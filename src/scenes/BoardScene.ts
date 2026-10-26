@@ -145,7 +145,8 @@ export class BoardScene extends Phaser.Scene {
 
     const [dx, dy] = NODE_POS.database;
     this.dbGlow = this.add.circle(dx, dy, 78, RED, 0).setBlendMode(Phaser.BlendModes.ADD);
-    this.db = this.add.image(dx, dy, 'db-hot').setScale(0.8);
+    this.db = this.add.image(dx, dy, 'db-hot');
+    this.db.setScale(170 / this.db.height);
     this.db.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.clickNode('database'));
     this.add.rectangle(dx + 92, dy, 14, 164, INK, 0.85).setStrokeStyle(1, CYAN);
     this.dbBar = this.add.rectangle(dx + 92, dy + 80, 10, 0, CYAN).setOrigin(0.5, 0);
