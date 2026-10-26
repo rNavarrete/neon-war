@@ -1,5 +1,5 @@
 import { initialState } from '../src/sim/state';
-import { testHookEnabled } from '../src/testHook';
+import { simSpeed, testHookEnabled } from '../src/testHook';
 
 describe('initialState', () => {
   it('starts at time zero in the briefing phase', () => {
@@ -17,5 +17,15 @@ describe('testHookEnabled', () => {
     expect(testHookEnabled('?foo=1&test=1')).toBe(true);
     expect(testHookEnabled('')).toBe(false);
     expect(testHookEnabled('?testing=1')).toBe(false);
+  });
+});
+
+describe('simSpeed', () => {
+  it('speeds up only test runs, within 1 to 20', () => {
+    expect(simSpeed('?test&speed=8')).toBe(8);
+    expect(simSpeed('?speed=8')).toBe(1);
+    expect(simSpeed('?test')).toBe(1);
+    expect(simSpeed('?test&speed=50')).toBe(1);
+    expect(simSpeed('?test&speed=abc')).toBe(1);
   });
 });

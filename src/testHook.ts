@@ -20,6 +20,14 @@ export function testHookEnabled(search: string): boolean {
   return new URLSearchParams(search).has('test');
 }
 
+/** Simulation speed multiplier: 1 normally; tests may ask for more with `?test&speed=N` (1 to 20). */
+export function simSpeed(search: string): number {
+  const params = new URLSearchParams(search);
+  if (!params.has('test')) return 1;
+  const n = Number(params.get('speed'));
+  return Number.isFinite(n) && n >= 1 && n <= 20 ? n : 1;
+}
+
 export function installTestHook(read: () => TestSnapshot): void {
   if (!testHookEnabled(window.location.search)) return;
   Object.defineProperty(window, '__neonTest', {
