@@ -1,0 +1,13 @@
+dist
+node_modules
+package-lock.json
+*.md
+check-evidence*
+check-logs
+check-selftest*.json
+control-change*.json
+src/style.css
+test-results
+playwright-report
+public
+.claude/skills

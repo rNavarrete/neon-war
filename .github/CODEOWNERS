@@ -1,0 +1,19 @@
+# Protected gate paths (ENG-140, G-B3/G-B4). Changes here are control changes and
+# need Rolando's explicit review. Takes effect when the ruleset turns on
+# code-owner review (ENG-142); until then scripts/control-change.mjs flags them.
+#
+# `*` makes Rolando the code owner of every file (ENG-142), so with code-owner review
+# on, only his approval can satisfy the main ruleset. Another write collaborator (the
+# factory bot) approving a PR never counts. The specific lines below keep the record
+# of which paths are control paths.
+*                    @rNavarrete
+/.github/           @rNavarrete
+/scripts/            @rNavarrete
+/package.json        @rNavarrete
+/package-lock.json   @rNavarrete
+/eslint.config.js    @rNavarrete
+/.prettierrc.json    @rNavarrete
+/.prettierignore     @rNavarrete
+/tsconfig.json       @rNavarrete
+/vite.config.ts      @rNavarrete
+/.nvmrc              @rNavarrete

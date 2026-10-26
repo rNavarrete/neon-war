@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/session-setup.mjs\" --hook",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Agent|Task|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/session-setup.mjs\" --gate",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
