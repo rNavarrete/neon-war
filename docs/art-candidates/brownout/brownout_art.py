@@ -187,6 +187,23 @@ JOBS |= {
         "bottom right: an old Japanese man with a towel around his neck and a bowl of noodles, grumpy. No text, no "
         "names, no borders."),
 }
+
+TEE = ("Keep her shirt exactly as in the first reference image: the oversized faded white long-sleeve NIRVANA band T-shirt "
+       "with the square blue underwater pool photo of a baby in a white swim diaper reaching for a dollar on a hook, the "
+       "photo clearly visible on her chest in every panel. ")
+AVATARS = ("Four square profile-picture portraits for a stream chat, arranged 2 by 2 with even gaps, each head and "
+    "shoulders facing the viewer, drawn in exactly the same clean 90s anime cyberpunk pixel-art style as the reference "
+    "images: big expressive anime eyes, crisp outlines, simple cel-like colour blocks with soft pixel shading, warm "
+    "friendly faces, the same art style as the girl in the references (do not draw her). Not realistic, not gritty, no "
+    "heavy rendering or wrinkles detail. Each portrait has its own flat bright solid colour background. All are her "
+    "neighbours in a poor rainy slum block on New Year's Eve: 1 top left: Kenji, a gap-toothed 9-year-old boy in a "
+    "beanie with cat ears and a paper party hat on top, excited. 2 top right: Mrs Okafor, a Nigerian woman in her "
+    "sixties with a bright patterned headwrap and reading glasses on a chain, holding up an old phone, unimpressed. 3 "
+    "bottom left: a tired young father in a hoodie with a sleeping baby on his shoulder. 4 bottom right: an old Japanese "
+    "man with a towel around his neck holding a bowl of noodles, grumpy but kind. No text, no names, no borders.")
+for v in "ab":
+    JOBS["lux-faces-board-v2" + v] = ("1536x1024", LUX_REFS, SHEET + TEE + FACES + GOG_ON + JOBS["lux-faces-board"][2].split(GOG_ON, 1)[1])
+    JOBS["chat-avatars-v2" + v] = ("1024x1024", [LUX, LUX_FACE], AVATARS)
 BATCHES = {"bg": [j for j in JOBS if j.startswith("bg-")],
            "lux": [j for j in JOBS if j.startswith("lux-")],
            "crew": [j for j in JOBS if j.split("-")[0] in ("rei", "mika", "ozzie")],
