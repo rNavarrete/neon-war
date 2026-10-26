@@ -1,0 +1,193 @@
+# CI for the one trusted check command (copied from factory-pilot-demo, ENG-140, governance G-B1..G-B5;
+# adds the Playwright browser and uploads the browser tests' screenshots).
+# The `verified` job is the single status ENG-142's ruleset requires.
+# Changes to this file are a control change (see scripts/control-change.mjs, CODEOWNERS).
+name: CI
+
+on:
+  pull_request:
+    # `edited` so a changed title/body (the Contract-Digest claim) re-runs the check.
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Cancel superseded PR runs only; every push to main keeps its own run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Exact candidate commit: the PR head, not GitHub's synthetic merge ref.
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # No install scripts: dependencies cannot run code before the check.
+      - run: npm ci --ignore-scripts
+      # The browser for the e2e step, at the version pinned in package-lock.json.
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Check (node scripts/check.mjs, not via npm)
+        # On pull_request events, check.mjs reads the PR title/body from the event
+        # payload file (GITHUB_EVENT_PATH), never via shell interpolation, and records
+        # the CLAIMED contract digest (PR body "Contract-Digest:" line). A malformed or
+        # inconsistent claim fails the check.
+        env:
+          NODE_OPTIONS: ''
+          CLAIM_FLAG: ${{ github.event_name == 'pull_request' && '--contract-claim-from-event' || '' }}
+        run: node scripts/check.mjs --out check-evidence.json $CLAIM_FLAG
+      - name: Verify evidence for the exact candidate commit
+        # Control changes are reported by the control-change job and reviewed by a human.
+        # CI records only the digest the PR CLAIMS; it is not trusted. No
+        # --expect-contract-digest here on purpose: the controller re-runs this verifier
+        # on the uploaded evidence with --expect-contract-digest <digest from its trusted
+        # approval record>, which rejects evidence whose claimed digest differs.
+        run: node scripts/verify-evidence.mjs check-evidence.json --expect-commit "$CANDIDATE_SHA"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: check-evidence-${{ env.CANDIDATE_SHA }}
+          path: |
+            check-evidence.json
+            check-logs/
+          if-no-files-found: warn
+      - name: Upload screenshots
+        # What the browser tests saw, for judging the look at review time.
+        if: always()
+        id: screens
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ env.CANDIDATE_SHA }}
+          path: test-results/screens/
+          if-no-files-found: warn
+      - name: Screenshot summary
+        if: always()
+        env:
+          SCREENS_URL: ${{ steps.screens.outputs.artifact-url }}
+        run: |
+          {
+            echo "### Screenshots"
+            echo ""
+            if [ -n "$SCREENS_URL" ]; then
+              echo "Download: $SCREENS_URL"
+              echo ""
+              ls test-results/screens/ 2>/dev/null | sed 's/^/- /'
+            else
+              echo "No screenshots were saved."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  control-change:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Detective only: never fails. Flags gate/workflow/config/test-assertion changes for Rolando's review.
+    # The classifier comes from the BASE commit (trusted/), so a PR cannot redefine it.
+    continue-on-error: true
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout head (candidate)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          path: head
+      - name: Checkout base (trusted classifier)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Classify diff with the trusted classifier
+        run: |
+          if [ -f trusted/scripts/control-change.mjs ]; then
+            node trusted/scripts/control-change.mjs --repo head --base "$BASE_SHA" --head "$HEAD_SHA" --out control-change.json
+          else
+            echo "::warning title=Control change::no trusted classifier on base branch"
+            node -e '
+              const fs = require("fs");
+              const r = { base: process.env.BASE_SHA, head: process.env.HEAD_SHA, baseCommit: process.env.BASE_SHA,
+                headCommit: process.env.HEAD_SHA, files: [], flagged: true, reasons: ["no trusted classifier on base branch"] };
+              fs.writeFileSync("control-change.json", JSON.stringify(r, null, 2) + "\n");'
+          fi
+      - name: Step summary
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            let r;
+            try { r = JSON.parse(fs.readFileSync("control-change.json", "utf8")); }
+            catch { r = { flagged: true, reasons: ["control-change.json missing or unreadable"] }; }
+            const lines = r.flagged
+              ? ["### Control change: needs explicit review", "", ...r.reasons.map((x) => "- " + x), ""]
+              : ["### Control change: none", ""];
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));'
+      - name: Upload control-change report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-change-${{ github.event.pull_request.head.sha }}
+          path: control-change.json
+          if-no-files-found: warn
+
+  check-selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # No install scripts: dependencies cannot run code before the check.
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Seeded pass/fail examples
+        run: node scripts/check-selftest.mjs
+      - name: Upload selftest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: check-selftest-${{ github.event.pull_request.head.sha || github.sha }}
+          path: check-selftest.json
+          if-no-files-found: warn
+
+  verified:
+    # The single required status (ENG-142). It runs even when a dependency failed,
+    # was skipped or was cancelled, and passes ONLY if every dependency reported
+    # 'success'. Skipped, cancelled, neutral or missing results all count as failure,
+    # so a candidate cannot pass by having its checks not run.
+    needs: [check, check-selftest]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require success from every check
+        env:
+          CHECK_RESULT: ${{ needs.check.result }}
+          SELFTEST_RESULT: ${{ needs.check-selftest.result }}
+        run: |
+          echo "check: $CHECK_RESULT"
+          echo "check-selftest: $SELFTEST_RESULT"
+          if [ "$CHECK_RESULT" != "success" ] || [ "$SELFTEST_RESULT" != "success" ]; then
+            echo "::error::not verified: every required job must report success (skipped/cancelled/neutral fail)"
+            exit 1
+          fi

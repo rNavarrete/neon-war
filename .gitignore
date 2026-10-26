@@ -1,0 +1,9 @@
+node_modules
+dist
+check-evidence*.json
+check-logs/
+check-selftest*.json
+control-change*.json
+.factory/
+test-results/
+playwright-report/
