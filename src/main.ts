@@ -10,7 +10,8 @@ const game = new Phaser.Game({
   width: GAME_WIDTH,
   height: GAME_HEIGHT,
   backgroundColor: '#05070f',
-  pixelArt: true,
+  // Painted art: smooth scaling, not pixel art.
+  pixelArt: false,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [board],
 });
