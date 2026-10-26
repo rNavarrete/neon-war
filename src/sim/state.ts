@@ -4,7 +4,7 @@
 export type Phase = 'briefing' | 'observe' | 'diagnose' | 'act' | 'verify';
 
 export interface SimState {
-  /** Seconds since the mission started. */
+  /** Seconds since the session started. */
   readonly time: number;
   readonly phase: Phase;
 }
