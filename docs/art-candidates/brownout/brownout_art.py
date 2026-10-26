@@ -204,6 +204,12 @@ AVATARS = ("Four square profile-picture portraits for a stream chat, arranged 2 
 for v in "ab":
     JOBS["lux-faces-board-v2" + v] = ("1536x1024", LUX_REFS, SHEET + TEE + FACES + GOG_ON + JOBS["lux-faces-board"][2].split(GOG_ON, 1)[1])
     JOBS["chat-avatars-v2" + v] = ("1024x1024", [LUX, LUX_FACE], AVATARS)
+# v2 avatars still came out inked and grimy (Rolando 21:29): copy the crew sprites' crisp pixel art instead.
+for v in "ab":
+    JOBS["chat-avatars-v3" + v] = ("1024x1024", ["crew-ozzie.png", "crew-mika-teen.png", LUX_FACE], AVATARS.replace(
+        "Not realistic, not gritty, no heavy rendering or wrinkles detail.",
+        "Match the reference sprites exactly: crisp clean pixel art with visible square pixels, smooth skin, few "
+        "wrinkles, no ink hatching, no grime, no scratches, no painterly texture. Not realistic, not gritty."))
 BATCHES = {"bg": [j for j in JOBS if j.startswith("bg-")],
            "lux": [j for j in JOBS if j.startswith("lux-")],
            "crew": [j for j in JOBS if j.split("-")[0] in ("rei", "mika", "ozzie")],
