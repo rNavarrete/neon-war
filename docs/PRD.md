@@ -1,5 +1,9 @@
 # Neon Relay — Product Requirements Document
 
+> **Note (2026-10-26):** this is the original concept PRD. Since then the game became Neon War, levels are
+> called sessions, the art is painted rather than pixel art, and Session 0 is Brownout. Where this file
+> disagrees with docs/GAME.md, GAME.md wins.
+
 **Status:** Concept PRD / prototype scope  
 **Working title:** *Neon Relay* (not final)  
 **Platform:** Browser, desktop-first  

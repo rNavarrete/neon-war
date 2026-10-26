@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 
-export const GAME_WIDTH = 1280;
-export const GAME_HEIGHT = 720;
+// Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
+export const GAME_WIDTH = 1920;
+export const GAME_HEIGHT = 1080;
 
 // Placeholder board: shows the picked art so the scaffold can be judged in screenshots.
 // No game rules here; those arrive in src/sim/ with the first tickets.
