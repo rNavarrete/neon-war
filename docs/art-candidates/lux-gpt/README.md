@@ -17,7 +17,8 @@ Load in Phaser with `this.load.spritesheet(key, path, { frameWidth, frameHeight 
 
 | Strip | Frames | Cell | Source sheet |
 | --- | --- | --- | --- |
-| `lux-walk.png` | 8 | 192x192 | `lux-walk-keys-goggles-v2.png` (side view) |
+| `lux-walk.png` | 8 | 192x192 | `lux-walk-keys-goggles-v2.png` (side view; jacked in, goggles on) |
+| `lux-walk-offline.png` | 8 | 192x192 | `lux-walk-keys-neck.png` (side view; offline, goggles around neck) |
 | `lux-idle.png` | 4 | 192x192 | `lux-idle-goggles.png` (breathing, glance up from phone) |
 | `lux-fidget.png` | 4 | 192x192 | `lux-fidget-goggles.png` frames 1-4 (frames 5-6 lost the goggles) |
 | `drone-hover.png` | 4 | 96x96 | `lux-drone-keys.png` top row |
