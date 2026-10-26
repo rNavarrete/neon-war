@@ -50,6 +50,10 @@ const LABEL: Record<string, string> = {
   database: 'DATABASE',
 };
 
+/** Components drawn with a sprite from public/art/node-<kind>.png. */
+const SPRITE_KINDS = ['gateway', 'balancer', 'server', 'cache'] as const;
+const SPRITE_H = 64;
+
 const KIND_COLOR: Record<string, number> = {
   gateway: CYAN,
   balancer: CYAN,
@@ -126,6 +130,7 @@ export class BoardScene extends Phaser.Scene {
     this.load.image('board-bg', 'art/board-bg.png');
     this.load.image('db-hot', 'art/db-hot.png');
     this.load.image('partner-worried', 'art/partner-worried.png');
+    for (const kind of SPRITE_KINDS) this.load.image(`node-${kind}`, `art/node-${kind}.png`);
   }
 
   create(): void {
@@ -242,18 +247,33 @@ export class BoardScene extends Phaser.Scene {
     return NODE_POS[id] ?? [0, 0];
   }
 
+  /** Where a placed component's × sits, relative to its centre. */
+  private removeOffset(kind: string): [number, number] {
+    return this.textures.exists(`node-${kind}`) ? [40, -36] : [36, -30];
+  }
+
   private addNodeView(id: string): void {
     const node = nodeById(this.state, id);
     if (!node) return;
     const [x, y] = this.positionOf(id);
     const color = KIND_COLOR[node.kind];
-    const box = this.add.rectangle(0, 0, 84, 52, INK, 0.92).setStrokeStyle(2, color);
-    const label = this.add.text(0, 0, LABEL[node.kind], text(12)).setOrigin(0.5);
-    const view = this.add.container(x, y, [box, label]);
+    const key = `node-${node.kind}`;
+    const sprite = this.textures.exists(key);
+    const box = sprite
+      ? this.add.rectangle(0, 0, 96, 88, INK, 0.35).setStrokeStyle(2, color)
+      : this.add.rectangle(0, 0, 84, 52, INK, 0.92).setStrokeStyle(2, color);
+    const label = this.add.text(0, sprite ? 34 : 0, LABEL[node.kind], text(12)).setOrigin(0.5);
+    const parts: Phaser.GameObjects.GameObject[] = [box, label];
+    if (sprite) {
+      const img = this.add.image(0, -8, key);
+      img.setScale(SPRITE_H / img.height);
+      parts.splice(1, 0, img);
+    }
+    const view = this.add.container(x, y, parts);
     box.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.clickNode(id));
     if (node.slot) {
       const remove = this.add
-        .text(36, -30, '×', text(18, '#ff3b5c'))
+        .text(...this.removeOffset(node.kind), '×', text(18, '#ff3b5c'))
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
       remove.on('pointerdown', () => this.apply(decommission(this.state, id)));
@@ -297,11 +317,18 @@ export class BoardScene extends Phaser.Scene {
     for (const kind of ['cache', 'server'] as Placeable[]) {
       const [x, y] = TRAY_POS[kind];
       const color = kind === 'cache' ? VIOLET : CYAN;
+      const icon = this.textures.exists(`node-${kind}`);
+      const tx = icon ? 22 : 0;
       const card = this.add.container(x, y, [
         this.add.rectangle(0, 0, 120, 70, INK, 1).setStrokeStyle(2, color),
-        this.add.text(0, -12, LABEL[kind], text(13)).setOrigin(0.5),
-        this.add.text(0, 14, `${MISSION.cost[kind]} cr`, text(12, '#ffb347')).setOrigin(0.5),
+        this.add.text(tx, -12, LABEL[kind], text(13)).setOrigin(0.5),
+        this.add.text(tx, 14, `${MISSION.cost[kind]} cr`, text(12, '#ffb347')).setOrigin(0.5),
       ]);
+      if (icon) {
+        const img = this.add.image(-34, 0, `node-${kind}`);
+        img.setScale(52 / img.height);
+        card.add(img);
+      }
       card.setSize(120, 70).setInteractive({ useHandCursor: true, draggable: true });
       this.trayHome.set(card, [x, y]);
       card.on('drag', (_p: Phaser.Input.Pointer, dragX: number, dragY: number) =>
@@ -502,7 +529,10 @@ export class BoardScene extends Phaser.Scene {
     for (const n of this.state.nodes) {
       const [x, y] = this.positionOf(n.id);
       nodes[n.id] = [x, y];
-      if (n.slot) remove[n.id] = [x + 36, y - 30];
+      if (n.slot) {
+        const [ox, oy] = this.removeOffset(n.kind);
+        remove[n.id] = [x + ox, y + oy];
+      }
     }
     const cut: Record<string, Point> = {};
     for (const l of this.state.links) cut[linkKey(l)] = midpoint(this.routeFor(l));
