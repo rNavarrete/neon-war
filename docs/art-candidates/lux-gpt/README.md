@@ -7,3 +7,17 @@ streaming-rig backpack, taped phone, camera drone.
 Kept for reference: the other outfits (`lux-fit-*`), the streamer and AR-goggles portraits, and the tee variants
 (`lux-fit-1-bandtee.png` with an original band, `lux-fit-1-nirvana.png` with no figure in the print).
 Backgrounds are solid #FF00FF and need a chroma-key pass before use as sprites.
+
+## Sprite strips (`sprites/`)
+
+Built from the raw magenta sheets by `lux_sprites.py` in the bake-off folder: magenta keyed out (including the
+pink the see-through coat picked up), every frame on an even grid, feet on one baseline, mirrored to face left.
+Load in Phaser with `this.load.spritesheet(key, path, { frameWidth, frameHeight })`; `*-preview.gif` shows each loop.
+
+| Strip | Frames | Cell | Source sheet |
+| --- | --- | --- | --- |
+| `lux-walk.png` | 8 | 192x192 | `lux-walk-keys.png` (side view) |
+| `lux-idle.png` | 4 | 192x192 | `lux-idle-1.png` (breathing, glance up from phone) |
+| `lux-fidget.png` | 6 | 192x192 | `lux-idle-keys.png` (one-off poses; frame 6 is a back view) |
+| `drone-hover.png` | 4 | 96x96 | `lux-drone-keys.png` top row |
+| `drone-iris.png` | 4 | 96x96 | `lux-drone-keys.png` bottom row |
