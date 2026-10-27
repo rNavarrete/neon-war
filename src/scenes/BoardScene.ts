@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { run } from '../game/run';
 import { SCENES } from './keys';
 
 // Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
@@ -56,5 +57,11 @@ export class BoardScene extends Phaser.Scene {
       .setOrigin(1, 1);
 
     this.ready = true;
+    this.scene.launch(SCENES.hud);
+  }
+
+  // HUD stream only: stands in for the board stream's update so the run ticks in HUD tests.
+  update(_time: number, delta: number): void {
+    run().tick(delta / 1000);
   }
 }
