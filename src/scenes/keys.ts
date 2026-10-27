@@ -7,6 +7,7 @@ export const SCENES = {
   pause: 'pause',
   settings: 'settings',
   debrief: 'debrief',
+  overlay: 'overlay',
 } as const;
 
 export type SceneKey = (typeof SCENES)[keyof typeof SCENES];
