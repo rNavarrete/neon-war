@@ -1,0 +1,59 @@
+// The HUD's section of the read-only test hook (window.__neonTest.state.hud). Positions are page
+// CSS pixels, ready for page.mouse.click.
+
+import type { LineId } from '../../strings';
+import type { DialMode } from './dial';
+
+export interface PagePoint {
+  x: number;
+  y: number;
+}
+
+export interface HudTestState {
+  /** True once the HUD has built its panels. */
+  ready: boolean;
+  /** Sim seconds since the clock opened, and whether the board is held still. */
+  now: number;
+  paused: boolean;
+  /** The in-world clock and the "midnight in m:ss" countdown as shown. */
+  clock: string;
+  countdown: string;
+  jobCard: { open: boolean; x: number; y: number };
+  dial: {
+    visible: boolean;
+    mode: DialMode;
+    value: number;
+    locked: boolean;
+    minus: PagePoint;
+    plus: PagePoint;
+    set: PagePoint;
+  };
+  notes: { estimate: number | null; sizing: number | null };
+  /** The last values plotted on the chart, and the sim's right now. */
+  chart: { demand: number; capacity: number; ceiling: number; estimateLine: number | null };
+  sim: { demand: number; capacity: number; trust: number; credits: number };
+  /** Trust and credits as shown on screen. */
+  shown: { trust: number; credits: number };
+  /** The surge warning on screen; `shownAt` is the sim time it first appeared. */
+  surge: {
+    demand: number;
+    startsAt: number;
+    inSeconds: number;
+    line: LineId;
+    shownAt: number | null;
+  } | null;
+  dip: { partId: string; lit: boolean; flashing: boolean } | null;
+  banner: { open: boolean; choice: string | null; pay: PagePoint; ignore: PagePoint; bin: PagePoint };
+  laundry: { available: boolean; cut: boolean; button: PagePoint };
+  regroup: { visible: boolean; active: boolean; spent: boolean; button: PagePoint };
+  sizingPrompt: { open: boolean };
+  bark: { current: LineId | null; text: string | null; history: LineId[] };
+  chat: { block: string[]; stream: string[] };
+  timeScale: number;
+}
+
+declare module '../../testHook' {
+  interface TestSections {
+    hud: HudTestState;
+  }
+}
