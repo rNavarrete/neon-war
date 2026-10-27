@@ -109,9 +109,8 @@ const RED = 0xff4d5e;
 const INBOUND_STAGGER = [1.7, 2.1, 1.9] as const;
 /** strokePoints reads only x and y, so a plain point list will do. */
 const asVectors = (path: Point[]) => path as unknown as Phaser.Math.Vector2[];
-/** Board slab: a dark tiled surface with a raised rim, baked once into a texture. */
+/** Board slab: a table tilted away from the viewer with a lit front edge, baked once into a texture. */
 const SLAB_RIM = 26;
-const TILE = 58;
 
 type Drag =
   | { kind: 'card'; id: string }
@@ -272,11 +271,10 @@ export class BoardScene extends Phaser.Scene {
     const { left, right, top, bottom } = BOARD_AREA;
     const w = right - left;
     const h = bottom - top;
-    const slab = `board-slab-${BOARD_STYLE}`;
+    const slab = 'board-slab';
     if (!this.textures.exists(slab)) this.bakeSlab(slab, w, h);
     this.add.image(left - 12, top - 12, slab).setOrigin(0);
     this.bakePacket();
-    if (BOARD_STYLE === 'pcb') this.addSilkscreen();
 
     // The lane the block's traffic arrives on: a groove cut through the rim into the gateway.
     const lane = this.add.graphics();
@@ -301,9 +299,7 @@ export class BoardScene extends Phaser.Scene {
     const g = this.make.graphics({}, false);
     const W = w + pad * 2;
     const H = h + pad * 2 + SLAB_RIM;
-    if (BOARD_STYLE === 'tilted') drawTiltedSlab(g, pad, w, h);
-    else if (BOARD_STYLE === 'pcb') drawPcbSlab(g, pad, w, h);
-    else drawTiledSlab(g, pad, w, h);
+    drawTiltedSlab(g, pad, w, h);
     g.generateTexture(key, W, H);
     g.destroy();
   }
@@ -317,24 +313,6 @@ export class BoardScene extends Phaser.Scene {
     p.fillStyle(0xffffff, 1).fillRoundedRect(7, 7, 12, 12, 3);
     p.generateTexture('packet', 26, 26);
     p.destroy();
-  }
-
-  /** The PCB style's white silkscreen labels, printed on the board under the parts. */
-  private addSilkscreen(): void {
-    const ink = { fontFamily: 'monospace', fontSize: '15px', color: '#cfe8dc' };
-    const labels: [number, number, string][] = [
-      [BOARD_AREA.left + 56, BOARD_AREA.top + 18, 'HALATION BLOCK-NET  REV 0'],
-      [BOARD_AREA.right - 210, BOARD_AREA.bottom - 40, 'LUX T.  NYE BUILD'],
-      [GATEWAY_LABEL.x, GATEWAY_LABEL.y, 'J1 GATEWAY'],
-      [LB_SLOT.x - 30, LB_SLOT.y + 70, 'U2 LB'],
-      [DB_LABEL.x, DB_LABEL.y, 'U9 DB'],
-    ];
-    for (const [x, y, t] of labels) this.add.text(x, y, t, ink).setAlpha(0.45);
-    for (const [id, pad] of Object.entries(SERVER_PADS)) {
-      this.add
-        .text(pad.x - 58, pad.y + 30, `U${2 + Number(id.slice(1))} ${id.toUpperCase()}`, ink)
-        .setAlpha(0.45);
-    }
   }
 
   private drawTray(): void {
@@ -837,75 +815,7 @@ export class BoardScene extends Phaser.Scene {
   }
 }
 
-// ---- board slab styles (test-only `?board=` picks one to compare; tiled is the default) ----------
-
-type BoardStyle = 'tiled' | 'tilted' | 'pcb';
-const BOARD_STYLE: BoardStyle = (() => {
-  const v = new URLSearchParams(window.location.search).get('board');
-  return v === 'tilted' || v === 'pcb' ? v : 'tiled';
-})();
-const GATEWAY_LABEL = { x: 548, y: 618 };
-const DB_LABEL = { x: 1405, y: 590 };
-
-/** Corner brackets just inside a rectangle's corners. */
-function brackets(
-  g: Phaser.GameObjects.Graphics,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  colour: number,
-) {
-  g.lineStyle(5, colour, 0.95);
-  const arm = 46;
-  for (const [cx, cy, sx, sy] of [
-    [x, y, 1, 1],
-    [x + w, y, -1, 1],
-    [x, y + h, 1, -1],
-    [x + w, y + h, -1, -1],
-  ]) {
-    g.lineBetween(cx + sx * 4, cy + sy * 14, cx + sx * 4, cy + sy * arm);
-    g.lineBetween(cx + sx * 14, cy + sy * 4, cx + sx * arm, cy + sy * 4);
-  }
-}
-
-/** A flat slab of dark tiles with a fine grid, a raised rim and cross marks. */
-function drawTiledSlab(g: Phaser.GameObjects.Graphics, pad: number, w: number, h: number): void {
-  g.fillStyle(0x000000, 0.55).fillRoundedRect(pad + 10, pad + 18, w, h + SLAB_RIM, 22);
-  g.fillStyle(0x070b16, 1).fillRoundedRect(pad, pad + SLAB_RIM, w, h, 22);
-  g.lineStyle(2, CYAN, 0.25).strokeRoundedRect(pad, pad + SLAB_RIM, w, h, 22);
-  g.fillStyle(0x0c1526, 1).fillRoundedRect(pad, pad, w, h, 22);
-  for (let ty = 0; ty * TILE < h; ty++) {
-    for (let tx = 0; tx * TILE < w; tx++) {
-      if ((tx + ty) % 2) continue;
-      g.fillStyle(0x101b30, 1).fillRect(
-        pad + tx * TILE + 2,
-        pad + ty * TILE + 2,
-        Math.min(TILE, w - tx * TILE) - 4,
-        Math.min(TILE, h - ty * TILE) - 4,
-      );
-    }
-  }
-  for (let i = 1; i * TILE < w; i++) {
-    const x = pad + i * TILE;
-    g.lineStyle(i % 4 ? 1 : 2, CYAN, i % 4 ? 0.07 : 0.14).lineBetween(x, pad + 6, x, pad + h - 6);
-  }
-  for (let i = 1; i * TILE < h; i++) {
-    const y = pad + i * TILE;
-    g.lineStyle(i % 4 ? 1 : 2, CYAN, i % 4 ? 0.07 : 0.14).lineBetween(pad + 6, y, pad + w - 6, y);
-  }
-  g.lineStyle(2, CYAN, 0.4);
-  for (let i = 4; i * TILE < w; i += 4) {
-    for (let j = 4; j * TILE < h; j += 4) {
-      const x = pad + i * TILE;
-      const y = pad + j * TILE;
-      g.lineBetween(x - 7, y, x + 7, y).lineBetween(x, y - 7, x, y + 7);
-    }
-  }
-  g.lineStyle(3, CYAN, 0.6).strokeRoundedRect(pad, pad, w, h, 22);
-  g.lineStyle(1, 0xffffff, 0.07).strokeRoundedRect(pad + 8, pad + 8, w - 16, h - 16, 16);
-  brackets(g, pad, pad, w, h, CYAN);
-}
+// ---- the board slab ---------------------------------------------------------------------------
 
 /**
  * A table tilted away from the viewer, like the mockup: the far edge narrower, the grid lines
@@ -981,53 +891,4 @@ function drawTiltedSlab(g: Phaser.GameObjects.Graphics, pad: number, w: number, 
   g.lineStyle(4, CYAN, 0.9).lineBetween(bl.x, bl.y, br.x, br.y);
   for (let x = bl.x + 40; x < br.x - 40; x += 46)
     g.fillStyle(x % 92 < 46 ? CYAN : AMBER, 0.8).fillRect(x, bl.y + 10, 14, 4);
-}
-
-/** A circuit board: dark green fibreglass, faint copper routing, vias, mounting holes and gold edge fingers. */
-function drawPcbSlab(g: Phaser.GameObjects.Graphics, pad: number, w: number, h: number): void {
-  let seed = 7;
-  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  g.fillStyle(0x000000, 0.55).fillRoundedRect(pad + 10, pad + 18, w, h + SLAB_RIM, 14);
-  g.fillStyle(0x06120c, 1).fillRoundedRect(pad, pad + 10, w, h, 14);
-  g.fillStyle(0x0b2117, 1).fillRoundedRect(pad, pad, w, h, 14);
-  // Fibreglass weave.
-  for (let i = 0; i < 1600; i++) {
-    g.fillStyle(0x12301f, 0.6).fillRect(pad + rand() * w, pad + rand() * h, 2, 2);
-  }
-  // Background copper: thin traces with 45-degree jogs and vias, under everything the player builds.
-  for (let i = 0; i < 46; i++) {
-    let x = pad + 30 + rand() * (w - 60);
-    let y = pad + 30 + rand() * (h - 60);
-    g.lineStyle(2, 0xb87333, 0.22);
-    for (let s = 0; s < 3; s++) {
-      const len = 40 + rand() * 160;
-      const dir = Math.floor(rand() * 4);
-      const nx = Math.max(
-        pad + 20,
-        Math.min(pad + w - 20, x + (dir === 0 ? len : dir === 1 ? -len : len * 0.4)),
-      );
-      const ny = Math.max(
-        pad + 20,
-        Math.min(pad + h - 20, y + (dir === 2 ? len : dir === 3 ? -len : len * 0.4)),
-      );
-      g.lineBetween(x, y, nx, ny);
-      x = nx;
-      y = ny;
-    }
-    g.fillStyle(0x0b2117, 1).fillCircle(x, y, 5);
-    g.lineStyle(2, 0xd4a35a, 0.45).strokeCircle(x, y, 5);
-  }
-  // Mounting holes, a lit outline and gold edge fingers along the bottom.
-  for (const [x, y] of [
-    [pad + 26, pad + 26],
-    [pad + w - 26, pad + 26],
-    [pad + 26, pad + h - 26],
-    [pad + w - 26, pad + h - 26],
-  ]) {
-    g.fillStyle(0x020604, 1).fillCircle(x, y, 10);
-    g.lineStyle(4, 0xd4a35a, 0.8).strokeCircle(x, y, 13);
-  }
-  g.lineStyle(3, 0x3ddc84, 0.55).strokeRoundedRect(pad, pad, w, h, 14);
-  for (let x = pad + w * 0.3; x < pad + w * 0.7; x += 18)
-    g.fillStyle(0xd4a35a, 0.9).fillRect(x, pad + h - 4, 11, 22);
 }
