@@ -35,6 +35,7 @@ import { cutLaundry, laundryCutAt, regroupAvailable, upcomingDip } from './hud/p
 import { REGROUP_UNUSED, type RegroupState, regroupActive, regroupSpent, startRegroup } from './hud/regroup';
 import { type DipWarning, dipWarningAt, fallForecastAt, surgeWarningAt } from './hud/warnings';
 import { GAME_HEIGHT, GAME_WIDTH } from './BoardScene';
+import { storyEnd } from '../story/state';
 import { SCENES } from './keys';
 
 const C = BROWNOUT.challenges;
@@ -68,14 +69,19 @@ const BANNER_BUTTONS: Record<BannerChoice, { dx: number; dy: number; w: number; 
 const CHAT_SEED = 20261231;
 
 /**
+ * The job card ignores clicks this soon after a story scene ends: they are the second half of a
+ * double-click on the cold open's last line, whose text box sits where the card's OK button lands.
+ */
+const CARD_GUARD_MS = 400;
+
+const cardGuarded = (): boolean => performance.now() - storyEnd.at < CARD_GUARD_MS;
+
+/**
  * The board's HUD, drawn over BoardScene with a transparent background: job card, estimate dial and
  * chart, clock and countdown, trust and credits, surge and power-dip warnings, the Solace banner,
  * the laundry cut, Regroup, the sizing prompt, barks and both chats. It reads run() every frame and
  * only calls the run's actions; the rules stay in src/sim/.
  */
-/** Clicks this soon after the HUD starts are the end of the cold open's last click, not a dismissal. */
-const EARLY_CLICK_GRACE_MS = 400;
-
 export class HudScene extends Phaser.Scene {
   ready = false;
   /**
@@ -165,12 +171,10 @@ export class HudScene extends Phaser.Scene {
     this.cardOpen = jobCardDue(r);
     if (this.cardOpen) {
       openJobCard(r);
-      // A click that lands while the HUD art is still loading still dismisses the card, unless it
-      // is the tail of a double-click on the cold open's last line: the card must be read.
+      // A click that lands while the HUD art is still loading still dismisses the card.
       const canvas = this.game.canvas;
-      const since = performance.now();
       const onDown = (): void => {
-        if (performance.now() - since >= EARLY_CLICK_GRACE_MS) this.cardClickedEarly = true;
+        if (!cardGuarded()) this.cardClickedEarly = true;
       };
       canvas.addEventListener('pointerdown', onDown);
       this.earlyClick = () => canvas.removeEventListener('pointerdown', onDown);
@@ -447,7 +451,9 @@ export class HudScene extends Phaser.Scene {
     dim.setInteractive();
     const art = this.add.image(j.x, j.y, 'hud:job-card').setScale(k);
     art.setInteractive({ useHandCursor: true });
-    art.on('pointerdown', () => this.closeJobCard());
+    art.on('pointerdown', () => {
+      if (!cardGuarded()) this.closeJobCard();
+    });
     // Positions inside the 864x1252 card art, scaled.
     const at = (ax: number, ay: number): [number, number] => [j.x + (ax - 432) * k, j.y + (ay - 626) * k];
     const text = (ax: number, ay: number, s: string, size: number, color: string, wrap: number) =>
@@ -479,7 +485,9 @@ export class HudScene extends Phaser.Scene {
     ok.setInteractive({ useHandCursor: true });
     ok.on('pointerover', () => ok.setTexture('hud:button-hover'));
     ok.on('pointerout', () => ok.setTexture('hud:button'));
-    ok.on('pointerdown', () => this.closeJobCard());
+    ok.on('pointerdown', () => {
+      if (!cardGuarded()) this.closeJobCard();
+    });
     const okText = this.add.text(okX, okY, 'OK', {
       fontFamily: FONT,
       fontSize: '26px',

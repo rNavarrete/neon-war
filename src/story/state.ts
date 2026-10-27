@@ -64,6 +64,12 @@ export interface StoryTestState {
   runHeld: boolean;
 }
 
+/**
+ * When the last story scene ended (performance.now() ms; -Infinity before any has). The HUD uses it
+ * to tell the second half of a double-click on the cold open's last line from a click on the job card.
+ */
+export const storyEnd = { at: Number.NEGATIVE_INFINITY };
+
 export const storyState: Omit<StoryTestState, 'runNow' | 'runHeld' | 'seen'> = {
   active: false,
   scriptId: null,

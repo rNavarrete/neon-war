@@ -103,8 +103,17 @@ test('the cold open waits for a click on every line, then hands over to the boar
   expect(s.sfx).toEqual(expect.arrayContaining(['rain-loop', 'goggles-on']));
   expect(s.runNow).toBeGreaterThanOrEqual(15);
   // The board's HUD shows the job card when it arrives (HUD stream; absent until merged).
-  const hud = (await state(page)) as { hud?: { jobCard: { open: boolean } } };
-  if (hud.hud) expect(hud.hud.jobCard.open).toBe(true);
+  type Card = { open: boolean; x: number; y: number };
+  const card = async () => ((await state(page)) as { hud?: { jobCard: Card } }).hud?.jobCard;
+  const hud = await card();
+  if (hud) {
+    expect(hud.open).toBe(true);
+    // A moment later (the card ignores clicks for 400 ms after the cold open) a click on OK closes it.
+    await page.waitForTimeout(500);
+    expect((await card())?.open).toBe(true);
+    await page.mouse.click(hud.x, hud.y);
+    await expect.poll(async () => (await card())?.open).toBe(false);
+  }
 });
 
 test('the rescue plays as a scene over the immersive backdrop and returns to the board', async ({ page }) => {
@@ -259,6 +268,8 @@ test('one test plays the whole session from the title to Night Book page 1 with 
   type Hud = { now: number; jobCard: { open: boolean; x: number; y: number } };
   const hud = async () => (await state(page)).hud as unknown as Hud;
   await expect.poll(async () => (await hud())?.jobCard?.open ?? false, { timeout: 40_000 }).toBe(true);
+  // The card ignores clicks for 400 ms after the cold open ends (the tail of a double-click).
+  await page.waitForTimeout(500);
   const card = (await hud()).jobCard;
   await page.mouse.click(card.x, card.y);
 
