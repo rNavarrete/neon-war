@@ -54,6 +54,7 @@ export function sfxForAction(action: GameEvents['action']): SfxKey | null {
     case 'wire':
       return 'wire-connect';
     case 'cut':
+    case 'laundryCut':
       return 'wire-cut';
     case 'decommission':
     case 'overclock':
@@ -78,7 +79,8 @@ export function musicWanted(view: { boardOpen: boolean; sceneOpen: boolean }): b
 
 /** What actually makes noise. Must never throw, even when the browser has audio locked. */
 export interface SfxPlayer {
-  play(key: string): void;
+  play(key: string, loop?: boolean): void;
+  stop?(key: string): void;
 }
 
 /** Listens to the bus, remembers the last effect asked for and passes it to the player if one is attached. */
@@ -92,7 +94,8 @@ export class AudioDirector {
       const key = sfxForAction(a);
       if (key) this.play(key);
     });
-    events.on('sfx', ({ key }) => this.play(key));
+    events.on('sfx', ({ key, loop }) => this.play(key, loop));
+    events.on('sfxStop', ({ key }) => this.stop(key));
     for (const [event, key] of Object.entries(EVENT_SFX) as [keyof typeof EVENT_SFX, SfxKey][]) {
       events.on(event, () => this.play(key));
     }
@@ -102,12 +105,20 @@ export class AudioDirector {
     this.player = player;
   }
 
-  play(key: string): void {
+  play(key: string, loop = false): void {
     this.lastSfx = key;
     try {
-      this.player?.play(key);
+      this.player?.play(key, loop);
     } catch {
       // Locked or missing audio never stops the game.
+    }
+  }
+
+  stop(key: string): void {
+    try {
+      this.player?.stop?.(key);
+    } catch {
+      // As above.
     }
   }
 }

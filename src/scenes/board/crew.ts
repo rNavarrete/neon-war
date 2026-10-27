@@ -1,18 +1,15 @@
-// What the board needs from the crew's rules (ENG-503), behind small placeholders until they land.
-// PLACEHOLDER (ENG-503): replace these bodies with the sim's answers; the board reads only these.
+// What the board needs from the crew's rules: the rescue racks the load balancer itself (between
+// the gateway and every server), so the tray card unlocks once the crew has arrived.
 
 import type { ActionResult, Run } from '../../game/run';
 
-/** Whether the crew has given Lux the load balancer yet. Always false until ENG-503 says so. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+/** Whether the crew has given Lux the load balancer yet. */
 export function balancerGiven(run: Run): boolean {
-  return false;
+  return run.rescued || run.session.board.parts.some((p) => p.kind === 'balancer');
 }
 
-/** Rack the crew's balancer in its slot. Refused until ENG-503 adds the rule. */
+/** The crew rack their balancer at the rescue, so there is never a second one to place. */
 export function placeBalancer(run: Run): ActionResult {
-  if (run.session.board.parts.some((p) => p.kind === 'balancer')) {
-    return { ok: false, reason: 'the balancer is already racked' };
-  }
-  return { ok: false, reason: "the crew hasn't given you a load balancer" };
+  if (!balancerGiven(run)) return { ok: false, reason: "the crew hasn't given you a load balancer" };
+  return { ok: false, reason: 'the balancer is already racked' };
 }

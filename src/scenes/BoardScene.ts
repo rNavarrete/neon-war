@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { bus } from '../game/bus';
+import { Director } from '../game/director';
 import { run } from '../game/run';
 import { type Part, type PartKind, wireKey } from '../sim/board';
 import { provideTestState } from '../testHook';
@@ -123,6 +124,7 @@ export class BoardScene extends Phaser.Scene {
   private selectedWire: string | null = null;
   private pointer = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 };
   private offBus: (() => void) | null = null;
+  private director: Director | null = null;
   private readonly travelOf = (wire: string): number => this.wireByKey.get(wire)?.travel ?? 1;
 
   constructor() {
@@ -198,9 +200,13 @@ export class BoardScene extends Phaser.Scene {
 
     this.offBus?.();
     this.offBus = bus.on('refused', ({ reason }) => this.showRefusal(reason));
+    this.director?.destroy();
+    this.director = new Director();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.offBus?.();
       this.offBus = null;
+      this.director?.destroy();
+      this.director = null;
       this.ready = false;
     });
 
@@ -217,6 +223,7 @@ export class BoardScene extends Phaser.Scene {
     const seconds = this.game.loop.rawDelta / 1000;
     const r = run();
     r.tick(seconds);
+    this.director?.flush(this);
     // Packets move in real time (slowed by Regroup), not test speed, so their density reads the same.
     this.syncBoard(r.paused ? 0 : Math.min(seconds, 0.25) * r.timeScale);
   }

@@ -76,8 +76,14 @@ export class OverlayScene extends Phaser.Scene {
       this.sound.volume = s.volume;
     });
     audio.attach({
-      play: (key) => {
-        if (this.cache.audio.exists(key)) this.sound.play(key);
+      play: (key, loop) => {
+        if (!this.cache.audio.exists(key)) return;
+        // A looping effect (the rain) plays once at a time, however often it is asked for.
+        if (loop && this.sound.get(key)?.isPlaying) return;
+        this.sound.play(key, { loop });
+      },
+      stop: (key) => {
+        this.sound.stopByKey(key);
       },
     });
     this.loadAudio();

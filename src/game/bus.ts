@@ -2,6 +2,8 @@
 // each other. The board emits what the player did; sound and barks listen.
 
 import type { BannerChoice } from '../sim/economy';
+import type { RescueCause } from '../sim/failures';
+import type { Failure, Midnight } from '../sim/play';
 
 export interface GameEvents {
   /** Something the player did on the board that worked. */
@@ -11,7 +13,8 @@ export interface GameEvents {
     | { type: 'cut'; from: string; to: string }
     | { type: 'decommission'; id: string; refund: number }
     | { type: 'overclock'; id: string }
-    | { type: 'banner'; choice: BannerChoice };
+    | { type: 'banner'; choice: BannerChoice }
+    | { type: 'laundryCut' };
   /** The player tried something the rules refused, with the reason to show. */
   refused: { reason: string };
   /** Play one sound effect by its key (the file name in public/audio/sfx without .mp3). */
@@ -26,6 +29,14 @@ export interface GameEvents {
   powerDip: { id: string };
   /** The crew's cable drops at the rescue (ENG-503 / the story layer emits it). */
   rescue: Record<string, never>;
+  /** The sim brought the crew in (trust under 30 or 45 s into the surge): the rescue scene plays. */
+  crewArrived: { by: RescueCause };
+  /** The board froze on a failure; the rewind screen plays, then the run rewinds. */
+  failure: Failure;
+  /** The stroke of twelve: whether the block held. */
+  midnight: Midnight;
+  /** The clock reached 00:01:00: the debrief plays. */
+  sessionEnd: Record<string, never>;
 }
 
 type Handler<T> = (payload: T) => void;
