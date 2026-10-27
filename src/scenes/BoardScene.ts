@@ -8,6 +8,7 @@ import { balancerGiven, placeBalancer } from './board/crew';
 import type { BoardTestState } from './board/hook';
 import {
   BOARD_AREA,
+  INBOUND_LANES,
   LB_SLOT,
   LB_SLOT_ID,
   PAD_SIZE,
@@ -15,15 +16,17 @@ import {
   SERVER_PADS,
   TRAY_AREA,
   WIRE_PICK,
-  distToSegment,
+  type Point,
+  distToPath,
   inBox,
-  midpoint,
   partAt,
   partBox,
   partCentre,
   slotAt,
+  pathLength,
+  pointAlong,
   toPage,
-  wireEnds,
+  wirePath,
 } from './board/layout';
 import { PacketPool, progress, travelSeconds } from './board/packets';
 import { LOCKED_KINDS, type TrayCard, lockedReason, trayCards } from './board/tray';
@@ -45,7 +48,7 @@ const DRAG_START = 10;
 const BUTTON_RADIUS = 28;
 
 const ART: Readonly<Record<string, string>> = {
-  room: 'art/bg/bedroom-lit.webp',
+  sky: 'art/bg/skyline.webp',
   goggles: 'art/hud/goggles-overlay.webp',
   gateway: 'art/board/gateway.webp',
   server: 'art/board/server.webp',
@@ -67,6 +70,7 @@ const ART: Readonly<Record<string, string>> = {
 
 interface PartView {
   img: Phaser.GameObjects.Image;
+  shadow: Phaser.GameObjects.Ellipse;
   label: Phaser.GameObjects.Text;
   art: string;
   text: string;
@@ -79,12 +83,35 @@ interface WireGeom {
   key: string;
   from: string;
   to: string;
-  ax: number;
-  ay: number;
-  bx: number;
-  by: number;
+  /** The trace's corner points, and its length in game pixels. */
+  path: Point[];
+  length: number;
+  /** Halfway along the trace: where the cut button and the test hook put the wire. */
+  mid: Point;
   travel: number;
 }
+
+/** Packet "wires" for the block's incoming traffic, one per inbound lane. */
+const INBOUND = INBOUND_LANES.map((path, i): WireGeom => {
+  const length = pathLength(path);
+  return {
+    key: `inbound${i}`,
+    from: 'block',
+    to: 'gateway',
+    path: [...path],
+    length,
+    mid: pointAlong(path, length, 0.5, { x: 0, y: 0 }),
+    travel: travelSeconds(length),
+  };
+});
+const RED = 0xff4d5e;
+/** Each inbound lane's share of the block's demand, scaled up so the incoming stream reads as busy. */
+const INBOUND_STAGGER = [1.7, 2.1, 1.9] as const;
+/** strokePoints reads only x and y, so a plain point list will do. */
+const asVectors = (path: Point[]) => path as unknown as Phaser.Math.Vector2[];
+/** Board slab: a dark tiled surface with a raised rim, baked once into a texture. */
+const SLAB_RIM = 26;
+const TILE = 58;
 
 type Drag =
   | { kind: 'card'; id: string }
@@ -92,8 +119,8 @@ type Drag =
   | null;
 
 /**
- * The playable board: Lux's room through her goggles, the parts on it, the wires and packets
- * between them, and the tray. It ticks the run and draws it; every rule lives in src/sim/.
+ * The playable board: a solid circuit board over the city, seen through Lux's goggles; the parts
+ * on it, the traces and packets between them (and the block's traffic streaming in), and the tray. It ticks the run and draws it; every rule lives in src/sim/.
  */
 export class BoardScene extends Phaser.Scene {
   ready = false;
@@ -109,7 +136,12 @@ export class BoardScene extends Phaser.Scene {
   private lastWires: readonly unknown[] | null = null;
   private lastParts: readonly unknown[] | null = null;
   private pool = new PacketPool();
-  private packetSprites: Phaser.GameObjects.Arc[] = [];
+  private packetSprites: Phaser.GameObjects.Image[] = [];
+  private inboundG!: Phaser.GameObjects.Graphics;
+  private packetRates: Record<string, number> = {};
+  private hotParts = new Set<string>();
+  private readonly at = { x: 0, y: 0 };
+  private chevronShift = 0;
   private skipTags: Phaser.GameObjects.Text[] = [];
   private cards: TrayCard[] = [];
   private cardViews = new Map<string, { art: Phaser.GameObjects.Image; lock: Phaser.GameObjects.Image }>();
@@ -125,7 +157,8 @@ export class BoardScene extends Phaser.Scene {
   private pointer = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 };
   private offBus: (() => void) | null = null;
   private director: Director | null = null;
-  private readonly travelOf = (wire: string): number => this.wireByKey.get(wire)?.travel ?? 1;
+  private readonly travelOf = (wire: string): number =>
+    (this.wireByKey.get(wire) ?? INBOUND.find((w) => w.key === wire))?.travel ?? 1;
 
   constructor() {
     super(SCENES.board);
@@ -231,18 +264,102 @@ export class BoardScene extends Phaser.Scene {
   // ---- drawing -------------------------------------------------------------------------------
 
   private drawBackdrop(): void {
-    const room = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'room');
-    room.setScale(Math.max(GAME_WIDTH / room.width, GAME_HEIGHT / room.height));
-    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05070f, 0.5).setOrigin(0);
+    // The city behind the board, dimmed so the board reads first.
+    const sky = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'sky');
+    sky.setScale(Math.max(GAME_WIDTH / sky.width, GAME_HEIGHT / sky.height));
+    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05070f, 0.55).setOrigin(0);
 
-    // The AR board: a faint cyan grid laid over the room.
-    const g = this.add.graphics();
     const { left, right, top, bottom } = BOARD_AREA;
-    g.fillStyle(0x07101c, 0.45).fillRoundedRect(left, top, right - left, bottom - top, 24);
-    g.lineStyle(1, CYAN, 0.08);
-    for (let x = left + 60; x < right; x += 60) g.lineBetween(x, top + 8, x, bottom - 8);
-    for (let y = top + 60; y < bottom; y += 60) g.lineBetween(left + 8, y, right - 8, y);
-    g.lineStyle(2, CYAN, 0.35).strokeRoundedRect(left, top, right - left, bottom - top, 24);
+    const w = right - left;
+    const h = bottom - top;
+    if (!this.textures.exists('board-slab')) this.bakeSlab(w, h);
+    this.add.image(left - 12, top - 12, 'board-slab').setOrigin(0);
+
+    // The lane the block's traffic arrives on: a groove cut through the rim into the gateway.
+    const lane = this.add.graphics();
+    const [top0, , bottom0] = INBOUND_LANES.map((l) => l[0].y);
+    const x0 = INBOUND_LANES[1][0].x;
+    const x1 = INBOUND_LANES[0][1].x + 10;
+    lane.fillStyle(0x03050b, 0.9).fillRect(x0, top0 - 20, x1 - x0, bottom0 - top0 + 40);
+    lane
+      .lineStyle(3, AMBER, 0.55)
+      .lineBetween(x0, top0 - 20, x1, top0 - 20)
+      .lineBetween(x0, bottom0 + 20, x1, bottom0 + 20);
+    lane
+      .lineStyle(10, AMBER, 0.08)
+      .lineBetween(x0, top0 - 20, x1, top0 - 20)
+      .lineBetween(x0, bottom0 + 20, x1, bottom0 + 20);
+    this.inboundG = this.add.graphics().setDepth(1);
+  }
+
+  /** Draw the board slab once and keep it as a texture: one image to draw each frame. */
+  private bakeSlab(w: number, h: number): void {
+    const pad = 12;
+    const g = this.make.graphics({}, false);
+    const W = w + pad * 2;
+    const H = h + pad * 2 + SLAB_RIM;
+    // Drop shadow and the slab's front face (its thickness), then the top surface.
+    g.fillStyle(0x000000, 0.55).fillRoundedRect(pad + 10, pad + 18, w, h + SLAB_RIM, 22);
+    g.fillStyle(0x070b16, 1).fillRoundedRect(pad, pad + SLAB_RIM, w, h, 22);
+    g.lineStyle(2, CYAN, 0.25).strokeRoundedRect(pad, pad + SLAB_RIM, w, h, 22);
+    g.fillStyle(0x0c1526, 1).fillRoundedRect(pad, pad, w, h, 22);
+    // Tiles: a faint checker, a fine grid, and a heavier line every fourth tile.
+    for (let ty = 0; ty * TILE < h; ty++) {
+      for (let tx = 0; tx * TILE < w; tx++) {
+        if ((tx + ty) % 2) continue;
+        const x0 = pad + tx * TILE;
+        const y0 = pad + ty * TILE;
+        g.fillStyle(0x101b30, 1).fillRect(
+          x0 + 2,
+          y0 + 2,
+          Math.min(TILE, w - tx * TILE) - 4,
+          Math.min(TILE, h - ty * TILE) - 4,
+        );
+      }
+    }
+    for (let i = 1; i * TILE < w; i++) {
+      const x = pad + i * TILE;
+      g.lineStyle(i % 4 ? 1 : 2, CYAN, i % 4 ? 0.07 : 0.14).lineBetween(x, pad + 6, x, pad + h - 6);
+    }
+    for (let i = 1; i * TILE < h; i++) {
+      const y = pad + i * TILE;
+      g.lineStyle(i % 4 ? 1 : 2, CYAN, i % 4 ? 0.07 : 0.14).lineBetween(pad + 6, y, pad + w - 6, y);
+    }
+    // Cross marks where the heavy lines meet.
+    g.lineStyle(2, CYAN, 0.4);
+    for (let i = 4; i * TILE < w; i += 4) {
+      for (let j = 4; j * TILE < h; j += 4) {
+        const x = pad + i * TILE;
+        const y = pad + j * TILE;
+        g.lineBetween(x - 7, y, x + 7, y).lineBetween(x, y - 7, x, y + 7);
+      }
+    }
+    // A lit edge, an inner bevel, and corner brackets.
+    g.lineStyle(3, CYAN, 0.6).strokeRoundedRect(pad, pad, w, h, 22);
+    g.lineStyle(1, 0xffffff, 0.07).strokeRoundedRect(pad + 8, pad + 8, w - 16, h - 16, 16);
+    g.lineStyle(5, CYAN, 0.95);
+    const arm = 46;
+    for (const [cx, cy, sx, sy] of [
+      [pad, pad, 1, 1],
+      [pad + w, pad, -1, 1],
+      [pad, pad + h, 1, -1],
+      [pad + w, pad + h, -1, -1],
+    ]) {
+      g.lineBetween(cx + sx * 4, cy + sy * 14, cx + sx * 4, cy + sy * arm);
+      g.lineBetween(cx + sx * 14, cy + sy * 4, cx + sx * arm, cy + sy * 4);
+    }
+    g.generateTexture('board-slab', W, H);
+    g.destroy();
+
+    // The packet: an amber cube with a soft glow, tinted red where traffic is being dropped.
+    if (!this.textures.exists('packet')) {
+      const p = this.make.graphics({}, false);
+      p.fillStyle(0xffffff, 0.18).fillRoundedRect(0, 0, 26, 26, 8);
+      p.fillStyle(0xffffff, 0.35).fillRoundedRect(4, 4, 18, 18, 5);
+      p.fillStyle(0xffffff, 1).fillRoundedRect(7, 7, 12, 12, 3);
+      p.generateTexture('packet', 26, 26);
+      p.destroy();
+    }
   }
 
   private drawTray(): void {
@@ -320,8 +437,11 @@ export class BoardScene extends Phaser.Scene {
       else pad.clearTint();
     }
     const pulse = 0.55 + 0.25 * Math.sin(this.time.now / 120);
+    this.hotParts.clear();
     for (const part of board.parts) {
       const look = partLook(part, r.flow.load[part.id] ?? 0, offline, r.session.offlineUntil, r.now);
+      // Traffic is being dropped here: the packets heading in turn red.
+      if (look.dark || (look.share !== null && look.share > 1)) this.hotParts.add(part.id);
       const v = this.viewFor(part, look);
       if (!v) continue;
       v.seen = this.frame;
@@ -342,6 +462,7 @@ export class BoardScene extends Phaser.Scene {
     for (const [id, v] of this.views) {
       if (v.seen === this.frame) continue;
       v.img.destroy();
+      v.shadow.destroy();
       v.label.destroy();
       this.views.delete(id);
     }
@@ -353,7 +474,8 @@ export class BoardScene extends Phaser.Scene {
     if (this.selectedWire && !this.wireByKey.has(this.selectedWire)) this.selectedWire = null;
 
     this.drawWires(r.flow.wires, r.flow.skipped);
-    this.stepPackets(dt, r.flow.wires);
+    this.drawInbound(r.demand, dt);
+    this.stepPackets(dt, r.flow.wires, r.demand);
     this.placeButtons();
 
     if (this.refusalText.visible && this.time.now > this.refusalUntil) this.refusalText.setVisible(false);
@@ -364,6 +486,10 @@ export class BoardScene extends Phaser.Scene {
     const c = partCentre(part);
     if (!c) return null;
     if (!v) {
+      const size = PART_SIZE[part.kind];
+      const shadow = this.add
+        .ellipse(c.x + 8, c.y + size.h / 2 - 6, size.w * 1.05, 26, 0x000000, 0.55)
+        .setDepth(1.5);
       const img = this.add.image(c.x, c.y, look.art).setDepth(3);
       const label = this.add
         .text(c.x, c.y - PART_SIZE[part.kind].h / 2 - 8, '', {
@@ -376,7 +502,7 @@ export class BoardScene extends Phaser.Scene {
         })
         .setOrigin(0.5, 1)
         .setDepth(5);
-      v = { img, label, art: '', text: '', colour: '', seen: 0 };
+      v = { img, shadow, label, art: '', text: '', colour: '', seen: 0 };
       this.views.set(part.id, v);
     }
     if (v.art !== look.art) {
@@ -402,14 +528,17 @@ export class BoardScene extends Phaser.Scene {
     for (const w of board.wires) {
       const a = board.parts.find((p) => p.id === w.from);
       const b = board.parts.find((p) => p.id === w.to);
-      const e = a && b ? wireEnds(a, b) : null;
-      if (!e) continue;
+      const path = a && b ? wirePath(a, b) : null;
+      if (!path) continue;
+      const length = pathLength(path);
       const g: WireGeom = {
         key: wireKey(w),
         from: w.from,
         to: w.to,
-        ...e,
-        travel: travelSeconds(Math.hypot(e.bx - e.ax, e.by - e.ay)),
+        path,
+        length,
+        mid: pointAlong(path, length, 0.5, { x: 0, y: 0 }),
+        travel: travelSeconds(length),
       };
       this.wireList.push(g);
       this.wireByKey.set(g.key, g);
@@ -425,18 +554,20 @@ export class BoardScene extends Phaser.Scene {
       const live = (rates[w.key] ?? 0) > 0;
       const selected = w.key === this.selectedWire;
       const colour = isSkipped ? GREY : selected ? 0xffffff : CYAN;
-      // A soft glow under a crisp core.
-      g.lineStyle(14, colour, isSkipped ? 0.08 : 0.16).lineBetween(w.ax, w.ay, w.bx, w.by);
-      g.lineStyle(4, colour, isSkipped ? 0.6 : live || selected ? 0.95 : 0.5).lineBetween(
-        w.ax,
-        w.ay,
-        w.bx,
-        w.by,
+      // A trace: a wide soft glow, a dark groove, then a bright core.
+      g.lineStyle(18, colour, isSkipped ? 0.05 : live ? 0.16 : 0.08).strokePoints(asVectors(w.path));
+      g.lineStyle(8, 0x03050b, 0.9).strokePoints(asVectors(w.path));
+      g.lineStyle(3, colour, isSkipped ? 0.5 : live || selected ? 0.95 : 0.45).strokePoints(
+        asVectors(w.path),
       );
-      g.fillStyle(colour, 0.9).fillCircle(w.ax, w.ay, 6).fillCircle(w.bx, w.by, 6);
+      const a = w.path[0];
+      const b = w.path[w.path.length - 1];
+      g.fillStyle(colour, 0.95)
+        .fillRect(a.x - 6, a.y - 6, 12, 12)
+        .fillRect(b.x - 6, b.y - 6, 12, 12);
       if (isSkipped) {
         const tag = this.skipTag(tags++);
-        tag.setPosition((w.ax + w.bx) / 2, (w.ay + w.by) / 2).setVisible(true);
+        tag.setPosition(w.mid.x, w.mid.y).setVisible(true);
       }
     }
     for (let i = tags; i < this.skipTags.length; i++) this.skipTags[i].setVisible(false);
@@ -472,31 +603,53 @@ export class BoardScene extends Phaser.Scene {
     return t;
   }
 
-  private stepPackets(dt: number, rates: Readonly<Record<string, number>>): void {
-    this.pool.step(dt, rates, this.travelOf);
+  /** The incoming lane's chevrons, drifting toward the gateway faster as demand climbs. */
+  private drawInbound(demand: number, dt: number): void {
+    const g = this.inboundG;
+    g.clear();
+    const lane = INBOUND_LANES[1];
+    const x0 = lane[0].x + 40;
+    const x1 = lane[1].x - 60;
+    const y = lane[0].y;
+    const speed = 30 + Math.min(demand, 300) * 0.6;
+    this.chevronShift = (this.chevronShift + dt * speed) % 34;
+    g.lineStyle(4, AMBER, 0.55);
+    for (let x = x0 + this.chevronShift; x < x1; x += 34) {
+      g.lineBetween(x, y - 10, x + 10, y).lineBetween(x + 10, y, x, y + 10);
+    }
+  }
+
+  private stepPackets(dt: number, rates: Readonly<Record<string, number>>, demand: number): void {
+    // Every wire on the board, plus the inbound lanes sharing the block's demand.
+    const all = this.packetRates;
+    for (const key in all) delete all[key];
+    for (const key in rates) all[key] = rates[key];
+    // The incoming crowd: denser than a wire, and the lanes a little out of step so it never marches.
+    for (let i = 0; i < INBOUND.length; i++)
+      all[INBOUND[i].key] = (demand * INBOUND_STAGGER[i]) / INBOUND.length;
+    this.pool.step(dt, all, this.travelOf);
     const items = this.pool.items;
     while (this.packetSprites.length < items.length) {
-      const dot = this.add.circle(0, 0, 6, AMBER, 1).setStrokeStyle(3, 0xffe2a8, 0.5).setDepth(2);
-      this.packetSprites.push(dot);
+      this.packetSprites.push(this.add.image(0, 0, 'packet').setDepth(2));
     }
     for (let i = 0; i < this.packetSprites.length; i++) {
       const s = this.packetSprites[i];
       const p = items[i];
-      const w = p?.active ? this.wireByKey.get(p.wire) : undefined;
+      const w = p?.active ? (this.wireByKey.get(p.wire) ?? INBOUND.find((x) => x.key === p.wire)) : undefined;
       if (!p || !w) {
         s.setVisible(false);
         continue;
       }
-      const k = progress(p);
-      s.setPosition(w.ax + (w.bx - w.ax) * k, w.ay + (w.by - w.ay) * k).setVisible(true);
+      pointAlong(w.path, w.length, progress(p), this.at);
+      s.setPosition(this.at.x, this.at.y).setVisible(true);
+      s.setTint(this.hotParts.has(w.to) ? RED : AMBER);
     }
   }
 
   private placeButtons(): void {
     const w = this.selectedWire ? this.wireByKey.get(this.selectedWire) : undefined;
     if (w) {
-      const m = midpoint(w);
-      this.cutBtn.setPosition(m.x, m.y - 40).setVisible(true);
+      this.cutBtn.setPosition(w.mid.x, w.mid.y - 40).setVisible(true);
     } else {
       this.cutBtn.setVisible(false);
     }
@@ -570,7 +723,7 @@ export class BoardScene extends Phaser.Scene {
     let best: WireGeom | null = null;
     let bestD = WIRE_PICK;
     for (const w of this.wireList) {
-      const d = distToSegment(p.x, p.y, w.ax, w.ay, w.bx, w.by);
+      const d = distToPath(p.x, p.y, w.path);
       if (d <= bestD) {
         best = w;
         bestD = d;
@@ -691,7 +844,7 @@ export class BoardScene extends Phaser.Scene {
         key: w.key,
         from: w.from,
         to: w.to,
-        ...page((w.ax + w.bx) / 2, (w.ay + w.by) / 2),
+        ...page(w.mid.x, w.mid.y),
         rate: round(r.flow.wires[w.key] ?? 0),
         skipped: r.flow.skipped.includes(w.key),
       })),

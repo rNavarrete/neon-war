@@ -39,8 +39,8 @@ describe('PacketPool', () => {
       if (now > last) emitted += now - last;
       last = now;
     }
-    // 10 s at 30 req/s: about 60 packets left, 1.5 s each, so about 9 alive at once.
-    expect(pool.active).toBeGreaterThanOrEqual(8);
+    // 10 s at 30 req/s: packetsPerSecond(30) leave each second, 1.5 s each, so that many times 1.5 alive.
+    expect(pool.active).toBeGreaterThanOrEqual(Math.floor(packetsPerSecond(30) * 1.5));
     expect(pool.active).toBeLessThanOrEqual(maxInFlight(30, 1.5));
     expect(emitted).toBeGreaterThan(0);
   });
@@ -90,7 +90,7 @@ describe('PacketPool', () => {
 
   it('moves packets from 0 to 1 along their wire and frees them at the end', () => {
     const pool = new PacketPool();
-    pool.step(0.2, { a: 30 }, travel);
+    pool.step(0.5, { a: 30 }, travel);
     const p = pool.items.find((x) => x.active)!;
     const before = progress(p);
     pool.step(0.5, { a: 30 }, travel);

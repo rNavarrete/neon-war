@@ -3,9 +3,9 @@
 // scene keeps one sprite per pool slot and moves it to the slot's position.
 
 /** Packets drawn per second for each request per second on a wire. */
-export const PACKETS_PER_REQUEST = 0.2;
+export const PACKETS_PER_REQUEST = 0.1;
 /** Most packets per second one wire shows, so a surge stays readable. */
-export const MAX_PACKETS_PER_SECOND = 30;
+export const MAX_PACKETS_PER_SECOND = 16;
 /** How fast a packet travels along a wire, in game pixels per second. */
 export const PACKET_SPEED = 320;
 

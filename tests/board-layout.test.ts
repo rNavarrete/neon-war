@@ -13,8 +13,14 @@ import {
   partBox,
   slotAt,
   slotBox,
+  INBOUND_LANES,
+  PART_SIZE,
+  distToPath,
+  pathLength,
+  pointAlong,
   toPage,
   wireEnds,
+  wirePath,
 } from '../src/scenes/board/layout';
 import { LOCKED_KINDS, lockedReason, trayCards } from '../src/scenes/board/tray';
 
@@ -72,6 +78,59 @@ describe('board layout', () => {
     expect(e.bx).toBeGreaterThan(e.ax);
     expect(distToSegment((e.ax + e.bx) / 2, (e.ay + e.by) / 2, e.ax, e.ay, e.bx, e.by)).toBeCloseTo(0);
     expect(distToSegment(e.ax - 30, e.ay, e.ax, e.ay, e.bx, e.by)).toBeCloseTo(30);
+  });
+
+  it('routes every wire as right-angle traces that never cross a server', () => {
+    const lb: Part = { id: 'lb', kind: 'balancer', slot: null };
+    const servers = SERVER_SLOTS.map((s) => server(`server-${s}`, s));
+    const pairs: [Part, Part][] = [
+      [gateway, lb],
+      ...servers.map((s): [Part, Part] => [lb, s]),
+      ...servers.map((s): [Part, Part] => [gateway, s]),
+      ...servers.map((s): [Part, Part] => [s, database]),
+    ];
+    for (const [a, b] of pairs) {
+      const path = wirePath(a, b)!;
+      const e = wireEnds(a, b)!;
+      expect(path[0]).toEqual({ x: e.ax, y: e.ay });
+      expect(path[path.length - 1]).toEqual({ x: e.bx, y: e.by });
+      for (let i = 1; i < path.length; i++) {
+        const straight = path[i].x === path[i - 1].x || path[i].y === path[i - 1].y;
+        expect(straight).toBe(true);
+      }
+      // Sample the trace: away from its own two ends it stays clear of every server.
+      const length = pathLength(path);
+      const at = { x: 0, y: 0 };
+      for (let k = 0.02; k < 0.98; k += 0.01) {
+        pointAlong(path, length, k, at);
+        for (const s of servers) {
+          if (s === a || s === b) continue;
+          const box = partBox(s)!;
+          const inside = Math.abs(at.x - box.x) < box.w / 2 && Math.abs(at.y - box.y) < box.h / 2;
+          expect(inside).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('walks a point along a trace and measures how far a click is from it', () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+    ];
+    expect(pathLength(path)).toBe(150);
+    expect(pointAlong(path, 150, 0.5, { x: 0, y: 0 })).toEqual({ x: 75, y: 0 });
+    expect(pointAlong(path, 150, 1, { x: 0, y: 0 })).toEqual({ x: 100, y: 50 });
+    expect(distToPath(100, 25, path)).toBe(0);
+    expect(distToPath(120, 25, path)).toBe(20);
+  });
+
+  it('brings the block traffic in from the left rim to the gateway', () => {
+    for (const lane of INBOUND_LANES) {
+      expect(lane[0].x).toBeLessThan(BOARD_AREA.left);
+      expect(lane[lane.length - 1]).toEqual({ x: GATEWAY.x - PART_SIZE.gateway.w / 2 + 6, y: GATEWAY.y });
+    }
   });
 
   it('maps game space to page pixels through the canvas rect', () => {
