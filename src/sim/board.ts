@@ -13,6 +13,8 @@ export interface Part {
   readonly kind: PartKind;
   /** Slot the player placed the part in, or null for parts the session starts with. */
   readonly slot: string | null;
+  /** Capacity multiplier from an upgrade such as the overclock kit; missing means 1. */
+  readonly boost?: number;
 }
 
 export interface Wire {
@@ -39,6 +41,10 @@ export interface BoardRules {
   readonly wiring: Readonly<Record<PartKind, readonly PartKind[]>>;
   /** Most wires a kind may send out; kinds missing here are unlimited. */
   readonly maxOut: Readonly<Partial<Record<PartKind, number>>>;
+  /** Kinds that health-check their targets: they skip offline parts instead of feeding them. */
+  readonly healthCheck: readonly PartKind[];
+  /** A one-off upgrade (the overclock kit): which kinds take it, its price, its capacity multiplier. */
+  readonly upgrade?: { readonly kinds: readonly PartKind[]; readonly cost: number; readonly factor: number };
 }
 
 /** Requests per second through each wire and part in one moment, for the rules and for drawing. */
@@ -49,6 +55,8 @@ export interface Flow {
   readonly served: number;
   /** Requests per second lost: over capacity, offline, or sent nowhere. */
   readonly dropped: number;
+  /** Wires a health-checking part skipped because their target was offline. */
+  readonly skipped: readonly string[];
 }
 
 export type BoardResult = { ok: true; board: Board } | { ok: false; reason: string };
@@ -132,11 +140,49 @@ export function disconnect(board: Board, from: string, to: string): BoardResult 
   };
 }
 
+/** Requests per second a part can serve, including any upgrade. */
+export function capacityOf(part: Part, rules: BoardRules): number {
+  return (rules.capacity[part.kind] ?? Infinity) * (part.boost ?? 1);
+}
+
+/** Spend the upgrade's price to multiply one part's capacity. Each part takes it once. */
+export function upgrade(board: Board, rules: BoardRules, id: string): BoardResult {
+  const part = partById(board, id);
+  if (!part) return fail(`no part ${id}`);
+  const up = rules.upgrade;
+  if (!up || !up.kinds.includes(part.kind)) return fail(`a ${part.kind} can't be upgraded`);
+  if (part.boost !== undefined) return fail('already upgraded');
+  if (board.credits < up.cost) return fail('not enough credits');
+  return {
+    ok: true,
+    board: {
+      ...board,
+      credits: board.credits - up.cost,
+      parts: board.parts.map((p) => (p.id === id ? { ...p, boost: up.factor } : p)),
+    },
+  };
+}
+
+/** Remove a part's upgrade (it burned out); the part keeps running at its normal capacity. */
+export function loseUpgrade(board: Board, id: string): BoardResult {
+  const part = partById(board, id);
+  if (!part) return fail(`no part ${id}`);
+  if (part.boost === undefined) return fail('not upgraded');
+  return {
+    ok: true,
+    board: {
+      ...board,
+      parts: board.parts.map((p) => (p.id === id ? { id: p.id, kind: p.kind, slot: p.slot } : p)),
+    },
+  };
+}
+
 /**
  * Where `demand` requests per second go right now. Demand enters at the gateways, split evenly.
  * Each part serves up to its capacity and splits what it serves evenly across its out-wires.
  * A part whose kind may send nowhere is the end of the line and counts as served. Offline parts
- * (booting, dead, in a power dip) drop everything they receive.
+ * (booting, dead, in a power dip) drop everything they receive, except that health-checking
+ * kinds (the load balancer) skip offline targets and split across the live ones.
  */
 export function route(
   board: Board,
@@ -148,6 +194,7 @@ export function route(
   const load: Record<string, number> = {};
   let served = 0;
   let dropped = 0;
+  const skipped: string[] = [];
 
   const gateways = board.parts.filter((p) => p.kind === 'gateway');
   if (gateways.length === 0) dropped += demand;
@@ -162,13 +209,17 @@ export function route(
         dropped += inRate;
         continue;
       }
-      const ok = Math.min(inRate, rules.capacity[kind] ?? Infinity);
+      const ok = Math.min(inRate, capacityOf(part, rules));
       dropped += inRate - ok;
       if (rules.wiring[kind].length === 0) {
         served += ok;
         continue;
       }
-      const outs = board.wires.filter((w) => w.from === part.id);
+      let outs = board.wires.filter((w) => w.from === part.id);
+      if (rules.healthCheck.includes(kind)) {
+        for (const w of outs) if (offline.includes(w.to)) skipped.push(wireKey(w));
+        outs = outs.filter((w) => !offline.includes(w.to));
+      }
       if (outs.length === 0) {
         dropped += ok;
         continue;
@@ -180,7 +231,7 @@ export function route(
       }
     }
   }
-  return { wires, load, served, dropped };
+  return { wires, load, served, dropped, skipped };
 }
 
 /** Share of demand that failed, from 0 to 1. */
