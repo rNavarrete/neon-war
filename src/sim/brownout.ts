@@ -21,8 +21,8 @@ export const BROWNOUT = {
   overclock: { cost: 60, factor: 2, rebootSeconds: 3 },
   database: { capacity: 200 },
   loadBalancer: { cost: 0 },
-  /** Share of a part's price given back on decommission. GAME.md doesn't set it: none for now. */
-  decommissionRefund: 0,
+  /** Share of a part's price given back on decommission: half (the B2a ticket; GAME.md is silent). */
+  decommissionRefund: 0.5,
 
   demand: {
     /** Evening climb (C3): ramps from the block's base to this over climbRampSeconds, then holds. */

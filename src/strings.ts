@@ -1,0 +1,434 @@
+// Every line Session 0 shows, keyed by its ID in docs/SCRIPT.md. Code refers to lines by ID only.
+// Generated from docs/SCRIPT.md; keep the two in sync (tests/strings.test.ts checks every ID and text).
+
+export interface Line {
+  /** scene waits for a click; bark never pauses the board; chat is a chat message; ui is on-screen text. */
+  readonly kind: string;
+  /** Who says it, or the chat or term group it belongs to. */
+  readonly speaker: string;
+  readonly text: string;
+}
+
+export const LINES = {
+  'C0.tv.01': {
+    kind: 'scene',
+    speaker: 'TV downstairs',
+    text: '...and Halation, we are ten minutes from midnight!',
+  },
+  'C0.tv.02': {
+    kind: 'scene',
+    speaker: 'TV downstairs',
+    text: 'Get your people close. Get your cameras ready!',
+  },
+  'C0.grandma.01': {
+    kind: 'scene',
+    speaker: 'Grandma (through the door)',
+    text: "Lux? Your show's starting, love.",
+  },
+  'C0.lux.01': { kind: 'scene', speaker: 'Lux', text: 'In a minute, Baachan.' },
+  'C0.chat.01': { kind: 'chat', speaker: 'block: kenji', text: "lux the net's doing the thing again" },
+  'C0.chat.02': { kind: 'chat', speaker: 'block: young father', text: 'I need to call my son at midnight!!' },
+  'C0.chat.03': {
+    kind: 'chat',
+    speaker: 'block: mrs okafor',
+    text: 'Countdown stream keeps freezing. Is it you or the rain?',
+  },
+  'C0.chat.04': { kind: 'chat', speaker: 'block: kenji', text: 'lux pls' },
+  'C0.triage.01': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: "Recording! Oh. Oh, it's the net again, isn't it.",
+  },
+  'C0.lux.02': { kind: 'scene', speaker: 'Lux', text: "Yeah. Let's go look." },
+  'C1.card.title': { kind: 'ui', speaker: 'Job card', text: 'THE BLOCK. TONIGHT.' },
+  'C1.card.who': { kind: 'ui', speaker: 'Job card', text: 'Who: 120 flats on one line.' },
+  'C1.card.what': {
+    kind: 'ui',
+    speaker: 'Job card',
+    text: 'What must work: calls, streams, the lift, the heating alarms.',
+  },
+  'C1.card.bar': { kind: 'ui', speaker: 'Job card', text: 'The bar: nobody goes dark at midnight.' },
+  'C1.card.rate': { kind: 'ui', speaker: 'Job card', text: 'Each flat pings the net about every 4 seconds.' },
+  'C1.triage.01': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: "Ooh, a dial! How many a second are coming? I'll guess first.",
+  },
+  'C1.triage.02': {
+    kind: 'bark',
+    speaker: 'TRIAGE (wrong-and-proud)',
+    text: "480 a second! I'm great at math.",
+  },
+  'C1.lux.01': { kind: 'bark', speaker: 'Lux', text: 'You multiplied. Divide.' },
+  'C1.triage.03': {
+    kind: 'bark',
+    speaker: 'TRIAGE (sheepish)',
+    text: "...30. That's what I meant. Obviously.",
+  },
+  'C1.triage.04': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "Hm. Let's watch the real line and see who's right.",
+  },
+  'C1.triage.05': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: 'One scrap box does 60. Rack it and wire it: gateway, box, database.',
+  },
+  'C1.chat.01': { kind: 'chat', speaker: 'block: mrs okafor', text: "It's back! Bless you Lux" },
+  'C1.chat.02': { kind: 'chat', speaker: 'stream: viewer', text: 'first try lol' },
+  'C1.triage.06': {
+    kind: 'bark',
+    speaker: 'TRIAGE (happy)',
+    text: '30 coming, 60 of room. Look at all that room.',
+  },
+  'C2.banner.title': { kind: 'ui', speaker: 'Solace banner', text: 'SOLACE PRIORITY SERVICE' },
+  'C2.banner.body': {
+    kind: 'ui',
+    speaker: 'Solace banner',
+    text: 'Your district deserves better. Guaranteed capacity for 60 seconds. 200 credits.',
+  },
+  'C2.banner.buttons': { kind: 'ui', speaker: 'Solace banner', text: 'Pay / Ignore / Bin' },
+  'C2.triage.01': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: "Guaranteed! That's the best kind of capacity, right?",
+  },
+  'C2.lux.pay': { kind: 'bark', speaker: 'Lux', text: "Fine. It's New Year's." },
+  'C2.triage.pay': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "The chart didn't move. Was it supposed to move?",
+  },
+  'C2.lux.ignore': { kind: 'bark', speaker: 'Lux', text: 'Not tonight.' },
+  'C2.lux.bin': { kind: 'bark', speaker: 'Lux', text: 'Solace selling us our own power back.' },
+  'C2.triage.after': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: '30 coming, 60 of room. Nothing to protect yet.',
+  },
+  'C3.warn.01': {
+    kind: 'ui',
+    speaker: 'Forecast',
+    text: "Everyone's getting ready to film. Demand climbing to 90 a second.",
+  },
+  'C3.chat.01': {
+    kind: 'chat',
+    speaker: 'block: young father',
+    text: "video keeps buffering, my son's on in 5",
+  },
+  'C3.chat.02': { kind: 'chat', speaker: 'block: kenji', text: 'heating alarm on 3rd floor beeping??' },
+  'C3.triage.01': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: 'New toys! The kit makes a box bigger. A second box makes... more box.',
+  },
+  'C3.triage.02': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "It's on! Why is it doing nothing? Is it shy?",
+  },
+  'C3.lux.01': { kind: 'bark', speaker: 'Lux', text: 'The gateway only feeds one box.' },
+  'C3.triage.03': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: "Rebooting... 3, 2, 1... it's huge now. 120!",
+  },
+  'C3.triage.04': {
+    kind: 'bark',
+    speaker: 'TRIAGE (panicking)',
+    text: "It's getting hot. Like, smell-it hot.",
+  },
+  'C3.chat.03': { kind: 'chat', speaker: 'stream: viewer', text: 'F' },
+  'C3.triage.rewind': {
+    kind: 'scene',
+    speaker: 'TRIAGE (sheepish)',
+    text: 'I recorded the last minute. Want to try that again?',
+  },
+  'C3.lux.rewind': { kind: 'scene', speaker: 'Lux', text: 'Yeah. Rewind.' },
+  'C4.warn.01': {
+    kind: 'ui',
+    speaker: 'Surge warning',
+    text: 'NEIGHBOURING BLOCKS CUT OFF. About 250 a second rerouting here in 10 s.',
+  },
+  'C4.triage.01': {
+    kind: 'bark',
+    speaker: 'TRIAGE (panicking)',
+    text: "250? We're built for 120! I did that math right, I checked!",
+  },
+  'C4.lux.01': { kind: 'bark', speaker: 'Lux', text: 'Hold. Hold. Hold.' },
+  'C4.flicker.01': { kind: 'ui', speaker: 'Dip warning', text: 'POWER FLICKER' },
+  'C4.triage.02': { kind: 'bark', speaker: 'TRIAGE (panicking)', text: 'Big box is down! Big box is DOWN!' },
+  'C4.chat.01': { kind: 'chat', speaker: 'block: mrs okafor', text: "it's gone again" },
+  'C4.chat.02': { kind: 'chat', speaker: 'block: young father', text: 'calling... calling... calling...' },
+  'C4.chat.seed': { kind: 'chat', speaker: 'block: unnamed neighbour', text: "wait isn't she the Takaha—" },
+  'C4.triage.03': {
+    kind: 'bark',
+    speaker: 'TRIAGE (panicking)',
+    text: "Everyone keeps hitting refresh. That's making it worse, right?",
+  },
+  'C4.triage.04': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: 'The database is choking on all the repeats.',
+  },
+  'C4.cut.button': {
+    kind: 'ui',
+    speaker: 'Laundry cut',
+    text: 'Cut the laundry floor loose (about 40 a second)',
+  },
+  'C4.lux.cut': { kind: 'bark', speaker: 'Lux', text: 'Sorry, laundry. Washers can wait till next year.' },
+  'C4.chat.cut': { kind: 'chat', speaker: 'block: kenji', text: 'who turned off the arcade' },
+  'C4.triage.cut': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: 'Less coming in. The database is breathing again. Barely.',
+  },
+  'C4.chat.03': { kind: 'chat', speaker: 'block (system)', text: 'Mrs Okafor left the chat' },
+  'C4.chat.04': { kind: 'chat', speaker: 'stream: viewer', text: 'is the stream frozen or is it just me' },
+  'C4.grandma.01': {
+    kind: 'bark',
+    speaker: 'Grandma (through the door)',
+    text: 'Three minutes, love! Come down!',
+  },
+  'C4.lux.02': { kind: 'bark', speaker: 'Lux', text: "I can't hold this. I can't—" },
+  'C5.triage.01': {
+    kind: 'scene',
+    speaker: 'TRIAGE (panicking)',
+    text: "Someone's in our goggles. Someone is IN our goggles.",
+  },
+  'C5.rei.01': { kind: 'scene', speaker: 'Rei', text: 'Cute setup. Move over.' },
+  'C5.lux.01': { kind: 'scene', speaker: 'Lux', text: 'Who are you? Get out of my—' },
+  'C5.rei.02': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: "Night Shift. We've been watching your block. You were doing fine. Then you weren't.",
+  },
+  'C5.mika.01': { kind: 'scene', speaker: 'Mika', text: 'Breathe. Read the chart.' },
+  'C5.mika.02': {
+    kind: 'scene',
+    speaker: 'Mika',
+    text: 'The surge is settling. About 120 a second for the next minute.',
+  },
+  'C5.rei.03': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: "Here. It splits traffic across every box you wire behind it, and it skips any box that's dark.",
+  },
+  'C5.rei.cut': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: 'You cut the laundry loose." (beat) "...Who taught you that?',
+  },
+  'C5.lux.cut': { kind: 'scene', speaker: 'Lux', text: 'Nobody.' },
+  'C5.ozzie.01': { kind: 'scene', speaker: 'Ozzie', text: "I'll front you 100. It goes on my tab." },
+  'C5.ozzie.02': { kind: 'scene', speaker: 'Ozzie', text: 'Six boxes. Buy six, sleep tonight.' },
+  'C5.mika.03': { kind: 'scene', speaker: 'Mika', text: 'Six is a waste. Two will do.' },
+  'C5.ozzie.03': { kind: 'scene', speaker: 'Ozzie', text: 'Two is how you end up here again.' },
+  'C5.rei.04': { kind: 'scene', speaker: 'Rei', text: 'Stop. She can count." (to Lux) "So count.' },
+  'C5.mika.04': {
+    kind: 'scene',
+    speaker: 'Mika',
+    text: 'One more thing. When it gets fast, hit this. Time slows down. You get it once.',
+  },
+  'C5.triage.02': {
+    kind: 'bark',
+    speaker: 'TRIAGE (sheepish)',
+    text: "The big box fried. It's a normal box again. Sorry, big box.",
+  },
+  'C5.triage.03': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "120 coming. Each box does 60. I'm not saying the answer.",
+  },
+  'C5.rei.05': { kind: 'bark', speaker: 'Rei', text: 'There it is.' },
+  'C5.ozzie.04': { kind: 'bark', speaker: 'Ozzie', text: 'See? Six. Sleep tonight.' },
+  'C5.mika.05': {
+    kind: 'bark',
+    speaker: 'Mika',
+    text: 'Look at the chart. Half of that is just heating your room.',
+  },
+  'C5.chat.01': { kind: 'chat', speaker: 'block: young father', text: "it's back!!!" },
+  'C5.rei.rewind': { kind: 'scene', speaker: 'Rei', text: 'Again. Slower.' },
+  'C6.warn.01': {
+    kind: 'ui',
+    speaker: 'Forecast',
+    text: 'MIDNIGHT: everyone calls and streams at once. About 150 a second.',
+  },
+  'C6.rei.01': { kind: 'bark', speaker: 'Rei', text: 'Your call. How many?' },
+  'C6.prompt': { kind: 'ui', speaker: 'Sizing prompt', text: 'How many boxes for midnight?' },
+  'C6.triage.01': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "150 coming, 60 a box. That's two and a half boxes. You can't buy half a box.",
+  },
+  'C6.ozzie.01': { kind: 'bark', speaker: 'Ozzie', text: "Now you're talking." },
+  'C6.mika.01': { kind: 'bark', speaker: 'Mika', text: 'Brave.' },
+  'C6.tv.01': { kind: 'bark', speaker: 'TV downstairs', text: 'Thirty seconds, Halation!' },
+  'C6.flicker.01': { kind: 'ui', speaker: 'Dip warning', text: 'POWER FLICKER' },
+  'C6.triage.02': { kind: 'bark', speaker: 'TRIAGE (panicking)', text: 'Not now! Not NOW!' },
+  'C6.tv.02': { kind: 'bark', speaker: 'TV downstairs', text: 'Five! Four! Three!...' },
+  'C6.chat.hold.01': { kind: 'chat', speaker: 'block (several neighbours)', text: 'HAPPY NEW YEAR!!!' },
+  'C6.chat.hold.02': {
+    kind: 'chat',
+    speaker: 'block: young father',
+    text: 'he picked up. he picked up. thank you',
+  },
+  'C6.rei.hold': { kind: 'bark', speaker: 'Rei', text: 'Clean.' },
+  'C6.rei.scrape': { kind: 'bark', speaker: 'Rei', text: 'Ugly. But it held.' },
+  'C6.triage.hold': { kind: 'bark', speaker: 'TRIAGE (happy)', text: 'We did it! I helped! Did I help?' },
+  'C6.lux.hold': { kind: 'bark', speaker: 'Lux', text: 'You helped.' },
+  'C6.fail.chat': { kind: 'chat', speaker: 'block (system)', text: '(the chat stops; no messages)' },
+  'C6.rei.fail': { kind: 'scene', speaker: 'Rei', text: 'Dark at midnight. Again, from one minute out.' },
+  'C7.warn.01': {
+    kind: 'ui',
+    speaker: 'Forecast',
+    text: "Everyone's watching fireworks. Demand falling to about 40 a second.",
+  },
+  'C7.ozzie.01': {
+    kind: 'bark',
+    speaker: 'Ozzie',
+    text: 'Every box still running is still costing. Just saying.',
+  },
+  'C7.triage.01': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "40 coming. That's... one box and a bit?",
+  },
+  'C7.ozzie.down': { kind: 'bark', speaker: 'Ozzie', text: "Now that's a New Year's resolution." },
+  'C7.ozzie.none': { kind: 'bark', speaker: 'Ozzie', text: "Paying for fireworks we're not watching." },
+  'C8.rei.open': { kind: 'scene', speaker: 'Rei', text: "Right. Let's see what you did." },
+  'C8.rei.sizing.good': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: "You counted before you built. Most people don't.",
+  },
+  'C8.rei.sizing.bad': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: 'You built first and counted later. Count first.',
+  },
+  'C8.rei.banner.pay': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: 'And you paid Solace. For a minute of nothing.',
+  },
+  'C8.rei.banner.skip': { kind: 'scene', speaker: 'Rei', text: "You didn't take Solace's offer. Good." },
+  'C8.rei.debt': { kind: 'scene', speaker: 'Rei', text: 'You owe Ozzie. He will remember.' },
+  'C8.ozzie.debt': { kind: 'scene', speaker: 'Ozzie', text: "I'll remember." },
+  'C8.rei.waste': { kind: 'scene', speaker: 'Rei', text: 'Half those boxes did nothing but cost.' },
+  'C8.rei.down': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: "And you turned them off after. That's rarer than it should be.",
+  },
+  'C8.rei.close': { kind: 'scene', speaker: 'Rei', text: "Now the words for it. You'll need them." },
+  'C8.terms.sizing': {
+    kind: 'ui',
+    speaker: 'Sizing',
+    text: "**Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one box did 60). **Back-of-the-envelope estimate** (the dial). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening).",
+  },
+  'C8.terms.scaling': {
+    kind: 'ui',
+    speaker: 'Scaling',
+    text: '**Scaling up** (the overclock kit: quick, but it has a ceiling and a reboot). **Scaling out** (more boxes). **Load balancer** with **health checks** (splits traffic, skips dark boxes). **Scaling down** (turning them off after).',
+  },
+  'C8.terms.failure': {
+    kind: 'ui',
+    speaker: 'Failure',
+    text: '**Single point of failure** (one big box). **Cascading failure** (one part falls, the next follows). **Retry storm** (everyone hitting refresh). **Load shedding** (cutting the laundry loose). **Redundancy, N+1** (the peak plus one spare).',
+  },
+  'C8.rei.interview': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: "Someday somebody in a nice shirt will ask you how to scale a web app from one server. Here's your answer.",
+  },
+  'C8.card.title': {
+    kind: 'ui',
+    speaker: 'Card',
+    text: 'How would you scale a web app from a single server?',
+  },
+  'C8.card.1': { kind: 'ui', speaker: 'Card', text: '1. Pin down who uses it and what must stay up.' },
+  'C8.card.2': {
+    kind: 'ui',
+    speaker: 'Card',
+    text: '2. Estimate requests per second: users times how often they call. Size for the peak, not the average.',
+  },
+  'C8.card.3': {
+    kind: 'ui',
+    speaker: 'Card',
+    text: '3. One server is fine while it runs well under capacity.',
+  },
+  'C8.card.4': {
+    kind: 'ui',
+    speaker: 'Card',
+    text: '4. Scale up first: quick, but it has a ceiling, needs downtime, and is still one point of failure.',
+  },
+  'C8.card.5': {
+    kind: 'ui',
+    speaker: 'Card',
+    text: '5. Then scale out behind a load balancer with health checks.',
+  },
+  'C8.card.6': { kind: 'ui', speaker: 'Card', text: '6. Size the pool for the peak plus one spare.' },
+  'C8.card.7': { kind: 'ui', speaker: 'Card', text: '7. Scale back down when the peak passes.' },
+  'C8.book.open': {
+    kind: 'scene',
+    speaker: '(stage direction, no text)',
+    text: "She opens the book. The first pages are full of old handwriting that isn't Rei's. She turns past them to a blank page.",
+  },
+  'C8.book.page1': {
+    kind: 'ui',
+    speaker: 'Night Book',
+    text: "Demand decides the design. Count who's coming, how often, and how big the peak gets. Build for the peak, with room for one part to die.",
+  },
+  'C8.triage.end': {
+    kind: 'scene',
+    speaker: 'TRIAGE (happy)',
+    text: 'Stream saved. 4 viewers. Best night ever.',
+  },
+  'C8.rei.end': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: "Arcade under the rail line. Tomorrow, midnight. Don't be late.",
+  },
+  'C8.title': { kind: 'ui', speaker: 'Title card', text: 'Session 0: Brownout' },
+  'fill.block.ok.01': { kind: 'block', speaker: 'block', text: 'old man noodles: is the noodle cam on?' },
+  'fill.block.ok.02': {
+    kind: 'block',
+    speaker: 'block',
+    text: 'kenji: lux can you make the wifi faster for the countdown',
+  },
+  'fill.block.ok.03': {
+    kind: 'block',
+    speaker: 'block',
+    text: 'mrs okafor: Happy almost new year everyone x',
+  },
+  'fill.block.ok.04': {
+    kind: 'block',
+    speaker: 'block',
+    text: 'young father: practising my midnight call face',
+  },
+  'fill.block.slow.01': { kind: 'block', speaker: 'block', text: 'kenji: lagging' },
+  'fill.block.slow.02': {
+    kind: 'block',
+    speaker: 'block',
+    text: 'old man noodles: the picture is doing the stairs thing',
+  },
+  'fill.block.slow.03': { kind: 'block', speaker: 'block', text: "mrs okafor: Lift's stuck again." },
+  'fill.block.down.01': { kind: 'block', speaker: 'block', text: 'young father: anyone else?' },
+  'fill.block.down.02': { kind: 'block', speaker: 'block', text: 'kenji: LUX' },
+  'fill.stream.ok.01': { kind: 'stream', speaker: 'stream', text: 'ok the drone cam is actually sick' },
+  'fill.stream.ok.02': { kind: 'stream', speaker: 'stream', text: 'lux fixing the net on NYE is so lux' },
+  'fill.stream.ok.03': { kind: 'stream', speaker: 'stream', text: "what's that chart" },
+  'fill.stream.slow.01': { kind: 'stream', speaker: 'stream', text: 'number go up??' },
+  'fill.stream.slow.02': { kind: 'stream', speaker: 'stream', text: 'triage is panicking again lol' },
+  'fill.stream.down.01': { kind: 'stream', speaker: 'stream', text: 'stream lagging bad' },
+  'fill.stream.down.02': { kind: 'stream', speaker: 'stream', text: 'rip' },
+} as const satisfies Record<string, Line>;
+
+export type LineId = keyof typeof LINES;
+
+/** The text of one line. */
+export function line(id: LineId): string {
+  return LINES[id].text;
+}

@@ -1,5 +1,11 @@
 // Read-only window into the running game for browser tests. Only installed when the page
 // URL has a `test` query parameter, so tests assert on game state instead of pixels.
+//
+// Each part of the game adds its own section without touching this file: declare the section's
+// type by augmenting TestSections, then call provideTestState with a getter.
+//
+//   declare module '../testHook' { interface TestSections { board: BoardTestState } }
+//   provideTestState('board', () => ({ ... }));
 
 export interface TestSnapshot {
   /** Key of the active Phaser scene, or null before the first scene starts. */
@@ -10,10 +16,23 @@ export interface TestSnapshot {
   canvas: { width: number; height: number } | null;
 }
 
+/** Extra sections of the snapshot, one per part of the game; each file augments this interface. */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface TestSections {}
+
+export type TestState = TestSnapshot & Partial<TestSections>;
+
 declare global {
   interface Window {
-    __neonTest?: { readonly state: TestSnapshot };
+    __neonTest?: { readonly state: TestState };
   }
+}
+
+const sections = new Map<string, () => unknown>();
+
+/** Add (or replace) one section of the test snapshot. Cheap to call when the hook is off. */
+export function provideTestState<K extends keyof TestSections>(key: K, read: () => TestSections[K]): void {
+  sections.set(key, read);
 }
 
 export function testHookEnabled(search: string): boolean {
@@ -28,12 +47,20 @@ export function simSpeed(search: string): number {
   return Number.isFinite(n) && n >= 1 && n <= 20 ? n : 1;
 }
 
+/** Scene a browser test asks to start in with `?test&scene=<key>`, or null. */
+export function startScene(search: string): string | null {
+  const params = new URLSearchParams(search);
+  return params.has('test') ? params.get('scene') : null;
+}
+
 export function installTestHook(read: () => TestSnapshot): void {
   if (!testHookEnabled(window.location.search)) return;
   Object.defineProperty(window, '__neonTest', {
     value: Object.freeze({
-      get state(): TestSnapshot {
-        return structuredClone(read());
+      get state(): TestState {
+        const snap: Record<string, unknown> = { ...read() };
+        for (const [key, get] of sections) snap[key] = get();
+        return structuredClone(snap) as unknown as TestState;
       },
     }),
     writable: false,

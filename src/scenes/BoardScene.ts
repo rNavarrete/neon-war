@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { SCENES } from './keys';
 
 // Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
 export const GAME_WIDTH = 1920;
@@ -10,7 +11,7 @@ export class BoardScene extends Phaser.Scene {
   ready = false;
 
   constructor() {
-    super('board');
+    super(SCENES.board);
   }
 
   preload(): void {
