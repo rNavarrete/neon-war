@@ -133,10 +133,18 @@ test('the estimate dial records 30 and leaves a dashed guess line on the chart',
       { timeout: 20_000, intervals: [25] },
     )
     .toBeLessThanOrEqual(1);
+  // Trust and credits on screen match the sim. At speed 20 trust can move between a draw and a
+  // read, so wait for a frame where both are read together, as for the chart.
+  await expect
+    .poll(
+      async () => {
+        const n = await hud(page);
+        return Math.max(Math.abs(n.shown.trust - n.sim.trust), Math.abs(n.shown.credits - n.sim.credits));
+      },
+      { timeout: 20_000, intervals: [25] },
+    )
+    .toBeLessThanOrEqual(1);
   h = await hud(page);
-  // Trust and credits on screen match the sim.
-  expect(Math.abs(h.shown.trust - h.sim.trust)).toBeLessThanOrEqual(1);
-  expect(Math.abs(h.shown.credits - h.sim.credits)).toBeLessThanOrEqual(1);
   expect(h.chat.block.length + h.chat.stream.length).toBeGreaterThan(0);
   await page.screenshot({ path: 'test-results/screens/hud-c1.png' });
 });
