@@ -21,7 +21,7 @@ export const BROWNOUT = {
   overclock: { cost: 60, factor: 2, rebootSeconds: 3 },
   database: { capacity: 200 },
   loadBalancer: { cost: 0 },
-  /** Share of a part's price given back on decommission: half (the B2a ticket; GAME.md is silent). */
+  /** Share of a part's price given back on decommission: half (Rolando, 27 Oct 2026). */
   decommissionRefund: 0.5,
 
   demand: {
