@@ -15,7 +15,9 @@ export interface GameEvents {
   /** The player tried something the rules refused, with the reason to show. */
   refused: { reason: string };
   /** Play one sound effect by its key (the file name in public/audio/sfx without .mp3). */
-  sfx: { key: string };
+  sfx: { key: string; loop?: boolean };
+  /** Stop a looping sound effect started with `sfx` and `loop` (e.g. rain-loop when a room scene ends). */
+  sfxStop: { key: string };
   /** A server went over 100% load and started to overheat (ENG-503 emits it). */
   overheat: { id: string };
   /** A server died from overheating (ENG-503 emits it). */
