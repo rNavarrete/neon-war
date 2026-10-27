@@ -11,7 +11,7 @@ import { PauseScene } from './scenes/PauseScene';
 import { SettingsScene } from './scenes/SettingsScene';
 import { StoryScene } from './scenes/StoryScene';
 import { TitleScene } from './scenes/TitleScene';
-import { autopilotOn, installTestHook, simSpeed, startScene } from './testHook';
+import { autopilotOn, installTestHook, simSpeed, startScene, testHookEnabled } from './testHook';
 
 function startGame(): void {
   newRun(simSpeed(window.location.search), autopilotOn(window.location.search) ? bestPlay : null);
@@ -41,6 +41,9 @@ function startGame(): void {
     backgroundColor: '#05070f',
     // Painted art: smooth scaling, not pixel art.
     pixelArt: false,
+    // Multisampling only softens drawn edges, and under `?test` headless Chromium does it in software
+    // at about half the frame rate, so browser tests turn it off.
+    render: { antialiasGL: !testHookEnabled(window.location.search) },
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     scene: scenes,
   });
