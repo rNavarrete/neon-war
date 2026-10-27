@@ -345,6 +345,14 @@ describe('ac9: the Solace banner', () => {
   it("can't be paid without the credits", () => {
     expect(chooseBanner(withCredits(start(), 199), 'pay', 100).ok).toBe(false);
   });
+
+  it('Ignore and Bin still work when credits are below 0', () => {
+    for (const choice of ['ignore', 'bin'] as const) {
+      const s = ok(chooseBanner(withCredits(start(), -40), choice, 100));
+      expect(s.board.credits).toBe(-40);
+      expect(s.banner).toEqual({ choice, at: 100 });
+    }
+  });
 });
 
 describe("ac10: Ozzie's tab", () => {
@@ -445,6 +453,17 @@ describe('ac12: pure functions', () => {
 
     expect(frozen).toEqual(copy);
     expect(surges).toEqual(SURGES);
+  });
+
+  it('createSession does not mutate its input', () => {
+    const init = {
+      slots: ['slot-1', 'slot-2'],
+      parts: fixed,
+      wires: [{ from: 'gateway', to: 'database' }],
+    };
+    const frozenInit = deepFreeze(structuredClone(init));
+    createSession(frozenInit);
+    expect(frozenInit).toEqual(init);
   });
 
   it('take time as a parameter and give the same answer for the same input', () => {

@@ -99,7 +99,7 @@ export function fitOverclock(session: Session, id: string, now: number): Session
 export function chooseBanner(session: Session, choice: BannerChoice, now: number): SessionResult {
   if (session.banner) return { ok: false, reason: 'the banner was already answered' };
   const cost = choice === 'pay' ? BROWNOUT.solace.cost : 0;
-  if (session.board.credits < cost) return { ok: false, reason: 'not enough credits' };
+  if (cost > 0 && session.board.credits < cost) return { ok: false, reason: 'not enough credits' };
   return {
     ok: true,
     session: {
