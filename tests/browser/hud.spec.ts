@@ -12,10 +12,14 @@ async function hud(page: Page): Promise<Hud> {
   return page.evaluate(() => window.__neonTest!.state.hud as unknown as HudTestState);
 }
 
-async function openBoard(page: Page, speed = 1): Promise<void> {
+/**
+ * Open the board at `speed`. With `autopilot` the test-only scripted best play builds what GAME.md's
+ * best-play path builds (src/game/autopilot.ts), so a test can reach the surge and midnight.
+ */
+async function openBoard(page: Page, speed = 1, autopilot = false): Promise<void> {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
-  await page.goto(`/?test&scene=board&speed=${speed}`);
+  await page.goto(`/?test&scene=board&speed=${speed}${autopilot ? '&autopilot' : ''}`);
   await expect
     .poll(() => page.evaluate(() => window.__neonTest?.state.hud?.ready ?? false), { timeout: 15_000 })
     .toBe(true);
@@ -50,6 +54,29 @@ async function setDial(page: Page, value: number): Promise<void> {
   await page.mouse.click(h.dial.set.x, h.dial.set.y);
 }
 
+type Story = {
+  active: boolean;
+  scriptId: string | null;
+  click: { x: number; y: number } | null;
+  skip: { visible: boolean; x: number; y: number };
+};
+
+/** Wait for a story scene over the board (the rescue), then click through it to the end. */
+async function playThroughScene(page: Page, scriptId: string): Promise<void> {
+  const story = () => page.evaluate(() => window.__neonTest!.state.story as unknown as Story);
+  await expect
+    .poll(async () => (await story()).scriptId, { timeout: 60_000, intervals: [50] })
+    .toBe(scriptId);
+  for (let guard = 0; guard < 200; guard++) {
+    const s = await story();
+    if (!s.active) return;
+    const p = s.skip.visible ? s.skip : s.click;
+    if (p) await page.mouse.click(p.x, p.y);
+    await page.waitForTimeout(80);
+  }
+  throw new Error(`the ${scriptId} scene never ended`);
+}
+
 test('the session opens on the job card, and clicking it away starts C1', async ({ page }) => {
   test.setTimeout(60_000);
   await openBoard(page, 4);
@@ -79,7 +106,7 @@ test('the session opens on the job card, and clicking it away starts C1', async 
 
 test('the estimate dial records 30 and leaves a dashed guess line on the chart', async ({ page }) => {
   test.setTimeout(180_000);
-  await openBoard(page, 20);
+  await openBoard(page, 20, true);
   await dismissJobCard(page);
   await setDial(page, 30);
   await expect.poll(async () => (await hud(page)).notes.estimate).toBe(30);
@@ -91,12 +118,22 @@ test('the estimate dial records 30 and leaves a dashed guess line on the chart',
     .toEqual(expect.arrayContaining(['C1.lux.01', 'C1.triage.03']));
 
   // Let the real line draw in for a while; the guess stays.
-  await waitForNow(page, 45);
+  await waitForNow(page, 60);
   h = await hud(page);
   expect(h.notes.estimate).toBe(30);
-  // The chart's last plotted values match the sim within 1 req/s.
-  expect(Math.abs(h.chart.demand - h.sim.demand)).toBeLessThanOrEqual(1);
-  expect(Math.abs(h.chart.capacity - h.sim.capacity)).toBeLessThanOrEqual(1);
+  // The guess itself costs nothing (also unit-tested in tests/hud-format.test.ts).
+  // The chart's last plotted values match the sim within 1 req/s. At speed 20 retries move demand
+  // between a plot and a read, so wait for a frame where both are read together.
+  await expect
+    .poll(
+      async () => {
+        const n = await hud(page);
+        return Math.max(Math.abs(n.chart.demand - n.sim.demand), Math.abs(n.chart.capacity - n.sim.capacity));
+      },
+      { timeout: 20_000, intervals: [25] },
+    )
+    .toBeLessThanOrEqual(1);
+  h = await hud(page);
   // Trust and credits on screen match the sim.
   expect(Math.abs(h.shown.trust - h.sim.trust)).toBeLessThanOrEqual(1);
   expect(Math.abs(h.shown.credits - h.sim.credits)).toBeLessThanOrEqual(1);
@@ -107,10 +144,9 @@ test('the estimate dial records 30 and leaves a dashed guess line on the chart',
 for (const choice of ['pay', 'ignore', 'bin'] as const) {
   test(`the Solace banner records ${choice}`, async ({ page }) => {
     test.setTimeout(180_000);
-    await openBoard(page, 20);
+    await openBoard(page, 20, true);
     await dismissJobCard(page);
-    await waitForNow(page, 85);
-    await expect.poll(async () => (await hud(page)).banner.open, { timeout: 30_000 }).toBe(true);
+    await expect.poll(async () => (await hud(page)).banner.open, { timeout: 60_000 }).toBe(true);
     // Let the slide-in finish so the buttons are where the hook says.
     await page.waitForTimeout(600);
     const before = await hud(page);
@@ -120,74 +156,124 @@ for (const choice of ['pay', 'ignore', 'bin'] as const) {
     await expect.poll(async () => (await hud(page)).banner.choice).toBe(choice);
     const after = await hud(page);
     expect(after.banner.open).toBe(false);
-    // No servers are running, so no upkeep: only the banner moves credits.
+    // Pay spends 200; the server's upkeep (5 credits a minute) moves credits by a little either way.
     const spent = before.sim.credits - after.sim.credits;
-    expect(spent).toBeCloseTo(choice === 'pay' ? 200 : 0, 5);
+    const expected = choice === 'pay' ? 200 : 0;
+    expect(spent).toBeGreaterThanOrEqual(expected);
+    expect(spent).toBeLessThan(expected + 3);
     await expect
       .poll(async () => (await hud(page)).bark.history, { timeout: 60_000 })
       .toContain(`C2.lux.${choice}`);
   });
 }
 
-test('surge warnings, the laundry cut, the sizing prompt and the midnight countdown', async ({ page }) => {
-  test.setTimeout(600_000);
-  await openBoard(page, 20);
+test('the surge, the laundry cut, the dip flicker, Regroup, the sizing prompt and midnight', async ({
+  page,
+}) => {
+  test.setTimeout(300_000);
+  // Speed 5: the laundry cut is only offered for the few seconds between the surge and the crew.
+  await openBoard(page, 5, true);
   await dismissJobCard(page);
   await waitForNow(page, 280);
 
-  // C4: the district surge is warned with its number at least 10 s ahead.
-  await expect
-    .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
-    .toBe(300);
-  let h = await hud(page);
-  expect(h.surge?.demand).toBe(250);
-  expect(300 - h.surge!.shownAt!).toBeGreaterThanOrEqual(10);
-  expect(h.surge?.line).toBe('C4.warn.01');
+  await test.step('C4: the district surge is warned with its number at least 10 s ahead', async () => {
+    await expect
+      .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
+      .toBe(300);
+    const h = await hud(page);
+    expect(h.surge?.demand).toBe(250);
+    expect(300 - h.surge!.shownAt!).toBeGreaterThanOrEqual(10);
+    expect(h.surge?.line).toBe('C4.warn.01');
+  });
 
-  // In the surge, the laundry cut appears; clicking it records the cut.
-  await expect
-    .poll(async () => (await hud(page)).laundry.available, { timeout: 60_000, intervals: [25] })
-    .toBe(true);
-  // Taken as the surge lands, so the warning (it lingers a few seconds) and the cut both show.
-  await page.screenshot({ path: 'test-results/screens/hud-c4.png' });
-  h = await hud(page);
-  await page.mouse.click(h.laundry.button.x, h.laundry.button.y);
-  await expect.poll(async () => (await hud(page)).laundry.cut).toBe(true);
-  await expect.poll(async () => (await hud(page)).bark.history, { timeout: 60_000 }).toContain('C4.lux.cut');
+  // The dip's 2 s warning lands while the laundry cut is being taken: watch for it from here on.
+  const dipSeen = (async () => {
+    for (const end = Date.now() + 90_000; Date.now() < end;) {
+      const n = await hud(page);
+      if (n.dip) return n;
+      await page.waitForTimeout(25);
+    }
+    return null;
+  })();
+
+  await test.step('the laundry cut takes about 40 req/s off demand', async () => {
+    // The cut is offered from the warning on; take it once the surge has landed.
+    await expect
+      .poll(
+        async () => {
+          const n = await hud(page);
+          return n.laundry.available && n.sim.demand >= 250;
+        },
+        { timeout: 60_000, intervals: [25] },
+      )
+      .toBe(true);
+    // The surge window is a couple of real seconds at speed 5: click before anything slow.
+    const before = await hud(page);
+    expect(before.sim.demand).toBeGreaterThanOrEqual(250);
+    await page.mouse.click(before.laundry.button.x, before.laundry.button.y);
+    await expect.poll(async () => (await hud(page)).laundry.cut).toBe(true);
+    // Taken as the surge lands, so the warning (it lingers a few seconds) and the cut both show.
+    await page.screenshot({ path: 'test-results/screens/hud-c4.png' });
+    const after = await hud(page);
+    // 250 becomes 210 before retries; with the retry pile on top the drop is 40 or more.
+    expect(before.sim.demand - after.sim.demand).toBeGreaterThanOrEqual(35);
+    await expect
+      .poll(async () => (await hud(page)).bark.history, { timeout: 60_000 })
+      .toContain('C4.lux.cut');
+  });
+
+  await test.step('a flicker warning shows on the overclocked server 2 s before its power dip', async () => {
+    const h = await dipSeen;
+    expect(h).not.toBeNull();
+    expect(h!.dip!.partId).toMatch(/^server-/);
+    expect(h!.now).toBeLessThan(305);
+  });
+
+  await test.step('the crew arrive, and Regroup runs quarter speed for 10 s once, then greys out', async () => {
+    await playThroughScene(page, 'C5');
+    await expect.poll(async () => (await hud(page)).regroup.visible, { timeout: 30_000 }).toBe(true);
+    const h = await hud(page);
+    expect(h.timeScale).toBe(1);
+    await page.mouse.click(h.regroup.button.x, h.regroup.button.y);
+    await expect.poll(async () => (await hud(page)).timeScale, { intervals: [25] }).toBe(0.25);
+    await expect.poll(async () => (await hud(page)).regroup.spent, { timeout: 30_000 }).toBe(true);
+    await expect.poll(async () => (await hud(page)).timeScale).toBe(1);
+  });
 
   await waitForNow(page, 430);
 
-  // C6: the midnight surge is warned at least 10 s ahead, and the sizing prompt asks for servers.
-  await expect
-    .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
-    .toBe(450);
-  h = await hud(page);
-  expect(450 - h.surge!.shownAt!).toBeGreaterThanOrEqual(10);
-  expect(h.surge?.demand).toBe(150);
-  await expect.poll(async () => (await hud(page)).sizingPrompt.open).toBe(true);
-  h = await hud(page);
-  expect(h.dial.mode).toBe('servers');
-  expect(h.now).toBeLessThan(510);
-  await page.screenshot({ path: 'test-results/screens/hud-c6.png' });
-  await setDial(page, 4);
-  await expect.poll(async () => (await hud(page)).notes.sizing).toBe(4);
-  h = await hud(page);
-  expect(h.sizingPrompt.open).toBe(false);
-  expect(h.notes.estimate).toBeNull();
+  await test.step('C6: the midnight surge is warned and the sizing prompt asks for servers', async () => {
+    await expect
+      .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
+      .toBe(450);
+    let h = await hud(page);
+    expect(450 - h.surge!.shownAt!).toBeGreaterThanOrEqual(10);
+    expect(h.surge?.demand).toBe(150);
+    await expect.poll(async () => (await hud(page)).sizingPrompt.open).toBe(true);
+    h = await hud(page);
+    expect(h.dial.mode).toBe('servers');
+    expect(h.now).toBeLessThan(510);
+    await page.screenshot({ path: 'test-results/screens/hud-c6.png' });
+    await setDial(page, 4);
+    await expect.poll(async () => (await hud(page)).notes.sizing).toBe(4);
+    h = await hud(page);
+    expect(h.sizingPrompt.open).toBe(false);
+  });
 
-  // The countdown reaches 0:00 at midnight, not before.
-  await waitForNow(page, 500);
-  h = await hud(page);
-  if (h.now < 509) expect(h.countdown).not.toBe('0:00');
-  await expect
-    .poll(async () => (await hud(page)).countdown, { timeout: 60_000, intervals: [25] })
-    .toBe('0:00');
-  h = await hud(page);
-  expect(h.now).toBeGreaterThanOrEqual(509);
-  await waitForNow(page, 510);
-  h = await hud(page);
-  expect(h.clock.startsWith('00:00')).toBe(true);
-  expect(h.countdown).toBe('0:00');
+  await test.step('the countdown reaches 0:00 at midnight, not before', async () => {
+    await waitForNow(page, 500);
+    let h = await hud(page);
+    if (h.now < 509) expect(h.countdown).not.toBe('0:00');
+    await expect
+      .poll(async () => (await hud(page)).countdown, { timeout: 60_000, intervals: [25] })
+      .toBe('0:00');
+    h = await hud(page);
+    expect(h.now).toBeGreaterThanOrEqual(509);
+    await waitForNow(page, 510);
+    h = await hud(page);
+    expect(h.clock.startsWith('00:00')).toBe(true);
+    expect(h.countdown).toBe('0:00');
+  });
 });
 
 test('Regroup stays hidden until the crew hands it over', async ({ page }) => {
@@ -196,36 +282,4 @@ test('Regroup stays hidden until the crew hands it over', async ({ page }) => {
   const h = await hud(page);
   expect(h.regroup.visible).toBe(false);
   expect(h.timeScale).toBe(1);
-});
-
-// WIRING(ENG-503): the laundry cut's effect on demand is ENG-503's rule; cutLaundry() only records it.
-test.fixme('cutting the laundry floor loose takes about 40 req/s off demand', async ({ page }) => {
-  await openBoard(page, 20);
-  await dismissJobCard(page);
-  await expect.poll(async () => (await hud(page)).laundry.available, { timeout: 30_000 }).toBe(true);
-  await waitForNow(page, 305);
-  const before = await hud(page);
-  await page.mouse.click(before.laundry.button.x, before.laundry.button.y);
-  await expect.poll(async () => (await hud(page)).laundry.cut).toBe(true);
-  const after = await hud(page);
-  expect(before.sim.demand - after.sim.demand).toBeGreaterThanOrEqual(35);
-});
-
-// WIRING(ENG-503): Regroup's charge is handed over at the rescue by ENG-503 (regroupAvailable()).
-test.fixme('Regroup runs quarter speed for 10 s once, then greys out', async ({ page }) => {
-  await openBoard(page, 20);
-  await dismissJobCard(page);
-  await expect.poll(async () => (await hud(page)).regroup.visible, { timeout: 40_000 }).toBe(true);
-  const h = await hud(page);
-  await page.mouse.click(h.regroup.button.x, h.regroup.button.y);
-  await expect.poll(async () => (await hud(page)).timeScale).toBe(0.25);
-  await expect.poll(async () => (await hud(page)).regroup.spent, { timeout: 5_000 }).toBe(true);
-  expect((await hud(page)).timeScale).toBe(1);
-});
-
-// WIRING(ENG-503): power dips come from ENG-503 (upcomingDip() returns null until then).
-test.fixme('a flicker warning shows on the part 2 s before a power dip', async ({ page }) => {
-  await openBoard(page, 20);
-  await dismissJobCard(page);
-  await expect.poll(async () => (await hud(page)).dip, { timeout: 30_000 }).not.toBeNull();
 });

@@ -15,6 +15,11 @@ const C = BROWNOUT.challenges;
 export interface CueView {
   /** Sim seconds since the clock opened. */
   now: number;
+  /**
+   * Seconds the HUD has run (it keeps counting while C1's clock waits for the first build), for
+   * "N s later" delays; defaults to `now`.
+   */
+  clock?: number;
   demand: number;
   capacity: number;
   /** Requests per second dropped right now. */
@@ -51,9 +56,9 @@ export interface Cue {
 }
 
 export interface DirectorState {
-  /** Sim time each cue fired. */
+  /** When each cue fired, on the HUD clock (see `at`). */
   readonly fired: Readonly<Record<string, number>>;
-  /** Sim time each held condition became true, while it stays true. */
+  /** When each held condition became true (HUD clock), while it stays true. */
   readonly since: Readonly<Record<string, number>>;
 }
 
@@ -64,6 +69,9 @@ const NO_CUES: readonly LineId[] = [];
 const after = (fired: Readonly<Record<string, number>>, id: LineId, secs: number, now: number): boolean =>
   fired[id] !== undefined && now >= fired[id] + secs;
 
+/** The time delays and holds are measured on. */
+const at = (v: CueView): number => v.clock ?? v.now;
+
 const between = (now: number, from: number, to: number): boolean => now >= from && now < to;
 
 const MIDNIGHT = BROWNOUT.clock.midnight;
@@ -72,7 +80,7 @@ const MIDNIGHT = BROWNOUT.clock.midnight;
 export const CUES: readonly Cue[] = [
   // C1: job card and first server.
   { id: 'C1.triage.01', when: (v) => v.cardClosed && v.now < C.c3 },
-  { id: 'C1.triage.02', when: (v, f) => after(f, 'C1.triage.01', 2, v.now) },
+  { id: 'C1.triage.02', when: (v, f) => after(f, 'C1.triage.01', 2, at(v)) },
   { id: 'C1.lux.01', when: (v) => v.dialTouched && v.now < C.c3 },
   { id: 'C1.triage.03', when: (v) => v.estimate !== null && estimateClose(v.estimate) },
   { id: 'C1.triage.04', when: (v) => v.estimate !== null && !estimateClose(v.estimate) },
@@ -95,13 +103,13 @@ export const CUES: readonly Cue[] = [
   { id: 'C2.lux.pay', when: (v) => v.banner === 'pay' },
   { id: 'C2.lux.ignore', when: (v) => v.banner === 'ignore' },
   { id: 'C2.lux.bin', when: (v) => v.banner === 'bin' },
-  { id: 'C2.triage.pay', when: (v, f) => after(f, 'C2.lux.pay', 3, v.now) },
+  { id: 'C2.triage.pay', when: (v, f) => after(f, 'C2.lux.pay', 3, at(v)) },
   {
     id: 'C2.triage.after',
     when: (v, f) =>
-      after(f, 'C2.lux.pay', 5, v.now) ||
-      after(f, 'C2.lux.ignore', 5, v.now) ||
-      after(f, 'C2.lux.bin', 5, v.now),
+      after(f, 'C2.lux.pay', 5, at(v)) ||
+      after(f, 'C2.lux.ignore', 5, at(v)) ||
+      after(f, 'C2.lux.bin', 5, at(v)),
   },
 
   // C3: bigger or more?
@@ -123,7 +131,7 @@ export const CUES: readonly Cue[] = [
   { id: 'C4.chat.01', holdFor: 5, when: (v) => between(v.now, C.c4, C.c5) && v.dropped > 0 },
   { id: 'C4.lux.cut', when: (v) => v.laundryCut },
   { id: 'C4.chat.cut', when: (v) => v.laundryCut },
-  { id: 'C4.triage.cut', when: (v, f) => after(f, 'C4.lux.cut', 3, v.now) },
+  { id: 'C4.triage.cut', when: (v, f) => after(f, 'C4.lux.cut', 3, at(v)) },
   { id: 'C4.chat.seed', when: (v) => between(v.now, C.c4 + 15, C.c5) },
   { id: 'C4.chat.03', when: (v) => between(v.now, C.c4 + 20, C.c5) },
   { id: 'C4.chat.04', when: (v) => between(v.now, C.c4 + 25, C.c5) },
@@ -143,7 +151,7 @@ export const CUES: readonly Cue[] = [
   { id: 'C6.rei.scrape', when: (v, f) => f['C6.chat.hold.01'] !== undefined && v.droppedInC6 },
   { id: 'C6.triage.hold', when: (v, f) => f['C6.chat.hold.01'] !== undefined },
   { id: 'C6.lux.hold', when: (v, f) => f['C6.chat.hold.01'] !== undefined },
-  { id: 'C6.chat.hold.02', when: (v, f) => after(f, 'C6.chat.hold.01', 2, v.now) },
+  { id: 'C6.chat.hold.02', when: (v, f) => after(f, 'C6.chat.hold.01', 2, at(v)) },
 
   // C7: scale down.
   { id: 'C7.ozzie.01', when: (v) => between(v.now, MIDNIGHT + 10, MIDNIGHT + 20) },
@@ -201,12 +209,12 @@ export function direct(
         continue;
       }
       if (start === undefined) {
-        since = { ...since, [cue.id]: v.now };
+        since = { ...since, [cue.id]: at(v) };
         continue;
       }
-      if (v.now < start + cue.holdFor) continue;
+      if (at(v) < start + cue.holdFor) continue;
     } else if (!on) continue;
-    fired = { ...fired, [cue.id]: v.now };
+    fired = { ...fired, [cue.id]: at(v) };
     (out ??= []).push(cue.id);
   }
   if (fired === s.fired && since === s.since) return { state: s, fired: NO_CUES };

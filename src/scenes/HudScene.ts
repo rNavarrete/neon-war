@@ -30,6 +30,7 @@ import { countdownText, errorState } from './hud/format';
 import type { HudTestState, PagePoint } from './hud/hook';
 import { dismissJobCard, jobCardDue, openJobCard } from './hud/jobCard';
 import { BOTTOM, CENTRE, COLORS, FONT, FONT_SANS, LEFT, RIGHT, TOP } from './hud/layout';
+import { laundryCutAvailable } from '../sim/failures';
 import { cutLaundry, laundryCutAt, regroupAvailable, upcomingDip } from './hud/pending503';
 import { REGROUP_UNUSED, type RegroupState, regroupActive, regroupSpent, startRegroup } from './hud/regroup';
 import { type DipWarning, dipWarningAt, fallForecastAt, surgeWarningAt } from './hud/warnings';
@@ -594,7 +595,7 @@ export class HudScene extends Phaser.Scene {
   }
 
   private updateLaundry(r: Run): void {
-    const inSurge = r.now >= C.c4 && r.now < C.c5;
+    const inSurge = laundryCutAvailable(r.now, r.rescued) || (laundryCutAt(r) !== null && r.now < C.c5);
     const cut = laundryCutAt(r) !== null;
     this.laundry.setVisible(inSurge);
     this.laundry.setAlpha(cut ? 0.45 : 1);
@@ -628,6 +629,7 @@ export class HudScene extends Phaser.Scene {
   private runDirector(r: Run, sizingOpen: boolean): void {
     const v = this.view;
     v.now = r.now;
+    v.clock = this.clock;
     v.demand = r.demand;
     v.capacity = r.capacity;
     v.dropped = r.flow.dropped > 1e-6 ? r.flow.dropped : 0;
