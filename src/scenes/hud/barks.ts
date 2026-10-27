@@ -6,7 +6,7 @@ import type { LineId } from '../../strings';
 
 export const BARK_SECONDS = 4;
 /** Barks waiting past this many are stale by the time they'd show: the oldest waiting one drops. */
-export const BARK_QUEUE_MAX = 3;
+export const BARK_QUEUE_MAX = 5;
 /** How many shown barks the test hook remembers. */
 export const BARK_HISTORY = 12;
 

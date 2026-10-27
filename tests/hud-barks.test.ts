@@ -19,7 +19,15 @@ describe('bark queue', () => {
 
   it('drops the oldest waiting barks when too many pile up', () => {
     let s = NO_BARKS;
-    const ids: LineId[] = ['C2.triage.01', 'C2.lux.pay', 'C2.triage.pay', 'C2.triage.after', 'C3.triage.01'];
+    const ids: LineId[] = [
+      'C2.triage.01',
+      'C2.lux.pay',
+      'C2.triage.pay',
+      'C2.triage.after',
+      'C3.triage.01',
+      'C3.triage.02',
+      'C3.triage.03',
+    ];
     for (const id of ids) s = enqueueBark(s, id);
     expect(s.queue).toEqual(ids.slice(ids.length - BARK_QUEUE_MAX));
   });

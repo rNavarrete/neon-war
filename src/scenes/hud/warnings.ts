@@ -8,10 +8,10 @@ import type { LineId } from '../../strings';
 const C = BROWNOUT.challenges;
 
 /**
- * Shown a little before the sim's forecast lead (10 s), so the warning is on screen for at least
- * the full lead even when a frame lands just after the lead starts.
+ * Shown 2 s before the sim's forecast lead (10 s), so the warning is on screen for at least the full
+ * lead even when a long frame (or a sped-up test) steps the clock past the moment the lead starts.
  */
-export const SURGE_WARNING_LEAD = BROWNOUT.demand.forecastLeadSeconds + 1;
+export const SURGE_WARNING_LEAD = BROWNOUT.demand.forecastLeadSeconds + 2;
 /** The warning stays up this long after the surge lands, so it can be read. */
 export const SURGE_WARNING_LINGER = 4;
 

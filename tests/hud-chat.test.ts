@@ -78,7 +78,8 @@ describe('warnings', () => {
     });
     expect(surgeWarningAt(C.c6 - 10)).toMatchObject({ surge: { demand: 150 }, line: 'C6.warn.01' });
     expect(surgeWarningAt(C.c4 - 10.5)?.surge.startsAt).toBe(C.c4);
-    expect(surgeWarningAt(C.c4 - 12)).toBeNull();
+    expect(surgeWarningAt(C.c4 - 11.5)?.surge.startsAt).toBe(C.c4);
+    expect(surgeWarningAt(C.c4 - 13)).toBeNull();
     expect(surgeWarningAt(C.c4 + 1)?.inSeconds).toBe(0);
     expect(surgeWarningAt(C.c4 + 30)).toBeNull();
   });
