@@ -37,14 +37,28 @@ export class Run {
   now = 0;
   demand = demandAt(0);
   flow: Flow = route(this.session.board, BROWNOUT_RULES, this.demand);
-  /** True while a menu or scene has stopped the board. */
-  paused = false;
+  /** Why the board is stopped right now (pause menu, job card, a scene); empty while it runs. */
+  private holds = new Set<string>();
   /** Slow-motion factor (Regroup sets 0.25); 1 normally. */
   timeScale = 1;
   notes: RunNotes = { estimate: null, sizing: null };
 
   /** @param speed test-only multiplier from `?test&speed=N`. */
   constructor(readonly speed = 1) {}
+
+  /** True while anything holds the board still. */
+  get paused(): boolean {
+    return this.holds.size > 0;
+  }
+
+  /** Stop the sim for a reason ('pause', 'job-card', 'scene'...). Holds stack: each is released on its own. */
+  hold(reason: string): void {
+    this.holds.add(reason);
+  }
+
+  release(reason: string): void {
+    this.holds.delete(reason);
+  }
 
   /** Advance by one frame of real time (seconds). Does nothing while paused. */
   tick(realSeconds: number): void {

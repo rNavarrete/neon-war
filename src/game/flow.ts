@@ -13,7 +13,7 @@ export function startSession(from: Phaser.Scene): void {
 
 /** Leave the session for the title screen. */
 export function quitToTitle(from: Phaser.Scene): void {
-  run().paused = true;
+  run().hold('quit');
   for (const key of [SCENES.hud, SCENES.pause, SCENES.settings]) from.scene.stop(key);
   from.scene.start(SCENES.title);
 }
