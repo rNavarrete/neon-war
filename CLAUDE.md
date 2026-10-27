@@ -91,6 +91,18 @@ Your report ("done, tests pass") is never evidence. The evidence is:
 
 A new push invalidates every earlier verdict, so push only what you intend to have reviewed.
 
+## How your tests are judged
+
+An independent verifier maps each criterion to one assertion and flags any assertion that may not prove it. Every flag fails the PR. Write each criterion's key assertion so none of these apply:
+
+- **Fixture-only.** The asserted value must come from code imported from `src/`, called in the test or in a helper in the same file. Never mock or `vi.spyOn` product code, and never assert on a literal.
+- **Weak assertion.** Pin the exact value with `toBe`, `toEqual` or `toMatchObject` with fields. Avoid `toBeGreaterThan`, `toBeLessThan`, `toBeTruthy`, `toBeDefined`, `.not`, a bare `toThrow()`, and `a && b` inside `expect`. The sim is deterministic, so even a criterion like "trust above 0" can be shown with the exact number your scenario produces; keep the bound as a second assertion if you like.
+- **May not run.** Put the assertion straight in the test body, never inside a `for` loop, `if`, `forEach` or other callback, or after `&&` or `?`. For several cases, write one test per case, or unroll the assertions.
+- **Mirrors the code.** Write the expected value out. Don't compute it with the function under test, or with `.map`, `.filter` or `.reduce`, and don't compare a call with itself. For "same answer for the same input", compare against written-out values.
+- **Passes without the change.** The verifier runs your tests on the base commit; each criterion's test must fail there.
+
+Before opening the PR, check each criterion's assertion against this list. Then reread the criterion and the numbers in `docs/GAME.md`, and test the edges: exact thresholds, the boundary between challenges, and large `dt` steps that could skip past a scripted event.
+
 ## PR body
 
 Include:
