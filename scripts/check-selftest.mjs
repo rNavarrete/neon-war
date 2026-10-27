@@ -296,7 +296,11 @@ function unitTests() {
 
 const t0 = Date.now();
 const results = [unitTests()];
-const files = listRepoFiles();
+// The cases test the check command, not the game: each copy keeps one browser test (boot) so the e2e
+// step still runs for real, and leaves out the rest of the suite, which plays whole sessions and
+// takes about 11 minutes. Ten full runs would not fit the job's 25 minutes.
+const KEPT_BROWSER_TEST = 'tests/browser/boot.spec.ts';
+const files = listRepoFiles().filter((f) => !f.startsWith('tests/browser/') || f === KEPT_BROWSER_TEST);
 for (const c of CASES) {
   process.stdout.write(`running case: ${c.name} ...\n`);
   results.push(checkCase(c, files));
