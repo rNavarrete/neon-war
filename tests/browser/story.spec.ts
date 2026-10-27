@@ -50,31 +50,52 @@ async function nextLine(page: Page): Promise<Story> {
   return story(page);
 }
 
-test('the cold open plays about 15 s with no input, then hands over to the board', async ({ page }) => {
+test('the cold open waits for a click on every line, then hands over to the board', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto('/?test&scene=story');
   await expect.poll(async () => (await story(page))?.scriptId, { timeout: 15_000 }).toBe('C0');
-  const t0 = Date.now();
-
-  await expect.poll(async () => (await story(page)).lineId, { timeout: 12_000 }).toBe('C0.lux.01');
   let s = await story(page);
+  expect(s.lineId).toBe('C0.tv.01');
   expect(s.backdrop).toBe('art/bg/bedroom-dark.webp');
-  expect(s.nameplate).toBe('Lux');
-  expect(s.portrait).toBe('portrait:lux/faces-room/grieving');
+  expect(s.runHeld).toBe(true);
+  expect(s.chat).toEqual([]);
+
+  // Nothing moves on its own: five seconds later (the old timers had moved on by 4 s) it is still the
+  // first line, no click has landed, and the run is held.
+  await page.waitForTimeout(5000);
+  s = await story(page);
+  expect(s.lineId).toBe('C0.tv.01');
+  expect(s.clicks).toBe(0);
+  expect(s.active).toBe(true);
   expect(s.runHeld).toBe(true);
 
-  await expect
-    .poll(async () => (await story(page)).chat.length, { timeout: 6_000 })
-    .toBeGreaterThanOrEqual(3);
-  s = await story(page);
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.tv.02');
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.grandma.01');
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.lux.01');
+  expect(s.nameplate).toBe('Lux');
+  expect(s.portrait).toBe('portrait:lux/faces-room/grieving');
+  expect(s.chat).toEqual([]);
+
+  // The phone lights up with the block's four messages as TRIAGE wakes.
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.triage.01');
+  expect(s.chat).toHaveLength(4);
   expect(s.chat[0]).toBe("kenji: lux the net's doing the thing again");
   await page.screenshot({ path: 'test-results/screens/cold-open.png' });
 
-  await expect.poll(async () => (await state(page)).scene, { timeout: 15_000 }).toBe('board');
-  const seconds = (Date.now() - t0) / 1000;
-  expect(seconds).toBeGreaterThan(13);
-  expect(seconds).toBeLessThan(20);
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.lux.02');
+  expect(s.sfx).toContain('goggles-on');
+  expect((await state(page)).scene).toBe('story');
 
+  // The last click brings the goggles down and hands over to the board at 23:51:45. Even a
+  // double-click there leaves the job card up to be read.
+  if (!s.typingDone) s = await clickStory(page);
+  await page.mouse.dblclick(s.click!.x, s.click!.y);
+  await expect.poll(async () => (await state(page)).scene, { timeout: 15_000 }).toBe('board');
   s = await story(page);
   expect(s.active).toBe(false);
   expect(s.finished).toEqual(['C0']);
@@ -230,10 +251,11 @@ test('one test plays the whole session from the title to Night Book page 1 with 
   const start = (await shell()).buttons.start;
   await page.mouse.click(start.x, start.y);
 
-  // C0: the cold open plays on its own and hands over to the board's job card.
+  // C0: the cold open is clicked through and hands over to the board's job card.
   await expect.poll(async () => (await story(page)).scriptId, { timeout: 15_000 }).toBe('C0');
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(1500);
   await page.screenshot({ path: 'test-results/screens/session-cold-open.png' });
+  await playThrough(page);
   type Hud = { now: number; jobCard: { open: boolean; x: number; y: number } };
   const hud = async () => (await state(page)).hud as unknown as Hud;
   await expect.poll(async () => (await hud())?.jobCard?.open ?? false, { timeout: 40_000 }).toBe(true);

@@ -73,6 +73,9 @@ const CHAT_SEED = 20261231;
  * the laundry cut, Regroup, the sizing prompt, barks and both chats. It reads run() every frame and
  * only calls the run's actions; the rules stay in src/sim/.
  */
+/** Clicks this soon after the HUD starts are the end of the cold open's last click, not a dismissal. */
+const EARLY_CLICK_GRACE_MS = 400;
+
 export class HudScene extends Phaser.Scene {
   ready = false;
   /**
@@ -162,10 +165,12 @@ export class HudScene extends Phaser.Scene {
     this.cardOpen = jobCardDue(r);
     if (this.cardOpen) {
       openJobCard(r);
-      // A click that lands while the HUD art is still loading still dismisses the card.
+      // A click that lands while the HUD art is still loading still dismisses the card, unless it
+      // is the tail of a double-click on the cold open's last line: the card must be read.
       const canvas = this.game.canvas;
+      const since = performance.now();
       const onDown = (): void => {
-        this.cardClickedEarly = true;
+        if (performance.now() - since >= EARLY_CLICK_GRACE_MS) this.cardClickedEarly = true;
       };
       canvas.addEventListener('pointerdown', onDown);
       this.earlyClick = () => canvas.removeEventListener('pointerdown', onDown);

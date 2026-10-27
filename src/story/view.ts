@@ -58,8 +58,8 @@ export function cover(scene: Phaser.Scene, key: string): Phaser.GameObjects.Imag
 
 /**
  * Real seconds between frames from Phaser's raw frame time. Phaser's smoothed delta is capped at
- * one 60 fps frame while the page is out of focus, which would stretch a 15 s scene; story timers
- * follow the wall clock instead (at most 0.25 s per frame).
+ * one 60 fps frame while the page is out of focus, which would stretch the rain, the room clock and
+ * the rewind animation; they follow the wall clock instead (at most 0.25 s per frame).
  */
 export class FrameClock {
   private last = -1;
@@ -98,8 +98,6 @@ export class VnView {
   private speaking: string | null = null;
   private blink = 0;
   lineId: LineId | null = null;
-  /** True while the scene waits for a click to go on (shows the ▼ marker when typing is done). */
-  waitsForClick = true;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -243,7 +241,7 @@ export class VnView {
       this.body.setText(this.full.slice(0, n));
     }
     this.blink = (this.blink + dt) % 1;
-    this.more.setVisible(this.body.visible && this.waitsForClick && this.typingDone && this.blink < 0.6);
+    this.more.setVisible(this.body.visible && this.typingDone && this.blink < 0.6);
   }
 
   snapshot(): ViewSnapshot {

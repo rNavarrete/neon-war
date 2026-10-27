@@ -2,12 +2,12 @@ import script from '../docs/SCRIPT.md?raw';
 import { SCRIPTS, chatText, isChat, scriptFaces, stepsFor, typedChars } from '../src/story/scripts';
 import { LINES } from '../src/strings';
 
-// The "When" column of docs/SCRIPT.md for a line, as seconds ("0:08, still looking" -> 8).
-function whenSeconds(id: string): number | null {
-  const row = script.split('\n').find((l) => l.startsWith(`| ${id} |`));
-  const when = row?.split('|')[4] ?? '';
-  const m = /(\d+):(\d\d)/.exec(when);
-  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+// The line IDs of a scene's table in docs/SCRIPT.md, in the order the rows are written.
+function scriptOrder(prefix: string): string[] {
+  return script
+    .split('\n')
+    .filter((l) => l.startsWith(`| ${prefix}`))
+    .map((l) => l.split('|')[1].trim());
 }
 
 describe('story scripts', () => {
@@ -15,12 +15,14 @@ describe('story scripts', () => {
     for (const s of Object.values(SCRIPTS)) for (const st of s.steps) expect(LINES[st.lineId]).toBeDefined();
   });
 
-  it('plays the cold open on the SCRIPT.md timers, every C0 line once, ending at 15 s', () => {
+  it('plays the cold open one click at a time, every C0 line once in SCRIPT.md order, ending with the goggles', () => {
     const c0 = SCRIPTS.C0;
     const ids = Object.keys(LINES).filter((id) => id.startsWith('C0.'));
     expect(c0.steps.map((s) => s.lineId).sort()).toEqual(ids.sort());
-    for (const s of c0.steps) expect(s.at).toBe(whenSeconds(s.lineId));
-    expect(c0.endAt).toBe(15);
+    expect(c0.steps.map((s) => s.lineId)).toEqual(scriptOrder('C0.'));
+    // No step carries a timer: the scene player only ever moves on a click.
+    for (const s of c0.steps) expect(Object.keys(s)).not.toContain('at');
+    expect(c0.steps.find((s) => s.lineId === 'C0.lux.01')?.cue).toBe('flicker');
     expect(c0.steps.at(-1)?.cue).toBe('goggles');
     expect(c0.where).toBe('room');
     expect(c0.backdrop).toBe('art/bg/bedroom-dark.webp');
@@ -34,7 +36,7 @@ describe('story scripts', () => {
     );
     expect(c5.steps.map((s) => s.lineId)).toEqual(sceneIds);
     expect(c5.backdrop).toBe('art/bg/immersive.webp');
-    expect(c5.steps.every((s) => s.at === undefined)).toBe(true);
+    expect(c5.steps.every((s) => !Object.keys(s).includes('at'))).toBe(true);
   });
 
   it("adds Rei's laundry aside only when the laundry floor was cut", () => {

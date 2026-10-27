@@ -1,11 +1,13 @@
-// The story layer's scenes as data: which lines play, in what order, over which backdrop. A step
-// with `at` plays on a timer (seconds from the scene's start); a step without it waits for a click
-// after the step before. Text never lives here, only line IDs from src/strings.ts.
+// The story layer's scenes as data: which lines play, in what order, over which backdrop. Every
+// step waits for a click after the step before; nothing advances on a timer. Text never lives here,
+// only line IDs from src/strings.ts.
 
 import { LINES, type LineId } from '../strings';
 
 /** Something a step does besides showing its line. */
 export type Cue =
+  /** The bedroom clock flickers to 02:14 for one frame, the night her mum died (cold open). */
+  | 'flicker'
   /** The goggles come down: goggles-on sound and the lens fades in (cold open). */
   | 'goggles'
   /** The crew's cable drops in (rescue). */
@@ -18,8 +20,6 @@ export type StepCondition = 'laundryCut';
 
 export interface ScriptStep {
   readonly lineId: LineId;
-  /** Seconds from the scene's start; absent means wait for a click after the step before. */
-  readonly at?: number;
   /** Portrait path under art/chars/ to use instead of the speaker's default face. */
   readonly face?: string;
   readonly cue?: Cue;
@@ -39,32 +39,32 @@ export interface SceneScript {
   /** Lux's room (room faces, rain) or her goggles (board faces). */
   readonly where: 'room' | 'board';
   readonly look: SceneLook;
-  /** Timed scenes end on their own this many seconds in; click scenes end after their last line. */
-  readonly endAt?: number;
   /** Show Akemi's photo (the cold open). */
   readonly photo?: boolean;
   readonly steps: readonly ScriptStep[];
 }
 
-/** C0, the cold open: 15 s, no input, lines on the "When" timers from docs/SCRIPT.md. */
+/**
+ * C0, the cold open: one line per click in the order of docs/SCRIPT.md. The block's four chat lines
+ * land together with TRIAGE waking up; the last click brings the goggles down and ends the scene.
+ */
 const COLD_OPEN: SceneScript = {
   id: 'C0',
   backdrop: 'art/bg/bedroom-dark.webp',
   where: 'room',
   look: 'vn',
-  endAt: 15,
   photo: true,
   steps: [
-    { lineId: 'C0.tv.01', at: 1 },
-    { lineId: 'C0.tv.02', at: 4 },
-    { lineId: 'C0.grandma.01', at: 6 },
-    { lineId: 'C0.lux.01', at: 8, face: 'lux/faces-room/grieving' },
-    { lineId: 'C0.chat.01', at: 9 },
-    { lineId: 'C0.chat.02', at: 10 },
-    { lineId: 'C0.chat.03', at: 11 },
-    { lineId: 'C0.chat.04', at: 12 },
-    { lineId: 'C0.triage.01', at: 13 },
-    { lineId: 'C0.lux.02', at: 14, face: 'lux/faces-room/composing', cue: 'goggles' },
+    { lineId: 'C0.tv.01' },
+    { lineId: 'C0.tv.02' },
+    { lineId: 'C0.grandma.01' },
+    { lineId: 'C0.lux.01', face: 'lux/faces-room/grieving', cue: 'flicker' },
+    { lineId: 'C0.chat.01' },
+    { lineId: 'C0.chat.02' },
+    { lineId: 'C0.chat.03' },
+    { lineId: 'C0.chat.04' },
+    { lineId: 'C0.triage.01' },
+    { lineId: 'C0.lux.02', face: 'lux/faces-room/composing', cue: 'goggles' },
   ],
 };
 

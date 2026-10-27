@@ -9,6 +9,7 @@ import {
 } from '../game/flow';
 import { run } from '../game/run';
 import { settings } from '../game/settings';
+import { BROWNOUT } from '../sim/brownout';
 import type { DebriefResults } from '../story/debrief';
 import { LABELS } from '../story/labels';
 import { SCRIPTS, type SceneScript, type ScriptStep, chatText, isChat, stepsFor } from '../story/scripts';
@@ -32,8 +33,8 @@ const RAIN_DROPS = 90;
 
 /**
  * Visual-novel scene player: the cold open, the rescue and the rewind screens. Lines play from the
- * scripts in src/story/scripts.ts; a click finishes the typing line or advances. Timed scenes (the
- * cold open) play on their own. The run is held while a scene is up (src/game/flow.ts does that).
+ * scripts in src/story/scripts.ts; a click finishes the typing line or advances, and nothing moves
+ * on without one. The run is held while a scene is up (src/game/flow.ts does that).
  */
 export class StoryScene extends Phaser.Scene {
   ready = false;
@@ -49,7 +50,7 @@ export class StoryScene extends Phaser.Scene {
   private tracking: Phaser.GameObjects.Rectangle[] = [];
   private rain: Phaser.GameObjects.Graphics | null = null;
   private drops: { x: number; y: number; v: number }[] = [];
-  private flickered = false;
+  private flickerPending = false;
   private frames = new FrameClock();
 
   constructor() {
@@ -79,7 +80,7 @@ export class StoryScene extends Phaser.Scene {
     this.elapsed = 0;
     this.done = false;
     this.rewinding = -1;
-    this.flickered = false;
+    this.flickerPending = false;
     this.frames = new FrameClock();
     this.clock = null;
     this.tracking = [];
@@ -98,7 +99,6 @@ export class StoryScene extends Phaser.Scene {
       onClick: () => this.click(),
       onSkip: () => this.finish(),
     });
-    this.view.waitsForClick = s.endAt === undefined;
     setLiveView(this.view);
 
     Object.assign(storyState, {
@@ -117,27 +117,20 @@ export class StoryScene extends Phaser.Scene {
       setLiveView(null);
     });
 
-    // Click scenes start on their first line; timed scenes wait for its timer.
-    if (s.endAt === undefined) this.advance();
+    this.advance();
     this.ready = true;
   }
 
   update(time: number): void {
     const real = this.frames.step(time);
     if (!this.story || this.done) return;
-    // Timers follow the test speed; the typewriter stays at reading speed (a click finishes it).
+    // Effects follow the test speed; the typewriter stays at reading speed (a click finishes it).
     const dt = real * run().speed;
     this.elapsed += dt;
     this.view.update(real);
     this.updateRain(dt);
     this.updateTracking(dt);
-
-    const s = this.script;
-    if (s.endAt !== undefined) {
-      while (this.next < this.steps.length && (this.steps[this.next].at ?? 0) <= this.elapsed) this.advance();
-      this.updateColdOpenClock();
-      if (this.elapsed >= s.endAt) this.finish();
-    }
+    if (this.script.where === 'room') this.updateRoomClock();
     if (this.rewinding >= 0) {
       this.rewinding += dt;
       this.updateRewindClock(Math.min(1, this.rewinding / REWIND_SECONDS));
@@ -145,14 +138,14 @@ export class StoryScene extends Phaser.Scene {
     }
   }
 
-  /** A click finishes the typing line, or goes on to the next one in a click scene. */
+  /** A click finishes the typing line, or goes on to the next one. */
   private click(): void {
     if (this.done || this.rewinding >= 0) return;
     if (!this.view.typingDone) {
       this.view.finishTyping();
       return;
     }
-    if (this.script.endAt === undefined) this.advance();
+    this.advance();
   }
 
   /** Show the next step; chat lines go to the corner and fall through to the step after. */
@@ -162,18 +155,17 @@ export class StoryScene extends Phaser.Scene {
       this.cue(step);
       if (isChat(step.lineId)) {
         this.view.chat(chatText(step.lineId));
-        if (this.script.endAt !== undefined) return;
         continue;
       }
       this.view.say(step.lineId, step.face);
       return;
     }
-    if (this.script.endAt !== undefined) return;
     if (this.story?.rewind) this.startRewind();
     else this.finish();
   }
 
   private cue(step: ScriptStep): void {
+    if (step.cue === 'flicker') this.flickerPending = !settings().reduceFlicker;
     if (step.cue === 'goggles') {
       playSfx('goggles-on');
       const lens = this.add
@@ -242,15 +234,17 @@ export class StoryScene extends Phaser.Scene {
     }
   }
 
-  private updateColdOpenClock(): void {
+  private updateRoomClock(): void {
     if (!this.clock) return;
-    // The clock flickers to 02:14 for one frame (the night her mum died); a steady clock with reduce flicker.
-    if (!this.flickered && this.elapsed >= 7 && !settings().reduceFlicker) {
-      this.flickered = true;
+    // The clock flickers to 02:14 for one frame when Lux looks at the photo (the 'flicker' cue); a
+    // steady clock with reduce flicker. Otherwise it ticks from 23:51:30 and stops at 23:51:45, where
+    // the board picks the run up however long she sits there (src/game/flow.ts).
+    if (this.flickerPending) {
+      this.flickerPending = false;
       this.clock.setText('02:14:00');
       return;
     }
-    this.clock.setText(run().clock(Math.floor(this.elapsed)));
+    this.clock.setText(run().clock(Math.min(Math.floor(this.elapsed), BROWNOUT.challenges.c1)));
   }
 
   // --- TRIAGE's stream replay: VHS lines over the frozen board -----------------------------------

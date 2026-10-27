@@ -16,23 +16,24 @@ two differ, GAME.md wins on rules and numbers, and this file wins on wording.
 - Lux speaks only in short lines to TRIAGE and the crew. TRIAGE is the only voice before the crew arrives.
 - System-design words stay out of every line until the debrief (C8).
 
-## C0 Cold open (23:51:30, 15 s, no input)
+## C0 Cold open (23:51:30, click to advance)
 
 Rain, test fireworks, Lux alone on her bed with her mum's photo; the clock flickers to 02:14 for one frame; the
-phone lights up; the drone wakes; goggles down. No click needed: lines play on timers.
+phone lights up; the drone wakes; goggles down. Every line waits for a click, like every other scene; nothing
+plays on a timer. The run's clock holds at 23:51:30 until the goggles come down, then C1 starts at 23:51:45.
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| C0.tv.01 | scene | TV downstairs | 0:01, under the rain | "...and Halation, we are ten minutes from midnight!" |
-| C0.tv.02 | scene | TV downstairs | 0:04 | "Get your people close. Get your cameras ready!" |
-| C0.grandma.01 | scene | Grandma (through the door) | 0:06 | "Lux? Your show's starting, love." |
-| C0.lux.01 | scene | Lux | 0:08, still looking at the photo | "In a minute, Baachan." |
-| C0.chat.01 | chat | block: kenji | 0:09 | lux the net's doing the thing again |
-| C0.chat.02 | chat | block: young father | 0:10 | I need to call my son at midnight!! |
-| C0.chat.03 | chat | block: mrs okafor | 0:11 | Countdown stream keeps freezing. Is it you or the rain? |
-| C0.chat.04 | chat | block: kenji | 0:12 | lux pls |
-| C0.triage.01 | bark | TRIAGE (eager) | 0:13, drone iris lights up | "Recording! Oh. Oh, it's the net again, isn't it." |
-| C0.lux.02 | scene | Lux | 0:14, goggles down | "Yeah. Let's go look." |
+| C0.tv.01 | scene | TV downstairs | first line, under the rain | "...and Halation, we are ten minutes from midnight!" |
+| C0.tv.02 | scene | TV downstairs | click | "Get your people close. Get your cameras ready!" |
+| C0.grandma.01 | scene | Grandma (through the door) | click | "Lux? Your show's starting, love." |
+| C0.lux.01 | scene | Lux | click, still looking at the photo; the clock flickers to 02:14 | "In a minute, Baachan." |
+| C0.chat.01 | chat | block: kenji | click: the phone lights up, all four at once | lux the net's doing the thing again |
+| C0.chat.02 | chat | block: young father | with C0.chat.01 | I need to call my son at midnight!! |
+| C0.chat.03 | chat | block: mrs okafor | with C0.chat.01 | Countdown stream keeps freezing. Is it you or the rain? |
+| C0.chat.04 | chat | block: kenji | with C0.chat.01 | lux pls |
+| C0.triage.01 | bark | TRIAGE (eager) | same click, drone iris lights up | "Recording! Oh. Oh, it's the net again, isn't it." |
+| C0.lux.02 | scene | Lux | click, goggles down; the next click starts the board | "Yeah. Let's go look." |
 
 ## C1 to C3: the board, alone with TRIAGE (23:51:45 to 23:56:30)
 
