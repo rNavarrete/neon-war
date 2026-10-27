@@ -4,6 +4,7 @@
 import type { BannerChoice } from '../sim/economy';
 import type { RescueCause } from '../sim/failures';
 import type { Failure, Midnight } from '../sim/play';
+import type { Occurrence } from './occurrences';
 
 export interface GameEvents {
   /** Something the player did on the board that worked. */
@@ -37,6 +38,8 @@ export interface GameEvents {
   midnight: Midnight;
   /** The clock reached 00:01:00: the debrief plays. */
   sessionEnd: Record<string, never>;
+  /** An edge between two frames of the sim (src/game/occurrences.ts), emitted by the HUD once each. */
+  occurrence: Occurrence;
 }
 
 type Handler<T> = (payload: T) => void;

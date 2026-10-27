@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { panel } from './hud/panel';
 import { bus } from '../game/bus';
+import { type Frame, frame } from '../game/frame';
+import { type Occurrence, detectOccurrences } from '../game/occurrences';
 import { allPortraits } from '../game/portraits';
 import { type Run, run } from '../game/run';
 import { settings } from '../game/settings';
@@ -91,6 +93,10 @@ export class HudScene extends Phaser.Scene {
   partLocator: ((partId: string) => { x: number; y: number } | null) | null = null;
 
   private runRef: Run | null = null;
+  /** The frame the last update read, to detect occurrences against; null before the first. */
+  private lastFrame: Frame | null = null;
+  /** This frame's occurrences, one array reused every update (see detectOccurrences). */
+  private readonly occurrences: Occurrence[] = [];
   /** Bark and filler clock: real seconds times the test speed, stopped while the board is held. */
   private clock = 0;
   private cardOpen = false;
@@ -233,6 +239,7 @@ export class HudScene extends Phaser.Scene {
     if (r !== this.runRef) this.resetForRun(r);
     if (!r.paused) this.clock += (delta / 1000) * r.speed;
     const now = r.now;
+    this.readFrame(r);
 
     this.updateTopStrip(r);
     const estimate = r.notes.estimate;
@@ -257,10 +264,29 @@ export class HudScene extends Phaser.Scene {
     this.updateFiller(r);
   }
 
+  // ---- the frame and its occurrences ----
+
+  /**
+   * Read this update's frame of the run (memoised per sim change) and emit each occurrence since
+   * the last one on the bus. The occurrence array is reused, so nothing is allocated on a quiet frame.
+   */
+  private readFrame(r: Run): void {
+    const f = frame(r);
+    if (f === this.lastFrame) {
+      this.occurrences.length = 0;
+      return;
+    }
+    detectOccurrences(this.lastFrame, f, this.occurrences);
+    this.lastFrame = f;
+    for (let i = 0; i < this.occurrences.length; i++) bus.emit('occurrence', this.occurrences[i]);
+  }
+
   // ---- per-run state ----
 
   private resetForRun(r: Run): void {
     this.runRef = r;
+    this.lastFrame = null;
+    this.occurrences.length = 0;
     this.director = NEW_DIRECTOR;
     this.barks = NO_BARKS;
     this.chats = { block: [], stream: [] };
