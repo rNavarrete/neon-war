@@ -58,11 +58,20 @@ export const BROWNOUT = {
 
   // Failure rules below are B1b's; their numbers live here so the whole table is in one place.
   overheat: { overloadSeconds: 8 },
-  retries: { maxDemandRise: 0.5 },
+  /**
+   * Failed requests come back: demand rises toward the error share, capped at maxDemandRise, by
+   * risePerSecond while errors last, and falls back by fallPerSecond when they stop. The rates are
+   * drafts for Rolando: GAME.md only sets the cap.
+   */
+  retries: { maxDemandRise: 0.5, risePerSecond: 0.05, fallPerSecond: 0.1 },
   powerDip: { warningSeconds: 2, darkSeconds: 20, beforeMidnightSeconds: 10 },
   regroup: { speed: 0.25, seconds: 10, charges: 1 },
   rescue: { trustBelow: 30, surgeSeconds: 45 },
   finalSizing: { holds: 4, holdsWithFastReplacement: 3, drops: 2, waste: 5 },
+  /** The C4 script: the power dip takes the overclocked server dark this long into the surge (a draft). */
+  surgeScript: { dipAfterSeconds: 5 },
+  /** C7: decommissioning down to this many servers counts as scaling down in the debrief. */
+  scaleDown: { to: 2 },
 } as const;
 
 /** The board's plumbing rules for Session 0, built from BROWNOUT. */
