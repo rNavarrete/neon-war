@@ -47,6 +47,12 @@ export function simSpeed(search: string): number {
   return Number.isFinite(n) && n >= 1 && n <= 20 ? n : 1;
 }
 
+/** Whether a browser test asked for scripted best play with `?test&autopilot`. */
+export function autopilotOn(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.has('test') && params.has('autopilot');
+}
+
 /** Scene a browser test asks to start in with `?test&scene=<key>`, or null. */
 export function startScene(search: string): string | null {
   const params = new URLSearchParams(search);

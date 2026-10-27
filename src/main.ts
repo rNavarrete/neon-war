@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { needsComputer, readDevice, showComputerNote } from './game/device';
+import { bestPlay } from './game/autopilot';
 import { newRun } from './game/run';
 import { BoardScene, GAME_HEIGHT, GAME_WIDTH } from './scenes/BoardScene';
 import { DebriefScene } from './scenes/DebriefScene';
@@ -10,10 +11,10 @@ import { PauseScene } from './scenes/PauseScene';
 import { SettingsScene } from './scenes/SettingsScene';
 import { StoryScene } from './scenes/StoryScene';
 import { TitleScene } from './scenes/TitleScene';
-import { installTestHook, simSpeed, startScene } from './testHook';
+import { autopilotOn, installTestHook, simSpeed, startScene } from './testHook';
 
 function startGame(): void {
-  newRun(simSpeed(window.location.search));
+  newRun(simSpeed(window.location.search), autopilotOn(window.location.search) ? bestPlay : null);
 
   const board = new BoardScene();
   // The first scene in the list starts on load; `?test&scene=<key>` lets a browser test start elsewhere.
