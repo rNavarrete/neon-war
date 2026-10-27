@@ -1,10 +1,10 @@
 # Neon War: Session 0, Brownout
 
 Levels are called **sessions** (Lux "jacks in" for a session). Brownout is session 0: the tutorial and the
-whole MVP. The full spec, with the reasoning behind every choice, is the Brownout session spec
-(https://claude.ai/artifact/WsaFpkAYob7fyJXfrCWLNT), and the step-by-step gameplay is the Brownout
-Challenge Design (https://claude.ai/artifact/AcYK8MokGTdd1Ga9NKcc2C, all five of its recommendations accepted
-by Rolando on 27 Oct 2026). Where docs/PRD.md disagrees with this file, this file wins.
+whole MVP. This file is the complete spec for building it: everything a task needs is here or elsewhere in
+this repo. It was distilled from earlier design notes (the session spec and the Challenge Design, whose five
+recommendations Rolando accepted on 27 Oct 2026); those notes are not needed to build or review anything.
+Where docs/PRD.md disagrees with this file, this file wins.
 
 ## Pitch
 

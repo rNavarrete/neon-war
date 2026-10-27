@@ -1,6 +1,6 @@
 # Art in public/art
 
-Rolando picked these on 27 Oct 2026 with the Brownout art picker (https://claude.ai/artifact/5mt5bTmmQvMFR79HLxhMjU).
+Rolando picked these on 27 Oct 2026 with the Brownout art picker.
 The source sheets are gpt-image-2 generations drawn on magenta. They were chroma-keyed and cut into single images, then saved as WebP with transparency.
 The uncut candidates and the prompt scripts are on branch `claude/project-thread-sctaoa` under `docs/art-candidates/`.
 
