@@ -72,6 +72,11 @@ export const BROWNOUT = {
   surgeScript: { dipAfterSeconds: 5 },
   /** C7: decommissioning down to this many servers counts as scaling down in the debrief. */
   scaleDown: { to: 2 },
+  /**
+   * How `step` cuts time: no sim tick is longer than maxStepSeconds, so a big step plays out the same
+   * as many small ones; times closer than timeEpsilon count as equal (floating-point slack).
+   */
+  sim: { maxStepSeconds: 0.1, timeEpsilon: 1e-9 },
 } as const;
 
 /** The board's plumbing rules for Session 0, built from BROWNOUT. */

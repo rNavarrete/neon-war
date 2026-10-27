@@ -24,7 +24,7 @@ export const coolHeat = (): Heat => ({ overload: {}, dead: [] });
 /**
  * Heat after dt seconds of this flow. A live server over 100% load keeps counting; one at or under
  * 100%, or offline (booting, dark), starts again from zero. A server that reaches the overheat time
- * dies.
+ * (8 s in a row, with floating-point slack so ten 0.1 s ticks make a full second) dies.
  */
 export function updateOverheat(
   board: Board,
@@ -40,10 +40,19 @@ export function updateOverheat(
     if (part.kind !== 'server' || dead.includes(part.id) || offline.includes(part.id)) continue;
     if ((flow.load[part.id] ?? 0) <= capacityOf(part, rules)) continue;
     const seconds = (heat.overload[part.id] ?? 0) + dt;
-    if (seconds >= BROWNOUT.overheat.overloadSeconds) dead.push(part.id);
+    if (seconds >= BROWNOUT.overheat.overloadSeconds - BROWNOUT.sim.timeEpsilon) dead.push(part.id);
     else overload[part.id] = seconds;
   }
   return { overload, dead };
+}
+
+/** Seconds until the hottest overloaded server cooks if it stays over load, or Infinity. */
+export function secondsToOverheat(heat: Heat): number {
+  let left = Infinity;
+  for (const id in heat.overload) {
+    left = Math.min(left, BROWNOUT.overheat.overloadSeconds - heat.overload[id]);
+  }
+  return left;
 }
 
 /**
