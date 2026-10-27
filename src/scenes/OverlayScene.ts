@@ -16,6 +16,8 @@ const W = 1920;
 export interface ShellTestState {
   /** The last effect key asked for, audible or not (headless browsers may lock audio). */
   lastSfx: string | null;
+  /** The last 20 effect keys asked for, oldest first. */
+  recentSfx: string[];
   /** True while the board music loop is playing (or queued to start once audio unlocks). */
   musicPlaying: boolean;
   settings: { volume: number; textSpeed: string; reduceFlicker: boolean; fullscreen: boolean };
@@ -151,6 +153,7 @@ export class OverlayScene extends Phaser.Scene {
     const title = this.scene.get(SCENES.title) as { creditsOpen?: boolean } | null;
     return {
       lastSfx: audio.lastSfx,
+      recentSfx: [...audio.recentSfx],
       musicPlaying: this.musicOn && this.music !== null,
       settings: {
         volume: s.volume,

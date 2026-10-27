@@ -87,6 +87,8 @@ export interface SfxPlayer {
 export class AudioDirector {
   /** The last effect key asked for, whether or not it was audible (tests read it). */
   lastSfx: string | null = null;
+  /** The last few effect keys asked for, oldest first (tests read it). */
+  recentSfx: string[] = [];
   private player: SfxPlayer | null = null;
 
   constructor(events: Bus) {
@@ -107,6 +109,8 @@ export class AudioDirector {
 
   play(key: string, loop = false): void {
     this.lastSfx = key;
+    this.recentSfx.push(key);
+    if (this.recentSfx.length > 20) this.recentSfx.shift();
     try {
       this.player?.play(key, loop);
     } catch {

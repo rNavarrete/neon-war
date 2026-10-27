@@ -84,7 +84,8 @@ test('the title shows the logo over the skyline with Start, Settings and Credits
   await press(page, 'start');
   // Session 0 opens with the cold open (story) and then the board.
   await expect.poll(async () => (await state(page)).scene, { timeout: 15_000 }).toMatch(/^(story|board)$/);
-  expect((await state(page)).shell!.lastSfx).toBe('ui-click');
+  // The click sounds first; the cold open's rain and goggles follow it.
+  expect((await state(page)).shell!.recentSfx).toContain('ui-click');
 });
 
 test('Esc and the pause button open Pause; the sim clock holds still while paused', async ({ page }) => {
