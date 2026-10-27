@@ -16,6 +16,14 @@ export interface GameEvents {
   refused: { reason: string };
   /** Play one sound effect by its key (the file name in public/audio/sfx without .mp3). */
   sfx: { key: string };
+  /** A server went over 100% load and started to overheat (ENG-503 emits it). */
+  overheat: { id: string };
+  /** A server died from overheating (ENG-503 emits it). */
+  serverDied: { id: string };
+  /** A power dip's warning ended and the part went dark (ENG-503 emits it). */
+  powerDip: { id: string };
+  /** The crew's cable drops at the rescue (ENG-503 / the story layer emits it). */
+  rescue: Record<string, never>;
 }
 
 type Handler<T> = (payload: T) => void;
