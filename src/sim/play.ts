@@ -177,12 +177,14 @@ export function liveServers(play: Play): number {
 
 /**
  * The next time after this play's clock that a sim tick must end on: the next point on the fixed
- * tick grid, a challenge start, the time trigger, a dip warning, going dark or ending, a part
+ * tick grid (0.1 s, or 0.025 s of sim time while Regroup slows it, so a tick is 0.1 s of real time
+ * either way), a challenge start, the time trigger, a dip warning, going dark or ending, a part
  * finishing its boot, the paid banner running out, or an overloaded server reaching 8 s.
  */
 export function nextEdge(play: Play): number {
   const t = play.t;
-  let edge = (Math.floor(t / TICK + EPS) + 1) * TICK;
+  const tick = play.regroup.left > 0 ? TICK * REGROUP.speed : TICK;
+  let edge = (Math.floor(t / tick + EPS) + 1) * tick;
   const consider = (at: number): void => {
     if (at > t && at < edge) edge = at;
   };
