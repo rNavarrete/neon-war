@@ -104,6 +104,9 @@ test('dragging a scrap server to a slot places it, spends 80 credits and shows i
   expect(placed.offline).toContain(id);
 
   const bootStart = placed.now - (3 - server.left);
+  // C1's clock waits for the first server wired gateway -> server -> database, then the boot runs.
+  await wire(page, 'gateway', id);
+  await wire(page, id, 'database');
   await waitOnline(page, id);
   const online = await board(page);
   expect(online.now - bootStart).toBeGreaterThanOrEqual(3);
@@ -171,6 +174,8 @@ test('dropping the overclock kit on a server makes it 120 req/s, spends 60 and r
 }) => {
   await openBoard(page);
   const s1 = await placeServer(page, 's1');
+  await wire(page, 'gateway', s1);
+  await wire(page, s1, 'database');
   await waitOnline(page, s1);
   const before = (await board(page)).credits;
 
@@ -202,6 +207,10 @@ test('packets follow each wire, load shows on each part, and the packet pool sto
   await wire(page, s1, 'database');
   await expect.poll(async () => (await board(page)).wires.length).toBe(2);
   await waitOnline(page, s1);
+  // Requests dropped while the server booted come back as retries for a moment: let them settle.
+  await expect
+    .poll(async () => Math.round((await board(page)).demand * 100) / 100, { timeout: 30_000 })
+    .toBe(30);
 
   const b = await board(page);
   for (const w of b.wires) expect(w.rate).toBeCloseTo(b.demand, 3);

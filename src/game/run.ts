@@ -38,6 +38,9 @@ export interface RunNotes {
 /** Longest step one frame may take, so a stalled tab doesn't jump the sim forward. */
 const MAX_FRAME_SECONDS = 0.25;
 
+/** Longest slice of a frame stepped at once (see tick). */
+const MAX_SLICE_SECONDS = 0.5;
+
 /** The midnight dip picks its server from this seed, the same way on every replay. */
 const SEED = 2026;
 
@@ -47,9 +50,56 @@ export class Run {
   /** Why the board is stopped right now (pause menu, job card, a scene); empty while it runs. */
   private holds = new Set<string>();
   private ended = false;
+  /** Set once the player's post-rescue build covers the tail (see waitingForCrewBuild). */
+  private crewBuilt = false;
+
+  /** Test-only scripted player (`?test&autopilot`), run before each step. */
+  autopilot: ((r: Run) => void) | null = null;
 
   /** @param speed test-only multiplier from `?test&speed=N`. */
   constructor(readonly speed = 1) {}
+
+  /**
+   * True while C1 waits for the player's first build. The clock and the block's demand start only
+   * once a server is wired from the gateway through to the database, so reading the job card, setting
+   * the dial and dragging the first server can't fail the block before it was ever up.
+   */
+  get waitingForFirstBuild(): boolean {
+    const t = this.now;
+    if (t < BROWNOUT.challenges.c1 || t >= BROWNOUT.challenges.c2) return false;
+    const { parts, wires } = this.session.board;
+    return !parts.some(
+      (p) =>
+        p.kind === 'server' &&
+        wires.some((w) => w.from === 'gateway' && w.to === p.id) &&
+        wires.some((w) => w.from === p.id && w.to === 'database'),
+    );
+  }
+
+  /**
+   * True while the board waits for the player's build after the rescue. The crew arrive with trust
+   * under 30 and one stock server behind their balancer, against a 120 req/s tail: at speed 1 that is
+   * a few seconds before trust runs out, too short to rack and wire anything. So, like C1, the clock
+   * waits until the servers wired behind the balancer (booting ones count) can carry the tail. How
+   * many to rack is still the player's call; once the tail is covered the clock never waits again.
+   */
+  get waitingForCrewBuild(): boolean {
+    if (this.crewBuilt || !this.rescued || this.now >= BROWNOUT.challenges.c6) return false;
+    const { parts, wires } = this.session.board;
+    const lb = parts.find((p) => p.kind === 'balancer');
+    if (!lb) return true;
+    const dead = this.dead;
+    const behind = parts
+      .filter(
+        (p) =>
+          p.kind === 'server' &&
+          !dead.includes(p.id) &&
+          wires.some((w) => w.from === lb.id && w.to === p.id) &&
+          wires.some((w) => w.from === p.id && w.to === 'database'),
+      )
+      .reduce((sum, p) => sum + capacityOf(p, BROWNOUT_RULES), 0);
+    return behind < BROWNOUT.demand.tail;
+  }
 
   get session() {
     return this.play.session;
@@ -94,11 +144,23 @@ export class Run {
   /** Advance by one frame of real time (seconds). Does nothing while paused. */
   tick(realSeconds: number): void {
     if (this.paused) return;
-    const dt = Math.min(realSeconds, MAX_FRAME_SECONDS) * this.speed;
-    if (dt <= 0) return;
+    this.autopilot?.(this);
+    if (this.waitingForFirstBuild) return;
+    if (this.rescued && !this.crewBuilt) {
+      if (this.waitingForCrewBuild) return;
+      this.crewBuilt = true;
+    }
+    let left = Math.min(realSeconds, MAX_FRAME_SECONDS) * this.speed;
     const before = this.play;
-    this.play = step(before, dt);
-    this.announce(before, this.play);
+    // In slices, so a fast test speed stops on the tick the crew arrive instead of running on past it.
+    while (left > 0 && !this.play.failure) {
+      const slice = Math.min(left, MAX_SLICE_SECONDS);
+      const wasRescued = this.rescued;
+      this.play = step(this.play, slice);
+      left -= slice;
+      if (!wasRescued && this.rescued) break;
+    }
+    if (this.play !== before) this.announce(before, this.play);
   }
 
   /** Total req/s the live servers can serve right now. */
@@ -188,6 +250,7 @@ export class Run {
 
   /** After a failure's rewind screen: back to the checkpoint with credits, parts and trust as they were. */
   rewind(): ActionResult {
+    this.crewBuilt = false;
     return this.apply(rewind(this.play), () => {});
   }
 
@@ -248,7 +311,8 @@ export function run(): Run {
 }
 
 /** Start a fresh run of Session 0 (Start on the title screen, Restart in pause). */
-export function newRun(speed = current.speed): Run {
+export function newRun(speed = current.speed, autopilot = current.autopilot): Run {
   current = new Run(speed);
+  current.autopilot = autopilot;
   return current;
 }

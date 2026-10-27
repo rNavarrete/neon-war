@@ -65,6 +65,13 @@ describe('test speed', () => {
   it('runs the sim N times faster under ?test&speed=N', () => {
     const fast = new Run(20);
     const normal = new Run(1);
+    // Each with a server wired gateway -> server -> database, so C1 doesn't wait for a first build.
+    for (const r of [fast, normal]) {
+      r.placeServer('s1');
+      const id = r.session.board.parts[r.session.board.parts.length - 1].id;
+      r.connect('gateway', id);
+      r.connect(id, 'database');
+    }
     for (let i = 0; i < 60; i++) {
       fast.tick(1 / 60);
       normal.tick(1 / 60);
