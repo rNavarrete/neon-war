@@ -3,10 +3,14 @@ import {
   type BoardRules,
   type Part,
   connect,
+  capacityOf,
+  loseUpgrade,
+  upgrade,
   createBoard,
   decommission,
   disconnect,
   errorShare,
+  partById,
   place,
   route,
   updateTrust,
@@ -19,6 +23,8 @@ const RULES: BoardRules = {
   capacity: { server: 60, database: 500 },
   wiring: { gateway: ['balancer', 'server'], balancer: ['server'], server: ['database'], database: [] },
   maxOut: { gateway: 1 },
+  healthCheck: ['balancer'],
+  upgrade: { kinds: ['server'], cost: 60, factor: 2 },
 };
 
 const fixed: Part[] = [
@@ -174,5 +180,63 @@ describe('updateTrust', () => {
     expect(updateTrust(50, 0, 3, rates)).toBe(53);
     expect(updateTrust(99.5, 0, 1, rates)).toBe(100);
     expect(updateTrust(5, 1, 1, rates)).toBe(0);
+  });
+});
+
+describe('health checks', () => {
+  function balanced(): Board {
+    let b = ok(place(start(), RULES, 'slot-1', 'server'));
+    b = ok(place(b, RULES, 'slot-2', 'balancer'));
+    b = ok(disconnect(b, 'gateway', 'server-1'));
+    b = ok(connect(b, RULES, 'gateway', 'balancer-p2'));
+    b = ok(connect(b, RULES, 'balancer-p2', 'server-1'));
+    b = ok(connect(b, RULES, 'balancer-p2', 'server-p1'));
+    return ok(connect(b, RULES, 'server-p1', 'database'));
+  }
+
+  it('the balancer skips an offline server and sends everything to the live one', () => {
+    const f = route(balanced(), RULES, 60, ['server-1']);
+    expect(f.dropped).toBe(0);
+    expect(f.wires['balancer-p2>server-p1']).toBe(60);
+    expect(f.wires['balancer-p2>server-1']).toBeUndefined();
+    expect(f.skipped).toEqual(['balancer-p2>server-1']);
+  });
+
+  it('the gateway does not health-check: feeding an offline server drops the traffic', () => {
+    const f = route(start(), RULES, 30, ['server-1']);
+    expect(f.dropped).toBe(30);
+    expect(f.skipped).toEqual([]);
+  });
+
+  it('with every server offline the balancer has nowhere to send traffic', () => {
+    expect(route(balanced(), RULES, 60, ['server-1', 'server-p1']).dropped).toBe(60);
+  });
+});
+
+describe('upgrade (overclock kit)', () => {
+  it('doubles one server for its price, once', () => {
+    const b = ok(upgrade(start(), RULES, 'server-1'));
+    expect(b.credits).toBe(340);
+    expect(capacityOf(partById(b, 'server-1')!, RULES)).toBe(120);
+    expect(route(b, RULES, 120).dropped).toBe(0);
+    expect(upgrade(b, RULES, 'server-1')).toEqual({ ok: false, reason: 'already upgraded' });
+  });
+
+  it('refuses other kinds and an empty wallet', () => {
+    expect(upgrade(start(), RULES, 'database')).toEqual({
+      ok: false,
+      reason: "a database can't be upgraded",
+    });
+    expect(upgrade({ ...start(), credits: 59 }, RULES, 'server-1')).toEqual({
+      ok: false,
+      reason: 'not enough credits',
+    });
+  });
+
+  it('a burned-out upgrade leaves the server at normal capacity', () => {
+    const b = ok(loseUpgrade(ok(upgrade(start(), RULES, 'server-1')), 'server-1'));
+    expect(partById(b, 'server-1')).toEqual({ id: 'server-1', kind: 'server', slot: null });
+    expect(route(b, RULES, 120).dropped).toBe(60);
+    expect(loseUpgrade(b, 'server-1')).toEqual({ ok: false, reason: 'not upgraded' });
   });
 });

@@ -2,8 +2,9 @@
 
 Levels are called **sessions** (Lux "jacks in" for a session). Brownout is session 0: the tutorial and the
 whole MVP. The full spec, with the reasoning behind every choice, is the Brownout session spec
-(https://claude.ai/artifact/WsaFpkAYob7fyJXfrCWLNT). Where docs/PRD.md disagrees with this file, this file
-wins.
+(https://claude.ai/artifact/WsaFpkAYob7fyJXfrCWLNT), and the step-by-step gameplay is the Brownout
+Challenge Design (https://claude.ai/artifact/AcYK8MokGTdd1Ga9NKcc2C, all five of its recommendations accepted
+by Rolando on 27 Oct 2026). Where docs/PRD.md disagrees with this file, this file wins.
 
 ## Pitch
 
@@ -11,9 +12,27 @@ A painted cyberpunk system-design game in the browser. It is New Year's Eve in H
 keeps her slum block's net alive against the midnight countdown, nearly loses it when the district piles on,
 and is rescued by the Night Shift crew. About 10 minutes.
 
-The lesson is **demand decides the design**: read how much traffic is coming, build just enough to fit, and
-watch it hold or fail. The player does that four times with less help each time. Real terms (throughput,
-capacity, peak load, headroom, load balancer, N+1) are named only in the debrief.
+Neon War is a tool for learning system design above all else. The lesson is **demand decides the design**:
+read how much traffic is coming, build just enough to fit, and watch it hold or fail. The player does that four
+times with less help each time. Real terms are named only in the debrief.
+
+## What Session 0 teaches
+
+Session 0 is the first chapter of every beginner system design course, and nothing more: the interview
+warm-up "How would you scale a web app from one server?" told as a story.
+
+- Requirements (a job card), then a back-of-the-envelope estimate (users times how often they call).
+- Throughput against capacity, and headroom (do not run at 100%).
+- Scaling up (a bigger box) before scaling out, and the limits of scaling up.
+- Single point of failure.
+- Scaling out behind a load balancer, with health checks.
+- Redundancy: the peak plus one spare (N+1).
+- Seen but not mastered: cascading failure, retry storms, load shedding.
+- Scaling back down after the peak (optional coda).
+
+Not in Session 0: database work, caching, CDN, object storage, replication, queues, rate limiting, stateless
+sessions, sharding, regions. Each gets a later session. The residents' database is on the board but is never
+the player's problem.
 
 ## Two layers
 
@@ -36,65 +55,88 @@ capacity, peak load, headroom, load balancer, N+1) are named only in the debrief
 
 ## Flow
 
-The clock opens at 23:51:30 and midnight lands at the peak of the final surge.
+The clock opens at 23:51:30 and runs in real time; midnight lands at the peak of the final surge, about 8½
+minutes in. The estimating help fades: TRIAGE does C1's math out loud (badly) and the player corrects it, C3
+gives the number, the crew argue numbers in C5, and C6 is the player alone.
 
-| #   | Real time | Clock    | Layer  | What happens                                                                                     | What it teaches                                                  |
-| --- | --------- | -------- | ------ | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| 0   | 0:00      | 23:51:30 | Scene  | Cold open: rain, fireworks, Lux alone with her mum's photo; she pulls her goggles down. 15 s, no input. | The world and the stakes.                                        |
-| 1   | 0:15      | 23:51:45 | Board  | One scrap server, about 30 req/s. TRIAGE: "Count what's coming."                                 | Read demand; one server fits; overbuilding burns credits.        |
-| 2   | 1:30      | 23:53    | Board  | Solace banner: "Priority service, 200 credits." Pay, Ignore or Bin.                              | Credits and choices; buying blind.                               |
-| 3   | 3:00      | 23:54:30 | Board  | Demand climbs to about 90 against 60. A second server helps only once traffic reaches it.        | Add capacity when demand passes it; it only counts if reached.   |
-| 4   | 5:00      | 23:56:30 | Board  | Warning: about 250 req/s in 10 s. Server overheats and dies, retries pile up, database times out. Optional: cut the laundry floor loose. | Forecasts, cascading failure, load shedding. |
-| 5   | 6:00      | 23:57:30 | Scene, then board | The crew breaks into her goggles, drops a load balancer and hands over Regroup.        | Load balancer; advice as opinions.                               |
-| 6   | 7:30      | 23:59    | Board  | Crew goes quiet. Forecast: 150 req/s at midnight, a power dip 10 s before. "Your call. How many?" | The whole loop alone; build for the peak plus one spare.        |
-| 7   | 9:00      | 00:00:30 | Scene  | Goggles up, back in her room. Rei grades the night. First Night Book page.                       | Real terms named for the first time.                             |
+| #   | Clock (real time)  | Layer  | What happens                                                                                     | Debrief names                                            |
+| --- | ------------------ | ------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| C0  | 23:51:30 (0:00)    | Scene  | Cold open: rain, test fireworks, Lux alone with her mum's photo; she pulls her goggles down. 15 s, no input. | nothing yet                              |
+| C1  | 23:51:45 (0:15)    | Board  | **Job card** (who: 120 flats; what must work; the bar: nobody goes dark at midnight; each flat calls about every 4 s). The player sets the **estimate dial** (answer 30 req/s), then places one scrap server and wires gateway → server → database. TRIAGE: "480 a second! I'm great at math." | requirements, requests per second, capacity, estimate |
+| C2  | 23:53:00 (1:30)    | Board  | **Solace banner**: "Priority service, 200 credits." Pay, Ignore or Bin. The chart shows 30 against 60: nothing to protect against. | overprovisioning                              |
+| C3  | 23:54:30 (3:00)    | Board  | **Bigger or more?** Forecast: demand climbing to 90. The tray offers the **overclock kit** (scale up) beside a second server. A second server racked now sits idle, because the gateway feeds one part only. Doing nothing: the server overheats and dies, and TRIAGE offers its stream replay. | scale up, scale out, headroom |
+| C4  | 23:56:30 (5:00)    | Board  | **District surge**, a scripted near-loss: 250 req/s warned 10 s ahead; the overclocked server pegs, a power dip takes it dark, retries climb toward 375, the database times out. Optional: **cut the laundry floor loose** (about 40 req/s). | single point of failure, cascading failure, retry storm, load shedding |
+| C5  | 23:57:30 (6:00)    | Scene, then board | **Rescue.** The crew break into her goggles (the one full-immersive moment), drop a load balancer, Ozzie opens his tab, Mika hands over Regroup. The fried server is back at stock 60. Surge settles to 120: 3 servers behind the balancer. Mika says two, Ozzie says six, Rei says count it yourself. | load balancer, horizontal scaling, health check |
+| C6  | 23:59:00 (7:30)    | Board  | **Midnight, your call.** Forecast 150 req/s, one rack loses power about 10 s before midnight for 20 s. The estimate dial now counts servers: 150 ÷ 60 = 2.5, so 3 hold the peak and **4** ride out the dip. | capacity planning, peak vs average, redundancy, N+1 |
+| C7  | 00:00:00 (8:30)    | Board  | **Scale down** (optional, 30 s): fireworks; demand falls to 40 within 20 s while upkeep keeps ticking. Decommission down to 2. | scale down, elasticity, cost   |
+| C8  | 00:01:00 (9:00)    | Scene  | **Debrief.** Goggles up. Rei grades the night; terms named in three groups (sizing, scaling, failure); Night Book page 1, "Demand decides the design"; the interview-version card. | everything above            |
 
-**Losing is gentle.** There is no game-over screen. If trust hits zero before the rescue, the crew arrives
-anyway and Rei rewinds to the start of the cascade. If the build fails at midnight, the block goes dark on the
-stroke of twelve and Rei rewinds to one minute to midnight.
+**Losing is gentle.** There is no game-over screen.
+
+- Before the crew exists (C1 to C3), a failure rewinds through **TRIAGE's stream replay**: "I recorded the
+  last minute. Want to try that again?" It goes back to the start of the current challenge.
+- If trust hits zero in the surge, the crew arrives anyway and Rei rewinds to the start of the surge.
+- If the build fails at midnight, the block goes dark on the stroke of twelve and Rei rewinds to 23:59.
 
 ## Rules and numbers
 
 Rules live in `src/sim/` as pure TypeScript. These are draft numbers; Rolando tunes them by playing, so code
 keeps every number in one constants object.
 
-**Parts on the board:** gateway (feeds one part only), scrap server, residents' database, load balancer
-(crew gift, fans out evenly to every server wired behind it). Every other part is shown in the tray but
-locked.
+**Parts on the board:** gateway (feeds one part only, no health check), scrap server, residents' database,
+load balancer (crew gift at the rescue). The load balancer splits traffic evenly across the servers wired
+behind it and **health-checks** them: a server that is dark, dead or still booting is skipped and gets a grey
+"skipped" tag, and its share goes to the live ones. Every other part is shown in the tray but locked.
 
 | Thing                   | Value                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------------- |
 | The block               | 120 flats, each calling about every 4 s: 30 req/s                                           |
-| Scrap server capacity   | 60 req/s                                                                                    |
-| Evening climb (beat 3)  | ramps to 90 req/s                                                                           |
-| District surge (beat 4) | 250 req/s, warned at least 10 s ahead                                                       |
-| Final surge (beat 6)    | 150 req/s, peaking at midnight                                                              |
+| Scrap server            | 60 req/s; costs 80 credits; takes 3 s to boot before it serves                              |
+| Replacement server      | the same: 80 credits, 3 s boot (that boot is why 3 servers only hold at midnight with a fast replacement) |
+| Overclock kit           | 60 credits; doubles one server to 120 req/s; the server reboots for 3 s and drops traffic meanwhile; one kit per server ("no bigger box in the slum") |
+| Overclock burns out     | the overclocked server is the one that cooks in the surge; after the rescue it is back at stock 60 ("the kit fried") |
+| Residents' database     | 200 req/s; never the bottleneck in normal play, only the retry pile in the surge (about 375) pushes it over |
+| Evening climb (C3)      | ramps to 90 req/s                                                                           |
+| District surge (C4)     | 250 req/s, warned 10 s ahead; with retries it climbs toward 375                             |
+| Surge tail (C5)         | settles to 120 req/s for the next minute                                                    |
+| Final surge (C6)        | 150 req/s, peaking at midnight                                                              |
+| After midnight (C7)     | falls from 150 to 40 within 20 s                                                            |
+| Laundry floor cut (C4)  | removes about 40 req/s of demand; those neighbours are annoyed                             |
 | Starting credits        | 400                                                                                         |
 | Starting trust          | 100 (the neighbours)                                                                        |
-| Scrap server            | costs 80 credits, takes 3 s to boot before it serves                                        |
 | Server upkeep           | 5 credits per running server per minute                                                     |
 | Load balancer           | free, given by the crew at the rescue                                                       |
-| Rescue loan             | Ozzie fronts 100 credits at the rescue                                                      |
+| Ozzie's tab             | at the rescue Ozzie fronts 100 credits, then covers any shortfall at midnight up to 200 more, as a debt shown in the debrief; every path stays finishable |
 | Solace banner           | 200 credits for 60 s of extra capacity                                                      |
+| Estimate dial           | C1: the player sets expected req/s; it stays on the chart as a dashed line while the real line draws in; a wrong guess costs nothing. C6: the same dial counts servers |
 | Trust                   | drains 10 per second at a 100% error rate (scaled by the error share); recovers 1 per second while there are no errors; stays between 0 and 100 |
 | Overheating             | a server over 100% load for 8 s dies                                                        |
 | Retries                 | failed requests come back: demand rises by up to 50% while errors last                      |
-| Power dips              | 2 s flicker warning, then the part is dark for 20 s; scripted in the cascade, one seeded dip 10 s before midnight |
+| Power dips              | 2 s flicker warning, then the part is dark for 20 s; scripted in the surge, one seeded dip 10 s before midnight |
 | Regroup                 | quarter speed for 10 s, once per session, handed over at the rescue                         |
 | Rescue trigger          | trust under 30, or 45 s into the district surge                                             |
-| Final sizing            | 4 servers ride out the dip; 3 hold only with a fast replacement; 2 drop requests; 6 or more waste credits |
-| Debrief grade           | dropped requests, wasted credits, trust left, banner choice                                 |
+| Final sizing            | 4 servers ride out the dip; 3 hold only with a fast replacement; 2 drop requests; 5 or more hold but are graded as waste |
+| Debrief grade           | dropped requests, wasted credits, trust left, banner choice, Ozzie's tab, whether the player scaled down |
 
-What the economy is meant to produce at the final surge:
+What the economy is meant to produce (approximate, upkeep included):
 
-| Path                      | Credits at the final surge   | What the player can build                                  |
-| ------------------------- | ---------------------------- | ---------------------------------------------------------- |
-| Skipped the banner        | about 360                    | 4 servers (one spare) with about 200 left                  |
-| Paid the banner           | about 160                    | exactly 4 servers, nothing left for a mistake              |
-| Built extra servers early | less, upkeep ran longer      | the overbuild shows up as less to spend at midnight        |
+| Path                                                   | Credits before midnight | Midnight with 4 servers | Debrief shows                          |
+| ------------------------------------------------------ | ----------------------- | ----------------------- | -------------------------------------- |
+| Best play (skip banner, overclock early, 3 at rescue)  | about 150               | about 60 left           | no debt                                |
+| Paid the banner                                        | about −50               | Ozzie covers about 130  | "You owe Ozzie 130", banner called out |
+| Racked an idle second server in C3                     | about 135               | about 55 left           | small upkeep cost only                 |
+| Overbuilt at the rescue (5 or 6 boxes)                 | about 0 to 70           | small debt              | wasted credits graded                  |
 
-Not set yet: the cost of a replacement server mid-surge, the residents' database capacity, and the
-debrief's grade thresholds. A ticket that needs one of these stops and asks.
+Not set yet: the debrief's grade thresholds. A ticket that needs them stops and asks.
+
+## The interview version
+
+The debrief ends with a card, kept as a Night Book page, that turns the night into an interview answer to
+"How would you scale a web app from a single server?": pin down who uses it and what must stay up; estimate
+requests per second (users times call rate) and size for the peak, not the average; one server is fine well
+under its capacity; scale up first (quick, but it has a ceiling, needs downtime and is still one point of
+failure); then scale out behind a load balancer with health checks; size the pool for the peak plus one
+spare; scale back down when the peak passes.
 
 ## Screens
 
@@ -107,11 +149,12 @@ Desktop only, 16:9, built at 1920x1080 and scaled to fit.
 | Board            | Beats 1 to 6                      | The board, parts, packets, the room behind it, and the HUD                     |
 | Pause            | Esc or button                     | Resume, Restart session, Settings, Quit to title                               |
 | Settings         | From title or pause               | Volume, text speed, reduce flicker, fullscreen                                 |
-| Rewind           | Trust hits zero, or midnight fails | Short glitch, Rei's line, back into the board                                 |
-| Debrief          | After midnight                    | Rei's grade per category, banner choice called out, terms named                |
+| Rewind           | A failure (see Losing is gentle)   | TRIAGE's stream replay before the rescue, Rei's rewind after it, then back into the board                                |
+| Debrief          | After midnight                    | Rei's grade per category, banner choice and Ozzie's tab called out, terms named in three groups, the interview-version card |
 | Night Book page  | End of debrief                    | Handwritten page with the lesson, then the title card ("Session 0: Brownout")  |
 
-**Board HUD:** midnight countdown and in-world clock; demand-versus-capacity chart (the main readout); trust
+**Board HUD:** the job card at the start; midnight countdown and in-world clock; demand-versus-capacity chart
+(the main readout) with the estimate dial and its dashed guess line; trust
 and credits; parts tray with locked slots; Regroup button and its one charge; surge forecast warning with its
 number; power-dip flicker warning on the part about to go dark; block chat and Lux's stream chat; crew and
 TRIAGE barks; packet and part load readouts; the Solace banner with Pay, Ignore and Bin; the sizing prompt
@@ -121,14 +164,19 @@ before the final surge.
 
 Art is painted, not pixel art. It comes from the art pipeline (gpt-image-2, picked by Rolando) and lands in
 `public/art/` only through a PR Rolando approves. Workers never add or edit art. Wires, packets, particles,
-the chart, panels and text are drawn in code.
+the chart, panels and text are drawn in code. `docs/ART.md` lists the picked files.
+
+Art the challenge design adds, not made yet: the overclock kit (a tray card and an overclocked look for the
+scrap server), the job card frame and the estimate dial. The "skipped" tag and the stream-replay rewind are
+drawn in code.
 
 Sound: one board music loop (Suno, "Cell Shaped Chaos") and a small set of effects (ElevenLabs), loaded from
 `public/` like all assets.
 
 ## Build order
 
-1. Groundwork (this file, the painted-art rules, the routing plumbing in `src/sim/board.ts`).
+1. Groundwork (this file, the painted-art rules, the routing plumbing in `src/sim/board.ts`, including the
+   load balancer's health check and the overclock upgrade).
 2. Art pass: picks cut out and added to `public/art/`.
 3. B1 rules: every number above as pure code, one unit test per number.
 4. B2 board and HUD: browser tests drive the mouse.
