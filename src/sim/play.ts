@@ -40,6 +40,7 @@ import {
   laundryCutAvailable,
   rescueDue,
   resolveDip,
+  secondsToOverheat,
   updateOverheat,
   updateRetries,
   withRetries,
@@ -47,6 +48,8 @@ import {
 
 const C = BROWNOUT.challenges;
 const REGROUP = BROWNOUT.regroup;
+const TICK = BROWNOUT.sim.maxStepSeconds;
+const EPS = BROWNOUT.sim.timeEpsilon;
 
 export type RewindBy = 'triage' | 'rei';
 export type FailureCause = 'server-died' | 'trust' | 'dark-at-midnight';
@@ -113,7 +116,7 @@ const fail = (reason: string): PlayResult => ({ ok: false, reason });
 /** Challenge starts a failure can rewind to. C5 belongs to the surge, C7 and C8 never fail. */
 const CHECKPOINTS: readonly number[] = [C.c1, C.c2, C.c3, C.c4, C.c6];
 
-/** Times a step must stop at so challenge starts, dips, the rescue and midnight land exactly. */
+/** Fixed times a step must stop at so challenge starts, dips, the rescue and midnight land exactly. */
 const BOUNDARIES: readonly number[] = [
   ...new Set([
     ...Object.values(C),
@@ -172,8 +175,28 @@ export function liveServers(play: Play): number {
   return servers(play.session.board).filter((p) => !play.heat.dead.includes(p.id)).length;
 }
 
-function nextBoundary(t: number): number {
-  return BOUNDARIES.find((b) => b > t) ?? Infinity;
+/**
+ * The next time after this play's clock that a sim tick must end on: the next point on the fixed
+ * tick grid, a challenge start, the time trigger, a dip warning, going dark or ending, a part
+ * finishing its boot, the paid banner running out, or an overloaded server reaching 8 s.
+ */
+export function nextEdge(play: Play): number {
+  const t = play.t;
+  let edge = (Math.floor(t / TICK + EPS) + 1) * TICK;
+  const consider = (at: number): void => {
+    if (at > t && at < edge) edge = at;
+  };
+  for (const b of BOUNDARIES) consider(b);
+  for (const d of play.dips) {
+    consider(d.warnAt);
+    consider(d.darkAt);
+    consider(d.endsAt);
+  }
+  for (const id in play.session.offlineUntil) consider(play.session.offlineUntil[id]);
+  const banner = play.session.banner;
+  if (banner && banner.choice === 'pay') consider(banner.at + BROWNOUT.solace.durationSeconds);
+  consider(t + secondsToOverheat(play.heat));
+  return edge;
 }
 
 function resolveDips(play: Play, now: number): Play {
@@ -230,7 +253,7 @@ export function applyRescue(play: Play, now: number, by: RescueCause): Play {
   };
 }
 
-/** Advance the session clock by dt seconds of sim time, which must not cross a boundary. */
+/** Advance the session clock by dt seconds of sim time, which must not cross an edge (see nextEdge). */
 function advance(play: Play, dt: number): Play {
   const now = play.t;
   const t = now + dt;
@@ -262,21 +285,24 @@ function advance(play: Play, dt: number): Play {
   );
   const trustGone = session.trust <= 0;
 
-  // Before the crew exists, a server cooking or trust running out rewinds this challenge.
+  // Failures are judged on the challenge the tick started in, against the checkpoint taken before
+  // it: a failure on the tick that reaches a challenge start still rewinds to the earlier one.
   if (now < C.c4) {
+    // Before the crew exists, a server cooking or trust running out rewinds this challenge.
     if (heat.dead.length > play.heat.dead.length) return failed(next, 'server-died', 'triage');
     if (trustGone) return failed(next, 'trust', 'triage');
+  } else if (now < C.c6) {
+    const due = next.rescue ? null : rescueDue(session.trust, t);
+    if (due) next = applyRescue(next, t, due);
+    // Trust gone in the surge: the crew comes anyway and Rei rewinds to the start of the surge.
+    if (trustGone) {
+      if (!next.rescue) next = applyRescue(next, t, 'trust');
+      return failed(next, 'trust', 'rei');
+    }
+  } else if (now < C.c7 && trustGone) {
+    return failed(next, 'dark-at-midnight', 'rei');
   }
   next = checkpointed(next);
-
-  const due = next.rescue ? null : rescueDue(session.trust, t);
-  if (due) next = applyRescue(next, t, due);
-  // Trust gone in the surge: the crew comes anyway and Rei rewinds to the start of the surge.
-  if (now >= C.c4 && now < C.c6 && trustGone) {
-    if (!next.rescue) next = applyRescue(next, t, 'trust');
-    return failed(next, 'trust', 'rei');
-  }
-  if (now >= C.c6 && now < C.c7 && trustGone) return failed(next, 'dark-at-midnight', 'rei');
 
   if (t >= C.c7 && !next.midnight) {
     const at = playDemand(next, t);
@@ -300,23 +326,29 @@ function advance(play: Play, dt: number): Play {
 
 /**
  * Advance the session by dt real seconds. Regroup runs the sim at quarter speed while it lasts. A
- * failure freezes the board until `rewind`.
+ * failure freezes the board until `rewind`. Time is cut into ticks of at most 0.1 s of sim time on a
+ * fixed grid, ending exactly on every edge (see nextEdge), so one big step plays out the same as
+ * many small ones and no dip, overheat, rescue, challenge start, midnight or Regroup end is skipped.
  */
 export function step(play: Play, dt: number): Play {
   let p = play;
   let left = dt;
-  while (left > 0 && !p.failure) {
+  while (left > EPS && !p.failure) {
     const slow = p.regroup.left > 0;
     const speed = slow ? REGROUP.speed : 1;
     let real = slow ? Math.min(left, p.regroup.left) : left;
     let simDt = real * speed;
-    const edge = nextBoundary(p.t);
-    if (p.t + simDt > edge) {
+    const edge = nextEdge(p);
+    // Past the edge, or short of it by floating-point dust only: end the tick exactly on the edge.
+    if (p.t + simDt > edge - EPS) {
       simDt = edge - p.t;
       real = simDt / speed;
     }
     p = advance(p, simDt);
-    if (slow) p = { ...p, regroup: { ...p.regroup, left: Math.max(0, p.regroup.left - real) } };
+    if (slow) {
+      const regroupLeft = p.regroup.left - real;
+      p = { ...p, regroup: { ...p.regroup, left: regroupLeft > EPS ? regroupLeft : 0 } };
+    }
     left -= real;
   }
   return p;
