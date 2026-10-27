@@ -31,14 +31,7 @@ import type { HudTestState, PagePoint } from './hud/hook';
 import { dismissJobCard, jobCardDue, openJobCard } from './hud/jobCard';
 import { BOTTOM, CENTRE, COLORS, FONT, FONT_SANS, LEFT, RIGHT, TOP } from './hud/layout';
 import { cutLaundry, laundryCutAt, regroupAvailable, upcomingDip } from './hud/pending503';
-import {
-  REGROUP_UNUSED,
-  type RegroupState,
-  regroupActive,
-  regroupSpent,
-  regroupTimeScale,
-  startRegroup,
-} from './hud/regroup';
+import { REGROUP_UNUSED, type RegroupState, regroupActive, regroupSpent, startRegroup } from './hud/regroup';
 import { type DipWarning, dipWarningAt, fallForecastAt, surgeWarningAt } from './hud/warnings';
 import { GAME_HEIGHT, GAME_WIDTH } from './BoardScene';
 import { SCENES } from './keys';
@@ -614,8 +607,8 @@ export class HudScene extends Phaser.Scene {
     this.regroupButton.on('pointerdown', () => {
       const r = run();
       if (!regroupAvailable(r) || this.regroup.startedAt !== null) return;
-      this.regroup = startRegroup(this.regroup, this.clock);
-      bus.emit('sfx', { key: 'regroup-slow' });
+      // The sim slows itself to quarter speed for 10 s and plays the effect; the HUD tracks the button.
+      if (r.regroup().ok) this.regroup = startRegroup(this.regroup, this.clock);
     });
     this.regroupButton.setVisible(false);
   }
@@ -628,8 +621,6 @@ export class HudScene extends Phaser.Scene {
     this.regroupButton.setTexture(spent ? 'hud:regroup-spent' : 'hud:regroup-ready');
     this.regroupButton.setDisplaySize(BOTTOM.regroup.size, BOTTOM.regroup.size);
     this.regroupButton.setAlpha(spent ? 0.7 : 0.75 + 0.25 * Math.sin(this.clock * 6));
-    const scale = regroupTimeScale(this.regroup, this.clock);
-    if (r.timeScale !== scale) r.timeScale = scale;
   }
 
   // ---- barks and chat ----

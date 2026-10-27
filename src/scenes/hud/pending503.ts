@@ -1,34 +1,26 @@
-// WIRING(ENG-503): placeholders for the failure rules the factory is building in src/sim/ (power
-// dips, the laundry cut, Regroup's charge). The HUD's controls and warnings are built against these
-// small functions; when ENG-503 merges, each body is replaced with a call into its rule and nothing
-// else in the HUD changes. Every placeholder is marked WIRING(ENG-503).
+// The HUD's view of the failure rules in src/sim/play.ts: the next power dip, the laundry cut and
+// Regroup's charge. The HUD's controls and warnings read only these small functions.
 
-import type { Run } from '../../game/run';
+import type { ActionResult, Run } from '../../game/run';
 import type { UpcomingDip } from './warnings';
 
-const laundry = new WeakMap<Run, number>();
-
-/** WIRING(ENG-503): the next power dip and the part it hits. No dips yet, so always null. */
+/** The power dip whose flicker warning is showing, and the part it is about to take dark. */
 export function upcomingDip(r: Run): UpcomingDip | null {
-  void r;
-  return null;
+  const d = r.play.dips.find((x) => x.part !== null && x.warnAt <= r.now && r.now < x.darkAt);
+  return d && d.part !== null ? { partId: d.part, at: d.darkAt } : null;
 }
 
-/**
- * WIRING(ENG-503): cut the laundry floor loose (about 40 req/s off demand). For now it only
- * records the cut and when it happened; demand is unchanged until the rule lands.
- */
-export function cutLaundry(r: Run): void {
-  if (!laundry.has(r)) laundry.set(r, r.now);
+/** Cut the laundry floor loose: about 40 req/s off demand for the rest of the district surge. */
+export function cutLaundry(r: Run): ActionResult {
+  return r.cutLaundry();
 }
 
 /** Sim time the laundry floor was cut in this run, or null. */
 export function laundryCutAt(r: Run): number | null {
-  return laundry.get(r) ?? null;
+  return r.play.laundryCut?.at ?? null;
 }
 
-/** WIRING(ENG-503): whether the Regroup charge has been handed over and not used. False for now. */
+/** Whether Mika has handed Regroup over and its one charge is still unspent. */
 export function regroupAvailable(r: Run): boolean {
-  void r;
-  return false;
+  return r.play.regroup.handedOver && r.play.regroup.charges > 0;
 }

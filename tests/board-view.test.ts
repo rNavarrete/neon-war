@@ -75,11 +75,18 @@ describe('test speed', () => {
 
   it('reaches C3 in under 30 s of real time at speed 20', () => {
     const r = new Run(20);
+    // A server wired gateway -> server -> database keeps the block up, so nothing fails and rewinds.
+    expect(r.placeServer('s1').ok).toBe(true);
+    const id = r.session.board.parts[r.session.board.parts.length - 1].id;
+    expect(r.connect('gateway', id).ok).toBe(true);
+    expect(r.connect(id, 'database').ok).toBe(true);
     let real = 0;
-    while (r.now < BROWNOUT.challenges.c3) {
+    while (r.now < BROWNOUT.challenges.c3 && real < 60) {
       r.tick(1 / 60);
       real += 1 / 60;
     }
+    expect(r.play.failure).toBeNull();
+    expect(r.now).toBeGreaterThanOrEqual(BROWNOUT.challenges.c3);
     expect(real).toBeLessThan(30);
   });
 });
