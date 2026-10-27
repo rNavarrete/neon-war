@@ -752,6 +752,7 @@ export class HudScene extends Phaser.Scene {
         : { demand: 0, capacity: 0, ceiling: 0, estimateLine: null },
       sim: {
         demand: r.demand,
+        block: r.blockDemand,
         capacity: r.capacity,
         trust: r.session.trust,
         credits: r.session.board.credits,

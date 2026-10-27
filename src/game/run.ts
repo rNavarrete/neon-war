@@ -20,7 +20,7 @@ import {
   step,
   useRegroup,
 } from '../sim/play';
-import { flickeringParts } from '../sim/failures';
+import { blockDemand, flickeringParts } from '../sim/failures';
 import { capacityOf } from '../sim/board';
 import { SERVER_SLOTS, STARTING_PARTS } from '../sim/tick';
 import { bus } from './bus';
@@ -116,6 +116,11 @@ export class Run {
 
   get demand(): number {
     return playDemand(this.play, this.now);
+  }
+
+  /** What the block sends right now before retries: the demand curve, less the laundry cut. */
+  get blockDemand(): number {
+    return blockDemand(this.now, this.rescued, this.play.laundryCut !== null);
   }
 
   get flow(): Flow {

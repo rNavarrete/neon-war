@@ -210,13 +210,14 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the sizing prompt an
     // The surge window is a couple of real seconds at speed 5: click before anything slow.
     const before = await hud(page);
     expect(before.sim.demand).toBeGreaterThanOrEqual(250);
+    expect(before.sim.block).toBe(250);
     await page.mouse.click(before.laundry.button.x, before.laundry.button.y);
     await expect.poll(async () => (await hud(page)).laundry.cut).toBe(true);
+    // The block sheds the laundry floor: 250 becomes 210 before retries (which keep climbing).
+    const after = await hud(page);
+    expect(after.sim.block).toBe(210);
     // Taken as the surge lands, so the warning (it lingers a few seconds) and the cut both show.
     await page.screenshot({ path: 'test-results/screens/hud-c4.png' });
-    const after = await hud(page);
-    // 250 becomes 210 before retries; with the retry pile on top the drop is 40 or more.
-    expect(before.sim.demand - after.sim.demand).toBeGreaterThanOrEqual(35);
     await expect
       .poll(async () => (await hud(page)).bark.history, { timeout: 60_000 })
       .toContain('C4.lux.cut');

@@ -31,7 +31,8 @@ export interface HudTestState {
   notes: { estimate: number | null; sizing: number | null };
   /** The last values plotted on the chart, and the sim's right now. */
   chart: { demand: number; capacity: number; ceiling: number; estimateLine: number | null };
-  sim: { demand: number; capacity: number; trust: number; credits: number };
+  /** `block` is what the block sends before retries (the laundry cut sheds from it). */
+  sim: { demand: number; block: number; capacity: number; trust: number; credits: number };
   /** Trust and credits as shown on screen. */
   shown: { trust: number; credits: number };
   /** The surge warning on screen; `shownAt` is the sim time it first appeared. */
