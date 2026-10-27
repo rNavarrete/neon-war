@@ -166,9 +166,9 @@ Art is painted, not pixel art. It comes from the art pipeline (gpt-image-2, pick
 `public/art/` only through a PR Rolando approves. Workers never add or edit art. Wires, packets, particles,
 the chart, panels and text are drawn in code. `docs/ART.md` lists the picked files.
 
-Art the challenge design adds, not made yet: the overclock kit (a tray card and an overclocked look for the
-scrap server), the job card frame and the estimate dial. The "skipped" tag and the stream-replay rewind are
-drawn in code.
+The challenge design's extra art is in `public/art/` too: the overclock kit (`board/overclock-kit`, with
+`board/server-overclocked` and `server-overclocked-hot`), the job card frame (`hud/job-card`) and the estimate dial
+(`hud/estimate-dial`). The "skipped" tag and the stream-replay rewind are drawn in code.
 
 Sound: one board music loop (Suno, "Cell Shaped Chaos") and a small set of effects (ElevenLabs), loaded from
 `public/` like all assets.
