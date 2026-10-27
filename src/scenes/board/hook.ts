@@ -36,6 +36,8 @@ export interface BoardTestState {
   skipped: string[];
   /** Packet sprites in the pool, and how many are on a wire right now. */
   packets: { pool: number; active: number };
+  /** Each rewind so far: the sim second it happened and the challenge start it went back to. */
+  rewinds: { at: number; to: number }[];
   selectedPart: string | null;
   selectedWire: string | null;
   cutButton: Point | null;

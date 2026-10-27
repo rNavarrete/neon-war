@@ -698,6 +698,7 @@ export class BoardScene extends Phaser.Scene {
       offline,
       skipped: [...r.flow.skipped],
       packets: { pool: this.pool.size, active: this.pool.active },
+      rewinds: r.play.rewinds.map((w) => ({ at: round(w.at), to: w.to })),
       selectedPart: this.selectedPart,
       selectedWire: this.selectedWire,
       cutButton: this.cutBtn.visible ? page(this.cutBtn.x, this.cutBtn.y) : null,

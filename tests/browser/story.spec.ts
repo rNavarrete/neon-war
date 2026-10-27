@@ -1,8 +1,9 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { TestState } from '../../src/testHook';
 
-// The story layer: scene player, cold open, rescue, rewinds, debrief and Night Book. Until ENG-503
-// wires the sim's triggers, tests play scenes through the test-only `window.__neonStory` handle.
+// The story layer: scene player, cold open, rescue, rewinds, debrief and Night Book. Some tests open
+// a scene directly through the test-only `window.__neonStory` handle; others let the sim trigger it,
+// with `?test&autopilot` playing GAME.md's best-play build (src/game/autopilot.ts).
 
 type Story = NonNullable<TestState['story']>;
 
@@ -25,8 +26,8 @@ async function boot(page: Page, url: string): Promise<void> {
 }
 
 /** Go to the board and click the HUD's job card away if it is up. */
-async function toBoard(page: Page, speed = 1): Promise<void> {
-  await boot(page, `/?test&scene=board&speed=${speed}`);
+async function toBoard(page: Page, speed = 1, extra = ''): Promise<void> {
+  await boot(page, `/?test&scene=board&speed=${speed}${extra}`);
   const hud = (await state(page)) as { hud?: { jobCard: { open: boolean; x: number; y: number } } };
   if (hud.hud?.jobCard.open) await page.mouse.click(hud.hud.jobCard.x, hud.hud.jobCard.y);
 }
@@ -144,10 +145,128 @@ test('the rescue plays as a scene over the immersive backdrop and returns to the
   expect((await story(page)).active).toBe(false);
 });
 
-// TODO(ENG-503): "plays when the sim triggers it" — once the rescue trigger (trust under 30 or 45 s
-// into the surge) and the load balancer unlock land, drive the surge under ?speed and assert the
-// scene starts on its own and the balancer is unlocked when the board returns.
-test.fixme('the sim triggers the rescue and the board returns with the load balancer unlocked', () => {});
+/** Click through whatever story scene is up until it ends (Skip when it shows). */
+async function playThrough(page: Page): Promise<void> {
+  for (let guard = 0; guard < 200; guard++) {
+    const s = await story(page);
+    if (!s.active) return;
+    const p = s.skip.visible ? s.skip : s.click;
+    if (p) await page.mouse.click(p.x, p.y);
+    await page.waitForTimeout(80);
+  }
+  throw new Error('the scene never ended');
+}
+
+type Board = { tray: { id: string; locked: boolean }[]; parts: { id: string; kind: string }[] };
+const board = async (page: Page) => (await state(page)).board as unknown as Board;
+
+test('the sim triggers the rescue and the board returns with the load balancer unlocked', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await toBoard(page, 20, '&autopilot');
+  expect((await board(page)).tray.find((t) => t.id === 'balancer')?.locked).toBe(true);
+  // Nothing opens the scene but the sim: the surge drains trust under 30 and the crew break in.
+  await expect
+    .poll(async () => (await story(page)).scriptId, { timeout: 90_000, intervals: [50] })
+    .toBe('C5');
+  const now = (await state(page)).hud as unknown as { now: number };
+  expect(now.now).toBeGreaterThan(300);
+  expect(now.now).toBeLessThan(345.1);
+  expect((await story(page)).backdrop).toMatch(/immersive/);
+  await page.screenshot({ path: 'test-results/screens/rescue-live.png' });
+  await playThrough(page);
+  await expect.poll(async () => (await state(page)).scene).toBe('board');
+  const b = await board(page);
+  expect(b.tray.find((t) => t.id === 'balancer')?.locked).toBe(false);
+  expect(b.parts.some((p) => p.kind === 'balancer')).toBe(true);
+});
+
+test("a real overheat in C3 plays TRIAGE's replay and rewinds credits, parts and trust to 23:54:30", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await toBoard(page, 20);
+  // One stock server and no kit: the evening climb to 90 cooks it.
+  const id = await page.evaluate(() => window.__neonShell!.place('s1'));
+  expect(id).not.toBeNull();
+  await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
+  await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);
+  await expect
+    .poll(async () => (await story(page)).scriptId, { timeout: 90_000, intervals: [50] })
+    .toBe('rewind-replay');
+  const s = await story(page);
+  expect(s.look).toBe('vhs');
+  expect(s.lineId).toBe('C3.triage.rewind');
+  await playThrough(page);
+  await expect.poll(async () => (await state(page)).scene).toBe('board');
+  // Speed 20 runs on as soon as the board is back, so the rewind target comes from the sim's record.
+  const b = (await state(page)).board as unknown as Board & { rewinds: { at: number; to: number }[] };
+  expect(b.rewinds).toHaveLength(1);
+  expect(b.rewinds[0].to).toBe(180);
+  expect(b.rewinds[0].at).toBeGreaterThan(180);
+  // Back as it was at the start of C3: the one server and full trust.
+  const h = (await state(page)).hud as unknown as { now: number; sim: { trust: number } };
+  expect(h.now).toBeGreaterThanOrEqual(180);
+  expect(h.sim.trust).toBe(100);
+  expect(b.parts.filter((p) => p.kind === 'server')).toHaveLength(1);
+});
+
+test('one test plays the whole session from the title to Night Book page 1 with best play', async ({
+  page,
+}) => {
+  test.setTimeout(300_000);
+  await boot(page, '/?test&speed=20&autopilot');
+  const shell = () =>
+    page.evaluate(
+      () =>
+        (
+          window.__neonTest!.state as unknown as {
+            shell: { buttons: Record<string, { x: number; y: number }> };
+          }
+        ).shell,
+    );
+  await expect.poll(async () => (await shell()).buttons.start ?? null, { timeout: 15_000 }).not.toBeNull();
+  const start = (await shell()).buttons.start;
+  await page.mouse.click(start.x, start.y);
+
+  // C0: the cold open plays on its own and hands over to the board's job card.
+  await expect.poll(async () => (await story(page)).scriptId, { timeout: 15_000 }).toBe('C0');
+  await page.waitForTimeout(5000);
+  await page.screenshot({ path: 'test-results/screens/session-cold-open.png' });
+  type Hud = { now: number; jobCard: { open: boolean; x: number; y: number } };
+  const hud = async () => (await state(page)).hud as unknown as Hud;
+  await expect.poll(async () => (await hud())?.jobCard?.open ?? false, { timeout: 40_000 }).toBe(true);
+  const card = (await hud()).jobCard;
+  await page.mouse.click(card.x, card.y);
+
+  // C1 to C4 on best play, then the crew break in.
+  await expect
+    .poll(async () => (await story(page)).scriptId, { timeout: 120_000, intervals: [50] })
+    .toBe('C5');
+  await page.screenshot({ path: 'test-results/screens/session-rescue.png' });
+  await playThrough(page);
+
+  // Midnight holds, then the debrief at 00:01:00.
+  await expect
+    .poll(async () => (await story(page)).debrief?.step ?? null, { timeout: 120_000 })
+    .toBe('grades');
+  const s = await story(page);
+  expect(s.debrief?.results.midnightHeld).toBe(true);
+  expect(s.debrief?.results.serversAtMidnight).toBe(4);
+  expect(s.debrief?.results.droppedRequests).toBeGreaterThan(0);
+  expect(s.debrief?.results.ozzieTab).toBe(100);
+  expect(s.debrief?.results.scaledDown).toBe(true);
+  await page.screenshot({ path: 'test-results/screens/session-debrief.png' });
+
+  let line = s;
+  for (let guard = 0; line.debrief?.step !== 'book' && guard < 40; guard++) line = await nextLine(page);
+  expect(line.debrief?.step).toBe('book');
+  line = await nextLine(page);
+  expect(line.debrief?.page).toMatch(/^Demand decides the design\./);
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: 'test-results/screens/session-night-book.png' });
+});
 
 const REWINDS = [
   { kind: 'replay', now: 200, target: 180, lines: ['C3.triage.rewind', 'C3.lux.rewind'], look: 'vhs' },
