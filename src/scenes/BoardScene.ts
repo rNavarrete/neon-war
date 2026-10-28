@@ -39,6 +39,9 @@ import {
   wirePath,
   inPort,
   returnPath,
+  type PadState,
+  padState,
+  targetState,
 } from './board/layout';
 import { ZONES, pageRect } from './live/layout';
 import {
@@ -57,7 +60,9 @@ import {
   wireSpeed,
 } from './board/packets';
 import { flagsFrom } from './live/flags';
-import { BROWNOUT_RULES } from '../sim/brownout';
+import { BROWNOUT, BROWNOUT_RULES } from '../sim/brownout';
+import { type GhostInfo, ghostInfo, ghostOpen } from './board/ghost';
+import { PlateCache, REPLACE_LABEL } from './board/plate';
 import { BoardSnapshot } from './board/snapshot';
 import { InventoryView } from './board/InventoryView';
 import {
@@ -175,6 +180,25 @@ const BAR_COLOURS: Readonly<Record<BarColour, number>> = {
   grey: 0x6b7385,
 };
 const BAR_INDEX: Readonly<Record<BarColour, number>> = { cyan: 1, amber: 2, red: 3, grey: 4 };
+/** A pad's tint while a card is dragged, by its legality (board-8). */
+const LEGALITY_TINT: Readonly<Record<PadState, number>> = {
+  legal: 0x9ffcff,
+  dead: 0x9ffcff,
+  poor: 0xffb02e,
+  taken: 0x6b7385,
+  wrong: 0xff4d5e,
+};
+/** The card prices padState checks the credits against. */
+const PRICES = { server: BROWNOUT.server.cost, overclock: BROWNOUT.overclock.cost } as const;
+/** The keys the board listens to (board-8); 1, 2 and 3 are the deck's and never taken here. */
+const BOARD_KEYS: readonly string[] = ['Escape', 'Delete', 'Backspace'];
+/** The REPLACE button's box, centred under a dead box. */
+const REPLACE_SIZE = { w: 132, h: 36 } as const;
+
+/** A tray card id as the bus names it, or null for anything else. */
+function trayIdOf(id: string): 'server' | 'overclock' | 'balancer' | null {
+  return id === 'server' || id === 'overclock' || id === 'balancer' ? id : null;
+}
 /** Alpha of a part on the dark half of a flicker blink. */
 const FLICKER_DIM = 0.35;
 
@@ -318,6 +342,49 @@ export class BoardScene extends Phaser.Scene {
   private countedCredits = NaN;
   private balancerUnlocked = false;
   private ghost!: Phaser.GameObjects.Image;
+  /** board-8: what the card in hand is over (a slot or a part), and what a dragged wire would land on. */
+  private over: { id: string | null; slot: string | null; kind: 'pad' | 'part' | null } = {
+    id: null,
+    slot: null,
+    kind: null,
+  };
+  private wireTo: { id: string | null; ok: boolean; reason: string | null } = {
+    id: null,
+    ok: false,
+    reason: null,
+  };
+  /** Each pad's legality for the card in hand (padList order), the balancer pad's, and what they were read from. */
+  private padLegality: PadState[] = [];
+  private lbLegality: PadState = 'wrong';
+  private legalFrame: Frame | null = null;
+  private legalCard: string | null = null;
+  private readonly padBoard: { parts: readonly Part[]; credits: number; dead: readonly string[] } = {
+    parts: [],
+    credits: 0,
+    dead: [],
+  };
+  /** The what-if ghost (null while hidden or with no target), what it was computed from, and its drawing. */
+  private ghostInfo: GhostInfo | null = null;
+  private ghostFrame: Frame | null = null;
+  private ghostDirty = true;
+  private ghostShownFor: string | null = null;
+  private ghostPlateShown: string | null = null;
+  private ghostPlateAt: string | null = null;
+  private ghostOutline!: Phaser.GameObjects.Graphics;
+  private ghostText!: Phaser.GameObjects.Text;
+  private whatIfG!: Phaser.GameObjects.Graphics;
+  private whatIfText!: Phaser.GameObjects.Text;
+  private drawnWhatIf: number | null | undefined = undefined;
+  private drawnTick: string | null | undefined = undefined;
+  /** The hover plate: what the pointer is over, the plate's text cache and its pooled Text and frame. */
+  private hover: { part: string | null; wire: string | null } = { part: null, wire: null };
+  private plates = new PlateCache();
+  private plate!: Phaser.GameObjects.Text;
+  private plateG!: Phaser.GameObjects.Graphics;
+  private plateFor: string | null = null;
+  private platePinned = false;
+  private replaceBtn!: Phaser.GameObjects.Container;
+  private targetRing: string | null = null;
   private refusalText!: Phaser.GameObjects.Text;
   private refusalUntil = 0;
   private cutBtn!: Phaser.GameObjects.Container;
@@ -393,6 +460,25 @@ export class BoardScene extends Phaser.Scene {
     this.selectedPart = null;
     this.selectedWire = null;
     this.refusalUntil = 0;
+    this.over = { id: null, slot: null, kind: null };
+    this.wireTo = { id: null, ok: false, reason: null };
+    this.padLegality = [];
+    this.lbLegality = 'wrong';
+    this.legalFrame = null;
+    this.legalCard = null;
+    this.ghostInfo = null;
+    this.ghostFrame = null;
+    this.ghostDirty = true;
+    this.ghostShownFor = null;
+    this.ghostPlateShown = null;
+    this.ghostPlateAt = null;
+    this.drawnWhatIf = undefined;
+    this.drawnTick = undefined;
+    this.hover = { part: null, wire: null };
+    this.plates = new PlateCache();
+    this.plateFor = null;
+    this.platePinned = false;
+    this.targetRing = null;
 
     this.drawBackdrop();
 
@@ -421,6 +507,39 @@ export class BoardScene extends Phaser.Scene {
     }
 
     this.ghost = this.add.image(0, 0, 'server').setVisible(false).setAlpha(0.75).setDepth(30);
+    this.ghostOutline = this.add.graphics().setDepth(29);
+    const small = { fontFamily: 'monospace', fontStyle: 'bold', stroke: '#05070f' } as const;
+    this.ghostText = this.add
+      .text(0, 0, '', {
+        ...small,
+        fontSize: '20px',
+        color: '#2de2e6',
+        backgroundColor: '#05070fee',
+        padding: { x: 10, y: 5 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(31)
+      .setVisible(false);
+    this.whatIfG = this.add.graphics().setDepth(0.75);
+    this.whatIfText = this.add
+      .text(0, 0, '', { ...small, fontSize: '13px', color: '#2de2e6', strokeThickness: 3 })
+      .setOrigin(1, 1)
+      .setDepth(0.8)
+      .setVisible(false);
+    this.plateG = this.add.graphics().setDepth(37);
+    this.plate = this.add
+      .text(0, 0, '', {
+        fontFamily: 'monospace',
+        fontSize: '16px',
+        color: '#ffe2b0',
+        backgroundColor: '#05070fee',
+        padding: { x: 10, y: 6 },
+        lineSpacing: 4,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(38)
+      .setVisible(false);
+    this.replaceBtn = this.makeReplaceButton();
     this.cutBtn = this.makeButton('icon-cut', 0xff4d5e);
     this.binBtn = this.makeButton('icon-bin', 0xff4d5e);
     this.refusalText = this.add
@@ -441,12 +560,20 @@ export class BoardScene extends Phaser.Scene {
     this.input.on('pointermove', this.onMove, this);
     this.input.on('pointerup', this.onUp, this);
     this.input.on('pointerupoutside', this.onUp, this);
+    // Esc cancels a drag or clears the selection; Delete or Backspace cuts the selected wire.
+    const kb = this.input.keyboard;
+    kb?.on('keydown-ESC', this.onEscape, this);
+    kb?.on('keydown-DELETE', this.onDelete, this);
+    kb?.on('keydown-BACKSPACE', this.onDelete, this);
 
     this.offBus?.();
     this.offBus = bus.on('refused', ({ reason }) => this.showRefusal(reason));
     this.director?.destroy();
     this.director = new Director();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      kb?.off('keydown-ESC', this.onEscape, this);
+      kb?.off('keydown-DELETE', this.onDelete, this);
+      kb?.off('keydown-BACKSPACE', this.onDelete, this);
       this.offBus?.();
       this.offBus = null;
       this.director?.destroy();
@@ -688,6 +815,28 @@ export class BoardScene extends Phaser.Scene {
     return this.add.container(0, 0, [bg, img]).setDepth(35).setVisible(false);
   }
 
+  /** The REPLACE button under a selected dead box (board-8). */
+  private makeReplaceButton(): Phaser.GameObjects.Container {
+    const bg = this.add
+      .rectangle(0, 0, REPLACE_SIZE.w, REPLACE_SIZE.h, 0x05070f, 0.94)
+      .setStrokeStyle(3, CYAN);
+    const label = this.add
+      .text(0, 0, REPLACE_LABEL, {
+        fontFamily: 'monospace',
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: '#2de2e6',
+      })
+      .setOrigin(0.5);
+    return this.add.container(0, 0, [bg, label]).setDepth(35).setVisible(false);
+  }
+
+  /** Whether (x, y) is on the REPLACE button. */
+  private replaceHit(x: number, y: number): boolean {
+    const b = this.replaceBtn;
+    return Math.abs(x - b.x) <= REPLACE_SIZE.w / 2 && Math.abs(y - b.y) <= REPLACE_SIZE.h / 2;
+  }
+
   /**
    * Bring every sprite in line with the run this frame. `seconds` is the frame's real length.
    * Everything below reads the one Frame taken here (frame() memoises per sim change), never
@@ -716,7 +865,8 @@ export class BoardScene extends Phaser.Scene {
 
     // Parts. `unlocked` is already true once a balancer is racked.
     this.lbPad.setTexture(unlocked ? 'slot-empty' : 'slot-locked');
-    const placingServer = d?.kind === 'card' && d.id === 'server';
+    const cardInHand = d?.kind === 'card' ? d.id : null;
+    if (cardInHand !== null) this.updateLegality(f, cardInHand);
     const t = this.time.now / 1000;
     this.clock = t;
     const reduce = settings().reduceFlicker;
@@ -732,12 +882,14 @@ export class BoardScene extends Phaser.Scene {
       const pv = this.padList[i];
       const pad = pv.pad;
       const onPad = partInSlot(parts, pv.slot);
-      const target = placingServer && onPad === null;
+      // A card in hand tints every pad by what a drop there would do (board-8).
+      const legality = cardInHand !== null ? (this.padLegality[i] ?? null) : null;
+      const target = legality !== null;
       // While the board waits for a build, the empty pads pulse: room for a box here.
       const pulsing = waiting && onPad === null && !target;
       this.pulsingPads[i] = pulsing;
       pad.setAlpha(target ? 1 : pulsing ? padPulseAlpha(t, reduce) : 0.8);
-      if (target) pad.setTint(0x9ffcff);
+      if (legality !== null) pad.setTint(LEGALITY_TINT[legality]);
       else if (pulsing) pad.setTint(0x7fe9ff);
       else pad.clearTint();
       // The balancer skips the box on this pad: grey dashed pad, SKIPPED sticky for 1 s after.
@@ -747,6 +899,8 @@ export class BoardScene extends Phaser.Scene {
       pv.dash.setVisible(shown);
       pv.chip.setVisible(shown);
     }
+    if (cardInHand !== null) this.lbPad.setTint(LEGALITY_TINT[this.lbLegality]);
+    else this.lbPad.clearTint();
     const pulse = reduce ? 0.55 : 0.55 + 0.25 * Math.sin(this.time.now / 120);
     this.hotParts.clear();
     this.slowParts.clear();
@@ -796,6 +950,8 @@ export class BoardScene extends Phaser.Scene {
     this.stepPackets(dt, f);
     this.stepSparks(dt, parts);
     this.drawWait(wait, f.paused ? 0 : Math.min(seconds, 0.25));
+    this.updateGhost(f);
+    this.updatePlate(parts, f);
     this.placeButtons(parts);
 
     if (this.refusalText.visible && this.time.now > this.refusalUntil) this.refusalText.setVisible(false);
@@ -1134,6 +1290,18 @@ export class BoardScene extends Phaser.Scene {
     const w = partSize(from).w;
     p.lineStyle(4, CYAN, 0.6).lineBetween(c.x + w / 2 - 6, c.y, this.pointer.x, this.pointer.y);
     p.fillStyle(CYAN, 0.9).fillCircle(this.pointer.x, this.pointer.y, 7);
+    // The part it would land on rings cyan when connect() takes it, red when it refuses (board-8).
+    const to = this.wireTo.id !== null ? partById(parts, this.wireTo.id) : null;
+    const tc = to ? partCentre(to) : null;
+    this.targetRing = to ? to.id : null;
+    if (to && tc) {
+      const size = partSize(to);
+      p.lineStyle(4, this.wireTo.ok ? CYAN : RED, 0.95).strokeCircle(
+        tc.x,
+        tc.y,
+        Math.max(size.w, size.h) / 2 + 8,
+      );
+    }
   }
 
   private skipTag(i: number): Phaser.GameObjects.Text {
@@ -1250,6 +1418,14 @@ export class BoardScene extends Phaser.Scene {
     } else {
       this.binBtn.setVisible(false);
     }
+    // A dead box selected: REPLACE under it puts a fresh one in its slot (board-8).
+    const dead = part !== null && c !== null && part.kind === 'server' && this.trouble.dead.includes(part.id);
+    if (dead) {
+      const size = partSize(part);
+      this.replaceBtn.setPosition(c.x, c.y + size.h / 2 + 34).setVisible(true);
+    } else {
+      this.replaceBtn.setVisible(false);
+    }
   }
 
   /** Packets on their way into `id` right now (the test hook only). */
@@ -1276,7 +1452,323 @@ export class BoardScene extends Phaser.Scene {
     bus.emit('refused', { reason });
   }
 
+  // ---- board-8: legality, the what-if ghost, plates, REPLACE -----------------------------------
+
+  /**
+   * Every pad's legality for the card in hand (padState), recomputed only when the card or the
+   * Frame changes; nothing allocates on a steady frame.
+   */
+  private updateLegality(f: Frame, card: string): void {
+    if (f === this.legalFrame && card === this.legalCard) return;
+    this.legalFrame = f;
+    this.legalCard = card;
+    const board = this.padBoard;
+    board.parts = f.parts;
+    board.credits = f.credits;
+    board.dead = f.dead;
+    for (let i = 0; i < this.padList.length; i++) {
+      this.padLegality[i] = padState(this.padList[i].slot, board, card, PRICES);
+    }
+    this.lbLegality = padState(LB_SLOT_ID, board, card, PRICES);
+    this.ghostDirty = true;
+  }
+
+  /** The legality of the pad (a slot id) the card is over, or 'wrong' over a part with no pad. */
+  private overState(): PadState | null {
+    const o = this.over;
+    if (o.id === null) return null;
+    if (o.slot === LB_SLOT_ID) return this.lbLegality;
+    if (o.slot !== null) {
+      for (let i = 0; i < this.padList.length; i++)
+        if (this.padList[i].slot === o.slot) return this.padLegality[i];
+    }
+    return 'wrong';
+  }
+
+  /**
+   * The what-if ghost while a card is dragged (board-8): the pad's state, the ghost's numbers
+   * (ghostInfo over wiredCapacity, recomputed only when the target or the Frame changes), the
+   * dragged card snapping onto a legal target with a dashed outline and its plate, and the what-if
+   * tick on the channel. Hidden while a dial question is open (ghostOpen).
+   */
+  private updateGhost(f: Frame): void {
+    const d = this.drag;
+    const card = d?.kind === 'card' ? d.id : null;
+    if (card === null || this.over.id === null) {
+      this.ghostInfo = null;
+    } else if (this.ghostDirty || f !== this.ghostFrame) {
+      this.ghostDirty = false;
+      this.ghostFrame = f;
+      const state = this.overState() ?? 'wrong';
+      this.ghostInfo = ghostInfo(
+        f,
+        BROWNOUT_RULES,
+        f.offline,
+        card,
+        this.over.id,
+        this.over.slot !== null && this.over.slot !== LB_SLOT_ID ? this.over.slot : null,
+        state,
+        ghostOpen(f.now, f.notes),
+      );
+    }
+    const g = this.ghostInfo;
+    // Snap the card in hand onto a legal target while the ghost may show.
+    const snap =
+      g !== null && g.legal && card !== null && this.over.slot !== null && this.over.slot !== LB_SLOT_ID;
+    const key = snap ? this.over.slot : null;
+    if (key !== this.ghostShownFor) {
+      this.ghostShownFor = key;
+      const og = this.ghostOutline;
+      og.clear();
+      if (key !== null) {
+        const box = slotBox(key);
+        const c = card === 'server' ? partCentre({ kind: 'server', slot: key }) : null;
+        if (box) {
+          og.lineStyle(2, CYAN, 0.95);
+          og.beginPath();
+          for (const seg of dashedOutline(
+            { x: box.x - box.w / 2, y: box.y - box.h / 2, w: box.w, h: box.h },
+            8,
+            6,
+          )) {
+            og.moveTo(seg.x1, seg.y1);
+            og.lineTo(seg.x2, seg.y2);
+          }
+          og.strokePath();
+        }
+        if (c) {
+          const size = partSize({ kind: 'server', slot: key });
+          this.ghost
+            .setPosition(c.x, c.y)
+            .setScale(Math.min(size.w / this.ghost.width, size.h / this.ghost.height));
+        } else if (box) {
+          this.ghost.setPosition(box.x, box.y - box.h * 0.2);
+        }
+      } else if (card !== null) {
+        this.ghost.setScale(120 / this.ghost.frame.height).setPosition(this.pointer.x, this.pointer.y);
+      }
+    }
+    // The plate beside the ghost: what the drop adds, or that nothing feeds it (also over a pad the
+    // credits fall short for, where only the drop is refused).
+    const at = g !== null && g.plate !== null && this.over.slot !== null && this.over.slot !== LB_SLOT_ID;
+    const plate = at ? g.plate : null;
+    const plateAt = at ? this.over.slot : null;
+    if (plate !== this.ghostPlateShown || plateAt !== this.ghostPlateAt) {
+      this.ghostPlateShown = plate;
+      this.ghostPlateAt = plateAt;
+      if (plate === null || plateAt === null) this.ghostText.setVisible(false);
+      else {
+        const box = slotBox(plateAt)!;
+        this.ghostText
+          .setText(plate)
+          .setPosition(
+            Phaser.Math.Clamp(box.x, BOARD_AREA.left + 180, BOARD_AREA.right - 180),
+            box.y - box.h / 2 - 8,
+          )
+          .setColor(g!.adds > 0 ? '#2de2e6' : '#c5cad6')
+          .setVisible(true);
+      }
+    }
+    this.drawWhatIf(at ? g.whatIf : null, at ? g.tick : null);
+  }
+
+  /** The what-if tick on the channel at the ghost's level, labelled "ROOM +60"; drawn only on a change. */
+  private drawWhatIf(level: number | null, tick: string | null): void {
+    const rounded = level === null ? null : Math.round(level * 1000) / 1000;
+    if (rounded === this.drawnWhatIf && tick === this.drawnTick) return;
+    this.drawnWhatIf = rounded;
+    this.drawnTick = tick;
+    const g = this.whatIfG;
+    g.clear();
+    if (rounded === null) {
+      this.whatIfText.setVisible(false);
+      return;
+    }
+    const { mouth, port } = CHANNEL;
+    const steps = 12;
+    g.lineStyle(3, CYAN, 0.9);
+    for (let i = 0; i < steps; i += 2) {
+      const xa = mouth.x + ((port.x - mouth.x) * i) / steps;
+      const xb = mouth.x + ((port.x - mouth.x) * (i + 1)) / steps;
+      g.lineBetween(xa, levelY(rounded, xa), xb, levelY(rounded, xb));
+    }
+    if (tick === null) this.whatIfText.setVisible(false);
+    else
+      this.whatIfText
+        .setText(tick)
+        .setPosition(port.x - 4, levelY(rounded, port.x) - 16)
+        .setVisible(true);
+  }
+
+  /**
+   * The hover plate (board-8): the part or wire under the pointer, else the selected one (pinned),
+   * in the script's words (plate.ts over labels.ts). Its text is re-set only when what it shows
+   * changes; nothing shows during a drag.
+   */
+  private updatePlate(parts: readonly Part[], f: Frame): void {
+    const dragging = this.drag !== null && (this.drag.kind === 'card' || this.drag.moved);
+    let partId: string | null = null;
+    let wireKeyShown: string | null = null;
+    let pinned = false;
+    if (!dragging) {
+      if (this.hover.part !== null && partById(parts, this.hover.part)) partId = this.hover.part;
+      else if (this.hover.wire !== null && this.wireByKey.has(this.hover.wire))
+        wireKeyShown = this.hover.wire;
+      else if (this.selectedPart !== null) {
+        partId = this.selectedPart;
+        pinned = true;
+      } else if (this.selectedWire !== null && this.wireByKey.has(this.selectedWire)) {
+        wireKeyShown = this.selectedWire;
+        pinned = true;
+      }
+      if (!pinned)
+        pinned =
+          (partId !== null && partId === this.selectedPart) ||
+          (wireKeyShown !== null && wireKeyShown === this.selectedWire);
+    }
+    this.platePinned = pinned;
+    const plate = this.plate;
+    if (partId === null && wireKeyShown === null) {
+      if (this.plateFor !== null) {
+        this.plateFor = null;
+        this.plates.reset();
+        plate.setVisible(false);
+        this.plateG.clear();
+      }
+      return;
+    }
+    let changed: boolean;
+    let x: number;
+    let y: number;
+    if (partId !== null) {
+      const part = partById(parts, partId)!;
+      const v = this.views.get(partId);
+      const c = partCentre(part);
+      if (!v || !c) return;
+      changed = this.plates.part(partId, part, v.look, this.skippedNow(part));
+      const size = partSize(part);
+      x = c.x;
+      y = c.y - size.h / 2 - 30;
+    } else {
+      const w = this.wireByKey.get(wireKeyShown!)!;
+      const a = partById(parts, w.from);
+      const b = partById(parts, w.to);
+      if (!a || !b) return;
+      changed = this.plates.wire(w.key, a, b, f.flow.wires[w.key] ?? 0);
+      x = w.mid.x;
+      y = w.mid.y - 76;
+    }
+    const target = partId ?? wireKeyShown;
+    if (changed || target !== this.plateFor) {
+      this.plateFor = target;
+      plate.setText(this.plates.text);
+      const left = BOARD_AREA.left + 8 + plate.width / 2;
+      const right = BOARD_AREA.right - 8 - plate.width / 2;
+      const px = Phaser.Math.Clamp(x, left, right);
+      const py = Math.max(BOARD_AREA.top + 8 + plate.height, y);
+      plate.setPosition(px, py).setVisible(true);
+      const g = this.plateG;
+      g.clear();
+      g.lineStyle(2, AMBER, 0.9).strokeRect(
+        px - plate.width / 2,
+        py - plate.height,
+        plate.width,
+        plate.height,
+      );
+    }
+  }
+
+  /** Whether the SKIPPED tag is on the pad under `part` now. */
+  private skippedNow(part: Part): boolean {
+    if (part.slot === null) return false;
+    for (let i = 0; i < this.padList.length; i++) {
+      const pv = this.padList[i];
+      if (pv.slot === part.slot) return this.clock < pv.skipUntil;
+    }
+    return false;
+  }
+
   // ---- input ---------------------------------------------------------------------------------
+
+  /** Tell the other lanes what the pointer drags and what it is over (bus 'drag'). */
+  private emitDrag(): void {
+    const d = this.drag;
+    if (!d) {
+      bus.emit('drag', { kind: null, card: null, over: null });
+      return;
+    }
+    if (d.kind === 'card') {
+      bus.emit('drag', { kind: 'card', card: trayIdOf(d.id), over: this.over.kind });
+      return;
+    }
+    bus.emit('drag', { kind: 'wire', card: null, over: this.wireTo.id === null ? null : 'part' });
+  }
+
+  /** End the drag in hand, with or without a drop, and say so once on the bus. */
+  private endDrag(): void {
+    const had = this.drag !== null && (this.drag.kind === 'card' || this.drag.moved);
+    this.drag = null;
+    this.ghost.setVisible(false);
+    this.over.id = null;
+    this.over.slot = null;
+    this.over.kind = null;
+    this.wireTo.id = null;
+    this.wireTo.ok = false;
+    this.wireTo.reason = null;
+    this.ghostDirty = true;
+    if (had) this.emitDrag();
+  }
+
+  /** What a card dragged to (x, y) is over: a pad (slot) or a part, by the card. */
+  private updateOver(x: number, y: number, card: string, parts: readonly Part[]): void {
+    let id: string | null = null;
+    let slot: string | null = null;
+    let kind: 'pad' | 'part' | null = null;
+    const pad = slotAt(x, y);
+    const part = partAt(parts, x, y);
+    if (card === 'overclock' && part) {
+      id = part.slot ?? part.id;
+      slot = part.slot;
+      kind = 'part';
+    } else if (pad !== null) {
+      id = pad;
+      slot = pad;
+      kind = 'pad';
+    } else if (part) {
+      id = part.id;
+      slot = part.slot;
+      kind = 'part';
+    }
+    if (id === this.over.id) return;
+    this.over.id = id;
+    this.over.slot = slot;
+    this.over.kind = kind;
+    this.ghostDirty = true;
+    this.emitDrag();
+  }
+
+  /** The part a wire dragged to (x, y) would land on, and whether connect() would take it. */
+  private updateWireTo(x: number, y: number, from: string): void {
+    const r = run();
+    const target = partAt(r.session.board.parts, x, y);
+    const id = target && target.id !== from ? target.id : null;
+    if (id === this.wireTo.id) return;
+    this.wireTo.id = id;
+    if (id === null) {
+      this.wireTo.ok = false;
+      this.wireTo.reason = null;
+    } else {
+      const t = targetState(r.session.board, BROWNOUT_RULES, from, id);
+      this.wireTo.ok = t.ok;
+      this.wireTo.reason = t.reason;
+    }
+    this.emitDrag();
+  }
+
+  /** Whether a press at (x, y) lands on a round button that is showing. */
+  private onButton(btn: Phaser.GameObjects.Container, x: number, y: number): boolean {
+    return btn.visible && Math.hypot(x - btn.x, y - btn.y) <= BUTTON_RADIUS + 4;
+  }
 
   private onDown(p: Phaser.Input.Pointer): void {
     this.pointer.x = p.x;
@@ -1289,14 +1781,19 @@ export class BoardScene extends Phaser.Scene {
       if (part) this.decommission(part.id);
       return;
     }
-    if (this.cutBtn.visible && Math.hypot(p.x - this.cutBtn.x, p.y - this.cutBtn.y) <= BUTTON_RADIUS + 4) {
+    if (this.onButton(this.cutBtn, p.x, p.y)) {
       const w = this.selectedWire ? this.wireByKey.get(this.selectedWire) : undefined;
       if (w) r.cut(w.from, w.to);
       this.selectedWire = null;
       return;
     }
-    if (this.binBtn.visible && Math.hypot(p.x - this.binBtn.x, p.y - this.binBtn.y) <= BUTTON_RADIUS + 4) {
+    if (this.onButton(this.binBtn, p.x, p.y)) {
       if (this.selectedPart) this.decommission(this.selectedPart);
+      return;
+    }
+    if (this.replaceBtn.visible && this.replaceHit(p.x, p.y)) {
+      // REPLACE on a dead box: a fresh one in its slot, on the same wires.
+      if (this.selectedPart && r.replaceServer(this.selectedPart).ok) this.selectedPart = null;
       return;
     }
 
@@ -1309,48 +1806,75 @@ export class BoardScene extends Phaser.Scene {
         return;
       }
       this.drag = { kind: 'card', id: card.id };
+      this.over.id = null;
+      this.over.slot = null;
+      this.over.kind = null;
+      this.ghostDirty = true;
+      this.ghostShownFor = null;
       this.ghost
         .setTexture(card.art)
         .setScale(120 / this.ghost.frame.height)
         .setPosition(p.x, p.y)
         .setVisible(true);
+      this.emitDrag();
       return;
     }
 
     const part = partAt(parts, p.x, p.y);
     if (part) {
       this.drag = { kind: 'wire', from: part.id, x0: p.x, y0: p.y, moved: false };
+      this.wireTo.id = null;
       return;
     }
 
+    this.selectedWire = this.wireNear(p.x, p.y);
+    this.selectedPart = null;
+  }
+
+  /** The wire within WIRE_PICK of (x, y), nearest first, or null. */
+  private wireNear(x: number, y: number): string | null {
     let best: WireGeom | null = null;
     let bestD = WIRE_PICK;
     for (const w of this.wireList) {
-      const d = distToPath(p.x, p.y, w.path);
+      const d = distToPath(x, y, w.path);
       if (d <= bestD) {
         best = w;
         bestD = d;
       }
     }
-    this.selectedWire = best ? best.key : null;
-    this.selectedPart = null;
+    return best ? best.key : null;
   }
 
   private onMove(p: Phaser.Input.Pointer): void {
     this.pointer.x = p.x;
     this.pointer.y = p.y;
     const d = this.drag;
-    if (!d) return;
-    if (d.kind === 'card') this.ghost.setPosition(p.x, p.y);
-    else if (!d.moved && Math.hypot(p.x - d.x0, p.y - d.y0) > DRAG_START) d.moved = true;
+    if (!d) {
+      // Hover: the part under the pointer, else a wire within reach.
+      const part = partAt(run().session.board.parts, p.x, p.y);
+      this.hover.part = part ? part.id : null;
+      this.hover.wire = part ? null : this.wireNear(p.x, p.y);
+      return;
+    }
+    this.hover.part = null;
+    this.hover.wire = null;
+    if (d.kind === 'card') {
+      if (this.ghostShownFor === null) this.ghost.setPosition(p.x, p.y);
+      this.updateOver(p.x, p.y, d.id, run().session.board.parts);
+      return;
+    }
+    if (!d.moved && Math.hypot(p.x - d.x0, p.y - d.y0) > DRAG_START) {
+      d.moved = true;
+      this.emitDrag();
+    }
+    if (d.moved) this.updateWireTo(p.x, p.y, d.from);
   }
 
   private onUp(p: Phaser.Input.Pointer): void {
     this.pointer.x = p.x;
     this.pointer.y = p.y;
     const d = this.drag;
-    this.drag = null;
-    this.ghost.setVisible(false);
+    this.endDrag();
     if (!d) return;
     const r = run();
     const parts = r.session.board.parts;
@@ -1358,7 +1882,9 @@ export class BoardScene extends Phaser.Scene {
     if (d.kind === 'card') {
       if (d.id === 'server') {
         const slot = slotAt(p.x, p.y);
+        const on = slot !== null ? partInSlot(parts, slot) : null;
         if (slot === LB_SLOT_ID) this.refuse('only the load balancer fits that slot');
+        else if (on !== null && on.kind === 'server' && r.dead.includes(on.id)) r.replaceServer(on.id);
         else if (slot) r.placeServer(slot);
       } else if (d.id === 'overclock') {
         const target = partAt(parts, p.x, p.y);
@@ -1374,7 +1900,7 @@ export class BoardScene extends Phaser.Scene {
 
     const target = partAt(parts, p.x, p.y);
     if (!d.moved) {
-      // A click on a part: select it (placed parts show the bin button).
+      // A click on a part: select it (placed parts show the bin button, a dead one REPLACE too).
       const clicked = target?.id === d.from ? target : null;
       this.selectedWire = null;
       this.selectedPart =
@@ -1382,6 +1908,31 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
     if (target && target.id !== d.from) r.connect(d.from, target.id);
+  }
+
+  /**
+   * Esc (board-8): cancels the drag in hand, else clears the selection; when it did either, the
+   * key stops here so the pause menu does not open too. Keys 1, 2 and 3 are never listened to.
+   */
+  private onEscape(event: KeyboardEvent): void {
+    let used = false;
+    if (this.drag !== null) {
+      this.endDrag();
+      used = true;
+    } else if (this.selectedPart !== null || this.selectedWire !== null) {
+      this.selectedPart = null;
+      this.selectedWire = null;
+      used = true;
+    }
+    if (used) event.stopPropagation();
+  }
+
+  /** Delete or Backspace (board-8): cuts the selected wire. A selected part is not removed by key. */
+  private onDelete(): void {
+    const w = this.selectedWire ? this.wireByKey.get(this.selectedWire) : undefined;
+    if (!w) return;
+    run().cut(w.from, w.to);
+    this.selectedWire = null;
   }
 
   private decommission(id: string): void {
@@ -1476,6 +2027,10 @@ export class BoardScene extends Phaser.Scene {
             scale: slotScale(part.slot),
             tags: partTags(look, pad !== undefined && this.clock < pad.skipUntil),
             packetsIn: this.packetsInto(part.id),
+            replaceButton:
+              this.replaceBtn.visible && this.selectedPart === part.id
+                ? page(this.replaceBtn.x, this.replaceBtn.y)
+                : null,
           },
         ];
       }),
@@ -1498,6 +2053,7 @@ export class BoardScene extends Phaser.Scene {
           skipTagUntil: null,
           dashed: false,
           pulsing: false,
+          legality: this.drag?.kind === 'card' ? this.lbLegality : null,
         },
         ...this.padList.map((pv) => {
           const b = padBox(pv.slot)!;
@@ -1518,6 +2074,8 @@ export class BoardScene extends Phaser.Scene {
             skipTagUntil: Number.isFinite(pv.skipUntil) ? round(pv.skipUntil) : null,
             dashed: this.clock < pv.skipUntil,
             pulsing: this.pulsingPads[this.padList.indexOf(pv)] === true,
+            legality:
+              this.drag?.kind === 'card' ? (this.padLegality[this.padList.indexOf(pv)] ?? null) : null,
           };
         }),
       ],
@@ -1540,7 +2098,7 @@ export class BoardScene extends Phaser.Scene {
         capacityLevel: round(this.chan.capacityLevel),
         wired: round(f.wiredCapacity),
         forecast: this.chan.forecast === null ? null : round(this.chan.forecast),
-        whatIf: null,
+        whatIf: this.drawnWhatIf ?? null,
         retryShare: round(this.chan.retryShare),
         marks: bankMarkPoints().map((m) => ({ label: m.label, value: m.value, ...page(m.x, m.y) })),
         lanePps: round(this.chan.lanePps),
@@ -1583,12 +2141,66 @@ export class BoardScene extends Phaser.Scene {
       binButton: this.binBtn.visible ? page(this.binBtn.x, this.binBtn.y) : null,
       refusal: this.refusalText.visible ? this.refusalText.text : null,
       dragging: this.drag ? (this.drag.kind === 'card' ? this.drag.id : 'wire') : null,
+      replaceButton: this.replaceBtn.visible ? page(this.replaceBtn.x, this.replaceBtn.y) : null,
+      dragOver:
+        this.drag?.kind === 'card'
+          ? {
+              kind: 'card' as const,
+              card: this.drag.id,
+              over: this.over.id,
+              overKind: this.over.kind,
+              state: this.overState(),
+              legal: this.over.id === null ? null : dropLegalOf(this.drag.id, this.overState()),
+              reason: null,
+            }
+          : this.drag?.kind === 'wire' && this.drag.moved
+            ? {
+                kind: 'wire' as const,
+                card: null,
+                over: this.wireTo.id,
+                overKind: this.wireTo.id === null ? null : ('part' as const),
+                state: null,
+                legal: this.wireTo.id === null ? null : this.wireTo.ok,
+                reason: this.wireTo.reason,
+              }
+            : null,
+      ghost: this.ghostInfo
+        ? {
+            card: this.ghostInfo.card,
+            over: this.ghostInfo.over,
+            legal: this.ghostInfo.legal,
+            state: this.ghostInfo.state,
+            plate: this.ghostInfo.plate,
+            wired: round(this.ghostInfo.wired),
+            capacity: round(this.ghostInfo.capacity),
+            adds: round(this.ghostInfo.adds),
+            whatIf: this.ghostInfo.whatIf === null ? null : round(this.ghostInfo.whatIf),
+            tick: this.ghostInfo.tick,
+            plateShown: this.ghostText.visible,
+            snapped: this.ghostShownFor !== null,
+          }
+        : null,
+      hover: {
+        part: this.hover.part,
+        wire: this.hover.wire,
+        text: this.plate.visible ? this.plate.text : null,
+        target: this.plate.visible ? this.plateFor : null,
+        pinned: this.plate.visible && this.platePinned,
+      },
+      keys: [...BOARD_KEYS],
+      wireTarget: this.targetRing,
       frame: this.snap.count,
       snapshotFrame: this.snap.readAt,
       snapshotChanges: this.snap.changes,
       snapshotCurrent: this.snap.current !== null && this.snap.current === frame(run()),
     };
   }
+}
+
+/** Whether a drop in this state does something (layout.dropLegal), or null with no state. */
+function dropLegalOf(card: string, state: PadState | null): boolean | null {
+  if (state === null) return null;
+  return state === 'legal' || (card === 'server' && state === 'dead');
 }
 
 /** The part with this id, found with a plain loop (no closure) since the board asks every frame. */

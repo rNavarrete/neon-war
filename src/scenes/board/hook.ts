@@ -3,7 +3,7 @@
 
 import type { PartKind } from '../../sim/board';
 import type { Rect } from '../live/layout';
-import type { Point } from './layout';
+import type { PadState, Point } from './layout';
 import type { InventoryCounts } from './tray';
 import type { BarColour, PartStatus, PartTag } from './view';
 
@@ -63,6 +63,8 @@ export interface BoardTestState {
     tags: PartTag[];
     /** Packets on their way into the part right now. */
     packetsIn: number;
+    /** The REPLACE button under this part while it is a selected dead box (board-8), else null. */
+    replaceButton: Point | null;
   })[];
   /**
    * Every pad (board-5): the balancer's and the six server pads, with their drawn box (page CSS
@@ -84,6 +86,8 @@ export interface BoardTestState {
     skipTagUntil: number | null;
     dashed: boolean;
     pulsing: boolean;
+    /** While a card is dragged (board-8): what a drop on this pad would do (layout.padState), else null. */
+    legality: PadState | null;
   })[];
   /** The board clock in seconds (the scene's own time): what skipTagUntil and the blinks count on. */
   clock: number;
@@ -146,13 +150,69 @@ export interface BoardTestState {
   refusal: string | null;
   /** What the pointer is dragging: a tray card id, 'wire', or null. */
   dragging: string | null;
+  /** The REPLACE button under the selected dead box (board-8), in page CSS pixels, or null. */
+  replaceButton: Point | null;
+  /**
+   * What the drag in hand is over (board-8), always reported, gate or not: for a card the slot id
+   * ('s1'..'s6', 'lb') or the part id under it, the pad's legality (`state`) and whether a drop
+   * would do something (`legal`); for a wire the part it would land on and connect()'s answer
+   * (`legal`, `reason`). Null with nothing in hand.
+   */
+  dragOver: {
+    kind: 'card' | 'wire';
+    card: string | null;
+    over: string | null;
+    overKind: 'pad' | 'part' | null;
+    state: PadState | null;
+    legal: boolean | null;
+    reason: string | null;
+  } | null;
+  /**
+   * The what-if ghost (board-8, contract 'board.ghost'): while a card is over a target and no dial
+   * question is open (C1 until the estimate is SET, C6 until the sizing is SET), the card, what it
+   * is over, whether the drop is legal, its plate ('+60 room · boots 3 s · -80 cr', or '+0 room ·
+   * nothing feeds it' when no free feed could wire the box), the wired req/s now and after the drop
+   * (ghostCapacity over wiredCapacity) and what it adds, the what-if level and the tick's label
+   * ('ROOM +60', only when it adds room), whether the plate is on screen and the card snapped onto
+   * the target. Null when nothing is dragged over a target, or while the gate is shut.
+   */
+  ghost: {
+    card: string;
+    over: string;
+    legal: boolean;
+    state: PadState;
+    plate: string | null;
+    wired: number;
+    capacity: number;
+    adds: number;
+    whatIf: number | null;
+    tick: string | null;
+    plateShown: boolean;
+    snapped: boolean;
+  } | null;
+  /**
+   * The hover plate (board-8): the part or wire under the pointer, the plate's text on screen (the
+   * hovered target, else the selected one), which part id or wire key it is for, and whether it is
+   * pinned (it shows the selection).
+   */
+  hover: {
+    part: string | null;
+    wire: string | null;
+    text: string | null;
+    target: string | null;
+    pinned: boolean;
+  };
+  /** The keys the board listens to: Escape, Delete, Backspace (never 1, 2 or 3). */
+  keys: string[];
+  /** The part a dragged wire's target ring is drawn on, or null. */
+  wireTarget: string | null;
   /**
    * The channel at the feed's left edge (board-4), on the shared 0..400 scale: `level` is
    * min(1, demand / max), `capacityLevel` the wired boxes' req/s / max (the ROOM tick; never the
    * racked total), `forecast` the coming surge's level while its warning is up (else null),
    * `retryShare` the red band's share of the fill, `marks` the five bank labels at the mouth in page
    * CSS pixels (bottom to top), `lanePps` the cubes a second streaming in (all lanes) and `lanes`
-   * each lane's share. `whatIf` is the drag ghost's level (board-8; null until then). `chevrons` is
+   * each lane's share. `whatIf` is the drag ghost's level (board.ghost.whatIf while it shows; else null). `chevrons` is
    * how many chevrons are drawn: none.
    */
   channel: {

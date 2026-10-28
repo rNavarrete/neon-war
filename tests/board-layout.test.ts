@@ -46,6 +46,8 @@ import {
 } from '../src/scenes/board/layout';
 import { ZONES, rectToArea } from '../src/scenes/live/layout';
 import { LOCKED_KINDS, lockedReason, trayCards } from '../src/scenes/board/tray';
+import { dropLegal, padState, targetState } from '../src/scenes/board/layout';
+import { BROWNOUT_RULES } from '../src/sim/brownout';
 
 const server = (id: string, slot: string): Part => ({ id, kind: 'server', slot });
 const gateway: Part = { id: 'gateway', kind: 'gateway', slot: null };
@@ -380,5 +382,68 @@ describe('feed geometry (board-1)', () => {
       expect(p.y).toBeGreaterThanOrEqual(BOARD_AREA.top);
       expect(p.y).toBeLessThanOrEqual(BOARD_AREA.bottom);
     }
+  });
+});
+
+// ---- board-8: legality ------------------------------------------------------------------------
+
+describe('pad legality while a card is dragged (board-8)', () => {
+  const prices = { server: 80, overclock: 60 };
+  const parts: Part[] = [
+    gateway,
+    database,
+    server('a', 's1'),
+    { id: 'b', kind: 'server', slot: 's2', boost: 2 },
+    server('dead', 's3'),
+  ];
+  const at = (credits: number, extra: Part[] = []) => ({
+    parts: [...parts, ...extra],
+    credits,
+    dead: ['dead'],
+  });
+
+  it('a server card: empty pads are legal, short credits poor, a live box taken, a dead box replaceable', () => {
+    const b = at(400);
+    expect(padState('s4', b, 'server', prices)).toBe('legal');
+    expect(padState('s1', b, 'server', prices)).toBe('taken');
+    expect(padState('s3', b, 'server', prices)).toBe('dead');
+    expect(padState('s4', at(79), 'server', prices)).toBe('poor');
+    expect(padState('s3', at(79), 'server', prices)).toBe('poor');
+    expect(padState('lb', b, 'server', prices)).toBe('wrong');
+    expect(padState('nowhere', b, 'server', prices)).toBe('wrong');
+    expect(dropLegal('server', 'legal')).toBe(true);
+    expect(dropLegal('server', 'dead')).toBe(true);
+    for (const s of ['taken', 'poor', 'wrong'] as const) expect(dropLegal('server', s)).toBe(false);
+  });
+
+  it('the kit: a server without one is legal, a kitted one taken, an empty pad wrong, a dead box not legal', () => {
+    const b = at(400);
+    expect(padState('s1', b, 'overclock', prices)).toBe('legal');
+    expect(padState('s2', b, 'overclock', prices)).toBe('taken');
+    expect(padState('s4', b, 'overclock', prices)).toBe('wrong');
+    expect(padState('s3', b, 'overclock', prices)).toBe('dead');
+    expect(dropLegal('overclock', 'dead')).toBe(false);
+    expect(padState('s1', at(59), 'overclock', prices)).toBe('poor');
+  });
+
+  it('the splitter pad takes no card from the tray: the crew racks it', () => {
+    expect(padState('lb', at(400), 'balancer', prices)).toBe('wrong');
+    expect(padState('s4', at(400), 'balancer', prices)).toBe('wrong');
+    expect(padState('lb', at(400, [{ id: 'lb1', kind: 'balancer', slot: null }]), 'balancer', prices)).toBe(
+      'taken',
+    );
+  });
+
+  it('a wire target mirrors connect(): ok, or its reason', () => {
+    const wires = [{ from: 'gateway', to: 'a' }];
+    expect(targetState({ parts, wires }, BROWNOUT_RULES, 'a', 'database')).toEqual({
+      ok: true,
+      reason: null,
+    });
+    const busy = targetState({ parts, wires }, BROWNOUT_RULES, 'gateway', 'b');
+    expect(busy.ok).toBe(false);
+    expect(busy.reason).toMatch(/feeds one part only/);
+    expect(targetState({ parts, wires }, BROWNOUT_RULES, 'database', 'a').ok).toBe(false);
+    expect(targetState({ parts, wires }, BROWNOUT_RULES, 'gateway', 'a').reason).toBe('already connected');
   });
 });
