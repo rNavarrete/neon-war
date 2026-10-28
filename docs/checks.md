@@ -113,8 +113,10 @@ step.
 every step itself, e2e included, as before. The selftest runs the shard flow too: one shard set that must pass
 and one with a shard never run, which must fail the e2e step.
 
-Expected time with four shards: the slowest shard holds about 8.5 minutes of tests, plus about 2 minutes to
-install and build, then the `check` job's other steps take a few minutes.
+Expected time with four shards, from measured per-file times: about 6.4, 7.7, 8.5 and 4.2 minutes of tests
+(Playwright splits by file, and `board-live` alone is over 4 minutes). Add about 2 to 3 minutes per shard job to
+install, fetch the browser and build, then 2 to 4 minutes for the `check` job, which starts when the slowest shard
+ends. So CI takes about 13 to 15 minutes instead of about 27.
 
 ## The job to require
 
