@@ -6,7 +6,7 @@
 // comes down ('alert' / 'alertEnd', one at a time) and mirrors itself as hud.alert.
 //
 // With nothing up at the start of C1, the band carries the first step instead (startHintOf): once
-// the job card closes, "drag a SERVER card onto a glowing pad" until the first server is on the board. A hint is not an alert: it tells the bus
+// the job card closes, "drag a SERVER card onto the grid" until the first server is on the board. A hint is not an alert: it tells the bus
 // nothing, plays no sound, never slides or flashes, and any alert takes the band over at once.
 //
 // The rules are pure in alerts.ts; this file only draws them. It is the only alert band (the HUD

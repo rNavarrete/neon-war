@@ -8,7 +8,7 @@
 import type { Part, Wire } from '../../sim/board';
 import { capacityOf } from '../../sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../../sim/brownout';
-import { GATEWAY, LB_SLOT, PART_SIZE, type Point } from './layout';
+import { GATEWAY, PART_SIZE, type Point, outPort } from './layout';
 
 /** Req/s the boxes behind the balancer must cover before the clock runs again (the tail). */
 export const CREW_NEED = BROWNOUT.demand.tail;
@@ -51,7 +51,19 @@ export function padPulseAlpha(t: number, reduceFlicker: boolean): number {
 
 /** The out-port that needs a wire: the gateway's in C1, the balancer's after the rescue. */
 export const GATEWAY_OUT: Point = { x: GATEWAY.x + PART_SIZE.gateway.w / 2, y: GATEWAY.y };
-export const BALANCER_OUT: Point = { x: LB_SLOT.x + PART_SIZE.balancer.w / 2, y: LB_SLOT.y };
+
+/** The balancer's out-port on the grid (the start of its traces), read again only when the balancer part changes. */
+let lbFor: Part | null = null;
+let lbOut: Point | null = null;
+export function balancerOut(parts: readonly Part[]): Point | null {
+  let lb: Part | null = null;
+  for (let i = 0; i < parts.length; i++) if (parts[i].kind === 'balancer') lb = parts[i];
+  if (lb !== lbFor) {
+    lbFor = lb;
+    lbOut = lb ? outPort(lb) : null;
+  }
+  return lbOut;
+}
 
 export interface WaitState {
   first: boolean;
@@ -92,7 +104,7 @@ export function waitInto(out: WaitState, f: WaitInput, t: number, reduceFlicker:
   out.crew = !out.first && f.waitingForCrewBuild;
   out.behind = out.crew ? crewCover(f.parts, f.wires, f.dead) : 0;
   out.need = CREW_NEED;
-  out.port = out.first ? GATEWAY_OUT : out.crew ? BALANCER_OUT : null;
+  out.port = out.first ? GATEWAY_OUT : out.crew ? balancerOut(f.parts) : null;
   out.blinking = out.port !== null && !reduceFlicker;
   out.portLit = out.port !== null && portLit(t, reduceFlicker);
   return out;

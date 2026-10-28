@@ -55,6 +55,10 @@ export const LABELS = {
     drawer: 'LOCKED · 20 PARTS',
     splitterLocked: "the crew hasn't given you one of those",
   },
+  board: {
+    /** The table's power bands, labelled along its far edge ("RACK A" to "RACK D"). */
+    rack: 'RACK',
+  },
   map: {
     /** The city map's title, Lux's building and the cut-off neighbours' tag. */
     title: 'CITY GRID',

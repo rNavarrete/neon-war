@@ -8,8 +8,11 @@
 //
 // Best play: one server wired in C1, leave the banner unanswered, overclock before the climb, three servers
 // behind the crew's balancer after the rescue, four before the midnight dip, back down to two after.
+// Servers go on the table's suggested spots (tick.ts SERVER_SLOTS), one per rack before any rack gets
+// a second, so the midnight dip (one rack loses power) only ever takes one of them.
 
 import { BROWNOUT } from '../sim/brownout';
+import { fits } from '../sim/grid';
 import { SERVER_SLOTS } from '../sim/tick';
 import type { Run } from './run';
 
@@ -26,10 +29,10 @@ function servers(r: Run) {
   return r.session.board.parts.filter((p) => p.kind === 'server');
 }
 
-/** Place a server in the first free slot and wire it in front of the database, from `feed`. */
+/** Place a server on the first suggested spot it fits and wire it in front of the database, from `feed`. */
 function rack(r: Run, feed: string): boolean {
-  const taken = new Set(r.session.board.parts.map((p) => p.slot));
-  const slot = SERVER_SLOTS.find((s) => !taken.has(s));
+  const { slots, parts: onBoard } = r.session.board;
+  const slot = SERVER_SLOTS.find((s) => fits(slots, onBoard, 'server', s).ok);
   if (!slot || !r.placeServer(slot).ok) return false;
   const parts = r.session.board.parts;
   const id = parts[parts.length - 1].id;

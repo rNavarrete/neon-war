@@ -7,7 +7,8 @@ import type { Part } from '../../sim/board';
 import { BROWNOUT } from '../../sim/brownout';
 import { LINES } from '../../strings';
 import { LABELS } from '../hud/labels';
-import { type Box, SERVER_PADS } from './layout';
+import { BOARD_CELLS, roomFor } from '../../sim/grid';
+import type { Box } from './layout';
 
 export type TrayId = 'server' | 'overclock' | 'balancer';
 
@@ -142,34 +143,31 @@ export interface InventoryCounts {
   balancer: number;
 }
 
-/** Every server slot on the board. */
-const SERVER_SLOT_COUNT = Object.keys(SERVER_PADS).length;
 
 /**
  * How many of each card the player could use now, from the credits, the parts on the board and
  * whether the crew has given the balancer. Counts are derived, never stock: servers are what the
- * credits buy, up to the free slots; kits are what the credits buy, up to the servers without one;
- * the balancer is 1 once given and until it is racked. Never below 0.
+ * credits buy, up to how many the table's free cells still take; kits are what the credits buy, up
+ * to the servers without one; the balancer is 1 once given and until it is racked. Never below 0.
  */
 export function inventoryCounts(
   credits: number,
-  parts: readonly Pick<Part, 'kind' | 'boost'>[],
+  parts: readonly Pick<Part, 'id' | 'kind' | 'slot' | 'boost'>[],
   balancerGiven: boolean,
 ): InventoryCounts {
-  let servers = 0;
   let unkitted = 0;
   let racked = false;
   for (const p of parts) {
     if (p.kind === 'server') {
-      servers++;
       if (p.boost === undefined) unkitted++;
     } else if (p.kind === 'balancer') {
       racked = true;
     }
   }
   const afford = (cost: number) => (cost > 0 ? Math.max(0, Math.floor(credits / cost)) : Infinity);
+  const servers = afford(BROWNOUT.server.cost);
   return {
-    server: Math.max(0, Math.min(afford(BROWNOUT.server.cost), SERVER_SLOT_COUNT - servers)),
+    server: Math.max(0, servers > 0 ? Math.min(servers, roomFor(BOARD_CELLS, parts, 'server')) : 0),
     overclock: Math.max(0, Math.min(afford(BROWNOUT.overclock.cost), unkitted)),
     balancer: balancerGiven && !racked ? 1 : 0,
   };

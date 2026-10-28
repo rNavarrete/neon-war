@@ -6,9 +6,16 @@ import { type Flow, type Part, capacityOf, errorShare } from './board';
 import { BROWNOUT, BROWNOUT_RULES } from './brownout';
 import { demandAt } from './demand';
 import { type Session, chargeUpkeep, createSession, offlineAt, routeSession, trustAfter } from './economy';
+import { BOARD_CELLS, SERVER_SPOTS } from './grid';
 
-/** Server slots on Session 0's board, left to right. */
-export const SERVER_SLOTS: readonly string[] = ['s1', 's2', 's3', 's4', 's5', 's6'];
+/** Every cell of Session 0's table a part may stand on: the board's slots (grid.ts). */
+export const BOARD_SLOTS: readonly string[] = BOARD_CELLS;
+
+/**
+ * Good server spots (anchor cells) on Session 0's table, spread across the four racks, in the order
+ * the autopilot fills them and the board suggests them. Any free 2 x 2 footprint works as well.
+ */
+export const SERVER_SLOTS: readonly string[] = SERVER_SPOTS;
 
 /** Parts the session starts with: the block's gateway and the residents' database. */
 export const STARTING_PARTS: readonly Part[] = [
@@ -17,7 +24,7 @@ export const STARTING_PARTS: readonly Part[] = [
 ];
 
 export function brownoutSession(): Session {
-  return createSession({ slots: SERVER_SLOTS, parts: STARTING_PARTS });
+  return createSession({ slots: BOARD_SLOTS, parts: STARTING_PARTS });
 }
 
 export interface Moment {

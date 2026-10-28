@@ -14,6 +14,7 @@ import {
   route,
 } from './board';
 import { BROWNOUT, BROWNOUT_RULES } from './brownout';
+import { BALANCER_SPOT, findSpot } from './grid';
 import {
   type BannerChoice,
   type Session,
@@ -233,7 +234,9 @@ export function applyRescue(play: Play, now: number, by: RescueCause): Play {
     if (r.ok) board = r.board;
   }
   if (!board.parts.some((p) => p.kind === 'balancer')) {
-    board = { ...board, parts: [...board.parts, { id: 'balancer', kind: 'balancer', slot: null }] };
+    // The crew rack it on the nearest free 2 x 1 cells to their spot by the gateway's bay.
+    const slot = findSpot(board.slots, board.parts, 'balancer', BALANCER_SPOT);
+    board = { ...board, parts: [...board.parts, { id: 'balancer', kind: 'balancer', slot }] };
   }
   const lb = board.parts.find((p) => p.kind === 'balancer')!.id;
   const gateways = board.parts.filter((p) => p.kind === 'gateway').map((p) => p.id);
@@ -379,7 +382,7 @@ function act(play: Play, change: (play: Play) => PlayResult): PlayResult {
 }
 
 /**
- * Rack a scrap server in a slot and wire it: behind the load balancer once there is one, otherwise
+ * Rack a scrap server with its footprint's anchor at `slot` (a cell) and wire it: behind the load balancer once there is one, otherwise
  * from the gateway if the gateway feeds nothing yet (it feeds one part only), and on to the database.
  */
 export function rackServer(play: Play, slot: string): PlayResult {
@@ -401,7 +404,7 @@ export function rackServer(play: Play, slot: string): PlayResult {
   });
 }
 
-/** Swap a server (a dead one, usually) for a new scrap server in its slot, on the same wires. */
+/** Swap a server (a dead one, usually) for a new scrap server on the same cells, on the same wires. */
 export function replaceServer(play: Play, id: string): PlayResult {
   return act(play, (p) => {
     const old = partById(p.session.board, id);

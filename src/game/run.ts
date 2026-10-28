@@ -20,9 +20,9 @@ import {
   step,
   useRegroup,
 } from '../sim/play';
-import { DIP_SCRIPT, blockDemand, dipWarnAt, flickeringParts } from '../sim/failures';
+import { DIP_SCRIPT, blockDemand, dipParts, dipWarnAt, flickeringParts } from '../sim/failures';
 import { capacityOf } from '../sim/board';
-import { SERVER_SLOTS, STARTING_PARTS } from '../sim/tick';
+import { BOARD_SLOTS, STARTING_PARTS } from '../sim/tick';
 import { bus } from './bus';
 
 export type ActionResult = { ok: true } | { ok: false; reason: string };
@@ -37,7 +37,7 @@ const MAX_SLICE_SECONDS = 0.5;
 const SEED = 2026;
 
 export class Run {
-  play: Play = createPlay({ slots: SERVER_SLOTS, parts: STARTING_PARTS, seed: SEED });
+  play: Play = createPlay({ slots: BOARD_SLOTS, parts: STARTING_PARTS, seed: SEED });
   /** Why the board is stopped right now (pause menu, job card, a scene); empty while it runs. */
   private holds = new Set<string>();
   private ended = false;
@@ -197,6 +197,7 @@ export class Run {
     return debriefNumbers(this.play);
   }
 
+  /** Rack a scrap server with its footprint's anchor at `slot` (a cell id). */
   placeServer(slot: string): ActionResult {
     return this.applySession(placeServer(this.session, slot, this.now), () => {
       const parts = this.session.board.parts;
@@ -275,7 +276,7 @@ export class Run {
     }
     for (const id of b.heat.dead) if (!a.heat.dead.includes(id)) bus.emit('serverDied', { id });
     for (const d of b.dips) {
-      if (d.part !== null && a.t < d.darkAt && b.t >= d.darkAt) bus.emit('powerDip', { id: d.part });
+      if (a.t < d.darkAt && b.t >= d.darkAt) for (const id of dipParts(d)) bus.emit('powerDip', { id });
     }
     if (!a.rescue && b.rescue) bus.emit('crewArrived', { by: b.rescue.by });
     if (!a.failure && b.failure) bus.emit('failure', b.failure);

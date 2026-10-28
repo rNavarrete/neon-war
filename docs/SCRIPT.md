@@ -293,7 +293,7 @@ header has no lines yet. UI micro-copy (labels, key caps) is not a line and stay
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| C1.alert.place | ui | Alert | C1 after the job card closes, until the first server is on the board | drag a SERVER card onto a glowing pad |
+| C1.alert.place | ui | Alert | C1 after the job card closes, until the first server is on the board | drag a SERVER card onto the grid |
 | C3.alert.title | ui | Alert | the C3 forecast headline, after the number | EVERYONE FILMING |
 | C3.alert.down | ui | Alert | a failure freezes the board, before the rewind | BLOCK DOWN |
 | C4.alert.title | ui | Alert | the C4 forecast and the surge, after the number | NEIGHBOURS REROUTED HERE |

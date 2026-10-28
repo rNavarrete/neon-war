@@ -5,12 +5,28 @@
 // and `inventory` (the tray of parts). Both areas come from src/scenes/live/layout.ts, the only
 // geometry source for the Live screen (docs/LIVE.md); everything else on screen is the HUD's.
 //
-// The table is seen from above and in front: its far edge is narrower than its near edge, and the
-// rack's rows grow toward the viewer (0.88, 1.00, 1.06). Every coordinate here is already
-// projected (screen pixels), so the hit tests and the hook read them exactly as they are drawn.
+// The table is seen from above and in front: its far edge is narrower than its near edge. Parts
+// stand on the cells of its painted grid (cells.ts places them on screen, src/sim/grid.ts says
+// which cells a part covers). Every coordinate here is already projected (screen pixels), so the
+// hit tests and the hook read them exactly as they are drawn.
 
 import { type BoardRules, type Part, type PartKind, type Wire, connect } from '../../sim/board';
+import {
+  BOARD_CELLS,
+  FOOTPRINT,
+  GRID,
+  anchorOf,
+  cellId,
+  fits,
+  footprintCells,
+  occupancy,
+  parseCell,
+  partCells,
+  portNode,
+} from '../../sim/grid';
 import { ZONES, rectToArea } from '../live/layout';
+import { anchorAt, blockCentre, blockQuad, nodePoint } from './cells';
+import { type Block, traceNodes } from './lattice';
 
 export interface Point {
   readonly x: number;
@@ -48,60 +64,16 @@ export function project(u: number, v: number): Point {
   return { x: left + (right - left) * u, y: far.y + (near.y - far.y) * v };
 }
 
-/** Centre of the gateway, where the block's traffic comes in. */
+/** Centre of the gateway, where the block's traffic comes in. It stands on the table's left rim. */
 export const GATEWAY: Point = { x: 640, y: 412 };
-/** Centre of the load balancer's slot, between the gateway and the servers. */
-export const LB_SLOT: Point = { x: 870, y: 412 };
-/** Centre of the residents' database, at the end of the line. */
+/** Centre of the residents' database, at the end of the line, on the table's right rim. */
 export const DATABASE: Point = { x: 1760, y: 412 };
 
-/** Id of the load balancer's slot. It is not one of the sim's server slots. */
-export const LB_SLOT_ID = 'lb';
-
-export interface RackRow {
-  /** Where the row's servers stand (their centres). */
-  readonly y: number;
-  /** How big things draw on this row, against the mid row. */
-  readonly scale: number;
-  /** The two columns' centres on this row: they lean in toward the far edge. */
-  readonly x: readonly [number, number];
-}
-
-/** The server rack: three rows (far, mid, near) of two columns. */
-export const RACK_ROWS: readonly RackRow[] = [
-  { y: 300, scale: 0.88, x: [1077, 1303] },
-  { y: 412, scale: 1.0, x: [1070, 1310] },
-  { y: 524, scale: 1.06, x: [1063, 1317] },
-];
-
-/** Each server slot's column and row in the rack. The first column fills first (s1-s3). */
-export const SERVER_GRID: Readonly<Record<string, { col: number; row: number }>> = {
-  s1: { col: 0, row: 0 },
-  s2: { col: 0, row: 1 },
-  s3: { col: 0, row: 2 },
-  s4: { col: 1, row: 0 },
-  s5: { col: 1, row: 1 },
-  s6: { col: 1, row: 2 },
-};
-
-/** How far a server's centre sits above its pad's centre at the mid row (scaled by the row). */
-export const SERVER_RISE = 30;
-
-/** The draw scale of a server slot's row; 1 for anything outside the rack. */
-export function slotScale(slot: string | null | undefined): number {
-  const g = slot ? SERVER_GRID[slot] : undefined;
-  return g ? RACK_ROWS[g.row].scale : 1;
-}
-
-/** Server slot pads, by the sim's slot id. A server stands on its pad, SERVER_RISE above it. */
-export const SERVER_PADS: Readonly<Record<string, Point>> = Object.fromEntries(
-  Object.entries(SERVER_GRID).map(([id, g]) => {
-    const row = RACK_ROWS[g.row];
-    return [id, { x: row.x[g.col], y: row.y + SERVER_RISE * row.scale }];
-  }),
-);
-
-/** Drawn size of each kind on the board (its hit box), in game pixels; a server's at the mid row. */
+/**
+ * Drawn size of each kind on the board (its hit box), in game pixels. The gateway and the database
+ * are drawn at this size; a server or the splitter is scaled to its footprint's width, keeping this
+ * shape (never above its art's own size).
+ */
 export const PART_SIZE: Readonly<Record<PartKind, { w: number; h: number }>> = {
   gateway: { w: 110, h: 190 },
   balancer: { w: 140, h: 100 },
@@ -109,99 +81,113 @@ export const PART_SIZE: Readonly<Record<PartKind, { w: number; h: number }>> = {
   database: { w: 150, h: 140 },
 };
 
-/** Size of a slot pad at the mid row (scaled by the row). */
-export const PAD_SIZE = { w: 116, h: 69 } as const;
-/** The load balancer slot's hit box. */
-const LB_HIT = { w: 150, h: 150 } as const;
-/** How far a server slot's hit box reaches above the server's centre, at the mid row. */
-const SLOT_REACH = 40;
+/** How much of its footprint's width a part's art fills, and how far its foot sits in from the near edge. */
+const FILL = 0.92;
+const FOOT_INSET = 0.25;
+
+/**
+ * Where a part of `kind` anchored at `anchor` stands: its art box over its footprint, as wide as
+ * the footprint (FILL of it) and shaped like PART_SIZE, its foot a little in from the footprint's
+ * near edge, so it stands on its cells and rises over the ones behind. Null for a non-cell anchor.
+ */
+export function standBox(kind: PartKind, anchor: string): Box | null {
+  const a = parseCell(anchor);
+  if (!a) return null;
+  const { w, h } = FOOTPRINT[kind];
+  const q = blockQuad(a.col, a.row, w, h);
+  const width = ((q[1].x - q[0].x + q[2].x - q[3].x) / 2) * FILL;
+  const size = PART_SIZE[kind];
+  const height = (width * size.h) / size.w;
+  const far = (q[0].y + q[1].y) / 2;
+  const near = (q[2].y + q[3].y) / 2;
+  const foot = near - (near - far) * FOOT_INSET;
+  return { x: (q[0].x + q[1].x + q[2].x + q[3].x) / 4, y: foot - height / 2, w: width, h: height };
+}
 
 /** Centre of a part on the board, or null if it has nowhere to stand. */
 export function partCentre(part: Pick<Part, 'kind' | 'slot'>): Point | null {
-  switch (part.kind) {
-    case 'gateway':
-      return GATEWAY;
-    case 'database':
-      return DATABASE;
-    case 'balancer':
-      return LB_SLOT;
-    case 'server': {
-      const g = part.slot ? SERVER_GRID[part.slot] : undefined;
-      if (!g) return null;
-      const row = RACK_ROWS[g.row];
-      return { x: row.x[g.col], y: row.y };
-    }
-  }
+  const b = partBox(part);
+  return b ? { x: b.x, y: b.y } : null;
 }
 
-/** A part's drawn size: a server's shrinks toward the far row. */
+/** A part's drawn size: a server's or the splitter's follows its footprint (smaller toward the far edge). */
 export function partSize(part: Pick<Part, 'kind' | 'slot'>): { w: number; h: number } {
-  const size = PART_SIZE[part.kind];
-  if (part.kind !== 'server') return size;
-  const s = slotScale(part.slot);
-  return { w: size.w * s, h: size.h * s };
+  const b = partBox(part);
+  return b ? { w: b.w, h: b.h } : PART_SIZE[part.kind];
 }
 
 export function partBox(part: Pick<Part, 'kind' | 'slot'>): Box | null {
-  const c = partCentre(part);
-  return c ? { ...c, ...partSize(part) } : null;
+  if (part.kind === 'gateway') return { ...GATEWAY, ...PART_SIZE.gateway };
+  if (part.kind === 'database') return { ...DATABASE, ...PART_SIZE.database };
+  return part.slot === null ? null : standBox(part.kind, part.slot);
 }
 
-/** A server slot's pad as drawn: centred on the pad, scaled by its row. */
-export function padBox(slot: string): Box | null {
-  const pad = SERVER_PADS[slot];
-  if (!pad) return null;
-  const s = slotScale(slot);
-  return { x: pad.x, y: pad.y, w: PAD_SIZE.w * s, h: PAD_SIZE.h * s };
-}
-
-/**
- * The box that counts as dropping onto a slot. A server slot's runs from a little above the
- * server's centre down to the bottom of its pad, as wide as the pad, so the three rows' boxes
- * never overlap. The balancer's is a square on its slot.
- */
-export function slotBox(slot: string): Box | null {
-  if (slot === LB_SLOT_ID) return { ...LB_SLOT, ...LB_HIT };
-  const g = SERVER_GRID[slot];
-  const pad = padBox(slot);
-  if (!g || !pad) return null;
-  const top = RACK_ROWS[g.row].y - SLOT_REACH * slotScale(slot);
-  const bottom = pad.y + pad.h / 2;
-  return { x: pad.x, y: (top + bottom) / 2, w: pad.w, h: bottom - top };
+/** How big a part draws against its PART_SIZE (1 for the gateway and the database): text and marks scale with it. */
+export function partScale(part: Pick<Part, 'kind' | 'slot'>): number {
+  const b = partBox(part);
+  return b ? b.w / PART_SIZE[part.kind].w : 1;
 }
 
 export function inBox(b: Box, x: number, y: number): boolean {
   return Math.abs(x - b.x) <= b.w / 2 && Math.abs(y - b.y) <= b.h / 2;
 }
 
-/** The part under a point, if any. Later parts win, like drawing order. */
+/** The part under a point, if any. Nearer parts (lower on screen) win, like drawing order. */
 export function partAt(parts: readonly Part[], x: number, y: number): Part | null {
+  let best: Part | null = null;
+  let bestY = -Infinity;
   for (let i = parts.length - 1; i >= 0; i--) {
     const b = partBox(parts[i]);
-    if (b && inBox(b, x, y)) return parts[i];
+    if (b && inBox(b, x, y) && b.y > bestY) {
+      best = parts[i];
+      bestY = b.y;
+    }
   }
-  return null;
+  return best;
 }
 
-/** Every slot the board draws: the balancer's first, then the six server slots. */
-export const SLOT_IDS: readonly string[] = [LB_SLOT_ID, ...Object.keys(SERVER_GRID)];
+/** A footprint's outline on screen: far-left, far-right, near-right, near-left. Null for a non-cell anchor. */
+export function footprintQuad(kind: PartKind, anchor: string): [Point, Point, Point, Point] | null {
+  const a = parseCell(anchor);
+  if (!a) return null;
+  const { w, h } = FOOTPRINT[kind];
+  return blockQuad(a.col, a.row, w, h);
+}
 
-/** The slot (a server slot or 'lb') under a point, if any. */
-export function slotAt(x: number, y: number): string | null {
-  for (const id of SLOT_IDS) {
-    const b = slotBox(id);
-    if (b && inBox(b, x, y)) return id;
-  }
-  return null;
+/**
+ * The anchor a card of `kind` dragged to (x, y) would take: its footprint centred under the
+ * pointer and kept on the grid, or null off the grid.
+ */
+export function dropAnchor(kind: PartKind, x: number, y: number): string | null {
+  const { w, h } = FOOTPRINT[kind];
+  const a = anchorAt(x, y, w, h);
+  return a ? cellId(a.col, a.row) : null;
+}
+
+const BOARD_CELL_SET = new Set(BOARD_CELLS);
+
+/**
+ * The cells a part of `kind` would cover at `anchor` and which of them are not free: off the
+ * table's playable cells or under another part (one listed in `ignore` does not count).
+ */
+export function previewCells(
+  kind: PartKind,
+  anchor: string,
+  parts: readonly Pick<Part, 'id' | 'kind' | 'slot'>[],
+  ignore: readonly string[] = [],
+): { cells: string[]; bad: string[] } {
+  const cells = footprintCells(kind, anchor);
+  const taken = occupancy(parts.filter((p) => !ignore.includes(p.id)));
+  return { cells, bad: cells.filter((c) => taken.has(c) || !BOARD_CELL_SET.has(c)) };
 }
 
 // ---- legality (board-8) ------------------------------------------------------------------------
 
 /**
- * What dropping a card on a pad would do, for the drag's tints: `legal` it takes (an empty pad for
- * a server, a server without the kit for the kit), `dead` a dead server is there (a server card
- * replaces it), `poor` it would take but the credits are short, `taken` something is there already,
- * `wrong` the card does not go there.
+ * What dropping a card at a spot would do, for the drag's tints: `legal` it takes (a server
+ * footprint on free cells, the kit on a server without one), `dead` a dead server is there (a server
+ * card replaces it), `poor` it would take but the credits are short, `taken` a part is in the way,
+ * `wrong` the card does not go there (a fixed part's bay, the crew's splitter, not a cell).
  */
 export type PadState = 'legal' | 'taken' | 'dead' | 'poor' | 'wrong';
 
@@ -218,21 +204,23 @@ export interface PadPrices {
   readonly overclock: number;
 }
 
-/** The legality of dropping `card` (a tray card id) on `slot` (a server slot or 'lb'). */
+/**
+ * The legality of dropping `card` (a tray card id) with its footprint's anchor at `slot` (a cell
+ * id), or onto the part standing on that cell. Pure.
+ */
 export function padState(slot: string, board: PadBoard, card: string, prices: PadPrices): PadState {
-  if (slot === LB_SLOT_ID) {
-    // Only the crew's splitter stands here, and the crew racks it themselves.
-    for (const p of board.parts) if (p.kind === 'balancer') return 'taken';
-    return 'wrong';
-  }
-  if (!SERVER_GRID[slot]) return 'wrong';
+  if (!parseCell(slot)) return 'wrong';
   let on: Part | null = null;
-  for (const p of board.parts) if (p.slot === slot) on = p;
+  for (const p of board.parts) if (partCells(p).includes(slot)) on = p;
   const dead = on !== null && board.dead.includes(on.id);
   if (card === 'server') {
-    if (on === null) return board.credits >= prices.server ? 'legal' : 'poor';
-    if (dead) return board.credits >= prices.server ? 'dead' : 'poor';
-    return 'taken';
+    if (on !== null && on.kind === 'server' && dead) return board.credits >= prices.server ? 'dead' : 'poor';
+    if (on !== null) return on.kind === 'gateway' || on.kind === 'database' ? 'wrong' : 'taken';
+    if (!fits(BOARD_CELLS, board.parts, 'server', slot).ok) {
+      const { bad } = previewCells('server', slot, board.parts);
+      return bad.every((c) => BOARD_CELL_SET.has(c)) ? 'taken' : 'wrong';
+    }
+    return board.credits >= prices.server ? 'legal' : 'poor';
   }
   if (card === 'overclock') {
     if (on === null || on.kind !== 'server') return 'wrong';
@@ -240,6 +228,8 @@ export function padState(slot: string, board: PadBoard, card: string, prices: Pa
     if (on.boost !== undefined) return 'taken';
     return board.credits >= prices.overclock ? 'legal' : 'poor';
   }
+  // The crew rack their splitter themselves.
+  if (card === 'balancer') return board.parts.some((p) => p.kind === 'balancer') ? 'taken' : 'wrong';
   return 'wrong';
 }
 
@@ -265,86 +255,66 @@ export function targetState(
 }
 
 /**
- * Where a part or a slot sits on screen (projected game pixels), for the HUD's dip mark and its
- * leader lines: a part's centre by part id, or a slot's pad (the balancer slot's centre) by slot
- * id. Null when the id names neither, or the part has nowhere to stand.
+ * Where a part or a cell sits on screen (projected game pixels), for the HUD's dip mark and its
+ * leader lines: a part's centre by part id, or a cell's centre by cell id. Null when the id names
+ * neither, or the part has nowhere to stand.
  */
 export function partAnchor(
   board: { readonly parts: readonly Pick<Part, 'id' | 'kind' | 'slot'>[] },
   id: string,
 ): Point | null {
   for (const p of board.parts) if (p.id === id) return partCentre(p);
-  if (id === LB_SLOT_ID) return LB_SLOT;
-  return SERVER_PADS[id] ?? null;
+  const c = parseCell(id);
+  return c ? blockCentre(c.col, c.row, 1, 1) : null;
 }
 
-/** How far a server's ports sit above (in, on its left) and below (out, on its right) its centre. */
-const SERVER_PORT = 18;
+// Wires run like traces on a circuit board, along the painted grid's lines: straight runs and right
+// angles only, never through a part's footprint (lattice.ts finds the way). A trace leaves a part's
+// out-port node and enters the next one's in-port node (grid.ts portNode); the gateway's starts at
+// its art's right edge and runs into its bay, the database's ends at its art's left edge.
 
-/** Where a wire leaves a part (its right edge) and enters one (its left edge). */
-export function wireEnds(from: Pick<Part, 'kind' | 'slot'>, to: Pick<Part, 'kind' | 'slot'>) {
-  const a = partCentre(from);
-  const b = partCentre(to);
+/** Every part's footprint as a block the traces go round. */
+function blocksOf(parts: readonly Pick<Part, 'kind' | 'slot'>[]): Block[] {
+  const out: Block[] = [];
+  for (const p of parts) {
+    const a = anchorOf(p);
+    const c = a ? parseCell(a) : null;
+    if (c) out.push({ col: c.col, row: c.row, ...FOOTPRINT[p.kind] });
+  }
+  return out;
+}
+
+/** The gateway's out-port at its art's right edge, and the database's in-port at its art's left edge. */
+const GATEWAY_ART_OUT = GATEWAY.x + PART_SIZE.gateway.w / 2 - 6;
+const DATABASE_ART_IN = DATABASE.x - PART_SIZE.database.w / 2 + 6;
+
+/**
+ * The trace a wire follows from one part to the next, as corner points in game pixels: the
+ * lattice route between their ports round every footprint in `parts` (an L when no route exists),
+ * with the gateway's and the database's art edges added at the ends, level with their port rows.
+ * Null if either has no cells.
+ */
+export function wirePath(
+  from: Pick<Part, 'kind' | 'slot'>,
+  to: Pick<Part, 'kind' | 'slot'>,
+  parts: readonly Pick<Part, 'kind' | 'slot'>[],
+): Point[] | null {
+  const a = portNode(from, 'out');
+  const b = portNode(to, 'in');
   if (!a || !b) return null;
-  const ax = a.x + partSize(from).w / 2 - 6;
-  const bx = b.x - partSize(to).w / 2 + 6;
-  // A server takes wires in high on its left and sends them out low on its right, so a trace
-  // leaving one column never lines up with a trace entering the next.
-  const ay = a.y + (from.kind === 'server' ? SERVER_PORT * slotScale(from.slot) : 0);
-  const by = b.y - (to.kind === 'server' ? SERVER_PORT * slotScale(to.slot) : 0);
-  return { ax, ay, bx, by };
+  const nodes = traceNodes(GRID.cols, GRID.rows, a, b, blocksOf(parts));
+  const points: Point[] = nodes.map(nodePoint);
+  if (from.kind === 'gateway') points.unshift({ x: GATEWAY_ART_OUT, y: points[0].y });
+  if (to.kind === 'database') points.push({ x: DATABASE_ART_IN, y: points[points.length - 1].y });
+  return tidy(points);
 }
 
-// Wires run like traces on a circuit board: straight lines and right angles only, and never across
-// a server. Into the rack they come down a bus left of the first column; out of it they go along a
-// bus right of the second. A wire into the second column runs over the rack along the far rim and
-// comes down the gap between the columns; a wire out of the first column goes down the gap and
-// along the near rim. Every corner of a trace lies on one of these named lines.
-/** The vertical bus into the rack, left of its first column. */
-export const BUS_IN = 989;
-/** The vertical bus out of the rack, right of its second column. */
-export const BUS_OUT = 1395;
-/** Between the columns: where a wire comes down into the second column. */
-export const GAP_IN = 1178;
-/** Between the columns: where a wire leaves the first column for the near rim. */
-export const GAP_OUT = 1202;
-/** The rim channel along the table's far edge, over the rack. */
-export const OVER = 236;
-/** The rim channel along the table's near edge, under the rack. */
-export const UNDER = 601;
-
-/** The trace a wire follows from one part to the next, as corner points. */
-export function wirePath(from: Pick<Part, 'kind' | 'slot'>, to: Pick<Part, 'kind' | 'slot'>): Point[] | null {
-  const e = wireEnds(from, to);
-  if (!e) return null;
-  const a = { x: e.ax, y: e.ay };
-  const b = { x: e.bx, y: e.by };
-  const into = to.kind === 'server' && to.slot ? SERVER_GRID[to.slot] : undefined;
-  const outOf = from.kind === 'server' && from.slot ? SERVER_GRID[from.slot] : undefined;
-  if (into) {
-    if (into.col === 0) return tidy([a, { x: BUS_IN, y: a.y }, { x: BUS_IN, y: b.y }, b]);
-    return tidy([
-      a,
-      { x: BUS_IN, y: a.y },
-      { x: BUS_IN, y: OVER },
-      { x: GAP_IN, y: OVER },
-      { x: GAP_IN, y: b.y },
-      b,
-    ]);
-  }
-  if (outOf) {
-    if (outOf.col === 1) return tidy([a, { x: BUS_OUT, y: a.y }, { x: BUS_OUT, y: b.y }, b]);
-    return tidy([
-      a,
-      { x: GAP_OUT, y: a.y },
-      { x: GAP_OUT, y: UNDER },
-      { x: BUS_OUT, y: UNDER },
-      { x: BUS_OUT, y: b.y },
-      b,
-    ]);
-  }
-  const mid = (a.x + b.x) / 2;
-  return tidy([a, { x: mid, y: a.y }, { x: mid, y: b.y }, b]);
+/** Where a part sends its wires out (the trace's first point), or null. */
+export function outPort(part: Pick<Part, 'kind' | 'slot'>): Point | null {
+  const n = portNode(part, 'out');
+  if (!n) return null;
+  const p = nodePoint(n);
+  return part.kind === 'gateway' ? { x: GATEWAY_ART_OUT, y: p.y } : p;
 }
 
 /** Drop repeated points and points in the middle of a straight run. */
@@ -437,17 +407,19 @@ export const INBOUND_LANES: readonly (readonly Point[])[] = [-LANE_SPREAD, 0, LA
     : [{ x: INBOUND_FROM, y: GATEWAY.y + dy }, { x: CHANNEL.mouth.x + 30, y: GATEWAY.y + dy }, end];
 });
 
-/** Where a part takes its wires in: its left edge, high on a server (the end wirePath draws to). */
+/**
+ * Where a part takes its wires in (the end wirePath draws to): its in-port node on the grid, the
+ * database's art edge level with its port row, or the gateway's left edge where the channel meets it.
+ */
 export function inPort(part: Pick<Part, 'kind' | 'slot'>): Point | null {
-  const c = partCentre(part);
-  if (!c) return null;
-  return {
-    x: c.x - partSize(part).w / 2 + 6,
-    y: c.y - (part.kind === 'server' ? SERVER_PORT * slotScale(part.slot) : 0),
-  };
+  if (part.kind === 'gateway') return { x: GATEWAY.x - PART_SIZE.gateway.w / 2 + 6, y: GATEWAY.y };
+  const n = portNode(part, 'in');
+  if (!n) return null;
+  const p = nodePoint(n);
+  return part.kind === 'database' ? { x: DATABASE_ART_IN, y: p.y } : p;
 }
 
-/** The far rim the retries run back along, just inside the table's far edge (above OVER's traces). */
+/** The far rim the retries run back along, just inside the table's far edge (above the grid). */
 export const RETURN_RIM = TABLE.far.y + 4;
 /** How far left of a port a returning retry steps before it turns. */
 const RETURN_STEP = 14;

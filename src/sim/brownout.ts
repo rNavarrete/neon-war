@@ -70,6 +70,27 @@ export const BROWNOUT = {
   finalSizing: { holds: 4, holdsWithFastReplacement: 3, drops: 2, waste: 5 },
   /** The C4 script: the power dip takes the overclocked server dark this long into the surge (a draft). */
   surgeScript: { dipAfterSeconds: 5 },
+  /**
+   * The table's grid (src/sim/grid.ts): the painted silkscreen's squares, the cells each kind
+   * covers, the fixed parts' bays (gateway at the left edge, database at the right, `bayRow` their
+   * first row), the racks (bands of `rackColumns` columns, each on its own power feed), where the
+   * crew rack their splitter, and the suggested server spots (one per rack along each row in turn).
+   */
+  board: {
+    cols: 28,
+    rows: 19,
+    footprint: {
+      server: { w: 2, h: 2 },
+      balancer: { w: 2, h: 1 },
+      gateway: { w: 2, h: 4 },
+      database: { w: 2, h: 4 },
+    },
+    bayRow: 10,
+    racks: ['A', 'B', 'C', 'D'],
+    rackColumns: 7,
+    balancerSpot: { col: 3, row: 8 },
+    serverSpots: { cols: [3, 9, 16, 22], rows: [11, 5, 15] },
+  },
   /** C7: decommissioning down to this many servers counts as scaling down in the debrief. */
   scaleDown: { to: 2 },
   /**
