@@ -47,6 +47,7 @@ import {
 import { laundryCutAvailable } from '../sim/failures';
 import { cutLaundry, laundryCutAt, regroupAvailable, upcomingDip } from './hud/pending503';
 import { REGROUP_UNUSED, type RegroupState, regroupActive, regroupSpent, startRegroup } from './hud/regroup';
+import { shownCredits, shownTrust } from './hud/title';
 import { type DipWarning, dipWarningAt, fallForecastAt, surgeWarningAt } from './hud/warnings';
 import { GAME_HEIGHT, GAME_WIDTH } from './BoardScene';
 import { storyEnd } from '../story/state';
@@ -66,7 +67,6 @@ const HUD_ART = [
   'job-card',
   'estimate-dial',
   'warning-bar',
-  'clock-panel',
   'textbox',
   'button',
   'button-hover',
@@ -76,9 +76,6 @@ const HUD_ART = [
 ];
 const ICONS = ['trust', 'credits', 'warning', 'power-dip', 'cut', 'clock'];
 const AVATARS = ['kenji', 'mrs-okafor', 'young-father', 'old-man-noodles'];
-
-/** Lux's face in the title cluster. */
-const LUX_AVATAR = 'portrait:lux/faces-board/determined';
 
 /** One of the deck's three keys: its cap, its digit and word, and whether it is lit (pressable). */
 interface DeckKey {
@@ -102,9 +99,10 @@ const cardGuarded = (): boolean => performance.now() - storyEnd.at < CARD_GUARD_
 
 /**
  * The board's HUD, drawn over BoardScene with a transparent background and staged into the Live
- * screen's zones (src/scenes/live/layout.ts, docs/LIVE.md): the title cluster (Lux, LIVE, trust and
- * credits), the alert band (surge and fall), the clock and countdown, the chart in the scope, the
- * barks as the comms band's line, one chat column, and the deck's keys (1 REGROUP, 2 CUT 3F, 3 SET).
+ * screen's zones (src/scenes/live/layout.ts, docs/LIVE.md). It hosts the zone views (the registry:
+ * the title cluster and the clock are TitleView and ClockView) and still draws the alert band (surge
+ * and fall), the chart in the scope, the barks as the comms band's line, one chat column, and the
+ * deck's keys (1 REGROUP, 2 CUT 3F, 3 SET).
  * Over the feed, only while asked: the job card, the Solace banner, the dial card, the sizing prompt
  * and the power-dip warning. It reads run() every frame and only calls the run's actions; the rules
  * stay in src/sim/.
@@ -150,9 +148,6 @@ export class HudScene extends Phaser.Scene {
   private lastSurgeAt = -1;
   /** Sim time the current surge warning first went on screen. */
   private surgeShownAt = -1;
-  private shownSecond = -1;
-  private shownTrust = NaN;
-  private shownCredits = NaN;
   private dip: DipWarning | null = null;
   /** What the dial question reads, one object reused every update. */
   private readonly ask: { now: number; cardOpen: boolean; estimate: number | null; sizing: number | null } = {
@@ -187,12 +182,6 @@ export class HudScene extends Phaser.Scene {
   private dial!: DialView;
   private barkView!: BarkView;
   private chatView!: ChatView;
-  private title!: Phaser.GameObjects.Container;
-  private clockPanel!: Phaser.GameObjects.Image;
-  private clockText!: Phaser.GameObjects.Text;
-  private countdown!: Phaser.GameObjects.Text;
-  private trustText!: Phaser.GameObjects.Text;
-  private creditsText!: Phaser.GameObjects.Text;
   private warning!: Phaser.GameObjects.Container;
   private warningNumber!: Phaser.GameObjects.Text;
   private warningLine!: Phaser.GameObjects.Text;
@@ -257,9 +246,7 @@ export class HudScene extends Phaser.Scene {
     this.resetForRun(run());
     // The Live screen's views go first, so their placeholders sit under everything drawn below.
     for (const v of this.views) v.create(this, this.hostFor(v));
-    this.buildTitle();
     this.buildAlert();
-    this.buildClock();
     this.chart = new ChartView(this);
     this.dial = new DialView(this, {
       touched: () => {
@@ -306,7 +293,6 @@ export class HudScene extends Phaser.Scene {
     this.liveClock.dt = step;
     for (let i = 0; i < this.views.length; i++) this.views[i].update(f, this.liveClock, this.occurrences);
 
-    this.updateTopStrip(r);
     const estimate = r.notes.estimate;
     const sizing = r.notes.sizing;
     this.chart.update(
@@ -400,55 +386,7 @@ export class HudScene extends Phaser.Scene {
     }
   }
 
-  // ---- top strip: the title cluster, the alert band, the clock ----
-
-  /** Lux in her ring, the LIVE dot, and the trust and credits chips, in ZONES.title. */
-  private buildTitle(): void {
-    const a = TOP.avatar;
-    const g = this.add.graphics();
-    g.fillStyle(COLORS.ink, 0.9);
-    g.fillCircle(a.x, a.y, a.r);
-    g.lineStyle(3, COLORS.cyan, 0.9);
-    g.strokeCircle(a.x, a.y, a.r);
-    for (const c of [TOP.trust, TOP.credits]) {
-      g.fillStyle(COLORS.ink, 0.75);
-      g.fillRoundedRect(c.x, c.y, c.w, c.h, 8);
-      g.lineStyle(1, COLORS.cyan, 0.45);
-      g.strokeRoundedRect(c.x, c.y, c.w, c.h, 8);
-    }
-    const face = this.add.image(a.x, a.y, LUX_AVATAR);
-    face.setScale((a.r * 1.4) / Math.max(face.width, face.height));
-    const dot = this.add.circle(TOP.live.x, TOP.live.y, TOP.live.r, COLORS.magenta, 1);
-    const live = this.add
-      .text(TOP.liveText.x, TOP.liveText.y, 'LIVE', {
-        fontFamily: FONT,
-        fontSize: '18px',
-        color: COLORS.magentaText,
-      })
-      .setOrigin(0, 0.5);
-    const chip = (c: typeof TOP.trust, icon: string): [Phaser.GameObjects.Image, Phaser.GameObjects.Text] => {
-      const i = this.add.image(c.x + 22, c.y + c.h / 2, icon);
-      i.setScale((c.h - 8) / Math.max(i.width, i.height));
-      const t = this.add
-        .text(c.x + 44, c.y + c.h / 2, '', { fontFamily: FONT, fontSize: '26px', color: COLORS.white })
-        .setOrigin(0, 0.5);
-      return [i, t];
-    };
-    const [trustIcon, trustText] = chip(TOP.trust, 'hud:icon-trust');
-    const [creditsIcon, creditsText] = chip(TOP.credits, 'hud:icon-credits');
-    this.trustText = trustText;
-    this.creditsText = creditsText;
-    this.title = this.add.container(0, 0, [
-      g,
-      face,
-      dot,
-      live,
-      trustIcon,
-      trustText,
-      creditsIcon,
-      creditsText,
-    ]);
-  }
+  // ---- the alert band ----
 
   /** The alert band (surge and fall), filling ZONES.alert while it has something to say. */
   private buildAlert(): void {
@@ -475,48 +413,6 @@ export class HudScene extends Phaser.Scene {
     this.warning = this.add
       .container(0, 0, [bar, icon, this.warningLine, this.warningNumber])
       .setVisible(false);
-  }
-
-  /** The in-world clock and the countdown, in ZONES.clock (the pause button there is the overlay's). */
-  private buildClock(): void {
-    const p = TOP.clockPanel;
-    this.clockPanel = this.add
-      .image(p.x, p.y, 'hud:clock-panel')
-      .setOrigin(0)
-      .setDisplaySize(p.size, p.size * (207 / 213));
-    const icon = this.add.image(p.x + p.size / 2, p.y + p.size / 2, 'hud:icon-clock');
-    icon.setScale((p.size * 0.6) / Math.max(icon.width, icon.height));
-    this.clockText = this.add.text(TOP.clockText.x, TOP.clockText.y, '', {
-      fontFamily: FONT,
-      fontSize: '40px',
-      color: COLORS.cyanText,
-    });
-    this.countdown = this.add.text(TOP.countdown.x, TOP.countdown.y, '', {
-      fontFamily: FONT,
-      fontSize: '22px',
-      color: COLORS.heroText,
-    });
-  }
-
-  private updateTopStrip(r: Run): void {
-    const second = Math.floor(r.now);
-    if (second !== this.shownSecond) {
-      this.shownSecond = second;
-      this.clockText.setText(r.clock());
-      this.countdown.setText(`midnight in ${countdownText(r.now)}`);
-    }
-    const trust = Math.round(r.session.trust);
-    if (trust !== this.shownTrust) {
-      this.shownTrust = trust;
-      this.trustText.setText(String(trust));
-      this.trustText.setColor(trust < BROWNOUT.rescue.trustBelow ? COLORS.heroText : COLORS.white);
-    }
-    const credits = Math.floor(r.session.board.credits);
-    if (credits !== this.shownCredits) {
-      this.shownCredits = credits;
-      this.creditsText.setText(String(credits));
-      this.creditsText.setColor(credits < 0 ? COLORS.heroText : COLORS.white);
-    }
   }
 
   private updateWarnings(r: Run): void {
@@ -944,6 +840,7 @@ export class HudScene extends Phaser.Scene {
 
   private snapshot(): HudTestState {
     const r = run();
+    const f = frame(r);
     const built = this.ready;
     const [okX, okY] = this.jobCardOk();
     const ok = this.toPage(okX, okY);
@@ -952,8 +849,9 @@ export class HudScene extends Phaser.Scene {
       ready: built,
       now: r.now,
       paused: r.paused,
-      clock: built ? this.clockText.text : r.clock(),
-      countdown: built ? this.countdown.text.replace('midnight in ', '') : countdownText(r.now),
+      // The clock, the countdown and the chips are drawn by ClockView and TitleView from the same frame.
+      clock: f.clock,
+      countdown: countdownText(f.now),
       jobCard: { open: this.cardOpen, x: ok.x, y: ok.y },
       dial: {
         visible: built && this.dial.visible,
@@ -980,10 +878,7 @@ export class HudScene extends Phaser.Scene {
         trust: r.session.trust,
         credits: r.session.board.credits,
       },
-      shown: {
-        trust: Number(built ? this.trustText.text : NaN),
-        credits: Number(built ? this.creditsText.text : NaN),
-      },
+      shown: { trust: shownTrust(f.trust), credits: shownCredits(f.credits) },
       surge: w
         ? {
             demand: w.surge.demand,
@@ -1044,11 +939,7 @@ export class HudScene extends Phaser.Scene {
       getBounds(): { x: number; y: number; width: number; height: number };
     };
     const pieces: [string, Home, Bounded][] = [
-      ['title', 'title', this.title],
       ['alert', 'alert', this.warning],
-      ['clock.text', 'clock', this.clockText],
-      ['clock.countdown', 'clock', this.countdown],
-      ['clock.panel', 'clock', this.clockPanel],
       ['scope', 'scope', this.chart.panel],
       ['dial', 'dialCard', this.dial.container],
       ['sizing', 'sizingPrompt', this.sizingPanel],

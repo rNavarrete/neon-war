@@ -139,6 +139,7 @@ type Hud = {
   surge: { startsAt: number } | null;
   sizingPrompt: { open: boolean };
   bounds: Bounds[];
+  title?: { right: number; clockRight: number | null };
 };
 type StoryState = {
   active: boolean;
@@ -168,7 +169,10 @@ async function homeRects(page: Page): Promise<Record<string, Rect>> {
 async function expectRestaged(page: Page, moment: string, read?: Hud): Promise<Bounds[]> {
   const homes = await homeRects(page);
   const { bounds } = read ?? (await hudState(page));
-  expect(bounds.length, moment).toBeGreaterThanOrEqual(15);
+  // 15 legacy pieces until the HUD stopped drawing its own title cluster and clock (TitleView and
+  // ClockView draw them now): the alert, the scope, the dial, the sizing prompt, the chat, the comms
+  // band, the three deck keys, the job card and the banner are left.
+  expect(bounds.length, moment).toBeGreaterThanOrEqual(11);
   const eps = 1;
   const shown = bounds.filter((b) => b.visible);
   for (const b of shown) {
@@ -242,18 +246,15 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     const h = await hudState(page);
     expect(h.dial.visible).toBe(true);
     const ids = (await expectRestaged(page, 'C1')).map((b) => b.id);
-    for (const id of [
-      'title',
-      'clock.text',
-      'clock.countdown',
-      'clock.panel',
-      'scope',
-      'dial',
-      'chat',
-      'comms',
-    ]) {
+    for (const id of ['scope', 'dial', 'chat', 'comms']) {
       expect(ids, id).toContain(id);
     }
+    // The legacy title cluster and clock are gone; the gauges views draw them in their zones.
+    const all = h.bounds.map((b) => b.id);
+    for (const id of ['title', 'clock.text', 'clock.countdown', 'clock.panel'])
+      expect(all, id).not.toContain(id);
+    expect(h.title!.right).toBeLessThanOrEqual(440);
+    expect(h.title!.clockRight!).toBeLessThanOrEqual(1800);
     for (const id of ['deck.1', 'deck.2', 'deck.3']) expect(ids, id).toContain(id);
     expect(ids).not.toContain('jobCard');
     await page.screenshot({ path: 'test-results/screens/live-restage-c1.png' });
