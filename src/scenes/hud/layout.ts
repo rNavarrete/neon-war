@@ -5,7 +5,6 @@
 // the feed, and only while open. HUD_RECTS lists each piece's box and the zone or card it must stay
 // inside, for tests/hud-layout.test.ts. Pure: no Phaser.
 
-import { speakerName } from '../../game/portraits';
 import { CARDS, type CardId, type Rect, SCREEN_RECT, ZONES, type ZoneId, centreOf } from '../live/layout';
 
 export const FONT = 'ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace';
@@ -46,31 +45,9 @@ export const boxAround = (cx: number, cy: number, w: number, h: number): Rect =>
   h,
 });
 
-// ---- the top strip: title, alert, clock ----
-
-const title = Z.title;
-const alert = Z.alert;
-const clock = Z.clock;
-
-export const TOP = {
-  /** Lux's avatar in a ring, top-left of the title zone. */
-  avatar: { x: title.x + 56, y: title.y + 50, r: 36 },
-  /** The LIVE dot and its word. */
-  live: { x: title.x + 112, y: title.y + 26, r: 7 },
-  liveText: { x: title.x + 126, y: title.y + 26 },
-  /** The trust and credits chips: an icon on the left, the number after it. */
-  trust: { x: title.x + 104, y: title.y + 48, w: 150, h: 40 },
-  credits: { x: title.x + 268, y: title.y + 48, w: 164, h: 40 },
-  /** The alert band fills its zone: the headline from (540, 16), the number chip ending at x 1470. */
-  alert: { x: alert.x, y: alert.y, w: alert.w, h: alert.h },
-  alertIcon: { x: alert.x + 40, y: alert.y + alert.h / 2, size: 44 },
-  alertHeadline: { x: alert.x + 80, y: alert.y + 8, w: 640, h: 68 },
-  alertChip: { right: alert.x + alert.w - 30, y: alert.y + alert.h / 2, w: 250, h: 44 },
-  /** The in-world clock and the countdown under it; the pause button (1850, 52) is OverlayScene's. */
-  clockText: { x: clock.x, y: clock.y + 20, w: 200, h: 44 },
-  countdown: { x: clock.x, y: clock.y + 64, w: 240, h: 28 },
-  clockPanel: { x: clock.x + 216, y: clock.y + 12, size: 76 },
-};
+// ---- the top strip ----
+// The title cluster and the clock are TitleView's (title.ts), the alert band AlertView's (alerts.ts):
+// each places its pieces from its own zone, so nothing for the top strip is left here.
 
 // ---- the left column: the scope ----
 
@@ -105,7 +82,8 @@ export const RIGHT = {
   chatBody: { x: chat.x + 20, y: chat.y + 40, w: chat.w - 40, h: 220, rows: 5 },
 };
 
-// ---- the bottom: the comms band and the deck ----
+// ---- the bottom: the comms band's slots and the deck ----
+// The comms band itself is CommsView's (comms.ts commsLayout); only the five slots stay here.
 
 const comms = Z.comms;
 const deck = Z.deck;
@@ -120,29 +98,13 @@ const KEY_LABELS = [
 ] as const;
 
 export const BOTTOM = {
-  comms: { x: comms.x, y: comms.y, w: comms.w, h: comms.h },
-  commsTitle: { x: comms.x + 22, y: comms.y + 8 },
-  /** The crew's five slots, r 42 at y 720, x 517 + 98 i, each named under its circle. */
+  /** The crew's five slots, r 42 at y 720, x 517 + 98 i (comms.ts commsLayout matches them). */
   slots: SLOT_NAMES.map((name, i) => ({ name, x: comms.x + 62 + 98 * i, y: comms.y + 75, r: 42 })),
-  slotLabelY: comms.y + 122,
-  /** The face shown in the speaking slot, fitted inside the circle. */
-  slotFace: 58,
-  divider: { x: comms.x + 520, top: comms.y + 14, bottom: comms.y + comms.h - 14 },
-  /** The current line: the speaker over the words, from x 1000, wrapped to 760 px. */
-  lineName: { x: comms.x + 545, y: comms.y + 12 },
-  lineText: { x: comms.x + 545, y: comms.y + 38, w: 760, h: 100 },
   /** The deck's keys, 80x64 at (1272, 1022), (1360, 1022), (1448, 1022). */
   keys: KEY_LABELS.map((k, i) => ({ ...k, x: deck.x + 817 + 88 * i, y: deck.y + 52, w: 80, h: 64 })),
 };
 
 export const KEY = { regroup: 0, cut: 1, set: 2 } as const;
-
-/** The slot a speaker's line lights: the crew by name, anyone else (Lux, the TV, the door) HOUSE. */
-export function slotFor(speaker: string): number {
-  const name = speakerName(speaker).toUpperCase();
-  const i = BOTTOM.slots.findIndex((s) => s.name === name);
-  return i >= 0 ? i : BOTTOM.slots.length - 1;
-}
 
 // ---- cards over the feed ----
 
@@ -205,34 +167,6 @@ const bannerArt = boxAround(
 );
 
 export const HUD_RECTS: readonly HudRect[] = [
-  { id: 'title.avatar', rect: circle(TOP.avatar), home: 'title' },
-  { id: 'title.live', rect: { x: TOP.live.x - TOP.live.r, y: TOP.live.y - 12, w: 80, h: 24 }, home: 'title' },
-  { id: 'title.trust', rect: TOP.trust, home: 'title' },
-  { id: 'title.credits', rect: TOP.credits, home: 'title' },
-  { id: 'alert.band', rect: TOP.alert, home: 'alert' },
-  {
-    id: 'alert.icon',
-    rect: boxAround(TOP.alertIcon.x, TOP.alertIcon.y, TOP.alertIcon.size, TOP.alertIcon.size),
-    home: 'alert',
-  },
-  { id: 'alert.headline', rect: TOP.alertHeadline, home: 'alert' },
-  {
-    id: 'alert.chip',
-    rect: {
-      x: TOP.alertChip.right - TOP.alertChip.w,
-      y: TOP.alertChip.y - TOP.alertChip.h / 2,
-      w: TOP.alertChip.w,
-      h: TOP.alertChip.h,
-    },
-    home: 'alert',
-  },
-  { id: 'clock.text', rect: TOP.clockText, home: 'clock' },
-  { id: 'clock.countdown', rect: TOP.countdown, home: 'clock' },
-  {
-    id: 'clock.panel',
-    rect: { x: TOP.clockPanel.x, y: TOP.clockPanel.y, w: TOP.clockPanel.size, h: TOP.clockPanel.size },
-    home: 'clock',
-  },
   { id: 'scope.panel', rect: LEFT.chart, home: 'scope' },
   {
     id: 'scope.plot',
@@ -267,23 +201,7 @@ export const HUD_RECTS: readonly HudRect[] = [
   { id: 'sizing.prompt', rect: CENTRE.sizing, home: 'sizingPrompt' },
   { id: 'chat.panel', rect: RIGHT.chat, home: 'chat' },
   { id: 'chat.body', rect: RIGHT.chatBody, home: 'chat' },
-  { id: 'comms.band', rect: BOTTOM.comms, home: 'comms' },
   ...BOTTOM.slots.map((s): HudRect => ({ id: `comms.slot.${s.name}`, rect: circle(s), home: 'comms' })),
-  ...BOTTOM.slots.map((s): HudRect => ({
-    id: `comms.label.${s.name}`,
-    rect: boxAround(s.x, BOTTOM.slotLabelY + 8, 84, 16),
-    home: 'comms',
-  })),
-  {
-    id: 'comms.line',
-    rect: {
-      x: BOTTOM.lineName.x,
-      y: BOTTOM.lineName.y,
-      w: BOTTOM.lineText.w,
-      h: BOTTOM.lineText.y + BOTTOM.lineText.h - BOTTOM.lineName.y,
-    },
-    home: 'comms',
-  },
   ...BOTTOM.keys.map((k): HudRect => ({
     id: `deck.key.${k.digit}`,
     rect: boxAround(k.x, k.y, k.w, k.h),
