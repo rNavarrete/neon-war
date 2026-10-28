@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { type GameEvents, bus } from '../game/bus';
+import { type GameEvents, bus, dragVerdict } from '../game/bus';
 import { Director } from '../game/director';
 import { run } from '../game/run';
 import { type Part, wireKey } from '../sim/board';
@@ -1847,18 +1847,35 @@ export class BoardScene extends Phaser.Scene {
 
   // ---- input ---------------------------------------------------------------------------------
 
-  /** Tell the other lanes what the pointer drags and what it is over (bus 'drag'). */
+  /**
+   * Tell the other lanes what the pointer drags and what it is over (bus 'drag'), with the pad's
+   * verdict (dragVerdict): the card's padState where it is, null over nothing, on a wire and at
+   * the end.
+   */
   private emitDrag(): void {
     const d = this.drag;
     if (!d) {
-      bus.emit('drag', { kind: null, card: null, over: null });
+      bus.emit('drag', { kind: null, card: null, over: null, ...dragVerdict(null) });
       return;
     }
     if (d.kind === 'card') {
-      bus.emit('drag', { kind: 'card', card: trayIdOf(d.id), over: this.over.kind });
+      // The legality is cached per Frame and card, so this is free unless the card just changed.
+      if (this.over.id !== null) this.updateLegality(frame(run()), d.id);
+      const state = this.overState();
+      bus.emit('drag', {
+        kind: 'card',
+        card: trayIdOf(d.id),
+        over: this.over.kind,
+        ...dragVerdict(state),
+      });
       return;
     }
-    bus.emit('drag', { kind: 'wire', card: null, over: this.wireTo.id === null ? null : 'part' });
+    bus.emit('drag', {
+      kind: 'wire',
+      card: null,
+      over: this.wireTo.id === null ? null : 'part',
+      ...dragVerdict(null),
+    });
   }
 
   /** End the drag in hand, with or without a drop, and say so once on the bus. */
