@@ -153,7 +153,7 @@ test('3. a missed line can be reread from the band log, and the log stays open a
   page,
 }) => {
   test.setTimeout(60_000);
-  const { errors } = await openBoard(page, { speed: 20, autopilot: false });
+  const { errors } = await openBoard(page, { speed: 2, autopilot: false });
   await dismissJobCard(page);
   await expect
     .poll(async () => (await hud(page)).comms?.history ?? [], { timeout: 15_000 })

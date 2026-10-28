@@ -63,16 +63,24 @@ test('the COMING /s gauge at speed 5: needle on demand, OVER BY in the raid', as
   await reach(page, 'c1');
 
   await test.step('a settled frame: the needle within 1 req/s of demand, the band on the wired room', async () => {
+    let settled: Hud | null = null;
     await expect
       .poll(
         async () => {
           const h = await gaugeHud(page);
-          return h.gauge.capacity > 0 && Math.abs(h.gauge.needle - h.gauge.demand) <= 1;
+          // Read on a frame where the gauge and hud.sim agree too: early in C1 the retries still move
+          // demand between the gauge's frame and the read (the dial step used to give it time).
+          const ok =
+            h.gauge.capacity > 0 &&
+            Math.abs(h.gauge.needle - h.gauge.demand) <= 1 &&
+            Math.abs(h.gauge.demand - h.sim.demand) <= 1;
+          if (ok) settled = h;
+          return ok;
         },
         { timeout: 10_000, intervals: [50] },
       )
       .toBe(true);
-    const h = await gaugeHud(page);
+    const h = settled as unknown as Hud;
     expectGaugeMatchesSim(h);
     expect(h.gauge.sub).toBe(`room ${Math.round(h.gauge.capacity)}/s`);
     expect(h.gauge.strip).toBeNull();
