@@ -35,6 +35,7 @@ import type { LiveHost } from '../src/scenes/live/view';
 import { BROWNOUT } from '../src/sim/brownout';
 import { blockDemand } from '../src/sim/failures';
 import { LINES } from '../src/strings';
+import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 
 // The hook's sections as the views provide them, read back here without a window.
 const sections = vi.hoisted(() => new Map<string, () => unknown>());
@@ -323,7 +324,7 @@ describe('MapView', () => {
     expect(made.every((m) => m.depth > 0)).toBe(true);
 
     v.update(frameAt(C.c4 + 2, { blockDemand: 250, errorShare: 0.5 }), { now: 1, dt: 0.5 });
-    const hud = sections.get('hud')!() as { map: unknown };
+    const hud = hudSection({} as HudTestState) as unknown as { map: unknown };
     expect(hud.map).toMatchObject({
       raid: true,
       neighboursCut: true,

@@ -9,6 +9,7 @@ import { surgeWarningAt } from '../src/scenes/hud/warnings';
 import { BROWNOUT } from '../src/sim/brownout';
 import hudSource from '../src/scenes/HudScene.ts?raw';
 import deckSource from '../src/scenes/hud/DeckView.ts?raw';
+import * as panelModule from '../src/scenes/hud/panel';
 
 // M2 follow-up (tech): the HUD scene's legacy alert band and deck keys are gone. AlertView is the
 // one band and plays the forecast's surge-warning itself; DeckView owns the keys and the digits, and
@@ -146,5 +147,18 @@ describe('the deck presses SET through the host', () => {
 
   it('reaches no private dial on the scene', () => {
     expect(deckSource).not.toMatch(/DialHolder|\.dial\?\./);
+  });
+});
+
+describe('views provide hud.* through provideHudSection only', () => {
+  const views = import.meta.glob<string>('../src/scenes/{hud,live/views}/*.ts', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+
+  it('retires the provideHudPart shim from panel.ts', () => {
+    expect('provideHudPart' in panelModule).toBe(false);
+    for (const [file, src] of Object.entries(views)) expect(src.includes('provideHudPart'), file).toBe(false);
   });
 });

@@ -29,7 +29,8 @@ import {
 } from './chartRing';
 import { LABELS } from './labels';
 import { COLORS, FONT } from './layout';
-import { GAUGES_DEPTH, panel, provideHudPart } from './panel';
+import { provideHudSection } from './hook';
+import { GAUGES_DEPTH, panel } from './panel';
 
 const DASH = 10;
 const GAP = 7;
@@ -136,7 +137,7 @@ export class ChartView implements LiveView {
     this.shownTop = -1;
     this.shownRacked = null;
     this.shownAhead = null;
-    this.off.push(provideHudPart(scene, 'chart', () => this.snapshot()));
+    this.off.push(provideHudSection('chart', () => this.snapshot()));
   }
 
   update(frame: Frame): void {

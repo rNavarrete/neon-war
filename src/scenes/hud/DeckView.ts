@@ -46,11 +46,11 @@ import {
 } from './deck';
 import { HeadroomView } from './HeadroomView';
 import type { HeadroomColour } from './headroom';
-import type { PagePoint } from './hook';
 import { jobCardDue } from './jobCard';
 import { COLORS, FONT } from './layout';
 import { cutLaundry } from './pending503';
-import { GAUGES_DEPTH, provideHudPart } from './panel';
+import { type PagePoint, provideHudSection } from './hook';
+import { GAUGES_DEPTH } from './panel';
 
 /** What the hook mirrors as hud.headroom. */
 export interface HeadroomTestState {
@@ -282,10 +282,10 @@ export class DeckView implements LiveView {
       }
     }
 
-    this.off.push(provideHudPart(scene, 'headroom', () => this.headroomSnapshot()));
-    this.off.push(provideHudPart(scene, 'deck', () => this.snapshot()));
-    this.off.push(provideHudPart(scene, 'regroup', () => this.regroupHook()));
-    this.off.push(provideHudPart(scene, 'laundry', () => this.laundryHook()));
+    this.off.push(provideHudSection('headroom', () => this.headroomSnapshot()));
+    this.off.push(provideHudSection('deck', () => this.snapshot()));
+    this.off.push(provideHudSection('regroup', () => this.regroupHook()));
+    this.off.push(provideHudSection('laundry', () => this.laundryHook()));
   }
 
   update(frame: Frame, clock: LiveClock): void {

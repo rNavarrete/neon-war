@@ -10,7 +10,7 @@ import Phaser from 'phaser';
 import { bus } from '../../game/bus';
 import { type DialMode, dialDimmed, dialFraction, dialLabel, dialValueAt, turnDial } from './dial';
 import { COLORS, FONT, RIGHT } from './layout';
-import { provideHudPart } from './panel';
+import { provideHudSection } from './hook';
 
 /** The dial card's look, mirrored as hud.dialCard. */
 export interface DialCardTestState {
@@ -103,7 +103,7 @@ export class DialView {
     const offWired = bus.on('occurrence', (o) => {
       if (o.kind === 'wired') this.wired = true;
     });
-    const offHook = provideHudPart(scene, 'dialCard', () => ({
+    const offHook = provideHudSection('dialCard', () => ({
       dimmed: this.dimmed,
       label: this.shownLabel,
     }));

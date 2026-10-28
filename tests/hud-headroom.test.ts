@@ -29,6 +29,7 @@ import {
 import { ZONES, inside } from '../src/scenes/live/layout';
 import { BROWNOUT } from '../src/sim/brownout';
 import { SERVER_SLOTS } from '../src/sim/tick';
+import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 
 // The hook's sections as the views provide them, read back here without a window.
 const sections = vi.hoisted(() => new Map<string, () => unknown>());
@@ -265,7 +266,7 @@ describe('DeckView', () => {
     view.update(f, { now: 1.04, dt: 0.016 });
     expect(view.headroom.draws).toBe(1);
 
-    const hud = sections.get('hud')!() as { headroom: Record<string, unknown> };
+    const hud = hudSection({} as HudTestState) as unknown as { headroom: Record<string, unknown> };
     expect(hud.headroom).toMatchObject({
       wiredCapacity: f.wiredCapacity,
       capacity: f.capacity,

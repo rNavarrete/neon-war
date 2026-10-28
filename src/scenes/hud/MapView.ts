@@ -42,7 +42,8 @@ import {
   windowRect,
 } from './cityMap';
 import { COLORS, FONT } from './layout';
-import { GAUGES_DEPTH, provideHudPart } from './panel';
+import { provideHudSection } from './hook';
+import { GAUGES_DEPTH } from './panel';
 
 /** The painted base the art pipeline will drop (docs/ART-REQUESTS.md); a vector grid until then. */
 export const CITY_GRID_KEY = 'hud/city-grid';
@@ -166,7 +167,7 @@ export class MapView implements LiveView {
     this.midnightAt = null;
     this.sparkleShown = -1;
     this.outlineAlpha = -1;
-    this.off.push(provideHudPart(scene, 'map', () => this.snapshot()));
+    this.off.push(provideHudSection('map', () => this.snapshot()));
   }
 
   /** Bring the map in line with this frame. Allocates nothing. */

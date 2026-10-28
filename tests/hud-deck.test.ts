@@ -24,6 +24,7 @@ import { LABELS } from '../src/scenes/hud/labels';
 import { headroomLayout } from '../src/scenes/hud/headroom';
 import { ZONES, inside } from '../src/scenes/live/layout';
 import { BROWNOUT } from '../src/sim/brownout';
+import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 
 // gauges-8: the deck's keys 1 REGROUP, 2 CUT 3F, 3 SET (src/scenes/hud/deck.ts, DeckView.ts). What
 // each key shows, when a press (a click or its digit) acts, and the guards in front of them.
@@ -293,7 +294,7 @@ describe('DeckView presses', () => {
     view.press('three', 'key');
     expect(sets).toBe(2);
 
-    const hud = sections.get('hud')!() as {
+    const hud = hudSection({} as HudTestState) as unknown as {
       deck: { presses: { key: string; via: string; acted: boolean }[]; set: string; go: string };
     };
     expect(hud.deck.presses.map((p) => [p.via, p.acted])).toEqual([
@@ -323,7 +324,7 @@ describe('DeckView presses', () => {
     view.press('two', 'key');
     expect(r.play.regroup.left).toBe(0);
     expect(r.play.laundryCut).toBeNull();
-    const hud = sections.get('hud')!() as {
+    const hud = hudSection({} as HudTestState) as unknown as {
       regroup: { visible: boolean; active: boolean; spent: boolean };
       laundry: { available: boolean; cut: boolean };
     };

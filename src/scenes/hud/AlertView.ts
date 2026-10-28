@@ -30,7 +30,8 @@ import {
   stripeScroll,
 } from './alerts';
 import { COLORS, FONT, FONT_SANS } from './layout';
-import { GAUGES_DEPTH, panel, provideHudPart } from './panel';
+import { provideHudSection } from './hook';
+import { GAUGES_DEPTH, panel } from './panel';
 
 /** One entry of hud.alert.history: a kind or number the band showed, and when (sim seconds). */
 export interface AlertHistoryEntry {
@@ -209,7 +210,7 @@ export class AlertView implements LiveView {
     this.shownKind = null;
     this.shownStripes = false;
     this.shownLit = true;
-    this.off.push(provideHudPart(scene, 'alert', () => this.snapshot()));
+    this.off.push(provideHudSection('alert', () => this.snapshot()));
   }
 
   update(frame: Frame, clock: LiveClock): void {
