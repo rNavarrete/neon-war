@@ -30,7 +30,7 @@ Twelve rects `{x, y, w, h}` in game pixels. No two overlap; all lie inside 1920x
 | `clock`     | 1520 |   0 |  400 | 100 | gauges  | The in-world clock, the countdown, trust and credits       |
 | `map`       |   16 | 110 |  408 | 310 | gauges  | The city map with the block's dots                         |
 | `cam`       |   16 | 430 |  408 | 270 | luxcam  | Lux's cam frame                                            |
-| `gauge`     |   16 | 710 |  408 | 170 | gauges  | The demand gauge with the estimate and sizing marks        |
+| `gauge`     |   16 | 710 |  408 | 170 | gauges  | The demand gauge                                           |
 | `scope`     |   16 | 890 |  408 | 180 | gauges  | The scope: the chart with the demand and capacity lines    |
 | `feed`      |  455 | 110 | 1455 | 530 | board   | The board: gateway, balancer, rack, database, packets      |
 | `comms`     |  455 | 645 | 1455 | 150 | comms   | The comms band: the crew's slots and the current line      |
@@ -47,11 +47,11 @@ The board's areas come straight from the table: `rectToArea(ZONES.feed)` is
 Cards are drawn over the feed only while something asks for them, and are the one thing allowed to
 cover another lane's zone. The banner, job card and dip fallback keep the centres today's
 `HudScene` uses, so every click point `tests/browser/hud.spec.ts` reads from the hook still lands.
+There is no estimate step: the dial card and the C6 sizing prompt are gone, and nothing is drawn
+over the top right of the feed (`live-gauges.spec.ts` checks it).
 
 | Card           |    x |   y |   w |   h | Centre     | When                                                   |
 | -------------- | ---: | --: | --: | --: | ---------- | ------------------------------------------------------ |
-| `dialCard`     | 1560 | 120 | 340 | 250 | 1730, 245  | The 230 px dial, while a dial question is open         |
-| `sizingPrompt` | 1210 | 120 | 340 | 100 | 1380, 170  | The C6 sizing prompt, beside the dial                  |
 | `banner`       |  638 | 172 | 644 | 316 | 960, 330   | The Solace banner (1431x700 art at 0.45), in C2        |
 | `jobCard`      |  701 | 156 | 518 | 752 | 960, 532   | The C1 job card (864x1252 art at 0.6), until clicked   |
 | `dipFallback`  |  860 | 240 | 200 | 120 | 960, 300   | The power-dip warning when the board can't place it    |
@@ -71,7 +71,7 @@ cover another lane's zone. The banner, job card and dip fallback keep the centre
 A lane draws its zone as a `LiveView` (`src/scenes/live/view.ts`): `zone`, a declared
 `budget: {objects, texts}`, optional `preload(scene)`, `create(scene, host)`, `update(frame, clock,
 occurrences)` and `shutdown()`. The host (`LiveHost`) is the HUD scene, the bus, the zone's rect, a
-live `flags` getter and `pressSet()`. `update` runs every frame and must not allocate: it reads the shared `Frame`,
+live `flags` getter. `update` runs every frame and must not allocate: it reads the shared `Frame`,
 the HUD clock `{now, dt}` (real seconds times the test speed, stopped while the board is held; each
 frame's raw length capped at 0.25 s as `run().tick` caps it, so it keeps step with the sim) and
 this frame's occurrences, and moves only what changed.
@@ -107,16 +107,6 @@ each fired id goes out on the bus as `cue {id, kind: 'bark' | 'chat', at}` (`at`
 Bark ids go to the comms band's queue and chat ids to the chat; `C6.fail.chat` is the chat going
 silent, never a row, and no filler is posted while `chatSilenced` holds (until the rewind).
 `hud.cues {fired, silenced}` mirrors it for tests.
-
-### LiveHost.pressSet
-
-`pressSet()` is the one action a view may ask of the host: press the dial card's SET, exactly as the
-card's own button does. The host forwards it to `DialView.pressSet()`, which records the dial's
-value (the C1 estimate or the C6 sizing) and returns `true`, or does nothing and returns `false`
-while the dial is locked or no dial question is open. DeckView calls it for key 3 (`3 SET`, the
-key or the keyboard), so the deck never holds the dial or knows what SET records. It is optional
-on the interface: a host built in a unit test may leave it out, and a view reads it as
-`host.pressSet?.() ?? false`.
 
 ### Flags
 
@@ -176,7 +166,6 @@ Every `Frame` field (`tests/live-docs.test.ts` checks this list against the inte
 | `failure` | The failure the board froze on, or null |
 | `rewinds` | Every rewind so far |
 | `crewMet` | The crew has arrived at least once; kept across rewinds |
-| `notes` | The dial answers (the C1 estimate, the C6 sizing), once set |
 
 `src/game/occurrences.ts`: `detectOccurrences(prev, next)` lists the edges between two frames as
 `{kind, id?, at}`: `placed`, `wired`, `cut`, `hot`, `died`, `dip`, `skipped`, `retriesRising`,
@@ -264,8 +253,8 @@ or `src/testHook.ts`: it declares the key on `HudTestState` by module augmentati
 `provideHudSection` in `create` and the remover it returns in `shutdown`. `provideHudPart` in
 `src/scenes/hud/panel.ts` is the same call under the gauges views' older name.
 
-The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard`, `dial`,
-`chart`, `surge`, `dip`, `dipMark`, `banner`, `sizingPrompt`, `bark`, `cues`, `bounds`...):
+The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard`, `chart`,
+`surge`, `dip`, `dipMark`, `banner`, `bark`, `cues`, `bounds`...):
 
 | Section | Provided by | What it mirrors |
 | --- | --- | --- |
@@ -275,13 +264,12 @@ The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard
 | `hud.comms` | CommsView (`live/views/comms.ts`) | the band line, the five slots, `queue`, `history`, `dropped`, the reread log, the TRIAGE mood |
 | `hud.bark` | the host, from CommsView | `{current, text, history}`, the band's shown lines (the older name) |
 | `hud.luxCam` | LuxCamView | the mood, the art, `history` of moods, REC, the frame, `speaking`, `motion` |
-| `hud.alert` | AlertView | the alert up now and its kind, line, tag and text |
-| `hud.gauge`, `hud.chart` | GaugeView, ChartView | the COMING /s gauge; the scope's series and marks over the host's `chart` |
+| `hud.alert` | AlertView | the alert up now and its kind, line, tag and text; `hint` and `hintText`, the start-of-C1 hint ("drag a SERVER card onto a glowing pad") while no alert is up |
+| `hud.gauge`, `hud.chart` | GaugeView, ChartView | the COMING /s gauge; the scope's series over the host's `chart` |
 | `hud.map` | MapView | the city map's dots, raid outlines and midnight |
 | `hud.deck`, `hud.headroom`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, the room-left bar, Regroup and the laundry cut |
-| `hud.dialCard` | DialView | `{dimmed, label}`: the dial card's look |
 | `hud.chatArt`, `hud.chatTrace` | ChatFeedView | which chat art loaded or fell back; the trace of rows posted, with their cause |
-| `hud.measure`, `hud.taught` | `src/scenes/hud/taught.ts` | the SET estimate and when it was taken; the trace of moments the night taught, for the debrief's grey lines |
+| `hud.measure`, `hud.taught` | `src/scenes/hud/taught.ts` | the board's wires and when the first went in; the trace of moments the night taught, for the debrief's grey lines |
 
 Outside `hud`: `shell.voice` (the mixer: `recentVoice`, `missing`, `playing`, `started`, `groups`), `avatars.baked`
 (every round avatar baked, as `avatar:<key>@<size>`), `art` (the art manifest's resolutions),
@@ -320,7 +308,7 @@ that lane. `src/sim/` is frozen (only decision D2 could open it), and the protec
 | --- | --- | --- | --- |
 | tech | none (the host, the contract) | `src/game/run.ts`, `flow.ts`, `director.ts`, `frame.ts`, `occurrences.ts`, `bus.ts`, `mixer.ts`, `audio.ts`, `src/main.ts`, `src/testHook.ts`, `src/scenes/live/` (`layout.ts`, `view.ts`, `registry.ts`, `flags.ts`, `hook.ts`; lanes edit only their registry line), `src/scenes/HudScene.ts`, `src/scenes/hud/layout.ts`, `src/scenes/hud/hook.ts`, `src/scenes/OverlayScene.ts`, `docs/LIVE.md`, `docs/AUDIO.md` | `live-layout`, `frame`, `occurrences`, `live-flags`, `live-docs`, `mixer`, `hud-layout`; `tests/browser/live/reach.ts`, `live-skeleton`, `live-perf`, `live-tour`, `voice`, and the existing `hud`, `board`, `story`, `boot`, `shell` specs |
 | board | `feed`, `inventory` | `src/scenes/BoardScene.ts`, `src/scenes/board/` (layout, tray, view, packets, hook, crew, channel, anim, ghost, InventoryView) | `board-layout`, `board-view`, `board-packets`, `board-channel`, `board-anim`; `board-live.spec.ts` |
-| gauges | `title`, `alert`, `clock`, `map`, `gauge`, `scope`, `deck` | `src/scenes/hud/` TitleView, title, alerts, AlertView, gauge, GaugeView, headroom, HeadroomView, thresholds, cityMap, MapView, deck, DeckView, ChartView, chartRing, DialView, dial, warnings, pending503, regroup, jobCard, format, panel | `hud-title`, `hud-alerts`, `hud-chart`, `hud-gauge`, `hud-headroom`, `hud-map`, `hud-deck`, `hud-format`; `live-gauges.spec.ts` |
+| gauges | `title`, `alert`, `clock`, `map`, `gauge`, `scope`, `deck` | `src/scenes/hud/` TitleView, title, alerts, AlertView, gauge, GaugeView, headroom, HeadroomView, thresholds, cityMap, MapView, deck, DeckView, ChartView, chartRing, warnings, pending503, regroup, jobCard, format, panel | `hud-title`, `hud-alerts`, `hud-chart`, `hud-gauge`, `hud-headroom`, `hud-map`, `hud-deck`, `hud-format`; `live-gauges.spec.ts` |
 | comms | `comms` | `src/scenes/hud/comms.ts`, `CommsView.ts`, `locate.ts`; `src/game/voice.ts`, `settings.ts`, `settingsControls.ts`, `src/scenes/SettingsScene.ts`; the voice emits in `StoryScene.ts`, `src/story/view.ts`, `src/story/state.ts` | `hud-comms`, `game-voice`, `shell-audio`; `comms.spec.ts` |
 | chat | `chat` | `src/scenes/hud/chatEngine.ts`, `ChatFeedView.ts`, `chat.ts` | `hud-chat`, `hud-chat-engine`; `chat.spec.ts` |
 | luxcam | `cam` | `src/scenes/hud/luxcam.ts`, `LuxCamView.ts`, `src/game/portraits.ts` | `hud-luxcam`; `luxcam.spec.ts` |
@@ -350,7 +338,7 @@ The fields are:
   declared `budget`, and `actual` counts the objects (and texts) that view made. An object is
   credited to the view whose `create` or `update` was running when the object was added (the HUD
   listens for `ADDED_TO_SCENE`), and a container's children go with it.
-- `perf.host`: the HUD objects that no view made (the cards, the dial, the legacy pieces).
+- `perf.host`: the HUD objects that no view made (the cards, the legacy pieces).
 - `perf.pools[name]`: the size of each pool registered with `registerPool(name, size)`.
   `pools.packets` is the board's packet sprites, made once and reused.
 - `perf.filters`: live Glow and GradientMap filters on objects and cameras (art3d-6's probe).
@@ -387,18 +375,16 @@ against the built views):
 | `deck` (DeckView with HeadroomView)                  |     8 |                 21 |
 | `chat` (ChatFeedView)                                |    17 |                 31 |
 | `feed` and `inventory` (BoardScene)                  |    28 |                  - |
-| Cards (HUD host: job card, banner, dial, sizing, dip) |    13 |                  - |
+| Cards (HUD host: job card, banner, dip)              |    13 |                  - |
 | **Total**                                             | **110** |                  |
 
-The chat feed's five rows of name and words need 17 texts, so the host's cards give up 7 of their 20 to keep the total at 110. The host makes exactly 13 (`HOST_TEXTS` in `src/scenes/hud/cardText.ts`, `tests/hud-card-text.test.ts`, and `perf.host.texts <= 13` in `live-skeleton.spec.ts`):
+The chat feed's five rows of name and words need 17 texts, so the host's cards give up 7 of their 20 to keep the total at 110. The host makes 8 of its 13 since the dial card and the sizing prompt went with the estimate step (`HOST_TEXTS` in `src/scenes/hud/cardText.ts`, `tests/hud-card-text.test.ts`, and `perf.host.texts <= 13` in `live-skeleton.spec.ts`):
 
 - **Job card and banner, 7.** The C1 job card (rate, title, who, what, bar, pay line, OK) and the
   C2 Solace banner (title, body, three button words) never show together: the banner waits for the
   card to close. They share one pool of seven texts, made once, which the host moves into whichever
   card opens and dresses from `jobCardTexts()` or `bannerTexts()` (two stay hidden on the banner).
   Every word either card showed before is still on it.
-- **Dial card, 4** (DialView: the question, the value, minus and plus).
-- **Sizing prompt, 1.** Its arrow is drawn as a Graphics, not typed as a text.
 - **Dip warning, 1.**
 
 The legacy pieces (the old chat column, the HUD's own deck digits, the old alert line) are gone,
@@ -462,7 +448,6 @@ of copying the boilerplate from `hud.spec.ts` and `story.spec.ts`.
   to speed 20 with autopilot, waits for `hud.ready` and returns `{errors}`, the page errors, which
   keep filling.
 - `dismissJobCard(page)` clicks the job card away and waits for `hud.jobCard.open` to be false.
-- `setDial(page, value)` uses the dial's plus and minus buttons, then presses SET.
 - `reach(page, moment, {timeout})` runs the night on to `'c1'`, `'c3'`, `'surge'`, `'rescue'` or
   `'midnight'`, clicking away the job card and clicking through every story scene on the way
   (Skip when it shows). It returns the hook as read there (`snap`, `hud`), the wall-clock

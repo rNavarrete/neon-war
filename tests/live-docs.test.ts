@@ -4,8 +4,7 @@ import frameSource from '../src/game/frame.ts?raw';
 import { ZONES, ZONE_IDS } from '../src/scenes/live/layout';
 import { BOARD_ZONES, REGISTRY } from '../src/scenes/live/registry';
 
-// Tech follow-up 6: docs/LIVE.md is the lanes' contract, so it names what they share: the host's
-// pressSet, the bus events with line.lesson and audience, and every hook section a view provides.
+// Tech follow-up 6: docs/LIVE.md is the lanes' contract, so it names what they share: the bus events with line.lesson and audience, and every hook section a view provides.
 
 /** Every source file's text, by path. */
 const SOURCES = import.meta.glob('../src/**/*.ts', {
@@ -15,11 +14,6 @@ const SOURCES = import.meta.glob('../src/**/*.ts', {
 }) as Record<string, string>;
 
 describe('docs/LIVE.md names the shared contract', () => {
-  it('documents LiveHost.pressSet', () => {
-    expect(live).toMatch(/### LiveHost\.pressSet/);
-    expect(live).toMatch(/`pressSet\(\)`/);
-  });
-
   it('documents line.lesson, audience and the drag verdict', () => {
     expect(live).toMatch(/\*\*`line\.lesson`\.\*\*/);
     expect(live).toMatch(/\*\*`audience`\.\*\*/);
