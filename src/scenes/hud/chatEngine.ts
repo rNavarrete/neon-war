@@ -134,10 +134,11 @@ const SO = 'fill.stream.ok.';
 const BO = 'fill.block.ok.';
 
 /**
- * Every reaction, from 05-comms "Live chat". Until chat-2 writes a reaction's own lines, the calm
- * ones borrow the pinned all-fine filler and the error ones the some-errors or heavy-errors filler
- * (posted only while the block has errors); reactions with no honest stand-in (a hot, dead or dark
- * box, the laundry, the surge landing) stay silent.
+ * Every reaction, from 05-comms "Live chat". Each draws from its own pool, written by chat-2 into the
+ * chat anchor of docs/SCRIPT.md and src/strings.ts. The fallback stands in only if a pool is ever
+ * emptied: the calm ones borrow the pinned all-fine filler and the error ones the some-errors or
+ * heavy-errors filler (posted only while the block has errors); reactions with no honest stand-in
+ * (a hot, dead or dark box, the laundry, the surge landing) stay silent then.
  */
 export const REACTIONS: Readonly<Record<ReactionKey, Reaction>> = Object.freeze({
   placed: R('fill.stream.placed.', SO, 12),
