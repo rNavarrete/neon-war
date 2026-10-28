@@ -5,8 +5,8 @@
 //
 // Pure data and lookups: no Phaser, so tests/art-manifest.test.ts checks it in node against the
 // files on disk. Workers never add art (public/art is protected): when the owner drops a picked file,
-// its request's `cut` goes from null to the file's real size and src/scenes/plates.ts starts loading
-// it instead of the fallback. Nothing else changes.
+// its key goes into PICKED_CUTS with the file's real size, so its request's `cut` is no longer null,
+// and src/scenes/plates.ts starts loading it instead of the fallback. Nothing else changes.
 
 import type { CardId, ZoneId } from '../scenes/live/layout';
 
@@ -95,10 +95,24 @@ export interface ArtRequest {
 
 const size = (w: number, h: number): Size => ({ w, h });
 
-/** A cut drawn at scale k, rounded to whole pixels. */
 /**
  * The real size of each picked file of the Live screen's requests (Rolando's picks of 28 Oct 2026,
  * landed by the owner's art pipeline). A request is picked once its key is here.
+ *
+ * Some came out smaller than the cut asked for. Most still cover their display size, so they are
+ * drawn downscaled as asked: board/server-overclocked-dark (405x626), hud/live/card-frame-idle
+ * (192x171), -ready (200x171) and -locked (188x219), whose nine-slice corners at k 0.5 still fit the
+ * 120x140 card. hud/live/corner-marks (59x59) is ONE bracket, not four: a view draws it four times,
+ * rotated or flipped, at 48x48. The cam busts (924x548) have transparent sides.
+ *
+ * Three are smaller than their display (tests/art-manifest.test.ts lists them by name):
+ * - hud/live/topbar-strip came out 1536x33 against a 1920x100 bar. Stretching it would upscale it
+ *   1.25x wide and 3x tall and blur its hairline, so its request's display is the file's own size:
+ *   the view draws it 1:1 (centred, or repeated at scale 1 along the bar) and fills the rest of the
+ *   bar in code. Nothing drew it yet, so no view changes.
+ * - hud/comms-plate (1450x144) is drawn at the band's 1455x150 by CommsView, and board/table-plate
+ *   (1228x416) asks for 1441 px across the feed. Their views must draw them at their file size (or
+ *   nine-slice them) before the list in the test can be emptied.
  */
 const PICKED_CUTS: Readonly<Record<string, Size>> = {
   'board/table-plate': size(1228, 416),
@@ -153,6 +167,7 @@ const PICKED_CUTS: Readonly<Record<string, Size>> = {
 /** A request's cut: the picked file's real size, or null while its fallback draws. */
 const picked = (key: string): Size | null => PICKED_CUTS[key] ?? null;
 
+/** A cut drawn at scale k, rounded to whole pixels. */
 const scaled = (cut: Size, k: number): Size => size(Math.round(cut.w * k), Math.round(cut.h * k));
 
 /** A cut fitted inside a w x h box without upscaling, as the board fits part art. */
@@ -1095,7 +1110,9 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 4,
     lane: 'gauges',
     zone: 'screen',
-    display: size(1920, 100),
+    // The pick is 1536x33, short of the 1920x100 bar it was cut for: drawn 1:1, never stretched
+    // (see PICKED_CUTS). The bar around it is code fill.
+    display: size(1536, 33),
     target: size(1920, 100),
     cut: picked('hud/live/topbar-strip'),
     states: 'one; states are tints',

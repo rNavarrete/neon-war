@@ -97,8 +97,15 @@ function stubScene(loaded: string[] = []) {
   };
 }
 
-const bakeKey = ART_REQUESTS.find((r) => r.fallback.kind === 'bake')!.key;
-const reuseKey = ART_REQUESTS.find((r) => r.fallback.kind === 'reuse')!.key;
+// Batches 1 to 4 are picked (28 Oct 2026), so the fallback examples are batch 5 keys still unpicked.
+const unpicked = ART_REQUESTS.filter((r) => !isPicked(r));
+const bakeKey = unpicked.find((r) => r.fallback.kind === 'bake')!.key;
+const reuseKey = unpicked.find((r) => r.fallback.kind === 'reuse')!.key;
+/** An unpicked key that reuses the packet icon, tinted cyan. */
+const PACKET = 'board/packet-cube';
+/** A picked key, and the texture its file loads as. */
+const PICKED = 'board/server-dark';
+const PICKED_TEXTURE = 'art:board/server-dark';
 
 beforeEach(() => resetBakedForTests());
 
@@ -111,19 +118,31 @@ describe('resolveArt', () => {
   });
 
   it('gives a key with a reused fallback the picked file, tinted, flagged as a fallback', () => {
-    const r = artRequest('board/server-dark')!;
+    const r = artRequest(PACKET)!;
     expect(isPicked(r)).toBe(false);
-    expect(resolveArt('board/server-dark')).toEqual({
-      key: 'board/server-dark',
-      texture: 'art:board/server',
-      tint: 0x55556a,
+    expect(resolveArt(PACKET)).toEqual({
+      key: PACKET,
+      texture: 'art:hud/icons/packet',
+      tint: 0x5ce1ff,
       alpha: 1,
       fallback: true,
     });
   });
 
+  it('gives a picked key its own file, untinted, not flagged as a fallback', () => {
+    expect(isPicked(artRequest(PICKED)!)).toBe(true);
+    expect(resolveArt(PICKED)).toEqual({
+      key: PICKED,
+      texture: PICKED_TEXTURE,
+      tint: 0xffffff,
+      alpha: 1,
+      fallback: false,
+    });
+  });
+
   it('gives a key with a baked fallback its stand-in texture at the fallback alpha', () => {
     const r = artRequest(bakeKey)!;
+    expect(isPicked(r)).toBe(false);
     expect(resolveArt(bakeKey)).toEqual({
       key: bakeKey,
       texture: standInTexture(bakeKey),
@@ -143,7 +162,7 @@ describe('resolveArt', () => {
     });
   });
 
-  it('resolves every requested key to a fallback today, since none is picked yet', () => {
+  it('resolves every requested key to a fallback exactly while it is not picked', () => {
     for (const r of ART_REQUESTS) {
       const a = resolveArt(r.key);
       expect(a.key).toBe(r.key);
@@ -154,23 +173,57 @@ describe('resolveArt', () => {
 
 describe('artFiles and preloadArt', () => {
   it('queues each reused file once, and nothing for baked keys', () => {
-    const files = artFiles(['board/server-dark', 'board/server-booting-a', bakeKey, 'hud/not-a-key']);
-    expect(files).toEqual([{ texture: 'art:board/server', file: 'art/board/server.webp' }]);
+    const files = artFiles([PACKET, PACKET, bakeKey, 'hud/not-a-key']);
+    expect(files).toEqual([{ texture: 'art:hud/icons/packet', file: 'art/hud/icons/packet.webp' }]);
+  });
+
+  it("queues a picked key's own file, once, instead of the file its fallback reused", () => {
+    const files = artFiles([PICKED, PICKED, 'board/server-booting-a']);
+    expect(files).toEqual([
+      { texture: PICKED_TEXTURE, file: 'art/board/server-dark.webp' },
+      { texture: 'art:board/server-booting-a', file: 'art/board/server-booting-a.webp' },
+    ]);
+    expect(files.map((f) => f.file)).not.toContain('art/board/server.webp');
   });
 
   it('skips files the scene already has', () => {
-    const s = stubScene(['art:board/server']);
-    preloadArt(s.scene, ['board/server-dark', 'chars/comms/rei']);
-    expect(s.queued).toEqual([['art:chars/rei/faces/smirk', 'art/chars/rei/faces/smirk.webp']]);
+    const s = stubScene(['art:hud/icons/packet', PICKED_TEXTURE]);
+    preloadArt(s.scene, [PACKET, 'chars/lux/cam/cheer', PICKED, 'chars/comms/rei']);
+    expect(s.queued).toEqual([
+      ['art:chars/lux/faces-board/triumphant', 'art/chars/lux/faces-board/triumphant.webp'],
+      ['art:chars/comms/rei', 'art/chars/comms/rei.webp'],
+    ]);
   });
 });
 
 describe('ensureArt', () => {
   it('uses the reused file when it is loaded, and bakes nothing', () => {
-    const s = stubScene(['art:board/server']);
-    expect(ensureArt(s.scene, 'board/server-dark')).toEqual(resolveArt('board/server-dark'));
+    const s = stubScene(['art:hud/icons/packet']);
+    expect(ensureArt(s.scene, PACKET)).toEqual(resolveArt(PACKET));
+    expect(ensureArt(s.scene, PACKET).fallback).toBe(true);
     expect(s.dynamic).toEqual([]);
     expect(artTestState(s.scene.textures).baked).toEqual([]);
+  });
+
+  it('uses a picked file when it is loaded, untinted, and bakes nothing', () => {
+    const s = stubScene([PICKED_TEXTURE]);
+    expect(ensureArt(s.scene, PICKED)).toEqual({
+      key: PICKED,
+      texture: PICKED_TEXTURE,
+      tint: 0xffffff,
+      alpha: 1,
+      fallback: false,
+    });
+    expect(s.dynamic).toEqual([]);
+    expect(artTestState(s.scene.textures).baked).toEqual([]);
+  });
+
+  it('bakes a stand-in for a picked key whose file did not load, rather than draw a missing texture', () => {
+    const s = stubScene();
+    const a = ensureArt(s.scene, PICKED);
+    expect(a.texture).toBe(standInTexture(PICKED));
+    expect(a.fallback).toBe(true);
+    expect(s.dynamic.map((d) => d.key)).toEqual([standInTexture(PICKED)]);
   });
 
   it('bakes a plate once in the display size, labelled with the key, and frees what it drew with', () => {
@@ -217,13 +270,29 @@ describe('ensureArt', () => {
 });
 
 describe('the art hook section', () => {
-  it('lists every unpicked key as a fallback and no loaded key while nothing is picked', () => {
+  it('lists every unpicked key as a fallback and no loaded key while no picked file is loaded', () => {
     const state = artTestState(stubScene().scene.textures);
     expect(state.fallback).toEqual(ART_REQUESTS.filter((r) => !isPicked(r)).map((r) => r.key));
-    expect(state.fallback).toHaveLength(ART_REQUESTS.length);
+    expect(state.fallback).toEqual(unpicked.map((r) => r.key));
     expect(state.loaded).toEqual([]);
     expect(artTestState(null).loaded).toEqual([]);
     expect(artTestState(null).missing).toEqual([]);
+  });
+
+  it('lists only the unpicked keys as fallbacks: batch 5, none of the 47 picks', () => {
+    const fallback = artTestState(null).fallback;
+    expect(fallback).toEqual(ART_REQUESTS.filter((r) => r.batch === 5).map((r) => r.key));
+    for (const r of ART_REQUESTS) expect(fallback.includes(r.key), r.key).toBe(!isPicked(r));
+    expect(ART_REQUESTS.length - fallback.length).toBe(47);
+  });
+
+  it('lists a picked key as loaded once its texture is in, and only then', () => {
+    expect(artTestState(stubScene([PICKED_TEXTURE]).scene.textures).loaded).toEqual([PICKED]);
+    // A reused fallback's texture being loaded does not make its key loaded.
+    expect(artTestState(stubScene(['art:hud/icons/packet']).scene.textures).loaded).toEqual([]);
+    const all = ART_REQUESTS.filter(isPicked);
+    const every = stubScene(all.map((r) => artTexture(r.key)));
+    expect(artTestState(every.scene.textures).loaded).toEqual(all.map((r) => r.key));
   });
 
   it("names every object drawing Phaser's missing texture, inside containers too", () => {

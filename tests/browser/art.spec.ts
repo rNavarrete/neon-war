@@ -1,6 +1,7 @@
 import { type ConsoleMessage, type Page, expect, test } from '@playwright/test';
-import { ART_REQUESTS } from '../../src/game/artManifest';
+import { ART_REQUESTS, isPicked } from '../../src/game/artManifest';
 import type { ArtTestState } from '../../src/scenes/plates';
+import { reach, shot } from './live/reach';
 
 // Art with stand-ins (art3d-2): the board boots with every texture it asks for, so no console error
 // or warning mentions a missing texture or frame; and the `art` hook section reports the requested
@@ -59,10 +60,30 @@ test('the art hook lists the stand-ins and the picked keys as arrays', async ({ 
   expect(Array.isArray(art!.fallback)).toBe(true);
   expect(Array.isArray(art!.loaded)).toBe(true);
   expect(Array.isArray(art!.baked)).toBe(true);
-  // Nothing is picked yet, so every requested key stands in and none is loaded.
-  expect(art!.fallback).toEqual(ART_REQUESTS.map((r) => r.key));
-  expect(art!.loaded).toEqual([]);
+  // Batches 1 to 4 are picked (28 Oct 2026, art3d-5): only the unpicked keys (batch 5) stand in,
+  // and every loaded key is a picked one whose file the views asked for.
+  const unpicked = ART_REQUESTS.filter((r) => !isPicked(r)).map((r) => r.key);
+  const picked = ART_REQUESTS.filter(isPicked).map((r) => r.key);
+  expect(unpicked.length).toBeGreaterThan(0);
+  expect(art!.fallback).toEqual(unpicked);
+  for (const k of picked) expect(art!.fallback, k).not.toContain(k);
+  for (const k of art!.loaded) expect(picked, k).toContain(k);
+  expect(art!.loaded.length).toBeGreaterThan(0);
   // Phaser swaps an unknown texture key for its __MISSING texture without a console line, so the
   // hook scans the running scenes for it.
   expect(art!.missing).toEqual([]);
+});
+
+test('the Live screen runs with the picked pieces in and nothing drawing a missing texture', async ({ page }) => {
+  // art3d-5: the look of batches 1 to 4 can't be judged by an assertion, so the running Live screen
+  // (job card away, the night under way) is saved for Rolando to judge.
+  test.setTimeout(90_000);
+  await reach(page, 'c1');
+  const art = await page.evaluate(
+    () => (window.__neonTest!.state as unknown as { art?: ArtTestState }).art ?? null,
+  );
+  test.fixme(art === null, 'the art hook is not installed: src/main.ts needs installArtHook(game)');
+  expect(art!.missing).toEqual([]);
+  expect(art!.fallback).toEqual(ART_REQUESTS.filter((r) => !isPicked(r)).map((r) => r.key));
+  await shot(page, 'm4-art3d-live');
 });
