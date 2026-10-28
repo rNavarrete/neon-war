@@ -357,11 +357,10 @@ test('the power-dip mark sits on its part: |hud.dipMark - board.parts[id]| <= 2 
   page,
 }) => {
   test.setTimeout(120_000);
-  // Speed 7, not 20 (tech follow-up 5): a frame steps min(frame, 0.25 s) x speed of sim time, and
-  // the warning is up for 2 sim seconds. At speed 20 a frame slower than 100 ms (headless Chromium
-  // under 10 fps) can jump the whole warning; at speed 7 a step is 1.75 s at most, so some frame
-  // always draws it (tests/live-dip-watch.test.ts).
-  const { errors } = await openBoard(page, { speed: 7, autopilot: true });
+  // Speed 20: a frame steps min(frame, 0.25 s) x speed of sim time (5 s here), and the warning is up
+  // for 2 sim seconds, but Run.tick stops its slices on the tick the warning starts, so the frame
+  // that crosses warnAt always draws it (tests/game-run-dip.test.ts).
+  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
   await dismissJobCard(page);
   // No dip showing: no mark.
   const before = (await page.evaluate(() => window.__neonTest!.state.hud)) as unknown as DipRead;

@@ -883,7 +883,7 @@ describe('the 10 per 30 s cap with scripted rows', () => {
   };
 
   /** A chat with `n` posts already inside the window at `at`. */
-  const full = (rand: () => number, n = CHAT_PACE.windowMax, at = 1): ChatState => ({
+  const full = (rand: () => number, n: number = CHAT_PACE.windowMax, at = 1): ChatState => ({
     ...initialChat(0, rand),
     servedOnce: true,
     servingMax: 1,
