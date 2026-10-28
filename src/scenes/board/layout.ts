@@ -9,7 +9,7 @@
 // rack's rows grow toward the viewer (0.88, 1.00, 1.06). Every coordinate here is already
 // projected (screen pixels), so the hit tests and the hook read them exactly as they are drawn.
 
-import type { Part, PartKind } from '../../sim/board';
+import { type BoardRules, type Part, type PartKind, type Wire, connect } from '../../sim/board';
 import { ZONES, rectToArea } from '../live/layout';
 
 export interface Point {
@@ -195,6 +195,75 @@ export function slotAt(x: number, y: number): string | null {
   return null;
 }
 
+// ---- legality (board-8) ------------------------------------------------------------------------
+
+/**
+ * What dropping a card on a pad would do, for the drag's tints: `legal` it takes (an empty pad for
+ * a server, a server without the kit for the kit), `dead` a dead server is there (a server card
+ * replaces it), `poor` it would take but the credits are short, `taken` something is there already,
+ * `wrong` the card does not go there.
+ */
+export type PadState = 'legal' | 'taken' | 'dead' | 'poor' | 'wrong';
+
+/** What padState reads: the parts, the credits, the dead servers and the card's prices. */
+export interface PadBoard {
+  readonly parts: readonly Part[];
+  readonly credits: number;
+  readonly dead: readonly string[];
+}
+
+/** The prices padState checks the credits against. */
+export interface PadPrices {
+  readonly server: number;
+  readonly overclock: number;
+}
+
+/** The legality of dropping `card` (a tray card id) on `slot` (a server slot or 'lb'). */
+export function padState(slot: string, board: PadBoard, card: string, prices: PadPrices): PadState {
+  if (slot === LB_SLOT_ID) {
+    // Only the crew's splitter stands here, and the crew racks it themselves.
+    for (const p of board.parts) if (p.kind === 'balancer') return 'taken';
+    return 'wrong';
+  }
+  if (!SERVER_GRID[slot]) return 'wrong';
+  let on: Part | null = null;
+  for (const p of board.parts) if (p.slot === slot) on = p;
+  const dead = on !== null && board.dead.includes(on.id);
+  if (card === 'server') {
+    if (on === null) return board.credits >= prices.server ? 'legal' : 'poor';
+    if (dead) return board.credits >= prices.server ? 'dead' : 'poor';
+    return 'taken';
+  }
+  if (card === 'overclock') {
+    if (on === null || on.kind !== 'server') return 'wrong';
+    if (dead) return 'dead';
+    if (on.boost !== undefined) return 'taken';
+    return board.credits >= prices.overclock ? 'legal' : 'poor';
+  }
+  return 'wrong';
+}
+
+/** Whether a drop in this state does something: legal, or a server card on a dead server (replace). */
+export function dropLegal(card: string, state: PadState): boolean {
+  return state === 'legal' || (card === 'server' && state === 'dead');
+}
+
+/** Whether a wire dragged from `from` to `to` would connect, and why not: connect()'s own answer. */
+export function targetState(
+  board: { readonly parts: readonly Part[]; readonly wires: readonly Wire[] },
+  rules: BoardRules,
+  from: string,
+  to: string,
+): { ok: boolean; reason: string | null } {
+  const r = connect(
+    { credits: 0, slots: [], nextId: 0, parts: board.parts, wires: board.wires },
+    rules,
+    from,
+    to,
+  );
+  return r.ok ? { ok: true, reason: null } : { ok: false, reason: r.reason };
+}
+
 /**
  * Where a part or a slot sits on screen (projected game pixels), for the HUD's dip mark and its
  * leader lines: a part's centre by part id, or a slot's pad (the balancer slot's centre) by slot
@@ -367,6 +436,39 @@ export const INBOUND_LANES: readonly (readonly Point[])[] = [-LANE_SPREAD, 0, LA
     ? [{ x: INBOUND_FROM, y: GATEWAY.y }, end]
     : [{ x: INBOUND_FROM, y: GATEWAY.y + dy }, { x: CHANNEL.mouth.x + 30, y: GATEWAY.y + dy }, end];
 });
+
+/** Where a part takes its wires in: its left edge, high on a server (the end wirePath draws to). */
+export function inPort(part: Pick<Part, 'kind' | 'slot'>): Point | null {
+  const c = partCentre(part);
+  if (!c) return null;
+  return {
+    x: c.x - partSize(part).w / 2 + 6,
+    y: c.y - (part.kind === 'server' ? SERVER_PORT * slotScale(part.slot) : 0),
+  };
+}
+
+/** The far rim the retries run back along, just inside the table's far edge (above OVER's traces). */
+export const RETURN_RIM = TABLE.far.y + 4;
+/** How far left of a port a returning retry steps before it turns. */
+const RETURN_STEP = 14;
+
+/**
+ * The way a retry goes back (board-7): from the in-port of the part that dropped it, a step left,
+ * up to the far rim, along it to just left of the gateway, down into the channel and out along its
+ * upper wall to the mouth, where it comes in again. From the gateway itself it runs straight back
+ * along the channel. Every point stays inside the feed.
+ */
+export function returnPath(part: Pick<Part, 'kind' | 'slot'>): Point[] | null {
+  const from = inPort(part);
+  if (!from) return null;
+  const { mouth, port } = CHANNEL;
+  const end = { x: mouth.x + 2, y: mouth.top + 14 };
+  const x = port.x - RETURN_STEP;
+  const down = { x, y: channelAt(x).top + 12 };
+  if (part.kind === 'gateway') return [{ x: from.x, y: port.top + 12 }, down, end];
+  const out = from.x - RETURN_STEP;
+  return tidy([from, { x: out, y: from.y }, { x: out, y: RETURN_RIM }, { x, y: RETURN_RIM }, down, end]);
+}
 
 export function midpoint(e: { ax: number; ay: number; bx: number; by: number }): Point {
   return { x: (e.ax + e.bx) / 2, y: (e.ay + e.by) / 2 };

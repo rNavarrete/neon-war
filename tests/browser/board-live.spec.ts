@@ -3,6 +3,7 @@ import type { BoardTestState } from '../../src/scenes/board/hook';
 import type { LiveTestState } from '../../src/scenes/live/hook';
 import type { Rect } from '../../src/scenes/live/layout';
 import { inboundLaneRates } from '../../src/scenes/board/channel';
+import { openBoard as liveOpen, reach as liveReach } from './live/reach';
 
 // The board on the Live screen (board lane, M1): the feed's tilted table, its parts and slots inside
 // the feed zone, the skyline above it and no goggles overlay. Positions come from the test hook in
@@ -523,3 +524,312 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
 });
 
 const b0 = (b: BoardTestState, id: string) => b.tray.find((t) => t.id === id)!;
+
+// ---- M3: packets v2 (board-7) -----------------------------------------------------------------
+
+test('the surge (board-7): packets crawl into the hot box, red retries are born at the dropping part and come back to the mouth, the pool stays bounded', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  // Best play to the district surge at speed 20: one box, overclocked, on the gateway.
+  await reachSurge(page);
+  type Seen = { b: BoardTestState };
+  let slow: Seen | null = null;
+  let red: Seen | null = null;
+  let maxPool = 0;
+  let firstPool = -1;
+  const deadline = Date.now() + 10_000;
+  // Ten seconds from the surge on (a scene may hold the board on the way; it is clicked through).
+  while (Date.now() < deadline) {
+    const b = await board(page);
+    if (firstPool < 0) firstPool = b.packets.pool;
+    maxPool = Math.max(maxPool, b.packets.pool);
+    expect(b.packets.pool, 'the pool never passes what the flow needs').toBeLessThanOrEqual(b.packets.need);
+    const hot = b.parts
+      .filter((p) => p.share !== null && p.share > 1 && p.status === 'online')
+      .map((p) => p.id);
+    if (!slow && hot.length > 0 && b.wires.some((w) => hot.includes(w.to))) slow = { b };
+    if (!red && b.channel.retryShare > 0 && b.packets.red > 0) red = { b };
+    await clickStoryOn(page);
+    await page.waitForTimeout(25);
+  }
+
+  // Half speed on every wire into an overloaded box, full speed elsewhere.
+  expect(slow, 'a box over 100% with a wire into it').not.toBeNull();
+  const s = slow!.b;
+  for (const w of s.wires) {
+    const to = s.parts.find((p) => p.id === w.to)!;
+    const over = to.status === 'online' && to.share !== null && to.share > 1;
+    expect(w.speed, `${w.key} speed`).toBe(over ? 0.5 : 1);
+  }
+
+  // Retries: red cubes on the board, every one born at a part that is dropping (hot or dark), and
+  // never spawned at the mouth: the red ones coming in again are only ever those that went back.
+  expect(red, 'retryShare > 0 and packets.red > 0 at the surge').not.toBeNull();
+  const r = red!.b;
+  expect(r.channel.retryShare).toBeGreaterThan(0);
+  expect(r.packets.red).toBeGreaterThan(0);
+  expect(r.packets.born).toBeGreaterThan(0);
+  expect(r.packets.retryFrom.length).toBeGreaterThan(0);
+  for (const id of r.packets.retryFrom) {
+    const p = r.parts.find((x) => x.id === id)!;
+    expect(p, `retries born at ${id}`).toBeDefined();
+    const dropping = p.status !== 'online' || (p.share !== null && p.share > 1) || p.kind === 'gateway';
+    expect(dropping, `${id} drops what it gets`).toBe(true);
+  }
+  expect(r.packets.red).toBeLessThanOrEqual(r.packets.returning + r.packets.reentered);
+  // Retry cubes reach the mouth and come in again (they move in real time, a few seconds back;
+  // a scene holding the board stops them, so it is clicked through).
+  const back = Date.now() + 40_000;
+  for (;;) {
+    const b = await board(page);
+    expect(b.packets.pool).toBeLessThanOrEqual(b.packets.need);
+    if (b.packets.reentered > 0) break;
+    if (Date.now() > back) throw new Error(`no retry re-entered: ${JSON.stringify(b.packets)}`);
+    await clickStoryOn(page);
+    await page.waitForTimeout(80);
+  }
+
+  // Bounded: over the ten seconds the pool never passed the flow's need, and stays modest.
+  expect(maxPool).toBeLessThan(600);
+  expect(firstPool).toBeGreaterThan(0);
+});
+
+/** Open with autopilot at speed 20 and run to the district surge (tests/browser/live/reach.ts). */
+async function reachSurge(page: Page): Promise<void> {
+  await liveOpen(page);
+  await liveReach(page, 'surge');
+}
+
+/** If a story scene holds the board, click it on (Skip when shown). */
+async function clickStoryOn(page: Page): Promise<void> {
+  type StoryHook = { active: boolean; skip: { visible: boolean; x: number; y: number }; click: Pt | null };
+  const s = await page.evaluate(
+    () => (window.__neonTest!.state as unknown as { story?: StoryHook }).story ?? null,
+  );
+  if (!s?.active) return;
+  const p = s.skip.visible ? s.skip : s.click;
+  if (p) await page.mouse.click(p.x, p.y);
+}
+
+// ---- M3: interactions v2 (board-8) ------------------------------------------------------------
+
+type Shell = { paused: boolean };
+type HudBits = {
+  notes: { estimate: number | null; sizing: number | null };
+  sizingPrompt: { open: boolean };
+  dial: { visible: boolean };
+};
+const shell = (page: Page) =>
+  page.evaluate(() => (window.__neonTest!.state as unknown as { shell?: Shell }).shell ?? null);
+const hudBits = (page: Page) =>
+  page.evaluate(() => (window.__neonTest!.state as unknown as { hud?: HudBits }).hud ?? null);
+
+/** Press on a tray card and carry it to `to` without letting go. */
+async function hold(page: Page, from: Pt, to: Pt): Promise<void> {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 3 });
+  await page.mouse.move(to.x, to.y, { steps: 3 });
+}
+
+/** The debrief's words a plate must never print (docs/SCRIPT.md C8.terms, the four the ticket names). */
+const DEBRIEF_WORDS = ['capacity', 'headroom', 'health check', 'load balancer'];
+
+test('C1 to C3 (board-8): legality tints, the ghost waits for SET then tells the truth about the feed, plates, Esc and Delete, keys 1/2/3 left alone', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await openBoard(page);
+  let b = await board(page);
+  expect(b.keys.sort()).toEqual(['Backspace', 'Delete', 'Escape']);
+  const card = b0(b, 'server');
+  const s1Pad = b.slots.find((s) => s.id === 's1')!;
+  const lbPad = b.slots.find((s) => s.id === 'lb')!;
+  const credits = b.credits;
+
+  // A card drag tints every pad by legality and reports what it is over; in C1 the estimate is not
+  // SET yet, so there is no ghost and no what-if tick.
+  await hold(page, card, s1Pad);
+  b = await board(page);
+  expect(b.dragging).toBe('server');
+  expect(b.dragOver).toMatchObject({
+    kind: 'card',
+    card: 'server',
+    over: 's1',
+    overKind: 'pad',
+    state: 'legal',
+    legal: true,
+  });
+  const legality = Object.fromEntries(b.pads.map((p) => [p.slot, p.legality]));
+  expect(legality).toEqual({
+    lb: 'wrong',
+    s1: 'legal',
+    s2: 'legal',
+    s3: 'legal',
+    s4: 'legal',
+    s5: 'legal',
+    s6: 'legal',
+  });
+  expect(b.ghost, 'no ghost until the estimate is SET').toBeNull();
+  expect(b.channel.whatIf).toBeNull();
+  await page.mouse.move(lbPad.x, lbPad.y, { steps: 3 });
+  await expect.poll(async () => (await board(page)).dragOver?.over).toBe('lb');
+  expect((await board(page)).dragOver).toMatchObject({ state: 'wrong', legal: false });
+
+  // Esc cancels the drag (and the pause menu stays shut); nothing was placed or spent.
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => (await board(page)).dragging).toBeNull();
+  await page.mouse.up();
+  b = await board(page);
+  expect(b.dragOver).toBeNull();
+  expect(b.parts.some((p) => p.kind === 'server')).toBe(false);
+  expect(b.pads.every((p) => p.legality === null)).toBe(true);
+  expect((await shell(page))?.paused, 'Esc during a drag does not open the pause menu').toBe(false);
+
+  // Key 3 reaches the deck through the board: it SETs the estimate.
+  expect((await hudBits(page))!.notes.estimate).toBeNull();
+  await page.keyboard.press('3');
+  await expect.poll(async () => (await hudBits(page))!.notes.estimate).not.toBeNull();
+
+  // Now the ghost shows: over s1 with the gateway free it adds 60, the what-if tick reads ROOM +60,
+  // and no credits are spent while it hovers.
+  await hold(page, card, s1Pad);
+  b = await expectGhost(page, 's1');
+  expect(b.ghost).toMatchObject({
+    card: 'server',
+    over: 's1',
+    legal: true,
+    adds: 60,
+    tick: 'ROOM +60',
+    plateShown: true,
+  });
+  expect(b.ghost!.plate).toBe('+60 room · boots 3 s · -80 cr');
+  expect(b.channel.whatIf).toBeCloseTo(0.15, 3);
+  expect(b.credits).toBeGreaterThan(credits - 1);
+  await page.screenshot({ path: 'test-results/screens/live-m3-board-ghost-c1.png' });
+  await page.mouse.up();
+  await expect.poll(async () => (await board(page)).parts.find((p) => p.slot === 's1')?.id).toBeDefined();
+  const s1 = (await board(page)).parts.find((p) => p.slot === 's1')!.id;
+  expect((await board(page)).ghost).toBeNull();
+
+  // Wire it in; once it is up, the ghost over the second pad tells the truth: nothing feeds it, and
+  // its what-if level is the wired room the ROOM tick stands on.
+  await wire(page, 'gateway', s1);
+  await wire(page, s1, 'database');
+  await expect.poll(async () => (await board(page)).channel.wired, { timeout: 20_000 }).toBe(60);
+  const s2Pad = (await board(page)).slots.find((s) => s.id === 's2')!;
+  await hold(page, card, s2Pad);
+  b = await expectGhost(page, 's2');
+  expect(b.ghost).toMatchObject({ legal: true, adds: 0, capacity: 60, wired: 60, tick: null });
+  expect(b.ghost!.plate).toBe('+0 room · nothing feeds it');
+  expect(b.channel.whatIf).toBeCloseTo(b.channel.capacityLevel, 3);
+  // Let go back over the tray: nothing placed.
+  await page.mouse.move(card.x, card.y, { steps: 3 });
+  await page.mouse.up();
+  await expect.poll(async () => (await board(page)).dragging).toBeNull();
+  expect((await board(page)).parts.filter((p) => p.kind === 'server')).toHaveLength(1);
+
+  // Hovering a part shows its numbers and state in the script's words, never the debrief's.
+  for (const id of ['gateway', s1, 'database']) {
+    const p = (await part(page, id))!;
+    await page.mouse.move(p.x, p.y, { steps: 2 });
+    await expect.poll(async () => (await board(page)).hover.target).toBe(id);
+    const text = (await board(page)).hover.text!;
+    expect(text).toMatch(/a second/);
+    for (const word of DEBRIEF_WORDS) expect(text.toLowerCase()).not.toContain(word);
+  }
+  const hovered = (await board(page)).hover;
+  expect(hovered.pinned).toBe(false);
+  const sp = (await part(page, s1))!;
+  await page.mouse.move(sp.x, sp.y, { steps: 2 });
+  await expect.poll(async () => (await board(page)).hover.text).toMatch(/^SERVER · \d+\/60 a second · \d+%/);
+
+  // Click pins the plate; it stays when the pointer leaves; Esc clears the selection (no pause).
+  await page.mouse.click(sp.x, sp.y);
+  await expect.poll(async () => (await board(page)).selectedPart).toBe(s1);
+  await page.mouse.move(card.x, card.y - 200, { steps: 2 });
+  await expect.poll(async () => (await board(page)).hover).toMatchObject({ target: s1, pinned: true });
+  // Keys 1 and 2 go to the deck untouched: the selection stays.
+  await page.keyboard.press('1');
+  await page.keyboard.press('2');
+  expect((await board(page)).selectedPart).toBe(s1);
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => (await board(page)).selectedPart).toBeNull();
+  expect((await board(page)).hover.text).toBeNull();
+  expect((await shell(page))?.paused).toBe(false);
+
+  // Delete cuts the selected wire.
+  const gw = (await board(page)).wires.find((x) => x.from === 'gateway')!;
+  await page.mouse.click(gw.x, gw.y);
+  await expect.poll(async () => (await board(page)).selectedWire).toBe(gw.key);
+  await expect.poll(async () => (await board(page)).hover.pinned).toBe(true);
+  expect((await board(page)).hover.text).toMatch(/^WIRE · \d+ a second\nGATEWAY to SERVER/);
+  await page.keyboard.press('Delete');
+  await expect.poll(async () => (await board(page)).wires.some((x) => x.key === gw.key)).toBe(false);
+  expect((await board(page)).selectedWire).toBeNull();
+  expect((await shell(page))?.paused).toBe(false);
+});
+
+/** Wait until the ghost is over `over` and its plate is drawn; returns that read. */
+async function expectGhost(page: Page, over: string): Promise<BoardTestState> {
+  await expect
+    .poll(async () => {
+      const b = await board(page);
+      return b.ghost?.over === over && b.ghost.plateShown;
+    })
+    .toBe(true);
+  return board(page);
+}
+
+test('C6 (board-8): the ghost and the what-if tick stay away while the sizing prompt is open, and come once it is SET', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  // Best play at speed 12 to the midnight forecast: the sizing prompt opens at 440 and stays until SET
+  // or midnight at 510 (about 6 s at this speed).
+  await liveOpen(page, { speed: 12 });
+  await liveReach(page, 'c1');
+  const deadline = Date.now() + 90_000;
+  for (;;) {
+    const h = await hudBits(page);
+    if (h?.sizingPrompt.open) break;
+    if (Date.now() > deadline) throw new Error('the sizing prompt never opened');
+    await clickStoryOn(page);
+    await page.waitForTimeout(40);
+  }
+  let b = await board(page);
+  const card = b0(b, 'server');
+  const empty = b.slots.filter((s) => s.id !== 'lb' && s.part === null);
+  expect(empty.length).toBeGreaterThan(0);
+  const pad = empty[empty.length - 1];
+  await hold(page, card, pad);
+  // One read of both sections, so the prompt and the board are seen on the same frame.
+  const both = () =>
+    page.evaluate(() => {
+      const s = window.__neonTest!.state as unknown as { board: BoardTestState; hud: HudBits };
+      return { board: s.board, prompt: s.hud.sizingPrompt.open };
+    });
+  let seen = await both();
+  for (let i = 0; i < 100 && seen.board.dragOver?.over !== pad.id; i++) seen = await both();
+  b = seen.board;
+  expect(b.dragOver?.over).toBe(pad.id);
+  expect(seen.prompt, 'the sizing prompt is still open').toBe(true);
+  // An empty pad: legal, or short of credits by now (the ghost shows either way; only the drop differs).
+  expect(['legal', 'poor']).toContain(b.dragOver!.state);
+  expect(b.ghost, 'no ghost while the player sizes alone').toBeNull();
+  expect(b.channel.whatIf).toBeNull();
+
+  // SET the sizing (key 3 still reaches the deck with a card in hand): the ghost comes, wired
+  // behind the crew's splitter, adding 60.
+  await page.keyboard.press('3');
+  await expect.poll(async () => (await hudBits(page))!.notes.sizing).not.toBeNull();
+  b = await expectGhost(page, pad.id);
+  expect(b.ghost).toMatchObject({ adds: 60, tick: 'ROOM +60' });
+  expect(b.ghost!.plate).toMatch(/^\+60 room · boots 3 s · -80 cr$/);
+  expect(b.ghost!.capacity).toBe(b.ghost!.wired + 60);
+  expect(b.channel.whatIf).toBeCloseTo(b.ghost!.capacity / 400, 3);
+  await page.screenshot({ path: 'test-results/screens/live-m3-board.png' });
+  await page.mouse.move(card.x, card.y, { steps: 2 });
+  await page.mouse.up();
+});
