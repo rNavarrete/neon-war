@@ -57,7 +57,7 @@ function expectWithinBudgets(p: PerfSection, moment: string): void {
   expect(p.pools.packets, `${moment}: pools.packets`).toBeLessThanOrEqual(PACKETS_MAX);
   expect(p.fps.avg).toBeGreaterThan(0);
   expect(p.frameMs).toBeGreaterThan(0);
-  // art3d-6 may add at most three Glows and one GradientMap; none have landed yet.
+  // art3d-6 adds at most three Glows and one GradientMap (the hot-part glow in motion.ts).
   expect(p.filters).toBeLessThanOrEqual(4);
   expect(p.lite).toBe(true);
 }

@@ -329,6 +329,11 @@ that lane. `src/sim/` is frozen (only decision D2 could open it), and the protec
 
 ## Perf budget
 
+The hot-part glow (art3d-6, `GLOW_PROBE_ON` in `src/scenes/motion.ts`): at most three red Glows on
+parts over capacity and one 1.5 s GradientMap after the rescue. Measured 28 Oct 2026 at the surge
+(headless, speed 20): `perf.frameMs` about 118.5 ms with it on, 112.3 ms off, inside run-to-run noise
+(headless baseline about 110 ms), so it stays on. Flipping that one constant drops it.
+
 `PerfMeter` in `src/scenes/live/hook.ts` (tech-7) measures the `perf` section. Once a second of real
 time, `HudScene` walks both scenes' display lists into every container. It also takes a sample
 when the HUD is built and when a story scene pauses the HUD, since no samples come while it is
