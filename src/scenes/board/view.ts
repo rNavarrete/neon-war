@@ -7,6 +7,7 @@ import { type Part, capacityOf } from '../../sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../../sim/brownout';
 import type { PowerDip } from '../../sim/failures';
 import { LABELS, diesIn as diesInLabel } from '../hud/labels';
+import { type PartArtOptions, stateArt } from './art';
 
 export type PartStatus = 'online' | 'booting' | 'rebooting' | 'offline' | 'dark' | 'dead';
 
@@ -88,11 +89,17 @@ export function partLook(
   offlineUntil: Readonly<Record<string, number>>,
   now: number,
   trouble?: PartTrouble,
+  art?: PartArtOptions,
 ): PartLook {
-  return partLookInto(emptyLook(), part, load, offline, offlineUntil, now, trouble);
+  return partLookInto(emptyLook(), part, load, offline, offlineUntil, now, trouble, art);
 }
 
-/** partLook written into `out` and returned, so the board reuses one object per part every frame. */
+/**
+ * partLook written into `out` and returned, so the board reuses one object per part every frame.
+ * With `art` (board-12) the art is the part state's picked art (src/scenes/board/art.ts stateArt):
+ * the unlit server while dark or rebooting, the boot lamp frames, the balancer's ping frames.
+ * Without it the look is exactly what it was before board-12.
+ */
 export function partLookInto(
   out: MutablePartLook,
   part: Part,
@@ -101,6 +108,7 @@ export function partLookInto(
   offlineUntil: Readonly<Record<string, number>>,
   now: number,
   trouble?: PartTrouble,
+  art?: PartArtOptions,
 ): PartLook {
   const cap = capacityOf(part, BROWNOUT_RULES);
   const capacity = Number.isFinite(cap) ? cap : null;
@@ -123,8 +131,9 @@ export function partLookInto(
     }
   }
   const hot = !isOff && share !== null && share > HOT_SHARE;
-  // Booting, rebooting and dark servers keep their art, darkened (unlit until the dark art lands,
-  // board-12); a dead server, or one offline for no reason the board knows, shows the dead server.
+  // Booting, rebooting and dark servers keep their art, darkened; with `art` they show the picked
+  // unlit and boot-lamp art (board-12). A dead server, or one offline for no reason the board
+  // knows, shows the dead server.
   out.status = status;
   out.left = left;
   out.load = load;
@@ -132,6 +141,7 @@ export function partLookInto(
   out.share = share;
   out.art =
     (status === 'offline' || status === 'dead') && part.kind === 'server' ? 'server-dead' : artFor(part, hot);
+  if (art) out.art = stateArt(part, status, out.art, art);
   out.dark = isOff;
   const over = trouble?.overload[part.id];
   out.diesIn =
