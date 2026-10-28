@@ -5,6 +5,7 @@
 
 import { AlertView } from '../hud/AlertView';
 import { ChartView } from '../hud/ChartView';
+import { ChatFeedView } from '../hud/ChatFeedView';
 import { CommsView } from '../hud/CommsView';
 import { DeckView } from '../hud/DeckView';
 import { GaugeView } from '../hud/GaugeView';
@@ -31,7 +32,7 @@ export const REGISTRY: readonly RegistryEntry[] = [
   { zone: 'scope', lane: 'gauges', make: () => new ChartView() },
   { zone: 'comms', lane: 'comms', make: () => new CommsView() },
   { zone: 'deck', lane: 'gauges', make: () => new DeckView() },
-  { zone: 'chat', lane: 'chat', make: () => new PlaceholderView('chat') },
+  { zone: 'chat', lane: 'chat', make: () => new ChatFeedView() },
 ];
 
 /** The zones the registry draws, in registry order. */
