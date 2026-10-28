@@ -11,10 +11,16 @@
 //   over 400 ms after voiceEnd, on the clock tick() is given (the HUD clock).
 // - Loaded voice groups are the previous, current and next challenge of the sim's now (never the
 //   whole set); a rewind moves now back and the groups follow on the next tick.
+// - The voices setting picks the clip's language (src/game/voice.ts voiceLangFor; TRIAGE stays
+//   Japanese). With voices off every request is still recorded, but nothing loads or plays, and the
+//   band falls back to its text dwell. A clip plays at the voice gain times the voice volume.
+// - A cut clip (a new line, voiceStop) fades to nothing over VOICE_CUT_FADE_MS on the port.
 
 import type { LineId } from '../strings';
 import { BROWNOUT } from '../sim/brownout';
 import { type Bus, bus } from './bus';
+import { type Settings, settings } from './settings';
+import { voiceLangFor } from './voice';
 
 // ---- sound effect keys added for the Live screen ----
 
@@ -82,15 +88,20 @@ export function voiceKey(id: string, lang: VoiceLang): string {
   return `voice:${lang}:${id}`;
 }
 
-/** The voices setting's default, until comms-5 ships it in src/game/settings.ts. */
-export const DEFAULT_VOICE_LANG: VoiceLang = 'ja';
+/** A cut clip (a new line or voiceStop) fades to nothing over this long instead of stopping dead. */
+export const VOICE_CUT_FADE_MS = 120;
+
+/** The settings the mixer reads: the voices setting and the voice volume. */
+export type VoiceSettings = Pick<Settings, 'voices' | 'voiceVolume'>;
 
 /**
- * The language a line is voiced in. A stub until comms-5 ships src/game/voice.ts and the voices
- * setting: TRIAGE is always Japanese, every other line takes the setting (Japanese by default).
+ * The language the mixer asks for a line's clip in under the voices setting, or null when voices
+ * are off: voiceLangFor (TRIAGE in Japanese). An id the script does not voice (not a line, or a
+ * stage direction) keeps the setting's language, so the manifest alone decides it; Pure.
  */
-export function voiceLangOf(id: string): VoiceLang {
-  return /\.triage\./.test(id) ? 'ja' : DEFAULT_VOICE_LANG;
+export function mixerLangFor(id: string, voices: VoiceSettings['voices']): VoiceLang | null {
+  if (voices === 'off') return null;
+  return voiceLangFor(id, voices) ?? voices;
 }
 
 /** A line's voice group: the challenge in its id (`C4.triage.02` is 4); null for fill and other ids. */
@@ -157,6 +168,11 @@ export interface SoundPort {
 export interface VoiceTestState {
   /** Ids a clip was asked for (by a band line or the replay glyph), oldest first, the last 20. */
   recentVoice: string[];
+  /**
+   * The same requests as 'lang:id', in the language the voices setting gave each when it was asked
+   * for ('off:id' while voices are off), oldest first, the last 20.
+   */
+  requested: string[];
   /** Ids asked for that the manifest does not list in their language, each once, in order. */
   missing: string[];
   /** The clip playing now, or null. */
@@ -188,17 +204,24 @@ export class Mixer {
   private playing: Playing | null = null;
   /** A listed clip asked for before it had loaded: it plays once ready, unless another line comes first. */
   private pending: LineId | null = null;
+  /** The pending clip's key (its language is the one the setting gave at the request). */
+  private pendingKey = '';
+  /** The voices setting the resident groups were loaded for. */
+  private voicesAt: VoiceSettings['voices'] | null = null;
   private challenge = -1;
   private groups: number[] = [];
   /** Voice keys loaded (or loading) for the resident groups. */
   private readonly loaded = new Set<string>();
   private readonly recent: string[] = [];
+  private readonly requested: string[] = [];
   private readonly started: string[] = [];
   private readonly missing: string[] = [];
 
   constructor(
     private readonly bus: Bus,
     private readonly manifest: VoiceManifest,
+    /** The voices setting and voice volume now (src/game/settings.ts; a stand-in in tests). */
+    private readonly readSettings: () => VoiceSettings = settings,
   ) {
     bus.on('line', ({ id }) => this.request(id));
     bus.on('voice', ({ id }) => this.request(id));
@@ -212,6 +235,7 @@ export class Mixer {
     this.port = port;
     this.loaded.clear();
     this.challenge = -1;
+    this.voicesAt = null;
     if (port) {
       this.safely(() => port.setGain('music', this.gains.music));
       this.safely(() => port.setGain('sfx', this.gains.sfx));
@@ -236,7 +260,7 @@ export class Mixer {
     if (p && p.seconds > 0 && clock >= p.since + p.seconds) this.finish();
     if (this.pending !== null && this.port) {
       const id = this.pending;
-      const key = voiceKey(id, voiceLangOf(id));
+      const key = this.pendingKey;
       if (this.port.voiceReady(key)) {
         this.pending = null;
         this.start(id, key);
@@ -251,8 +275,10 @@ export class Mixer {
     }
 
     const k = challengeAt(simNow);
-    if (k !== this.challenge) {
+    const voices = this.readSettings().voices;
+    if (k !== this.challenge || voices !== this.voicesAt) {
       this.challenge = k;
+      this.voicesAt = voices;
       this.resolveGroups(simNow);
     }
   }
@@ -263,7 +289,12 @@ export class Mixer {
     if (this.recent.length > RECENT_MAX) this.recent.shift();
     if (this.playing) this.stopPlaying();
     this.pending = null;
-    const lang = voiceLangOf(id);
+    const voices = this.readSettings().voices;
+    const lang = mixerLangFor(id, voices);
+    this.requested.push(`${lang ?? voices}:${id}`);
+    if (this.requested.length > RECENT_MAX) this.requested.shift();
+    // Voices off: the request is on record, and nothing loads or plays.
+    if (lang === null) return;
     if (!inManifest(this.manifest, id, lang)) {
       if (!this.missing.includes(id)) this.missing.push(id);
       return;
@@ -281,12 +312,14 @@ export class Mixer {
       this.safely(() => port.loadVoice(key, voicePath(id, lang)));
     }
     this.pending = id;
+    this.pendingKey = key;
   }
 
   /** The `shell.voice` hook section. */
   snapshot(): VoiceTestState {
     return {
       recentVoice: [...this.recent],
+      requested: [...this.requested],
       missing: [...this.missing],
       playing: this.playing?.id ?? null,
       started: [...this.started],
@@ -301,7 +334,7 @@ export class Mixer {
     if (!port) return;
     let seconds: number | null = null;
     this.safely(() => {
-      seconds = port.playVoice(key, this.gains.voice, () => {
+      seconds = port.playVoice(key, this.gains.voice * this.readSettings().voiceVolume, () => {
         if (this.playing?.key === key) this.finish();
       });
     });
@@ -342,10 +375,11 @@ export class Mixer {
     this.groups = residentGroups(simNow);
     const port = this.port;
     if (!port) return;
+    const voices = this.voicesAt ?? this.readSettings().voices;
     const want = new Set<string>();
     for (const lang of ['ja', 'en'] as const) {
       for (const id of idsInGroups(this.manifest, lang, this.groups)) {
-        if (voiceLangOf(id) === lang) want.add(voiceKey(id, lang));
+        if (mixerLangFor(id, voices) === lang) want.add(voiceKey(id, lang));
       }
     }
     for (const key of [...this.loaded]) {

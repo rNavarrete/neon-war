@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { MUSIC_FILES, MUSIC_KEY, SFX_KEYS, audio, musicWanted, sfxPath } from '../game/audio';
 import { bus } from '../game/bus';
 import { frame } from '../game/frame';
-import { type SoundPort, type VoiceTestState, bundledLiveSfx, mixer } from '../game/mixer';
+import { type SoundPort, VOICE_CUT_FADE_MS, type VoiceTestState, bundledLiveSfx, mixer } from '../game/mixer';
 import { run } from '../game/run';
 import { onSettingsChange, settings } from '../game/settings';
 import { provideTestState, testHookEnabled } from '../testHook';
@@ -70,6 +70,8 @@ export class OverlayScene extends Phaser.Scene {
   private sfxGain = 1;
   /** The voice clip playing, if any. */
   private voiceSound: Phaser.Sound.BaseSound | null = null;
+  /** Cut clips still fading out (VOICE_CUT_FADE_MS); the duck leaves them alone. */
+  private readonly fadingVoices = new Set<Phaser.Sound.BaseSound>();
 
   constructor() {
     super({ key: SCENES.overlay, active: true });
@@ -110,6 +112,8 @@ export class OverlayScene extends Phaser.Scene {
       offSettings();
       audio.attach(null);
       mixer.attach(null);
+      for (const s of this.fadingVoices) s.destroy();
+      this.fadingVoices.clear();
     });
     this.ready = true;
   }
@@ -173,8 +177,9 @@ export class OverlayScene extends Phaser.Scene {
         return Number.isFinite(s.duration) ? s.duration : 0;
       },
       stopVoice: () => {
-        this.voiceSound?.destroy();
+        const s = this.voiceSound;
         this.voiceSound = null;
+        if (s) this.fadeOutVoice(s);
       },
       setGain: (channel, gain) => {
         if (channel === 'music') {
@@ -184,10 +189,29 @@ export class OverlayScene extends Phaser.Scene {
         this.sfxGain = gain;
         // Effects already sounding (the rain loop) follow the duck too; the music and the voice do not.
         for (const s of this.sound.getAllPlaying()) {
-          if (s !== this.music && s !== this.voiceSound) (s as Phaser.Sound.WebAudioSound).setVolume?.(gain);
+          if (s !== this.music && s !== this.voiceSound && !this.fadingVoices.has(s))
+            (s as Phaser.Sound.WebAudioSound).setVolume?.(gain);
         }
       },
     };
+  }
+
+  /**
+   * Cut a voice clip with a VOICE_CUT_FADE_MS fade to 0, then destroy it (not at once: a hard stop
+   * clicks). Its COMPLETE listener goes first, so a cut clip never reports a natural end.
+   */
+  private fadeOutVoice(s: Phaser.Sound.BaseSound): void {
+    s.off(Phaser.Sound.Events.COMPLETE);
+    const done = (): void => {
+      this.fadingVoices.delete(s);
+      s.destroy();
+    };
+    if (!s.isPlaying) {
+      done();
+      return;
+    }
+    this.fadingVoices.add(s);
+    this.tweens.add({ targets: s, volume: 0, duration: VOICE_CUT_FADE_MS, onComplete: done });
   }
 
   private onEscape(): void {
