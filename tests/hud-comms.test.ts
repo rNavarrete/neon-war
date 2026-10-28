@@ -1,7 +1,34 @@
+import { artRequest } from '../src/game/artManifest';
 import { TEXT_CPS } from '../src/game/settings';
+import { COMMS_AVATARS, avatarSource } from '../src/scenes/avatars';
 import {
+  CHIP_SIZE,
+  COMMS_PLATE,
+  LEGACY_PLATE,
+  chipArt,
+  plateArt,
+  plateFile,
   BARK_SECONDS,
   COMMS_QUEUE_MAX,
+  CREW_LIGHT_SECONDS,
+  DARK_ALPHA,
+  DARK_TINT,
+  IDLE_MOOD,
+  OTHER_RING_ALPHA,
+  PANIC_JITTER_HZ,
+  RING_HIGH,
+  RING_HZ,
+  RING_LOW,
+  RING_STEADY,
+  SWAP_TICK_SCALE,
+  SWAP_TICK_SECONDS,
+  TRIAGE_MOODS,
+  crewLight,
+  crewTint,
+  irisFor,
+  moodOf,
+  speakRing,
+  swapTick,
   COMMS_SLOTS,
   type CommsState,
   FADE_SECONDS,
@@ -28,6 +55,7 @@ import {
   triageMood,
 } from '../src/scenes/hud/comms';
 import { BOTTOM } from '../src/scenes/hud/layout';
+import { fileTexture } from '../src/scenes/plates';
 import { LESSON_IDS } from '../src/scenes/hud/lineMeta';
 import { ZONES } from '../src/scenes/live/layout';
 import { LINES, type LineId } from '../src/strings';
@@ -365,5 +393,202 @@ describe('comms reread log', () => {
     expect(onRect(z, z.x, z.y)).toBe(true);
     expect(onRect(z, z.x + z.w / 2, z.y + z.h / 2)).toBe(true);
     expect(onRect(z, z.x + z.w / 2, z.y - 1)).toBe(false);
+  });
+});
+
+// comms-4: TRIAGE's iris, the speaker's glow, the swap tick and the crew light-up.
+describe('comms-4: iris, glow and crew light-up', () => {
+  const T = Array.from({ length: 241 }, (_, i) => i * 0.0371);
+
+  it("lists TRIAGE's six moods, the same set docs/SCRIPT.md brackets her lines with", () => {
+    const used = new Set(
+      (Object.keys(LINES) as LineId[]).map(triageMood).filter((m): m is string => m !== null),
+    );
+    expect([...used].sort()).toEqual([...TRIAGE_MOODS].sort());
+    expect(TRIAGE_MOODS).toHaveLength(6);
+  });
+
+  it("irisFor('panicking', t, true) is still (dx = dy = 0) at every t and the widest of the six", () => {
+    for (const t of T) {
+      const i = irisFor('panicking', t, true);
+      expect(i.dx, `t ${t}`).toBe(0);
+      expect(i.dy, `t ${t}`).toBe(0);
+      expect(i.open, `t ${t}`).toBe(1);
+    }
+    const r = irisFor('panicking', 0, true).r;
+    for (const m of TRIAGE_MOODS) {
+      if (m === 'panicking') continue;
+      for (const t of T) {
+        expect(irisFor(m, t, true).r, m).toBeLessThan(r);
+        expect(irisFor(m, t, false).r, m).toBeLessThan(r);
+      }
+    }
+    // The radius is the mood's alone, with or without reduce flicker.
+    for (const t of T) expect(irisFor('panicking', t, false).r).toBe(r);
+  });
+
+  it('panicking jitters at 12 Hz without reduce flicker, and never blinks', () => {
+    const xs = T.map((t) => irisFor('panicking', t, false));
+    expect(Math.max(...xs.map((i) => Math.abs(i.dx)))).toBeGreaterThan(1);
+    expect(Math.max(...xs.map((i) => Math.abs(i.dy)))).toBeGreaterThan(1);
+    expect(xs.every((i) => i.open === 1)).toBe(true);
+    // One full jitter period later the iris is back where it was.
+    const a = irisFor('panicking', 0.3, false);
+    const b = irisFor('panicking', 0.3 + 1 / PANIC_JITTER_HZ, false);
+    expect(b.dx).toBeCloseTo(a.dx, 6);
+  });
+
+  it('gives each mood its own look and blinks only without reduce flicker', () => {
+    const looks = TRIAGE_MOODS.map((m) => {
+      const i = irisFor(m, 0.5, true);
+      return `${i.dx},${i.dy},${i.r}`;
+    });
+    expect(new Set(looks).size).toBe(6);
+    for (const m of TRIAGE_MOODS) {
+      const reduced = T.map((t) => irisFor(m, t, true));
+      // Under reduce flicker nothing moves and the lid stays open.
+      expect(new Set(reduced.map((i) => `${i.dx},${i.dy},${i.open}`)).size, m).toBe(1);
+      expect(reduced[0].open, m).toBe(1);
+    }
+    // Eager blinks at t = 0 and is open just after.
+    expect(irisFor('eager', 0.05, false).open).toBeLessThan(1);
+    expect(irisFor('eager', 0.5, false).open).toBe(1);
+    // An unknown bracket reads as her resting mood.
+    expect(moodOf('grumpy')).toBe(IDLE_MOOD);
+    expect(moodOf(null)).toBe(IDLE_MOOD);
+    expect(irisFor('grumpy', 1, true)).toEqual(irisFor(IDLE_MOOD, 1, true));
+  });
+
+  it('the speaker ring glows at 1.2 Hz and holds steady under reduce flicker', () => {
+    expect(speakRing(0, false)).toBeCloseTo(RING_HIGH, 6);
+    expect(speakRing(0.5 / RING_HZ, false)).toBeCloseTo(RING_LOW, 6);
+    expect(speakRing(1 / RING_HZ, false)).toBeCloseTo(RING_HIGH, 6);
+    for (const t of T) {
+      const a = speakRing(t, false);
+      expect(a).toBeGreaterThanOrEqual(RING_LOW - 1e-9);
+      expect(a).toBeLessThanOrEqual(RING_HIGH + 1e-9);
+      expect(speakRing(t, true)).toBe(RING_STEADY);
+    }
+    expect(OTHER_RING_ALPHA).toBe(0.25);
+  });
+
+  it('ticks a new speaker up for 180 ms and back', () => {
+    expect(swapTick(0)).toBe(1);
+    expect(swapTick(SWAP_TICK_SECONDS / 2)).toBeCloseTo(SWAP_TICK_SCALE, 6);
+    expect(swapTick(SWAP_TICK_SECONDS)).toBe(1);
+    expect(swapTick(-1)).toBe(1);
+    expect(swapTick(5)).toBe(1);
+  });
+
+  it('lights the crew from the dark silhouette over 400 ms once they are in', () => {
+    expect(crewLight(null, 100)).toBe(0);
+    expect(crewLight(10, 10)).toBe(0);
+    expect(crewLight(10, 10 + CREW_LIGHT_SECONDS / 2)).toBeCloseTo(0.5, 6);
+    expect(crewLight(10, 10 + CREW_LIGHT_SECONDS)).toBe(1);
+    expect(crewLight(-Infinity, 0)).toBe(1);
+    expect(crewTint(0)).toEqual({ tint: DARK_TINT, alpha: DARK_ALPHA });
+    expect(crewTint(0)).toEqual({ tint: 0x55556a, alpha: 0.3 });
+    expect(crewTint(1)).toEqual({ tint: 0xffffff, alpha: 1 });
+    const mid = crewTint(0.5);
+    expect(mid.alpha).toBeCloseTo(0.65, 6);
+    expect((mid.tint >> 16) & 0xff).toBeGreaterThan(0x55);
+    expect((mid.tint >> 16) & 0xff).toBeLessThan(0xff);
+  });
+
+  it("hud.comms.triage's mood is the current TRIAGE line's bracket, and null for anyone else", () => {
+    for (const id of Object.keys(LINES) as LineId[]) {
+      if (LINES[id].kind !== 'bark') continue;
+      const speaker = LINES[id].speaker;
+      const m = triageMood(id);
+      if (speaker.startsWith('TRIAGE')) {
+        expect(m, id).toBe(/\(([^)]+)\)/.exec(speaker)![1]);
+        expect(TRIAGE_MOODS as readonly string[], id).toContain(m);
+      } else {
+        expect(m, id).toBeNull();
+      }
+    }
+  });
+});
+
+// comms-9: the band's art through the manifest, with its fallbacks.
+describe('comms-9: plate, round avatars and HOUSE chips through the art manifest', () => {
+  const plateReq = artRequest(COMMS_PLATE)!;
+  /** The manifest entry as it will read once the owner's pick lands (its cut size set). */
+  const picked = <T extends { target: { w: number; h: number } }>(r: T): T => ({ ...r, cut: r.target });
+  const all = (): boolean => true;
+  const none = (): boolean => false;
+
+  it('asks for the plate at the band size and never upscales it', () => {
+    expect(plateReq.lane).toBe('comms');
+    expect(plateReq.zone).toBe('comms');
+    expect(plateReq.display).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
+    expect(plateReq.target.w).toBeGreaterThanOrEqual(plateReq.display.w);
+    expect(plateReq.target.h).toBeGreaterThanOrEqual(plateReq.display.h);
+    for (const key of [COMMS_AVATARS.TRIAGE, COMMS_AVATARS.REI, COMMS_AVATARS.MIKA, COMMS_AVATARS.OZZIE]) {
+      const r = artRequest(key)!;
+      expect(r.lane, key).toBe('comms');
+      expect(r.target.w, key).toBeGreaterThanOrEqual(84);
+    }
+    for (const key of COMMS_AVATARS.HOUSE) {
+      const r = artRequest(key)!;
+      expect(r.display, key).toEqual({ w: CHIP_SIZE, h: CHIP_SIZE });
+      expect(r.target.w, key).toBeGreaterThanOrEqual(CHIP_SIZE);
+    }
+  });
+
+  it('uses the picked plate once it has landed and loaded, drawn as cut', () => {
+    const p = plateArt(all, picked(plateReq));
+    expect(p).toEqual({
+      use: 'picked',
+      texture: fileTexture('art/hud/comms-plate.webp'),
+      nine: false,
+      tint: 0xffffff,
+      alpha: 1,
+    });
+    expect(plateFile(picked(plateReq))).toBe('art/hud/comms-plate.webp');
+  });
+
+  it('falls back to the text-box plate, then to code, while the pick is missing', () => {
+    expect(plateFile()).toBeNull();
+    const reuse = plateReq.fallback.kind === 'reuse' ? plateReq.fallback : null;
+    expect(reuse?.file).toBe('art/hud/textbox.webp');
+    // Not picked: the reused file, nine-sliced, at the manifest's tint and alpha.
+    expect(plateArt(all)).toMatchObject({ use: 'reuse', texture: fileTexture(reuse!.file), nine: true });
+    expect(plateArt(all).alpha).toBe(reuse!.alpha);
+    // The reused file not loaded: the HUD's own text box.
+    expect(plateArt((t) => t === LEGACY_PLATE)).toMatchObject({
+      use: 'reuse',
+      texture: LEGACY_PLATE,
+      nine: true,
+    });
+    // Picked in the manifest but the file did not load: still the fallback, never a missing texture.
+    expect(plateArt((t) => t === LEGACY_PLATE, picked(plateReq)).texture).toBe(LEGACY_PLATE);
+    // Nothing loaded: the code plate.
+    expect(plateArt(none)).toMatchObject({ use: 'code', texture: null });
+    expect(plateArt(none, undefined).use).toBe('code');
+  });
+
+  it('draws a picked HOUSE chip and the code glyph until then', () => {
+    for (const key of COMMS_AVATARS.HOUSE) {
+      const r = artRequest(key)!;
+      expect(chipArt(key, all)).toEqual({ key, use: 'code', texture: null });
+      expect(chipArt(key, all, picked(r))).toEqual({
+        key,
+        use: 'picked',
+        texture: fileTexture(`art/${key}.webp`),
+      });
+      expect(chipArt(key, none, picked(r)).use).toBe('code');
+    }
+  });
+
+  it('resolves the four round avatars through the manifest: the pick when it lands, the reused face until', () => {
+    for (const key of [COMMS_AVATARS.TRIAGE, COMMS_AVATARS.REI, COMMS_AVATARS.MIKA, COMMS_AVATARS.OZZIE]) {
+      const r = artRequest(key)!;
+      const now = avatarSource(key);
+      expect(now.fallback, key).toBe(true);
+      expect(now.file, key).toBe(r.fallback.kind === 'reuse' ? r.fallback.file : null);
+      const later = avatarSource(key, picked(r));
+      expect(later, key).toMatchObject({ fallback: false, file: `art/${key}.webp` });
+    }
   });
 });
