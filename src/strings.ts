@@ -433,6 +433,28 @@ export const LINES = {
   // anchor: chat
   // anchor: luxcam
   // anchor: learning
+  'C4.chat.dark': {
+    kind: 'chat',
+    speaker: 'block: kenji',
+    text: 'lights just blinked and the net went with them',
+  },
+  'C5.chat.lb': { kind: 'chat', speaker: 'stream: viewer', text: 'who are these people in her goggles??' },
+  'C6.chat.dark': {
+    kind: 'chat',
+    speaker: 'block: young father',
+    text: 'lights blinked. please. ten more seconds',
+  },
+  'C7.chat.01': {
+    kind: 'chat',
+    speaker: 'block: mrs okafor',
+    text: 'Happy New Year Lux. Now get some sleep x',
+  },
+  'fill.block.dark.01': { kind: 'block', speaker: 'block', text: 'kenji: everything just went out again' },
+  'fill.block.dark.02': {
+    kind: 'block',
+    speaker: 'block',
+    text: 'old man noodles: the noodle cam is just my own face now',
+  },
 } as const satisfies Record<string, Line>;
 
 export type LineId = keyof typeof LINES;

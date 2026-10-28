@@ -314,6 +314,14 @@ header has no lines yet. UI micro-copy (labels, key caps) is not a line and stay
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
+| C4.chat.dark | chat | block: kenji | the surge's power dip takes the big box dark | lights just blinked and the net went with them |
+| C5.chat.lb | chat | stream: viewer | 3 s after the board returns from the rescue | who are these people in her goggles?? |
+| C6.chat.dark | chat | block: young father | 23:59:50, the dip takes a box dark | lights blinked. please. ten more seconds |
+| C7.chat.01 | chat | block: mrs okafor | 5 s after midnight held | Happy New Year Lux. Now get some sleep x |
+| fill.block.dark.01 | block | block | filler while a box is dark | kenji: everything just went out again |
+| fill.block.dark.02 | block | block | filler while a box is dark | old man noodles: the noodle cam is just my own face now |
+
+Wording is a draft until the owner approves it (decision D8).
 
 ## Not settled yet
 
