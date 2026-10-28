@@ -27,12 +27,54 @@ import {
 } from '../src/scenes/hud/lineMeta';
 import { CARD_IDS, ZONE_IDS } from '../src/scenes/live/layout';
 import { LINES, type LineId } from '../src/strings';
-import { bestPlay } from '../src/game/autopilot';
+import { bestPlay, bestPlayUntil, idleAt, idleFrom } from '../src/game/autopilot';
 import { bus } from '../src/game/bus';
 import { type Frame, frame, resetFrame } from '../src/game/frame';
 import { type Occurrence, detectOccurrences } from '../src/game/occurrences';
 import { type Run, newRun, run } from '../src/game/run';
-import { type CueHost, NEW_DIRECTOR, cueViewOf, direct, emptyCueView } from '../src/scenes/hud/cues';
+import {
+  AWAITING_ENG503,
+  type CueHost,
+  type CueView,
+  NEW_DIRECTOR,
+  cueViewOf,
+  direct,
+  emptyCueView,
+} from '../src/scenes/hud/cues';
+import { ghostCapacity, ghostOpen } from '../src/scenes/board/ghost';
+import {
+  CHAT_PACE,
+  chatSetFor,
+  emptyChatInputs,
+  fillerAllowed,
+  initialChat,
+  stepChat,
+} from '../src/scenes/hud/chatEngine';
+import { FILLER_MAX_SECONDS, FILLER_MIN_SECONDS, fillerDelay } from '../src/scenes/hud/chat';
+import {
+  NO_COMMS,
+  READ_LEAD,
+  READ_TAIL,
+  STALE_CHAINED_SECONDS,
+  STALE_SECONDS,
+  VOICE_TAIL,
+  WARNING_PREEMPT_AFTER,
+  COMMS_QUEUE_MAX,
+  dwellFor,
+  enqueueComms,
+  staleAfter,
+  stepComms,
+} from '../src/scenes/hud/comms';
+import { BARK_SECONDS } from '../src/scenes/hud/barks';
+import { GAUGE_MAX, gaugeAngle } from '../src/scenes/hud/gauge';
+import {
+  headroomColour,
+  headroomLabel,
+  headroomLoad,
+  headroomPct,
+  litSegments,
+} from '../src/scenes/hud/headroom';
+import { camStep, emptyCamView, initialCam } from '../src/scenes/hud/luxcam';
 import { applyEstimate, applySizing } from '../src/scenes/hud/dial';
 import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 import { sizingPromptOpen } from '../src/scenes/hud/jobCard';
@@ -51,7 +93,7 @@ import {
   taughtTrace,
   termsSeen,
 } from '../src/scenes/hud/taught';
-import { BROWNOUT } from '../src/sim/brownout';
+import { BROWNOUT, BROWNOUT_RULES } from '../src/sim/brownout';
 import { SERVER_SLOTS } from '../src/sim/tick';
 import { MOMENT_WORDS, TERM_NAMES, seenLines, seenText } from '../src/story/debrief';
 import { storyWiring } from '../src/story/wiring';
@@ -608,5 +650,444 @@ describe('the debrief "you saw it at" lines (learning-4, D10)', () => {
     expect(lines).toHaveLength(TERM_KEYS.length - 1);
     expect(new Set(lines.map((l) => l.group))).toEqual(new Set(['sizing', 'scaling', 'failure']));
     for (const l of lines) expect(l.text, l.term).toMatch(/^you saw it at \d\d:\d\d:\d\d: .+/);
+  });
+});
+
+// ---- learning-5: the teaching criteria a to j (06-teaching.md, LRN-10 test plan) ----
+
+/** A CueView over the blank one: C1 with the job card still up, nothing built (learning-2's base). */
+function cueView(over: Partial<CueView> = {}): CueView {
+  return { ...emptyCueView(), now: C.c1, demand: 30, dropped: 30, ...over };
+}
+
+/** learning-2's five frozen CueViews (tests/hud-barks.test.ts), as T2 names them. */
+const FROZEN: readonly (readonly [string, CueView])[] = [
+  ['job card open', cueView({ now: C.c1 })],
+  [
+    'C1 built at 30 against 60',
+    cueView({ cardClosed: true, capacity: 60, demand: 30, dropped: 0, servers: 1 }),
+  ],
+  [
+    'C3 with an idle box',
+    cueView({
+      now: C.c3 + 10,
+      cardClosed: true,
+      capacity: 120,
+      demand: 70,
+      dropped: 0,
+      servers: 2,
+      idleServer: true,
+    }),
+  ],
+  [
+    'the surge dip',
+    cueView({
+      now: C.c4 + 5,
+      cardClosed: true,
+      capacity: 0,
+      demand: 280,
+      dropped: 280,
+      servers: 1,
+      overclocked: true,
+      overclockedId: 'server-p3',
+      darkPart: 'server-p3',
+      retry: 0.12,
+    }),
+  ],
+  [
+    'the crew wait with 2 live',
+    cueView({
+      now: C.c5 + 1,
+      cardClosed: true,
+      rescued: true,
+      rescueClock: 0,
+      servers: 3,
+      serversAfterRescue: 3,
+      liveBehindLb: 2,
+      bootingBehindLb: 1,
+      capacity: 120,
+      demand: 120,
+      dropped: 0,
+    }),
+  ],
+];
+
+/** Run the director over one frozen view with only the HUD clock moving, 0..600 in quarter seconds. */
+function runFrozen(base: CueView): { first: LineId[]; later: { id: LineId; clock: number }[] } {
+  let s = NEW_DIRECTOR;
+  const r0 = direct(s, { ...base, clock: 0 });
+  s = r0.state;
+  const later: { id: LineId; clock: number }[] = [];
+  for (let t = 0.25; t <= 600; t += 0.25) {
+    const r = direct(s, { ...base, clock: t });
+    s = r.state;
+    for (const id of r.fired) later.push({ id, clock: t });
+  }
+  return { first: [...r0.fired], later };
+}
+
+describe('teaching (a): hints fire on sim triggers only (learning-5)', () => {
+  it('with the sim frozen and the job card up, 600 s of HUD clock fire nothing', () => {
+    // From a real run's Frame: the card up at C1, nothing built, the sim clock standing still.
+    resetFrame();
+    const r = newRun(1, null);
+    r.now = C.c1;
+    const f = frame(r);
+    const host: CueHost = {
+      cardClosed: false,
+      dialTouched: false,
+      sizingOpen: false,
+      bannerShown: false,
+      decommissionsAfterMidnight: 0,
+    };
+    let s = NEW_DIRECTOR;
+    const v = emptyCueView();
+    const fired: LineId[] = [];
+    for (let clock = 0; clock <= 600; clock += 0.25) {
+      cueViewOf(v, f, [], clock, host, v);
+      const out = direct(s, v);
+      s = out.state;
+      fired.push(...out.fired);
+    }
+    expect(fired).toEqual([]);
+    const job = runFrozen(FROZEN[0][1]);
+    expect(job.first).toEqual([]);
+    expect(job.later).toEqual([]);
+  });
+
+  for (const [name, base] of FROZEN) {
+    it(`${name}: after clock 0 only the declared after() and holdFor chains of fired ids fire`, () => {
+      const { first, later } = runFrozen(base);
+      const fired = new Set<LineId>(first);
+      for (const { id, clock } of later) {
+        const cue = CUES.find((c) => c.id === id)!;
+        const held = cue.holdFor !== undefined && clock >= cue.holdFor;
+        const chained = (cue.follows ?? []).some((f) => fired.has(f));
+        expect(held || chained, `${name}: ${id} at HUD clock ${clock}`).toBe(true);
+        fired.add(id);
+      }
+      expect(new Set(later.map((l) => l.id)).size).toBe(later.length);
+    });
+  }
+
+  it('the job card open holds every line back: the same view with the card closed fires C1.triage.01', () => {
+    const open = FROZEN[0][1];
+    expect(direct(NEW_DIRECTOR, { ...open, clock: 0 }).fired).toEqual([]);
+    expect(direct(NEW_DIRECTOR, { ...open, cardClosed: true, clock: 0 }).fired).toContain('C1.triage.01');
+  });
+});
+
+describe('teaching (b): every cue has its line row (learning-5)', () => {
+  it('gives every CUES id a lineMeta row once, and the AWAITING lines no cue', () => {
+    for (const c of CUES) expect(metaOf(c.id), c.id).not.toBeNull();
+    const cued = new Set(CUES.map((c) => c.id));
+    for (const id of AWAITING_ENG503) expect(cued.has(id), id).toBe(false);
+    expect(cued.size).toBe(CUES.length);
+  });
+});
+
+describe('teaching (c): the readouts print the crew words, never a debrief term (learning-5)', () => {
+  it('the ROOM LEFT words over a sweep of demand and room hold no C8 term', () => {
+    for (const wired of [0, 30, 60, 120, 180, 240]) {
+      for (const demand of [0, 30, 90, 150, 250, 375]) {
+        const label = headroomLabel(demand, wired);
+        expect(termsIn(label), label).toEqual([]);
+        expect(label).toMatch(/^ROOM LEFT/);
+      }
+    }
+  });
+});
+
+describe('teaching (d): TRIAGE never answers (learning-5)', () => {
+  const TRIAGE_C1: LineId[] = [
+    'C1.triage.01',
+    'C1.triage.02',
+    'C1.triage.03',
+    'C1.triage.04',
+    'C1.triage.05',
+  ];
+
+  it('before the first wire with estimate null, no fired C1 TRIAGE line says 30', () => {
+    const fired: LineId[] = [];
+    for (const dialTouched of [false, true]) {
+      let s = NEW_DIRECTOR;
+      for (let clock = 0; clock <= 120; clock += 0.5) {
+        const v = cueView({ cardClosed: true, dialTouched, now: C.c1, estimate: null, capacity: 0, clock });
+        const out = direct(s, v);
+        s = out.state;
+        fired.push(...out.fired);
+      }
+    }
+    const triage = fired.filter((id) => TRIAGE_C1.includes(id));
+    expect(triage).toContain('C1.triage.01');
+    for (const id of triage) expect(LINES[id].text, id).not.toMatch(/\b30\b/);
+  });
+
+  it('with sizing null, no fired C6 TRIAGE line names three or four boxes', () => {
+    let s = NEW_DIRECTOR;
+    const fired: LineId[] = [];
+    for (let clock = 0; clock <= 120; clock += 0.5) {
+      const v = cueView({
+        now: C.c6 + Math.min(clock, 50),
+        cardClosed: true,
+        sizingOpen: true,
+        sizing: null,
+        rescued: true,
+        rescueClock: 0,
+        servers: 3,
+        capacity: 180,
+        demand: 120,
+        dropped: 0,
+        clock,
+      });
+      const out = direct(s, v);
+      s = out.state;
+      fired.push(...out.fired);
+    }
+    const triage = fired.filter((id) => id.startsWith('C6.triage.'));
+    expect(triage).toContain('C6.triage.01');
+    for (const id of triage) expect(LINES[id].text, id).not.toMatch(/\b(3|4|three|four)\b.*box/i);
+  });
+});
+
+describe('teaching (e): the comms band rules (learning-5)', () => {
+  const HINT: LineId = 'C1.triage.01';
+  const LESSON = LESSON_IDS.find((id) => tagOf(id) === 'HINT') ?? LESSON_IDS[0];
+  const WARNING = WARNING_IDS[0];
+
+  it('dwells max(4, 1 + chars/cps + 1.5, voice + 0.6), with no upper clamp', () => {
+    const rows: [LineId, number, number][] = [
+      [HINT, 30, 0],
+      [HINT, 5, 0],
+      [HINT, 30, 9],
+      ['C1.triage.02', 1000, 0],
+    ];
+    for (const [id, cps, voice] of rows) {
+      const read = READ_LEAD + LINES[id].text.length / cps + READ_TAIL;
+      expect(dwellFor(id, cps, voice), `${id} at ${cps} cps, voice ${voice}`).toBeCloseTo(
+        Math.max(BARK_SECONDS, read, voice > 0 ? voice + VOICE_TAIL : 0),
+      );
+    }
+    expect(dwellFor('C1.triage.02', 1000)).toBe(BARK_SECONDS);
+    expect(dwellFor(HINT, 30, 9)).toBeGreaterThan(8);
+  });
+
+  it('a WARNING cuts a HINT that has shown 1.5 s, waits behind a younger one, and never cuts a lesson', () => {
+    const shown = stepComms(enqueueComms(NO_COMMS, HINT, 0), 0, 30);
+    expect(shown.current?.id).toBe(HINT);
+    const early = enqueueComms(shown, WARNING, WARNING_PREEMPT_AFTER - 0.5);
+    expect(early.current?.until).toBe(shown.current!.until);
+    expect(early.queue[0].id).toBe(WARNING);
+    const late = enqueueComms(shown, WARNING, WARNING_PREEMPT_AFTER);
+    expect(late.current?.until).toBe(WARNING_PREEMPT_AFTER);
+    const lesson = stepComms(enqueueComms(NO_COMMS, LESSON, 0), 0, 30);
+    expect(isLesson(lesson.current!.id)).toBe(true);
+    const kept = enqueueComms(lesson, WARNING, 3);
+    expect(kept.current?.until).toBe(lesson.current!.until);
+  });
+
+  it('drops a stale HINT unshown, keeps LUX, WARNING and lesson lines however long they wait', () => {
+    expect(staleAfter(HINT)).toBe(STALE_SECONDS);
+    expect(staleAfter('C1.triage.02')).toBe(STALE_CHAINED_SECONDS);
+    expect(staleAfter(WARNING)).toBeNull();
+    expect(staleAfter(LESSON)).toBeNull();
+    expect(staleAfter('C1.lux.01')).toBeNull();
+    // A long lesson line ahead; the HINT waits past its stale time and is dropped, the WARNING is not.
+    let s = stepComms(enqueueComms(NO_COMMS, LESSON, 0), 0, 30);
+    s = enqueueComms(s, HINT, 0.1);
+    s = enqueueComms(s, WARNING, 0.2);
+    s = { ...s, current: { ...s.current!, until: STALE_SECONDS + 5, readUntil: STALE_SECONDS + 5 } };
+    s = stepComms(s, STALE_SECONDS + 5, 30);
+    expect(s.dropped).toContain(HINT);
+    expect(s.current?.id).toBe(WARNING);
+    expect(s.history).not.toContain(HINT);
+  });
+
+  it('keeps at most five waiting, dropping the oldest unprotected line', () => {
+    let s = NO_COMMS;
+    const hints = IDS.filter(
+      (id) => LINES[id].kind === 'bark' && metaOf(id) !== null && tagOf(id) === 'HINT' && !isLesson(id),
+    );
+    for (let i = 0; i < COMMS_QUEUE_MAX + 2; i++) s = enqueueComms(s, hints[i], i * 0.1);
+    expect(s.queue.length).toBe(COMMS_QUEUE_MAX);
+    expect(s.queue.map((q) => q.id)).toEqual(hints.slice(2, COMMS_QUEUE_MAX + 2));
+  });
+
+  it('a lesson line mutes chat filler and reactions for 2 s from when it shows', () => {
+    const rand = (): number => 0.5;
+    const c0 = initialChat(0, rand);
+    const inp = emptyChatInputs();
+    inp.clock = 10;
+    const after = stepChat(c0, inp, [{ kind: 'line', id: LESSON, lesson: true }], rand).state;
+    expect(CHAT_PACE.lessonQuiet).toBe(2);
+    expect(after.quietUntil).toBeCloseTo(10 + CHAT_PACE.lessonQuiet);
+    expect(fillerAllowed({ ...after, nextFillerAt: 0 }, 11.9)).toBe(false);
+    expect(fillerAllowed({ ...after, nextFillerAt: 0 }, 12)).toBe(true);
+    // Another band line does not quiet it.
+    const hint = stepChat(c0, inp, [{ kind: 'line', id: HINT, lesson: false }], rand).state;
+    expect(hint.quietUntil).toBe(c0.quietUntil);
+  });
+});
+
+describe('teaching (f): the room and gauge formulas (learning-5)', () => {
+  it('headroomPct, load, segments and colour from demand and wired room', () => {
+    const rows: [number, number, number | null, number, string][] = [
+      // demand, wired, pct, lit, colour
+      [30, 60, 50, 15, 'green'],
+      [90, 120, 25, 8, 'amber'],
+      [120, 120, 0, 0, 'amber'],
+      [250, 120, -108, 0, 'red'],
+      [0, 0, null, 0, 'green'],
+    ];
+    for (const [demand, wired, pct, lit, colour] of rows) {
+      expect(headroomPct(demand, wired), `${demand} of ${wired}`).toBe(pct);
+      expect(litSegments(demand, wired)).toBe(lit);
+      expect(headroomColour(headroomLoad(demand, wired))).toBe(colour);
+    }
+    expect(headroomLoad(30, 0)).toBe(Infinity);
+    expect(headroomLabel(90, 120)).toBe('ROOM LEFT 25% · 90 of 120');
+  });
+
+  it('the needle angle is linear over 0..400 and clamped to the arc', () => {
+    expect(gaugeAngle(0)).toBeCloseTo(Math.PI);
+    expect(gaugeAngle(GAUGE_MAX / 2)).toBeCloseTo(1.5 * Math.PI);
+    expect(gaugeAngle(GAUGE_MAX)).toBeCloseTo(2 * Math.PI);
+    expect(gaugeAngle(-50)).toBeCloseTo(Math.PI);
+    expect(gaugeAngle(1000)).toBeCloseTo(2 * Math.PI);
+    expect(gaugeAngle(100) - gaugeAngle(0)).toBeCloseTo(gaugeAngle(300) - gaugeAngle(200));
+  });
+});
+
+describe('teaching (g): the chat picks its words from what the block feels (learning-5)', () => {
+  it('chatSetFor: ok with nothing dropped, slow under half, down from half', () => {
+    const rows: [number, string][] = [
+      [0, 'ok'],
+      [0.01, 'slow'],
+      [0.49, 'slow'],
+      [0.5, 'down'],
+      [1, 'down'],
+    ];
+    for (const [share, set] of rows) expect(chatSetFor(share), String(share)).toBe(set);
+  });
+
+  it('filler waits 6 to 10 s between posts, from the seeded random alone', () => {
+    expect(fillerDelay(() => 0)).toBe(FILLER_MIN_SECONDS);
+    expect(fillerDelay(() => 0.999999)).toBeCloseTo(FILLER_MAX_SECONDS, 3);
+    expect(fillerDelay(() => 0.5)).toBe(fillerDelay(() => 0.5));
+  });
+});
+
+describe("teaching (h): Lux's face is a function of what she reads (learning-5)", () => {
+  /** Step the cam over `seconds` of HUD clock with the same facts. */
+  function hold(load: { demand: number; wired: number; errorShare?: number }, seconds: number) {
+    let s = initialCam(0);
+    const v = emptyCamView();
+    v.demand = load.demand;
+    v.wiredCapacity = load.wired;
+    v.errorShare = load.errorShare ?? 0;
+    v.now = 100;
+    for (let c = 0; c <= seconds; c += 0.1) {
+      v.clock = c;
+      s = camStep(s, v);
+    }
+    return s;
+  }
+
+  it('calm with room to spare, tense near full, panicking when half is dropping', () => {
+    expect(hold({ demand: 30, wired: 120 }, 5).mood).toBe('calm');
+    expect(hold({ demand: 110, wired: 120 }, 5).mood).toBe('tense');
+    expect(hold({ demand: 250, wired: 120, errorShare: 0.5 }, 5).mood).toBe('panicking');
+  });
+
+  it('is pure: the same state and view give the same step, and neither is changed', () => {
+    const s = initialCam(0);
+    const v = emptyCamView();
+    v.clock = 3;
+    v.demand = 110;
+    v.wiredCapacity = 120;
+    const sCopy = structuredClone(s);
+    const vCopy = structuredClone(v);
+    expect(camStep(s, v)).toEqual(camStep(s, v));
+    expect(s).toEqual(sCopy);
+    expect(v).toEqual(vCopy);
+    // Held still, she holds still.
+    expect(camStep(s, { ...v, paused: true })).toBe(s);
+  });
+});
+
+describe('teaching (i): the what-if ghost shows the room a drop would add (learning-5)', () => {
+  it('+60 for a box the gateway can feed, +0 with no free feed, x2 for the kit, gated by the dial', () => {
+    resetFrame();
+    const r = newRun(1, null);
+    r.now = C.c1;
+    expect(ghostCapacity(r.session.board, BROWNOUT_RULES, [], 'server', SERVER_SLOTS[0])).toBe(
+      BROWNOUT.server.capacity,
+    );
+    rackOne(r);
+    const racked = r.session.board;
+    const box = racked.parts.find((p) => p.kind === 'server')!;
+    // The gateway feeds one part: a second box has nothing to wire it from.
+    expect(ghostCapacity(racked, BROWNOUT_RULES, [], 'server', SERVER_SLOTS[1])).toBe(
+      BROWNOUT.server.capacity,
+    );
+    expect(box.slot).not.toBeNull();
+    expect(ghostCapacity(racked, BROWNOUT_RULES, [], 'overclock', box.slot!)).toBe(
+      BROWNOUT.server.capacity * BROWNOUT.overclock.factor,
+    );
+    // Hidden while the C1 question is open; shown once the guess is SET.
+    expect(ghostOpen(C.c1 + 1, { estimate: null, sizing: null })).toBe(false);
+    expect(ghostOpen(C.c1 + 1, { estimate: 30, sizing: null })).toBe(true);
+  });
+});
+
+describe('teaching (j): the taught trace points each term back at a moment (learning-5)', () => {
+  it('every lesson line that teaches maps its terms, once per line, at the clock it showed', () => {
+    let trace: TaughtTrace = EMPTY_TRACE;
+    let at = 0;
+    for (const id of LESSON_IDS) {
+      at += 10;
+      trace = seeLine(trace, id, at, `23:${String(at).padStart(2, '0')}`);
+    }
+    const terms = termsSeen(trace);
+    expect(terms.length).toBeGreaterThan(0);
+    for (const term of terms) expect(TERM_KEYS).toContain(term);
+    // Each line enters each term it teaches once, with the clock it showed at.
+    expect(new Set(trace.map((e) => `${e.line} ${e.term}`)).size).toBe(trace.length);
+    for (const e of trace) {
+      expect(e.line).not.toBeNull();
+      expect(TEACHES[e.line!] ?? metaOf(e.line!)?.teaches).toContain(e.term);
+      expect(e.at).toBe((LESSON_IDS.indexOf(e.line!) + 1) * 10);
+    }
+    // Seeing a line again adds nothing.
+    expect(seeLine(trace, LESSON_IDS[0], at + 100, '23:59')).toBe(trace);
+  });
+});
+
+describe('the ?idle flag (learning-5)', () => {
+  it('reads ?test&idle=<t> as the sim time the autopilot stops at, and nothing without ?test', () => {
+    expect(idleFrom('?test&autopilot&idle=60')).toBe(60);
+    expect(idleFrom('?test&idle')).toBe(0);
+    expect(idleFrom('?test&idle=nope')).toBe(0);
+    expect(idleFrom('?test&autopilot')).toBeNull();
+    expect(idleFrom('?idle=60')).toBeNull();
+    expect(idleAt(59.9, 60)).toBe(false);
+    expect(idleAt(60, 60)).toBe(true);
+    expect(idleAt(1e6, null)).toBe(false);
+  });
+
+  it('best play acts until the idle time and never after: the board stays as it was', () => {
+    resetFrame();
+    const r = newRun(1, null);
+    r.now = C.c1;
+    bestPlayUntil(r, C.c1 + 30);
+    expect(r.session.board.parts.some((p) => p.kind === 'server')).toBe(true);
+    // Past the idle time with the climb due (overclock before C3): nothing is done.
+    r.now = C.c3 - 10;
+    const before = r.session;
+    bestPlayUntil(r, C.c1 + 30);
+    expect(r.session).toBe(before);
+    // Without the flag the same moment overclocks, as best play does; in node bestPlay is just that.
+    bestPlay(r);
+    expect(r.session.board.parts.some((p) => p.boost !== undefined)).toBe(true);
   });
 });
