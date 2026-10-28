@@ -938,9 +938,7 @@ export class CommsView implements LiveView {
         replay: pagePoint({ x: L.replay.x + L.replay.w / 2, y: L.replay.y + L.replay.h / 2 }, canvas),
         replayed: [...this.replayed],
       },
-      // views/comms.ts still types the field as the placeholder null (a tech-owned file; see the
-      // lane notes): the band reports CommsLeaderState | null here.
-      leader: this.leaderNow(canvas) as unknown as null,
+      leader: this.leaderNow(canvas),
       located: Object.fromEntries(
         registeredNames().map((name) => {
           const p = locate(name);
