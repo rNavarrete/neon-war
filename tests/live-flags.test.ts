@@ -213,7 +213,7 @@ describe('live hook sections', () => {
 describe('lane anchors in the script and the strings file', () => {
   const lanes = ['board', 'gauges', 'comms', 'chat', 'luxcam', 'learning'];
 
-  it('has one empty section per lane in docs/SCRIPT.md, each with the line table header', () => {
+  it('has one section per lane in docs/SCRIPT.md, each with the line table header', () => {
     const lines = script.split('\n');
     for (const lane of lanes) {
       const at = lines.findIndex((l) => l.includes(`<!-- anchor: ${lane} -->`));
@@ -221,8 +221,10 @@ describe('lane anchors in the script and the strings file', () => {
       expect(lines[at].startsWith('### '), lane).toBe(true);
       expect(lines[at + 2], lane).toBe('| ID | Kind | Speaker | When | Line |');
       expect(lines[at + 3], lane).toBe('| --- | --- | --- | --- | --- |');
-      // Empty so far: the next line is blank or the next heading, never a line row.
-      expect(/^\| (C\d|fill)\./.test(lines[at + 4] ?? ''), lane).toBe(false);
+      // Lanes fill their own section: every row under the header is a five-column line row.
+      for (let i = at + 4; i < lines.length && lines[i].startsWith('|'); i++) {
+        expect(lines[i], lane).toMatch(/^\| (C\d|fill)\.[^|]+(\|[^|]*){4}\|$/);
+      }
     }
   });
 
