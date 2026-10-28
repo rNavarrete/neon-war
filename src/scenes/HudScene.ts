@@ -75,7 +75,6 @@ const HUD_ART = [
 const ICONS = ['trust', 'credits', 'warning', 'power-dip', 'cut', 'clock'];
 const AVATARS = ['kenji', 'mrs-okafor', 'young-father', 'old-man-noodles'];
 
-
 /**
  * The job card ignores clicks this soon after a story scene ends: they are the second half of a
  * double-click on the cold open's last line, whose text box sits where the card's OK button lands.

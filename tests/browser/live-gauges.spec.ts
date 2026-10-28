@@ -17,7 +17,7 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
   await dismissJobCard(page);
   await expect.poll(async () => (await hud(page)).title?.live, { timeout: 5_000 }).toBe('waiting');
   let h = await hud(page);
-  expect(h.title!.watching).toBeNull();
+  expect(h.title!.watching).toBe(h.audience?.watching ?? null);
   // Nothing of the title is drawn outside its zone, and nothing of the clock past x 1800.
   expect(h.title!.right).toBeLessThanOrEqual(440);
   expect(h.title!.clockRight).not.toBeNull();
@@ -30,8 +30,8 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
   await reach(page, 'c1');
   await expect.poll(async () => (await hud(page)).title?.live, { timeout: 5_000 }).toBe('live');
   h = await hud(page);
-  // No audience event before the chat lane emits one (chat-3): still no number.
-  expect(h.title!.watching).toBeNull();
+  // WATCHING mirrors the chat's audience (bus `audience`, chat-3): no number until it first emits.
+  expect(h.title!.watching).toBe(h.audience?.watching ?? null);
 
   // gauges-2: best play wired a server before answering, so the dial card dims and says the guess
   // stays free, yet stays open and SETs.
@@ -127,7 +127,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     await reach(page, 'c1');
     await expect.poll(async () => (await lane(page)).title.live, { timeout: 5_000 }).toBe('live');
     let h = await lane(page);
-    expect(h.title.watching).toBeNull();
+    expect(h.title.watching).toBe(h.audience?.watching ?? null);
     expect(h.title.right).toBeLessThanOrEqual(440);
     expect(h.title.clockRight).not.toBeNull();
     expect(h.title.clockRight!).toBeLessThanOrEqual(1800);
@@ -473,7 +473,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     const h = await lane(page);
     expect(h.alert.history.some((e) => e.kind === 'held' && e.at >= 510)).toBe(true);
     expect(h.alert.history.some((e) => e.kind === 'dark')).toBe(false);
-    expect(h.title.watching).toBeNull();
+    expect(h.title.watching).toBe(h.audience?.watching ?? null);
     expect(h.deck.regroup).toBe('spent');
     await shot(page, 'live-gauges-midnight');
   });
