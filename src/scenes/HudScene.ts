@@ -11,11 +11,10 @@ import { BROWNOUT } from '../sim/brownout';
 import type { BannerChoice } from '../sim/economy';
 import { LINES, type LineId, line } from '../strings';
 import { provideTestState } from '../testHook';
-import { BarkView } from './hud/BarkView';
+import { CommsView } from './hud/CommsView';
 import { type ChartView, scopeViewOf } from './hud/ChartView';
 import { ChatView } from './hud/ChatView';
 import { DialView } from './hud/DialView';
-import { type BarkState, NO_BARKS, enqueueBark, stepBarks } from './hud/barks';
 import {
   type ChatEntry,
   type ChatKind,
@@ -138,7 +137,6 @@ export class HudScene extends Phaser.Scene {
   private unsubscribe: (() => void)[] = [];
 
   private director: DirectorState = NEW_DIRECTOR;
-  private barks: BarkState = NO_BARKS;
   private chats: Record<ChatKind, ChatEntry[]> = { block: [], stream: [] };
   /** Both chats in arrival order, for the one chat column. */
   private merged: ChatEntry[] = [];
@@ -184,7 +182,8 @@ export class HudScene extends Phaser.Scene {
   // Views, built in create().
   private chart!: ChartView;
   private dial!: DialView;
-  private barkView!: BarkView;
+  /** The comms band (the registry's comms view): every bark the cue table fires goes to it. */
+  private comms: CommsView | null = null;
   private chatView!: ChatView;
   private warning!: Phaser.GameObjects.Container;
   private warningNumber!: Phaser.GameObjects.Text;
@@ -226,6 +225,7 @@ export class HudScene extends Phaser.Scene {
 
     this.flags = flagsFrom(window.location.search);
     this.views = createViews();
+    this.comms = (this.views.find((v) => v instanceof CommsView) as CommsView | undefined) ?? null;
     provideTestState('live', () => liveTestState(this.game.canvas.getBoundingClientRect(), this.views));
     provideTestState('perf', () => {
       const board = this.scene.get(SCENES.board) as Phaser.Scene | null;
@@ -260,7 +260,6 @@ export class HudScene extends Phaser.Scene {
       set: (value) => this.onDialSet(value),
     });
     this.chatView = new ChatView(this, RIGHT.chat, RIGHT.chatTitle, RIGHT.chatBody, 'LIVE CHAT');
-    this.barkView = new BarkView(this);
     this.buildDeck();
     this.buildDipMark();
     this.buildSizingPrompt();
@@ -316,7 +315,6 @@ export class HudScene extends Phaser.Scene {
     this.sizingPanel.setVisible(sizingOpen);
 
     this.runDirector(f, sizingOpen);
-    this.updateBarks();
     this.updateFiller(r);
   }
 
@@ -358,7 +356,7 @@ export class HudScene extends Phaser.Scene {
     this.lastFrame = null;
     this.occurrences.length = 0;
     this.director = NEW_DIRECTOR;
-    this.barks = NO_BARKS;
+    this.comms?.reset();
     this.chats = { block: [], stream: [] };
     this.merged = [];
     this.rand = seededRandom(CHAT_SEED);
@@ -774,7 +772,7 @@ export class HudScene extends Phaser.Scene {
     bus.emit('cue', { id, kind: chat ? 'chat' : 'bark', at: this.clock });
     if (id === CHAT_SILENCE) return;
     if (chat) this.say(chat, id);
-    else if (LINES[id].kind === 'bark') this.barks = enqueueBark(this.barks, id);
+    else if (LINES[id].kind === 'bark') this.comms?.enqueue(id);
   }
 
   private say(chat: ChatKind, id: LineId): void {
@@ -782,17 +780,6 @@ export class HudScene extends Phaser.Scene {
     this.chats[chat] = pushChat(this.chats[chat], entry);
     this.merged = pushChat(this.merged, entry);
     this.chatView.show(this.merged);
-  }
-
-  private updateBarks(): void {
-    const next = stepBarks(this.barks, this.clock);
-    if (next === this.barks) return;
-    this.barks = next;
-    const id = next.current?.id ?? null;
-    if (id && id !== this.barkView.shown && LINES[id].speaker.startsWith('TRIAGE')) {
-      bus.emit('sfx', { key: LINES[id].speaker.includes('panicking') ? 'triage-panic' : 'triage-blip' });
-    }
-    this.barkView.show(id);
   }
 
   private updateFiller(r: Run): void {
@@ -903,11 +890,7 @@ export class HudScene extends Phaser.Scene {
         open: built && this.sizingPanel.visible,
         ...this.toPagePoint(SIZING_AT.x, SIZING_AT.y),
       },
-      bark: {
-        current: this.barks.current?.id ?? null,
-        text: this.barks.current ? line(this.barks.current.id) : null,
-        history: [...this.barks.history],
-      },
+      bark: this.comms?.barkSnapshot() ?? { current: null, text: null, history: [] },
       cues: { fired: [...this.firedCues], silenced: chatSilenced(this.director) },
       chat: {
         block: this.chats.block.map((e) => `${e.who}: ${e.text}`),
@@ -940,13 +923,14 @@ export class HudScene extends Phaser.Scene {
       ['dial', 'dialCard', this.dial.container],
       ['sizing', 'sizingPrompt', this.sizingPanel],
       ['chat', 'chat', this.chatView.panel],
-      ['comms', 'comms', this.barkView.container],
       ['deck.1', 'deck', this.keys[KEY.regroup].cap],
       ['deck.2', 'deck', this.keys[KEY.cut].cap],
       ['deck.3', 'deck', this.keys[KEY.set].cap],
       ['jobCard', 'jobCard', this.cardArt],
       ['banner', 'banner', this.banner],
     ];
+    const band = this.comms?.container;
+    if (band) pieces.push(['comms', 'comms', band]);
     return pieces.map(([id, home, o]) => {
       const b = o.getBounds();
       const shown = id === 'jobCard' ? this.card.visible : o.visible;
