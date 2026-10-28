@@ -2,32 +2,41 @@ import Phaser from 'phaser';
 import { bus } from '../game/bus';
 import { Director } from '../game/director';
 import { run } from '../game/run';
-import { type Part, type PartKind, wireKey } from '../sim/board';
+import { type Part, wireKey } from '../sim/board';
 import { provideTestState } from '../testHook';
 import { balancerGiven, placeBalancer } from './board/crew';
 import type { BoardTestState } from './board/hook';
 import {
+  type Box,
   BOARD_AREA,
+  CHANNEL,
   INBOUND_LANES,
   LB_SLOT,
   LB_SLOT_ID,
   PAD_SIZE,
-  PART_SIZE,
   SERVER_PADS,
+  TABLE,
+  TABLE_FACE,
   TRAY_AREA,
   WIRE_PICK,
   type Point,
+  channelAt,
   distToPath,
   inBox,
   partAt,
   partBox,
   partCentre,
+  partSize,
+  project,
   slotAt,
+  slotBox,
+  slotScale,
   pathLength,
   pointAlong,
   toPage,
   wirePath,
 } from './board/layout';
+import { ZONES, pageRect } from './live/layout';
 import { PacketPool, progress, travelSeconds } from './board/packets';
 import { LOCKED_KINDS, type TrayCard, lockedReason, trayCards } from './board/tray';
 import { type PartLook, loadColour, loadLabel, partLook } from './board/view';
@@ -49,7 +58,6 @@ const BUTTON_RADIUS = 28;
 
 const ART: Readonly<Record<string, string>> = {
   sky: 'art/bg/skyline.webp',
-  goggles: 'art/hud/goggles-overlay.webp',
   gateway: 'art/board/gateway.webp',
   server: 'art/board/server.webp',
   'server-hot': 'art/board/server-hot.webp',
@@ -104,13 +112,17 @@ const INBOUND = INBOUND_LANES.map((path, i): WireGeom => {
     travel: travelSeconds(length),
   };
 });
+/** The inbound lanes by key, so the packet loop finds one without allocating a closure. */
+const INBOUND_BY_KEY: ReadonlyMap<string, WireGeom> = new Map(INBOUND.map((w) => [w.key, w]));
 const RED = 0xff4d5e;
 /** Each inbound lane's share of the block's demand, scaled up so the incoming stream reads as busy. */
 const INBOUND_STAGGER = [1.7, 2.1, 1.9] as const;
 /** strokePoints reads only x and y, so a plain point list will do. */
 const asVectors = (path: Point[]) => path as unknown as Phaser.Math.Vector2[];
-/** Board slab: a table tilted away from the viewer with a lit front edge, baked once into a texture. */
-const SLAB_RIM = 26;
+/** How much the skyline above the table is dimmed, so the board reads first but the city still shows. */
+const SKY_DIM = 0.3;
+/** Where the skyline's horizon sits in its art (a share of its height), and where it goes on screen. */
+const SKY_HORIZON = { art: 0.5, screen: TABLE.far.y - 8 } as const;
 
 type Drag =
   | { kind: 'card'; id: string }
@@ -156,8 +168,9 @@ export class BoardScene extends Phaser.Scene {
   private pointer = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 };
   private offBus: (() => void) | null = null;
   private director: Director | null = null;
+  private sky!: Phaser.GameObjects.Image;
   private readonly travelOf = (wire: string): number =>
-    (this.wireByKey.get(wire) ?? INBOUND.find((w) => w.key === wire))?.travel ?? 1;
+    (this.wireByKey.get(wire) ?? INBOUND_BY_KEY.get(wire))?.travel ?? 1;
 
   constructor() {
     super(SCENES.board);
@@ -187,10 +200,11 @@ export class BoardScene extends Phaser.Scene {
 
     this.drawBackdrop();
 
-    // Slot pads: six server slots and the load balancer's slot between the gateway and the servers.
+    // Slot pads: six server slots, each scaled by its row, and the load balancer's slot between the
+    // gateway and the servers.
     for (const [id, p] of Object.entries(SERVER_PADS)) {
       const pad = this.add.image(p.x, p.y, 'slot-empty');
-      pad.setScale(PAD_SIZE.w / pad.width).setAlpha(0.8);
+      pad.setScale((PAD_SIZE.w * slotScale(id)) / pad.width).setAlpha(0.8);
       this.pads.set(id, pad);
     }
     this.lbPad = this.add.image(LB_SLOT.x, LB_SLOT.y + 10, 'slot-locked');
@@ -201,10 +215,6 @@ export class BoardScene extends Phaser.Scene {
     // Parts and packets are added lazily; keep them above the wires by depth.
     this.wiresG.setDepth(1);
     this.previewG.setDepth(4);
-
-    // Lux's goggles frame the board; the tray and pointer feedback sit on the lens, above it.
-    const lens = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'goggles');
-    lens.setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setDepth(10);
 
     this.drawTray();
 
@@ -263,44 +273,54 @@ export class BoardScene extends Phaser.Scene {
   // ---- drawing -------------------------------------------------------------------------------
 
   private drawBackdrop(): void {
-    // The city behind the board, dimmed so the board reads first.
-    const sky = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'sky');
-    sky.setScale(Math.max(GAME_WIDTH / sky.width, GAME_HEIGHT / sky.height));
-    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05070f, 0.55).setOrigin(0);
+    // The screen behind every zone is dark; the HUD's panels sit on it.
+    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05070f, 1).setOrigin(0);
 
-    const { left, right, top, bottom } = BOARD_AREA;
-    const w = right - left;
-    const h = bottom - top;
-    const slab = 'board-slab';
-    if (!this.textures.exists(slab)) this.bakeSlab(slab, w, h);
-    this.add.image(left - 12, top - 12, slab).setOrigin(0);
+    // The feed: the city's skyline across the top of the zone, its horizon just behind the table's
+    // far edge, cropped to the zone and dimmed a little so the board reads first.
+    const feed = ZONES.feed;
+    const sky = this.add.image(feed.x, 0, 'sky').setOrigin(0);
+    const scale = feed.w / sky.width;
+    const top = SKY_HORIZON.screen - SKY_HORIZON.art * sky.height * scale;
+    sky.setScale(scale).setY(top);
+    sky.setCrop(0, (feed.y - top) / scale, sky.width, feed.h / scale);
+    this.sky = sky;
+    this.add.rectangle(feed.x, feed.y, feed.w, feed.h, 0x05070f, SKY_DIM).setOrigin(0);
+
+    const { left, top: areaTop } = BOARD_AREA;
+    const slab = 'board-table';
+    if (!this.textures.exists(slab)) this.bakeTable(slab);
+    this.add.image(left, areaTop, slab).setOrigin(0);
     this.bakePacket();
 
-    // The lane the block's traffic arrives on: a groove cut through the rim into the gateway.
+    // The channel the block's traffic arrives along: a mouth on the feed's left edge narrowing to
+    // the gateway's port, with amber banks.
+    const { mouth, port } = CHANNEL;
     const lane = this.add.graphics();
-    const [top0, , bottom0] = INBOUND_LANES.map((l) => l[0].y);
-    const x0 = INBOUND_LANES[1][0].x;
-    const x1 = INBOUND_LANES[0][1].x + 10;
-    lane.fillStyle(0x03050b, 0.9).fillRect(x0, top0 - 20, x1 - x0, bottom0 - top0 + 40);
-    lane
-      .lineStyle(3, AMBER, 0.55)
-      .lineBetween(x0, top0 - 20, x1, top0 - 20)
-      .lineBetween(x0, bottom0 + 20, x1, bottom0 + 20);
-    lane
-      .lineStyle(10, AMBER, 0.08)
-      .lineBetween(x0, top0 - 20, x1, top0 - 20)
-      .lineBetween(x0, bottom0 + 20, x1, bottom0 + 20);
+    const walls = [
+      { x: mouth.x, y: mouth.top },
+      { x: port.x, y: port.top },
+      { x: port.x, y: port.bottom },
+      { x: mouth.x, y: mouth.bottom },
+    ] as Phaser.Math.Vector2[];
+    lane.fillStyle(0x03050b, 0.92).fillPoints(walls, true);
+    for (const [width, alpha] of [
+      [10, 0.08],
+      [3, 0.6],
+    ] as const) {
+      lane
+        .lineStyle(width, AMBER, alpha)
+        .lineBetween(mouth.x, mouth.top, port.x, port.top)
+        .lineBetween(mouth.x, mouth.bottom, port.x, port.bottom);
+    }
     this.inboundG = this.add.graphics().setDepth(1);
   }
 
-  /** Draw the board slab once and keep it as a texture: one image to draw each frame. */
-  private bakeSlab(key: string, w: number, h: number): void {
-    const pad = 12;
+  /** Draw the table once, in the feed's own coordinates, and keep it as a texture: one image a frame. */
+  private bakeTable(key: string): void {
     const g = this.make.graphics({}, false);
-    const W = w + pad * 2;
-    const H = h + pad * 2 + SLAB_RIM;
-    drawTiltedSlab(g, pad, w, h);
-    g.generateTexture(key, W, H);
+    drawTable(g, BOARD_AREA.left, BOARD_AREA.top);
+    g.generateTexture(key, BOARD_AREA.right - BOARD_AREA.left, BOARD_AREA.bottom - BOARD_AREA.top);
     g.destroy();
   }
 
@@ -439,15 +459,17 @@ export class BoardScene extends Phaser.Scene {
     const c = partCentre(part);
     if (!c) return null;
     if (!v) {
-      const size = PART_SIZE[part.kind];
+      const size = partSize(part);
+      const s = slotScale(part.slot);
       const shadow = this.add
-        .ellipse(c.x + 8, c.y + size.h / 2 - 6, size.w * 1.05, 26, 0x000000, 0.55)
+        .ellipse(c.x + 8 * s, c.y + size.h / 2 - 6 * s, size.w * 1.05, 26 * s, 0x000000, 0.55)
         .setDepth(1.5);
-      const img = this.add.image(c.x, c.y, look.art).setDepth(3);
+      // Nearer parts (lower on screen) draw over farther ones.
+      const img = this.add.image(c.x, c.y, look.art).setDepth(3 + c.y / 1000);
       const label = this.add
-        .text(c.x, c.y - PART_SIZE[part.kind].h / 2 - 8, '', {
+        .text(c.x, c.y - size.h / 2 - 6, '', {
           fontFamily: 'monospace',
-          fontSize: '20px',
+          fontSize: `${Math.round(18 * s)}px`,
           fontStyle: 'bold',
           color: '#2de2e6',
           stroke: '#05070f',
@@ -461,14 +483,14 @@ export class BoardScene extends Phaser.Scene {
     if (v.art !== look.art) {
       v.art = look.art;
       v.img.setTexture(look.art);
-      v.img.setScale(this.artScale(part.kind, v.img));
+      v.img.setScale(this.artScale(part, v.img));
     }
     return v;
   }
 
-  /** Scale that fits a part's art inside its box on the board without upscaling past its size. */
-  private artScale(kind: PartKind, img: Phaser.GameObjects.Image): number {
-    const size = PART_SIZE[kind];
+  /** Scale that fits a part's art inside its box on the board (smaller on the rack's far row). */
+  private artScale(part: Pick<Part, 'kind' | 'slot'>, img: Phaser.GameObjects.Image): number {
+    const size = partSize(part);
     return Math.min(size.w / img.width, size.h / img.height);
   }
 
@@ -556,13 +578,13 @@ export class BoardScene extends Phaser.Scene {
     return t;
   }
 
-  /** The incoming lane's chevrons, drifting toward the gateway faster as demand climbs. */
+  /** The channel's chevrons, drifting toward the gateway faster as demand climbs. */
   private drawInbound(demand: number, dt: number): void {
     const g = this.inboundG;
     g.clear();
     const lane = INBOUND_LANES[1];
-    const x0 = lane[0].x + 40;
-    const x1 = lane[1].x - 60;
+    const x0 = CHANNEL.mouth.x + 12;
+    const x1 = CHANNEL.port.x - 24;
     const y = lane[0].y;
     const speed = 30 + Math.min(demand, 300) * 0.6;
     this.chevronShift = (this.chevronShift + dt * speed) % 34;
@@ -588,7 +610,7 @@ export class BoardScene extends Phaser.Scene {
     for (let i = 0; i < this.packetSprites.length; i++) {
       const s = this.packetSprites[i];
       const p = items[i];
-      const w = p?.active ? (this.wireByKey.get(p.wire) ?? INBOUND.find((x) => x.key === p.wire)) : undefined;
+      const w = p?.active ? (this.wireByKey.get(p.wire) ?? INBOUND_BY_KEY.get(p.wire)) : undefined;
       if (!p || !w) {
         s.setVisible(false);
         continue;
@@ -746,6 +768,7 @@ export class BoardScene extends Phaser.Scene {
     const board = r.session.board;
     const rect = this.game.canvas.getBoundingClientRect();
     const page = (x: number, y: number) => toPage({ x, y }, rect, { width: GAME_WIDTH, height: GAME_HEIGHT });
+    const pageBox = (b: Box) => pageRect({ x: b.x - b.w / 2, y: b.y - b.h / 2, w: b.w, h: b.h }, rect);
     const offline = r.offline;
     const slots = [
       {
@@ -753,17 +776,31 @@ export class BoardScene extends Phaser.Scene {
         ...page(LB_SLOT.x, LB_SLOT.y),
         part: null as string | null,
         locked: !this.balancerUnlocked,
+        rect: pageBox(slotBox(LB_SLOT_ID)!),
       },
       ...Object.entries(SERVER_PADS).map(([id, pad]) => ({
         id,
         ...page(pad.x, pad.y),
         part: board.parts.find((p) => p.slot === id)?.id ?? null,
         locked: false,
+        rect: pageBox(slotBox(id)!),
       })),
     ];
     slots[0].part = board.parts.find((p) => p.kind === 'balancer')?.id ?? null;
     const round = (n: number) => Math.round(n * 1000) / 1000;
+    const feed = ZONES.feed;
+    const skyShown = this.sky.visible && this.sky.alpha > 0;
     return {
+      area: pageRect(feed, rect),
+      backdrop: {
+        // The band between the feed's top and the table's far edge, where only the city shows.
+        skyline: skyShown
+          ? pageRect({ x: feed.x, y: feed.y, w: feed.w, h: TABLE.far.y - feed.y }, rect)
+          : null,
+        goggles:
+          this.textures.exists('goggles') ||
+          this.children.list.some((o) => (o as Phaser.GameObjects.Image).texture?.key === 'goggles'),
+      },
       now: round(r.now),
       speed: r.speed,
       paused: r.paused,
@@ -781,6 +818,7 @@ export class BoardScene extends Phaser.Scene {
             kind: part.kind,
             slot: part.slot,
             ...page(c.x, c.y),
+            rect: pageBox(partBox(part)!),
             status: look.status,
             left: round(look.left),
             boosted: part.boost !== undefined,
@@ -815,80 +853,72 @@ export class BoardScene extends Phaser.Scene {
   }
 }
 
-// ---- the board slab ---------------------------------------------------------------------------
+// ---- the table ---------------------------------------------------------------------------------
 
 /**
- * A table tilted away from the viewer, like the mockup: the far edge narrower, the grid lines
- * converging, a deep lit front edge. Parts stay where the flat layout puts them.
+ * The table the board stands on, seen tilted away like the mockup: the far edge narrower, the
+ * grid's columns leaning in, rows closer together toward the far edge, a lit front face. Drawn
+ * through project(u, v) in game space, shifted by (ox, oy) into the baked texture.
  */
-function drawTiltedSlab(g: Phaser.GameObjects.Graphics, pad: number, w: number, h: number): void {
-  const inset = 70;
-  const tl = { x: pad + inset, y: pad };
-  const tr = { x: pad + w - inset, y: pad };
-  const br = { x: pad + w, y: pad + h };
-  const bl = { x: pad, y: pad + h };
-  const face = SLAB_RIM;
-  // Shadow, front face, top.
-  g.fillStyle(0x000000, 0.6).fillPoints(
-    [
-      { x: tl.x + 12, y: tl.y + 20 },
-      { x: tr.x + 12, y: tr.y + 20 },
-      { x: br.x + 12, y: br.y + face + 10 },
-      { x: bl.x + 12, y: bl.y + face + 10 },
-    ] as Phaser.Math.Vector2[],
+function drawTable(g: Phaser.GameObjects.Graphics, ox: number, oy: number): void {
+  const at = (u: number, v: number) => {
+    const p = project(u, v);
+    return { x: p.x - ox, y: p.y - oy };
+  };
+  const quad = (pts: { x: number; y: number }[]) => pts as Phaser.Math.Vector2[];
+  const tl = at(0, 0);
+  const tr = at(1, 0);
+  const br = at(1, 1);
+  const bl = at(0, 1);
+  const face = TABLE_FACE;
+  // Shadow on the rooftops, the front face, then the top.
+  g.fillStyle(0x000000, 0.55).fillPoints(
+    quad([
+      { x: tl.x + 6, y: tl.y + 8 },
+      { x: tr.x + 6, y: tr.y + 8 },
+      { x: br.x + 6, y: br.y + face + 6 },
+      { x: bl.x + 6, y: bl.y + face + 6 },
+    ]),
     true,
   );
   g.fillStyle(0x05080f, 1).fillPoints(
-    [bl, br, { x: br.x - 6, y: br.y + face }, { x: bl.x + 6, y: bl.y + face }] as Phaser.Math.Vector2[],
+    quad([bl, br, { x: br.x - 4, y: br.y + face }, { x: bl.x + 4, y: bl.y + face }]),
     true,
   );
-  g.fillStyle(0x0b1322, 1).fillPoints([tl, tr, br, bl] as Phaser.Math.Vector2[], true);
-  // Rows get taller toward the viewer; columns converge toward the far edge.
-  const rows = 12;
-  const cols = 20;
-  const yAt = (k: number) => pad + h * Math.pow(k, 1.25);
-  const xAt = (k: number, y: number) => {
-    const t = (y - pad) / h;
-    const left = tl.x + (bl.x - tl.x) * t;
-    const right = tr.x + (br.x - tr.x) * t;
-    return left + (right - left) * k;
-  };
+  g.fillStyle(0x0b1322, 1).fillPoints(quad([tl, tr, br, bl]), true);
+  // Rows get deeper toward the viewer; columns lean in toward the far edge.
+  const rows = 10;
+  const cols = 24;
+  const vAt = (k: number) => Math.pow(k, 1.15);
   for (let r = 0; r < rows; r++) {
+    const v0 = vAt(r / rows);
+    const v1 = vAt((r + 1) / rows);
     for (let c = 0; c < cols; c++) {
       if ((r + c) % 2) continue;
-      const y0 = yAt(r / rows);
-      const y1 = yAt((r + 1) / rows);
       g.fillStyle(0x0f1a2e, 1).fillPoints(
-        [
-          { x: xAt(c / cols, y0), y: y0 },
-          { x: xAt((c + 1) / cols, y0), y: y0 },
-          { x: xAt((c + 1) / cols, y1), y: y1 },
-          { x: xAt(c / cols, y1), y: y1 },
-        ] as Phaser.Math.Vector2[],
+        quad([at(c / cols, v0), at((c + 1) / cols, v0), at((c + 1) / cols, v1), at(c / cols, v1)]),
         true,
       );
     }
   }
   for (let r = 1; r < rows; r++) {
-    const y = yAt(r / rows);
-    g.lineStyle(r % 3 ? 1 : 2, CYAN, (r % 3 ? 0.07 : 0.15) + 0.06 * (r / rows)).lineBetween(
-      xAt(0, y),
-      y,
-      xAt(1, y),
-      y,
-    );
+    const v = vAt(r / rows);
+    const a = at(0, v);
+    const b = at(1, v);
+    g.lineStyle(r % 3 ? 1 : 2, CYAN, (r % 3 ? 0.06 : 0.13) + 0.05 * v).lineBetween(a.x, a.y, b.x, b.y);
   }
   for (let c = 1; c < cols; c++) {
-    g.lineStyle(c % 4 ? 1 : 2, CYAN, c % 4 ? 0.08 : 0.16).lineBetween(
-      xAt(c / cols, pad),
-      pad,
-      xAt(c / cols, pad + h),
-      pad + h,
-    );
+    const a = at(c / cols, 0);
+    const b = at(c / cols, 1);
+    g.lineStyle(c % 4 ? 1 : 2, CYAN, c % 4 ? 0.07 : 0.14).lineBetween(a.x, a.y, b.x, b.y);
   }
   // Lit edges: the far rim dim, the near rim bright, small status lights along the front face.
-  g.lineStyle(3, CYAN, 0.45).strokePoints([tl, tr, br, bl] as Phaser.Math.Vector2[], true);
-  g.lineStyle(4, CYAN, 0.9).lineBetween(bl.x, bl.y, br.x, br.y);
-  for (let x = bl.x + 40; x < br.x - 40; x += 46)
-    g.fillStyle(x % 92 < 46 ? CYAN : AMBER, 0.8).fillRect(x, bl.y + 10, 14, 4);
+  g.lineStyle(2, CYAN, 0.4).strokePoints(quad([tl, tr, br, bl]), true);
+  g.lineStyle(3, CYAN, 0.85).lineBetween(bl.x, bl.y, br.x, br.y);
+  for (let x = bl.x + 40; x < br.x - 40; x += 46) {
+    g.fillStyle(Math.round(x) % 92 < 46 ? CYAN : AMBER, 0.75).fillRect(x, bl.y + face / 2 - 2, 14, 4);
+  }
+  // The channel's mouth is cut through the table's left rim, under the stream coming in.
+  const mouth = channelAt(CHANNEL.mouth.x);
+  g.fillStyle(0x03050b, 1).fillRect(0, mouth.top - oy, at(0, 0.5).x + 8, mouth.bottom - mouth.top);
 }

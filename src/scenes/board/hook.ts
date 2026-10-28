@@ -2,22 +2,30 @@
 // pixels, so browser tests can drive the mouse without hard-coded coordinates.
 
 import type { PartKind } from '../../sim/board';
+import type { Rect } from '../live/layout';
 import type { Point } from './layout';
 import type { PartStatus } from './view';
 
 export interface BoardTestState {
+  /** The feed zone the board draws in (BOARD_AREA), in page CSS pixels. */
+  area: Rect;
+  /** What sits behind the board: the skyline band above the table (null when hidden) and the goggles overlay (gone). */
+  backdrop: { skyline: Rect | null; goggles: boolean };
   /** Seconds since the clock opened, and the test speed multiplier. */
   now: number;
   speed: number;
   paused: boolean;
   credits: number;
   demand: number;
-  slots: (Point & { id: string; part: string | null; locked: boolean })[];
+  /** Each slot's pad centre, and `rect` its drop box, in page CSS pixels. */
+  slots: (Point & { id: string; part: string | null; locked: boolean; rect: Rect })[];
   tray: (Point & { id: string; label: string; locked: boolean })[];
   parts: (Point & {
     id: string;
     kind: PartKind;
     slot: string | null;
+    /** The part's box as drawn (its hit box), in page CSS pixels. */
+    rect: Rect;
     status: PartStatus;
     /** Seconds left of a boot or reboot. */
     left: number;

@@ -1,10 +1,16 @@
 // Where everything sits on the board, in 1920x1080 game space, and the hit tests the board's
 // pointer handling uses. Pure: no Phaser, so the geometry is unit-tested in node.
 //
-// The board keeps its parts and slots inside x 380-1540, y 140-880; the tray sits in the bottom
-// centre (x 560-1360, y > 880). Everything else on screen belongs to the HUD.
+// The board draws two zones of the Live screen: `feed` (a tilted table under the city's skyline)
+// and `inventory` (the tray of parts). Both areas come from src/scenes/live/layout.ts, the only
+// geometry source for the Live screen (docs/LIVE.md); everything else on screen is the HUD's.
+//
+// The table is seen from above and in front: its far edge is narrower than its near edge, and the
+// rack's rows grow toward the viewer (0.88, 1.00, 1.06). Every coordinate here is already
+// projected (screen pixels), so the hit tests and the hook read them exactly as they are drawn.
 
 import type { Part, PartKind } from '../../sim/board';
+import { ZONES, rectToArea } from '../live/layout';
 
 export interface Point {
   readonly x: number;
@@ -17,22 +23,56 @@ export interface Box extends Point {
   readonly h: number;
 }
 
-export const BOARD_AREA = { left: 380, right: 1540, top: 140, bottom: 880 } as const;
+/** The feed zone as edges: {left 455, right 1910, top 110, bottom 640}. */
+export const BOARD_AREA = rectToArea(ZONES.feed);
+/** The tray of parts, bottom centre. */
 export const TRAY_AREA = { left: 560, right: 1360, top: 890, bottom: 1072 } as const;
 
+/** The table top: its far edge (y 222, x 575-1790) and its near edge (y 612, x 462-1903). */
+export const TABLE = {
+  far: { y: 222, left: 575, right: 1790 },
+  near: { y: 612, left: 462, right: 1903 },
+} as const;
+/** How deep the table's lit front face is, below the near edge. */
+export const TABLE_FACE = 18;
+
+/**
+ * A point on the table top in screen pixels: u runs 0 to 1 from the left side to the right side,
+ * v from the far edge (0) to the near edge (1). The far edge is narrower, so lines of constant u
+ * lean in away from the viewer.
+ */
+export function project(u: number, v: number): Point {
+  const { far, near } = TABLE;
+  const left = far.left + (near.left - far.left) * v;
+  const right = far.right + (near.right - far.right) * v;
+  return { x: left + (right - left) * u, y: far.y + (near.y - far.y) * v };
+}
+
 /** Centre of the gateway, where the block's traffic comes in. */
-export const GATEWAY: Point = { x: 600, y: 510 };
+export const GATEWAY: Point = { x: 640, y: 412 };
 /** Centre of the load balancer's slot, between the gateway and the servers. */
-export const LB_SLOT: Point = { x: 790, y: 510 };
+export const LB_SLOT: Point = { x: 870, y: 412 };
 /** Centre of the residents' database, at the end of the line. */
-export const DATABASE: Point = { x: 1445, y: 510 };
+export const DATABASE: Point = { x: 1760, y: 412 };
 
 /** Id of the load balancer's slot. It is not one of the sim's server slots. */
 export const LB_SLOT_ID = 'lb';
 
-/** The server rack: two columns of three pads between the balancer and the database. */
-const RACK_COLUMNS = [1020, 1230] as const;
-const RACK_ROWS = [330, 530, 730] as const;
+export interface RackRow {
+  /** Where the row's servers stand (their centres). */
+  readonly y: number;
+  /** How big things draw on this row, against the mid row. */
+  readonly scale: number;
+  /** The two columns' centres on this row: they lean in toward the far edge. */
+  readonly x: readonly [number, number];
+}
+
+/** The server rack: three rows (far, mid, near) of two columns. */
+export const RACK_ROWS: readonly RackRow[] = [
+  { y: 300, scale: 0.88, x: [1077, 1303] },
+  { y: 412, scale: 1.0, x: [1070, 1310] },
+  { y: 524, scale: 1.06, x: [1063, 1317] },
+];
 
 /** Each server slot's column and row in the rack. The first column fills first (s1-s3). */
 export const SERVER_GRID: Readonly<Record<string, { col: number; row: number }>> = {
@@ -44,25 +84,37 @@ export const SERVER_GRID: Readonly<Record<string, { col: number; row: number }>>
   s6: { col: 1, row: 2 },
 };
 
-/** Server slot pads, by the sim's slot id. A server stands on its pad. */
+/** How far a server's centre sits above its pad's centre at the mid row (scaled by the row). */
+export const SERVER_RISE = 30;
+
+/** The draw scale of a server slot's row; 1 for anything outside the rack. */
+export function slotScale(slot: string | null | undefined): number {
+  const g = slot ? SERVER_GRID[slot] : undefined;
+  return g ? RACK_ROWS[g.row].scale : 1;
+}
+
+/** Server slot pads, by the sim's slot id. A server stands on its pad, SERVER_RISE above it. */
 export const SERVER_PADS: Readonly<Record<string, Point>> = Object.fromEntries(
-  Object.entries(SERVER_GRID).map(([id, g]) => [id, { x: RACK_COLUMNS[g.col], y: RACK_ROWS[g.row] }]),
+  Object.entries(SERVER_GRID).map(([id, g]) => {
+    const row = RACK_ROWS[g.row];
+    return [id, { x: row.x[g.col], y: row.y + SERVER_RISE * row.scale }];
+  }),
 );
 
-/** How far a server's centre sits above its pad's centre. */
-export const SERVER_RISE = 50;
-
-/** Drawn size of each kind on the board (its hit box), in game pixels. */
+/** Drawn size of each kind on the board (its hit box), in game pixels; a server's at the mid row. */
 export const PART_SIZE: Readonly<Record<PartKind, { w: number; h: number }>> = {
   gateway: { w: 110, h: 190 },
   balancer: { w: 140, h: 100 },
-  server: { w: 104, h: 150 },
+  server: { w: 80, h: 114 },
   database: { w: 150, h: 140 },
 };
 
-/** Size of a slot pad and the box that counts as dropping onto a slot. */
-export const PAD_SIZE = { w: 132, h: 78 } as const;
-const SLOT_HIT = { w: 150, h: 190 } as const;
+/** Size of a slot pad at the mid row (scaled by the row). */
+export const PAD_SIZE = { w: 116, h: 69 } as const;
+/** The load balancer slot's hit box. */
+const LB_HIT = { w: 150, h: 150 } as const;
+/** How far a server slot's hit box reaches above the server's centre, at the mid row. */
+const SLOT_REACH = 40;
 
 /** Centre of a part on the board, or null if it has nowhere to stand. */
 export function partCentre(part: Pick<Part, 'kind' | 'slot'>): Point | null {
@@ -74,22 +126,48 @@ export function partCentre(part: Pick<Part, 'kind' | 'slot'>): Point | null {
     case 'balancer':
       return LB_SLOT;
     case 'server': {
-      const pad = part.slot ? SERVER_PADS[part.slot] : undefined;
-      return pad ? { x: pad.x, y: pad.y - SERVER_RISE } : null;
+      const g = part.slot ? SERVER_GRID[part.slot] : undefined;
+      if (!g) return null;
+      const row = RACK_ROWS[g.row];
+      return { x: row.x[g.col], y: row.y };
     }
   }
 }
 
-export function partBox(part: Pick<Part, 'kind' | 'slot'>): Box | null {
-  const c = partCentre(part);
-  return c ? { ...c, ...PART_SIZE[part.kind] } : null;
+/** A part's drawn size: a server's shrinks toward the far row. */
+export function partSize(part: Pick<Part, 'kind' | 'slot'>): { w: number; h: number } {
+  const size = PART_SIZE[part.kind];
+  if (part.kind !== 'server') return size;
+  const s = slotScale(part.slot);
+  return { w: size.w * s, h: size.h * s };
 }
 
-/** The point the slot's hit box is centred on (a server slot's box covers the pad and the server on it). */
-export function slotBox(slot: string): Box | null {
-  if (slot === LB_SLOT_ID) return { ...LB_SLOT, w: SLOT_HIT.w, h: 150 };
+export function partBox(part: Pick<Part, 'kind' | 'slot'>): Box | null {
+  const c = partCentre(part);
+  return c ? { ...c, ...partSize(part) } : null;
+}
+
+/** A server slot's pad as drawn: centred on the pad, scaled by its row. */
+export function padBox(slot: string): Box | null {
   const pad = SERVER_PADS[slot];
-  return pad ? { x: pad.x, y: pad.y - 35, ...SLOT_HIT } : null;
+  if (!pad) return null;
+  const s = slotScale(slot);
+  return { x: pad.x, y: pad.y, w: PAD_SIZE.w * s, h: PAD_SIZE.h * s };
+}
+
+/**
+ * The box that counts as dropping onto a slot. A server slot's runs from a little above the
+ * server's centre down to the bottom of its pad, as wide as the pad, so the three rows' boxes
+ * never overlap. The balancer's is a square on its slot.
+ */
+export function slotBox(slot: string): Box | null {
+  if (slot === LB_SLOT_ID) return { ...LB_SLOT, ...LB_HIT };
+  const g = SERVER_GRID[slot];
+  const pad = padBox(slot);
+  if (!g || !pad) return null;
+  const top = RACK_ROWS[g.row].y - SLOT_REACH * slotScale(slot);
+  const bottom = pad.y + pad.h / 2;
+  return { x: pad.x, y: (top + bottom) / 2, w: pad.w, h: bottom - top };
 }
 
 export function inBox(b: Box, x: number, y: number): boolean {
@@ -105,44 +183,66 @@ export function partAt(parts: readonly Part[], x: number, y: number): Part | nul
   return null;
 }
 
+/** Every slot the board draws: the balancer's first, then the six server slots. */
+export const SLOT_IDS: readonly string[] = [LB_SLOT_ID, ...Object.keys(SERVER_GRID)];
+
 /** The slot (a server slot or 'lb') under a point, if any. */
 export function slotAt(x: number, y: number): string | null {
-  for (const id of [LB_SLOT_ID, ...Object.keys(SERVER_PADS)]) {
+  for (const id of SLOT_IDS) {
     const b = slotBox(id);
     if (b && inBox(b, x, y)) return id;
   }
   return null;
 }
 
+/**
+ * Where a part or a slot sits on screen (projected game pixels), for the HUD's dip mark and its
+ * leader lines: a part's centre by part id, or a slot's pad (the balancer slot's centre) by slot
+ * id. Null when the id names neither, or the part has nowhere to stand.
+ */
+export function partAnchor(
+  board: { readonly parts: readonly Pick<Part, 'id' | 'kind' | 'slot'>[] },
+  id: string,
+): Point | null {
+  for (const p of board.parts) if (p.id === id) return partCentre(p);
+  if (id === LB_SLOT_ID) return LB_SLOT;
+  return SERVER_PADS[id] ?? null;
+}
+
+/** How far a server's ports sit above (in, on its left) and below (out, on its right) its centre. */
+const SERVER_PORT = 18;
+
 /** Where a wire leaves a part (its right edge) and enters one (its left edge). */
 export function wireEnds(from: Pick<Part, 'kind' | 'slot'>, to: Pick<Part, 'kind' | 'slot'>) {
   const a = partCentre(from);
   const b = partCentre(to);
   if (!a || !b) return null;
-  const ax = a.x + PART_SIZE[from.kind].w / 2 - 6;
-  const bx = b.x - PART_SIZE[to.kind].w / 2 + 6;
+  const ax = a.x + partSize(from).w / 2 - 6;
+  const bx = b.x - partSize(to).w / 2 + 6;
   // A server takes wires in high on its left and sends them out low on its right, so a trace
   // leaving one column never lines up with a trace entering the next.
-  const ay = a.y + (from.kind === 'server' ? SERVER_PORT : 0);
-  const by = b.y - (to.kind === 'server' ? SERVER_PORT : 0);
+  const ay = a.y + (from.kind === 'server' ? SERVER_PORT * slotScale(from.slot) : 0);
+  const by = b.y - (to.kind === 'server' ? SERVER_PORT * slotScale(to.slot) : 0);
   return { ax, ay, bx, by };
 }
 
-const SERVER_PORT = 18;
-
 // Wires run like traces on a circuit board: straight lines and right angles only, and never across
-// a server. Into the rack they drop down a bus left of the first column; out of it they climb a bus
-// right of the second. A wire to or from the far column runs along the gap under (or over) a row.
-const SERVER_HALF = PART_SIZE.server.w / 2;
+// a server. Into the rack they come down a bus left of the first column; out of it they go along a
+// bus right of the second. A wire into the second column runs over the rack along the far rim and
+// comes down the gap between the columns; a wire out of the first column goes down the gap and
+// along the near rim. Every corner of a trace lies on one of these named lines.
 /** The vertical bus into the rack, left of its first column. */
-export const BUS_IN = RACK_COLUMNS[0] - SERVER_HALF - 30;
+export const BUS_IN = 989;
 /** The vertical bus out of the rack, right of its second column. */
-export const BUS_OUT = RACK_COLUMNS[1] + SERVER_HALF + 34;
-/** Between the columns: where a wire turns into or out of the second column. */
-const COLUMN_GAP = (RACK_COLUMNS[0] + RACK_COLUMNS[1]) / 2;
-/** Gap channels: under a pad for wires leaving column one, over a server for wires entering column two. */
-const channelUnder = (pad: Point) => pad.y + 52;
-const channelOver = (pad: Point) => pad.y - SERVER_RISE - PART_SIZE.server.h / 2 - 14;
+export const BUS_OUT = 1395;
+/** Between the columns: where a wire comes down into the second column. */
+export const GAP_IN = 1178;
+/** Between the columns: where a wire leaves the first column for the near rim. */
+export const GAP_OUT = 1202;
+/** The rim channel along the table's far edge, over the rack. */
+export const OVER = 236;
+/** The rim channel along the table's near edge, under the rack. */
+export const UNDER = 601;
 
 /** The trace a wire follows from one part to the next, as corner points. */
 export function wirePath(from: Pick<Part, 'kind' | 'slot'>, to: Pick<Part, 'kind' | 'slot'>): Point[] | null {
@@ -153,27 +253,23 @@ export function wirePath(from: Pick<Part, 'kind' | 'slot'>, to: Pick<Part, 'kind
   const into = to.kind === 'server' && to.slot ? SERVER_GRID[to.slot] : undefined;
   const outOf = from.kind === 'server' && from.slot ? SERVER_GRID[from.slot] : undefined;
   if (into) {
-    const pad = SERVER_PADS[to.slot!];
     if (into.col === 0) return tidy([a, { x: BUS_IN, y: a.y }, { x: BUS_IN, y: b.y }, b]);
-    const over = channelOver(pad);
     return tidy([
       a,
       { x: BUS_IN, y: a.y },
-      { x: BUS_IN, y: over },
-      { x: COLUMN_GAP, y: over },
-      { x: COLUMN_GAP, y: b.y },
+      { x: BUS_IN, y: OVER },
+      { x: GAP_IN, y: OVER },
+      { x: GAP_IN, y: b.y },
       b,
     ]);
   }
   if (outOf) {
-    const pad = SERVER_PADS[from.slot!];
     if (outOf.col === 1) return tidy([a, { x: BUS_OUT, y: a.y }, { x: BUS_OUT, y: b.y }, b]);
-    const under = channelUnder(pad);
     return tidy([
       a,
-      { x: COLUMN_GAP, y: a.y },
-      { x: COLUMN_GAP, y: under },
-      { x: BUS_OUT, y: under },
+      { x: GAP_OUT, y: a.y },
+      { x: GAP_OUT, y: UNDER },
+      { x: BUS_OUT, y: UNDER },
       { x: BUS_OUT, y: b.y },
       b,
     ]);
@@ -234,18 +330,42 @@ export function distToPath(px: number, py: number, path: readonly Point[]): numb
   return best;
 }
 
-/** Where the inbound stream starts: off the board's left rim, from under the HUD's chat panels. */
-const INBOUND_FROM = BOARD_AREA.left - 40;
+/** Where the inbound stream starts: just off the feed's left edge, from under the HUD's left column. */
+export const INBOUND_FROM = BOARD_AREA.left - 3;
 
 /**
- * The block's traffic arriving at the gateway: three lanes from the board's left rim that merge
- * into the gateway, so the incoming stream reads as a crowd, not a single file.
+ * The channel the block's traffic arrives along: a mouth on the feed's left edge (x 455, y 322-502)
+ * that narrows to the gateway's port on its left face (x 585). Geometry only; how full it is (the
+ * demand level) is a later ticket's.
  */
-export const INBOUND_LANES: readonly (readonly Point[])[] = [-26, 0, 26].map((dy) => {
+export const CHANNEL = {
+  mouth: { x: BOARD_AREA.left, top: 322, bottom: 502 },
+  port: { x: GATEWAY.x - PART_SIZE.gateway.w / 2, top: 372, bottom: 452 },
+} as const;
+
+/** The channel's walls at x, between the mouth and the port. */
+export function channelAt(x: number): { top: number; bottom: number } {
+  const { mouth, port } = CHANNEL;
+  const k = Math.max(0, Math.min(1, (x - mouth.x) / (port.x - mouth.x)));
+  return {
+    top: mouth.top + (port.top - mouth.top) * k,
+    bottom: mouth.bottom + (port.bottom - mouth.bottom) * k,
+  };
+}
+
+/** How far from the gateway's centre line the two outer inbound lanes run. */
+const LANE_SPREAD = 54;
+
+/**
+ * The block's traffic arriving at the gateway: three lanes in from the left that run straight
+ * through the channel's mouth and merge into the gateway's port, so the stream reads as a crowd,
+ * not a single file. Each lane stays between the channel's walls.
+ */
+export const INBOUND_LANES: readonly (readonly Point[])[] = [-LANE_SPREAD, 0, LANE_SPREAD].map((dy) => {
   const end = { x: GATEWAY.x - PART_SIZE.gateway.w / 2 + 6, y: GATEWAY.y };
   return dy === 0
     ? [{ x: INBOUND_FROM, y: GATEWAY.y }, end]
-    : [{ x: INBOUND_FROM, y: GATEWAY.y + dy }, { x: end.x - 46, y: GATEWAY.y + dy }, end];
+    : [{ x: INBOUND_FROM, y: GATEWAY.y + dy }, { x: CHANNEL.mouth.x + 30, y: GATEWAY.y + dy }, end];
 });
 
 export function midpoint(e: { ax: number; ay: number; bx: number; by: number }): Point {
