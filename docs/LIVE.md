@@ -78,9 +78,25 @@ this frame's occurrences, and moves only what changed.
 
 `src/scenes/live/registry.ts` has one line per zone naming the view class that draws it. A lane
 replaces its own line when its view lands and touches no other. The feed and the inventory are the
-board's and have no line; `BoardScene` draws them. Until a lane's view lands its zone shows a
-`PlaceholderView`: a dashed outline and the zone's name, under everything the HUD draws today,
-never interactive, two objects.
+board's and have no line; `BoardScene` draws them. A zone whose view had not landed showed a
+`PlaceholderView` (a dashed outline and the zone's name, under everything the HUD draws, never
+interactive, two objects). Since M5 every line names its real view, so `live.placeholders` is empty
+(`tests/live-flags.test.ts`, `live-skeleton.spec.ts` and `live-tour.spec.ts` check it).
+`PlaceholderView` and `placeholderZones()` stay so a new zone can start as one and the hook can
+prove none is left.
+
+| Zone    | View (registry line)                    | Lane   |
+| ------- | --------------------------------------- | ------ |
+| `title` | `TitleView` (`src/scenes/hud/TitleView.ts`) | gauges |
+| `alert` | `AlertView`                             | gauges |
+| `clock` | `ClockView` (`src/scenes/hud/TitleView.ts`) | gauges |
+| `map`   | `MapView`                               | gauges |
+| `cam`   | `LuxCamView`                            | luxcam |
+| `gauge` | `GaugeView`                             | gauges |
+| `scope` | `ChartView`                             | gauges |
+| `comms` | `CommsView`                             | comms  |
+| `deck`  | `DeckView` (with `HeadroomView`)        | gauges |
+| `chat`  | `ChatFeedView`                          | chat   |
 
 `HudScene` hosts the registry: it makes every view in `init`, calls `preload`, `create` (first, so
 placeholders sit under the HUD's own objects), `update` each frame and `shutdown` with the scene.
@@ -114,6 +130,53 @@ hook value. Views read it through `host.flags`.
 (the flow, offline parts, capacity and wired capacity, demand, retries, served/dropped/error share,
 the warnings, the dips, the waiting flags, the rewinds, the notes). It returns the identical object
 until the play, the notes or a hold changes, so views never call `run().flow` themselves.
+
+Every `Frame` field (`tests/live-docs.test.ts` checks this list against the interface):
+
+| Field | What it holds |
+| --- | --- |
+| `now` | Sim seconds since the clock opened at 23:51:30 |
+| `clock` | The in-world clock as hh:mm:ss |
+| `speed` | The test speed multiplier (1 in play) |
+| `paused` | Something holds the board (a card, a scene, the pause menu) or a failure waits for its rewind |
+| `timeScale` | 0.25 while Regroup runs, otherwise 1 |
+| `waitingForFirstBuild` | C1 waits for a server wired gateway to database; the clock holds |
+| `waitingForCrewBuild` | After the rescue the clock waits until the servers behind the balancer can carry the tail |
+| `parts` | The parts on the board |
+| `wires` | The wires on the board |
+| `credits` | Credits in hand |
+| `trust` | The block's trust |
+| `offlineUntil` | Parts booting or rebooting, by id: the sim time they come back |
+| `flow` | The routing of this frame's demand over the board, read once |
+| `demand` | Req/s the block sends now, after retries |
+| `blockDemand` | Req/s the block sends before retries: the curve less the laundry cut |
+| `retry` | How far retries have pushed demand up, 0 to 0.5 |
+| `capacity` | Req/s every live server could serve, wired or not |
+| `wiredCapacity` | Req/s the live servers wired gateway (or balancer) to database can serve |
+| `served` | Req/s served |
+| `dropped` | Req/s dropped |
+| `errorShare` | Share of demand that fails, 0 to 1 |
+| `offline` | Part ids serving nothing now: booting, rebooting, dead or dark in a dip |
+| `flickering` | Part ids showing the 2 s power-flicker warning |
+| `dark` | Part ids dark in a power dip right now |
+| `overheating` | Server ids over 100% load, counting down to death |
+| `overload` | Seconds each overheating server has spent over 100% load, by id |
+| `dead` | Server ids that died from overheating and wait to be replaced |
+| `dips` | Every power dip whose warning has started, with its part picked |
+| `dip` | The dip whose flicker warning is showing (`{partId, at}`), or null |
+| `surge` | The surge warning on screen, or null |
+| `fall` | The after-midnight forecast (`{demand}`), or null |
+| `laundryCut` | When the laundry cut was taken (`{at}`), or null |
+| `laundryCutAvailable` | The laundry cut is offered now (the district surge, before the crew) |
+| `rescued` | The crew has come in this run (a rewind before the rescue clears it) |
+| `rescue` | When and why the crew came in (`{at, by}`), or null |
+| `regroup` | `{charges, handedOver, left}` for the Regroup key |
+| `banner` | The C2 banner's answer (`{choice, at}`), or null |
+| `midnight` | The stroke of twelve's result, or null before it |
+| `failure` | The failure the board froze on, or null |
+| `rewinds` | Every rewind so far |
+| `crewMet` | The crew has arrived at least once; kept across rewinds |
+| `notes` | The dial answers (the C1 estimate, the C6 sizing), once set |
 
 `src/game/occurrences.ts`: `detectOccurrences(prev, next)` lists the edges between two frames as
 `{kind, id?, at}`: `placed`, `wired`, `cut`, `hot`, `died`, `dip`, `skipped`, `retriesRising`,
@@ -151,6 +214,38 @@ no events of their own by module augmentation: a new event is a line in `GameEve
   midnight, 0 when dark. The chat view emits it only when the number changes, and the first
   emission comes with the first change, so TitleView shows WATCHING with no number until then.
   Nothing reads the count back from the hook: `hud.audience.watching` is a mirror for tests.
+
+Every event in `GameEvents`, the older ones first (`tests/live-docs.test.ts` checks this table
+against `src/game/bus.ts`):
+
+| Event | Emitted by | Payload |
+| --- | --- | --- |
+| `action` | `run.ts`, for a board move that worked | `{type: 'place' \| 'wire' \| 'cut' \| 'decommission' \| 'overclock' \| 'banner' \| 'laundryCut', ...}` |
+| `refused` | `run.ts`, BoardScene, for a move the rules refused | `{reason}` |
+| `sfx` | the run, the board, the HUD, the shell, the story | `{key, loop?}` |
+| `sfxStop` | the story layer, ending a looped sound | `{key}` |
+| `overheat` | `run.ts`, a server goes over 100% load | `{id}` |
+| `serverDied` | `run.ts`, a server dies from overheating | `{id}` |
+| `powerDip` | `run.ts`, a dip's warning ends and the part goes dark | `{id}` |
+| `rescue` | OverlayScene, the crew's cable drops | `{}` |
+| `crewArrived` | `run.ts`, the sim brings the crew in | `{by}` |
+| `failure` | `run.ts`, the board froze on a failure | `Failure` |
+| `midnight` | `run.ts`, the stroke of twelve | `Midnight` |
+| `sessionEnd` | `run.ts`, the clock reached 00:01:00 | `{}` |
+| `occurrence` | HudScene, once per edge between two frames | `Occurrence` |
+| `drag` | BoardScene (above) | `{kind, card, over, state?, legal?}` |
+| `line` | CommsView (above) | `{id, speaker, tag, lesson, since}` |
+| `lineEnd` | CommsView, the band line ended or was pre-empted | `{id}` |
+| `chatLine` | declared for the chat lane; nothing emits it yet (the chat reads `cue`) | `{chat, id, who, text, at}` |
+| `alert` | AlertView, an alert went up | `{kind, line, text, at}` |
+| `alertEnd` | AlertView, that alert came down | `{kind}` |
+| `voice` | CommsView, the story layer: asks the mixer for a clip | `{id}` |
+| `voiceStart` | the mixer, the clip started | `{id, seconds}` |
+| `voiceStop` | CommsView, the story layer: stop the clip early | `{id}` |
+| `voiceEnd` | the mixer, the clip finished or was stopped | `{id}` |
+| `cue` | HudScene's host loop (above) | `{id, kind, at}` |
+| `audience` | ChatFeedView (above) | `{watching}` |
+| `perfSample` | HudScene, once per perf sample | `{at, fps, objects, texts, graphics}` |
 
 ### Hook sections
 
@@ -191,6 +286,46 @@ The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard
 Outside `hud`: `shell.voice` (the mixer: `recentVoice`, `missing`, `playing`, `started`, `groups`), `avatars.baked`
 (every round avatar baked, as `avatar:<key>@<size>`), `art` (the art manifest's resolutions),
 `board`, `story`, `live` and `perf`.
+
+Every top-level section of `window.__neonTest.state` (each `provideTestState` call;
+`tests/live-docs.test.ts` checks the list against the source):
+
+| Section | Provided by | What it mirrors |
+| --- | --- | --- |
+| `scene`, `ready`, `canvas` | `src/main.ts` (`TestSnapshot` in `src/testHook.ts`) | the scene on top, whether it is ready, the canvas size |
+| `board` | BoardScene | parts, wires, pads, the tray, packets and `board.channel` (the channel at the feed's left edge: `demand`, `max`, `level`, `capacityLevel`, `marks`, lanes) |
+| `hud` | HudScene, with every `hud.<name>` above | the HUD's keys and the views' sections |
+| `live` | HudScene (`src/scenes/live/hook.ts`) | `zones`, `placeholders`, `layoutVersion` |
+| `perf` | HudScene (`PerfMeter`) | the display-list counts (see "Perf budget") |
+| `story` | `src/story/state.ts` | the story scene up now, its click and Skip points, `finished` |
+| `shell` | OverlayScene | the shell's menus and `shell.voice`, the mixer |
+| `avatars` | `src/scenes/avatars.ts` | `avatars.baked` |
+| `art` | `src/scenes/plates.ts` | the art manifest's resolutions |
+| `debriefSeen` | DebriefScene | the debrief's "you saw it at" lines |
+| `settingsScreen` | SettingsScene | the settings screen's controls |
+
+`tests/browser/live-tour.spec.ts` reads at least one field of every zone's section (`hud.title`,
+`hud.alert`, `hud.clock`, `hud.map`, `hud.luxCam`, `hud.gauge`, `hud.chart`, `hud.comms`,
+`hud.deck`, `hud.chat`), `board.channel` and `shell.voice`, at the surge and at midnight, in one
+run.
+
+## Lanes and ownership
+
+Each file has one owning lane. A lane edits its own files, its one registry line and its anchored
+section of `docs/SCRIPT.md` and `src/strings.ts`; a change it needs in another lane's file goes to
+that lane. `src/sim/` is frozen (only decision D2 could open it), and the protected paths in
+`CLAUDE.md` belong to Rolando.
+
+| Lane | Zones | Source files | Tests |
+| --- | --- | --- | --- |
+| tech | none (the host, the contract) | `src/game/run.ts`, `flow.ts`, `director.ts`, `frame.ts`, `occurrences.ts`, `bus.ts`, `mixer.ts`, `audio.ts`, `src/main.ts`, `src/testHook.ts`, `src/scenes/live/` (`layout.ts`, `view.ts`, `registry.ts`, `flags.ts`, `hook.ts`; lanes edit only their registry line), `src/scenes/HudScene.ts`, `src/scenes/hud/layout.ts`, `src/scenes/hud/hook.ts`, `src/scenes/OverlayScene.ts`, `docs/LIVE.md`, `docs/AUDIO.md` | `live-layout`, `frame`, `occurrences`, `live-flags`, `live-docs`, `mixer`, `hud-layout`; `tests/browser/live/reach.ts`, `live-skeleton`, `live-perf`, `live-tour`, `voice`, and the existing `hud`, `board`, `story`, `boot`, `shell` specs |
+| board | `feed`, `inventory` | `src/scenes/BoardScene.ts`, `src/scenes/board/` (layout, tray, view, packets, hook, crew, channel, anim, ghost, InventoryView) | `board-layout`, `board-view`, `board-packets`, `board-channel`, `board-anim`; `board-live.spec.ts` |
+| gauges | `title`, `alert`, `clock`, `map`, `gauge`, `scope`, `deck` | `src/scenes/hud/` TitleView, title, alerts, AlertView, gauge, GaugeView, headroom, HeadroomView, thresholds, cityMap, MapView, deck, DeckView, ChartView, chartRing, DialView, dial, warnings, pending503, regroup, jobCard, format, panel | `hud-title`, `hud-alerts`, `hud-chart`, `hud-gauge`, `hud-headroom`, `hud-map`, `hud-deck`, `hud-format`; `live-gauges.spec.ts` |
+| comms | `comms` | `src/scenes/hud/comms.ts`, `CommsView.ts`, `locate.ts`; `src/game/voice.ts`, `settings.ts`, `settingsControls.ts`, `src/scenes/SettingsScene.ts`; the voice emits in `StoryScene.ts`, `src/story/view.ts`, `src/story/state.ts` | `hud-comms`, `game-voice`, `shell-audio`; `comms.spec.ts` |
+| chat | `chat` | `src/scenes/hud/chatEngine.ts`, `ChatFeedView.ts`, `chat.ts` | `hud-chat`, `hud-chat-engine`; `chat.spec.ts` |
+| luxcam | `cam` | `src/scenes/hud/luxcam.ts`, `LuxCamView.ts`, `src/game/portraits.ts` | `hud-luxcam`; `luxcam.spec.ts` |
+| learning | none (the words and the debrief) | `src/scenes/hud/cues.ts`, `lineMeta.ts`, `labels.ts`, `taught.ts`, `src/game/autopilot.ts`, `src/scenes/DebriefScene.ts`, `src/story/debrief.ts`, `src/story/wiring.ts`, `src/strings.ts` and `docs/SCRIPT.md` (each lane edits only its anchored section) | `hud-barks`, `strings`, `teaching`; `teaching.spec.ts` |
+| art3d | none (the art) | `src/game/artManifest.ts`, `src/scenes/plates.ts`, `avatarCrop.ts`, `avatars.ts`, `motion.ts`, `docs/ART-REQUESTS.md`, `docs/ART.md` | `art-manifest`, `avatar-crop`, `motion`; `art.spec.ts` |
 
 ## Perf budget
 
@@ -383,12 +518,13 @@ Since then (tech M3 follow-ups, measured 28 Oct 2026):
 
 ### The e2e seconds budget
 
-`scripts/check.mjs` caps the Playwright step at **900 s**. Playwright runs one worker
-(`playwright.config.ts`), so the cap is serial wall clock for the whole suite. The suite before the
-Live work took 616 s for 34 tests on the last full run (plan figure, not re-measured here). That
-leaves 284 s.
+Since tech-9 (decision D9) `scripts/check.mjs` caps the Playwright step at **1800 s**, and CI runs
+the browser tests as four parallel shards split by file (`docs/checks.md`, "Sharded e2e"). The e2e
+step in `check-evidence.json` is merged from the four shards, and its time is the **slowest
+shard's**, so the gate that matters is that step's time: under **1500 s**, inside the 1800 s cap.
+Each shard job has its own 25-minute CI timeout and the same 1800 s cap on its Playwright run.
 
-Per lane, for its spec file at M3 (one spec file per lane):
+Per lane, for its spec file (one spec file per lane), the planned budget and what was measured:
 
 | Lane / spec                                                          | Budget (s) |
 | -------------------------------------------------------------------- | ---------: |
@@ -397,26 +533,32 @@ Per lane, for its spec file at M3 (one spec file per lane):
 | comms: `comms.spec.ts`                                               |         90 |
 | chat: `chat.spec.ts`                                                 |         90 |
 | luxcam: `luxcam.spec.ts`                                             |         60 |
-| tech: `live-skeleton` 75, `live-perf` 45, `voice` 15, `live-tour` 30 |        165 |
+| tech: `live-skeleton` 75, `live-perf` 45, `voice` 15, `live-tour` 45 |        180 |
 | art3d: `art.spec.ts`                                                 |         30 |
 | learning: `teaching.spec.ts`                                         |        150 |
-| **Live total**                                                       |    **885** |
+| **Live total**                                                       |    **900** |
 | Existing suite                                                       |        616 |
-| **All**                                                              |   **1501** |
+| **All, serial**                                                      |   **1516** |
 
-- **Under the 900 s cap in force today**, only the M1 specs fit: 616 + 75 (`live-skeleton`) + 30
-  (`art.spec`) = 721 s, which leaves a **179 s reserve**. No M3 spec can merge until the cap is
-  raised.
-- **Under decision D9's 1800 s** (tech-9), the full table is 1501 s, which leaves a **299 s
-  reserve**. Measured, `live-skeleton` costs 75 s, not the 10 s the plan drafted, `live-perf`
-  41 s (one page to midnight, the rescue clicked through) and `voice` 13 s. That makes the tech row
-  165 s rather than 90 s, and the reserve 299 s rather than 374 s. tech-8 folds the
-  moment tests, these two reach tests among them, into one `live-tour` at M5, and brings the suite
-  under 1500 s.
+- **`live-tour.spec.ts` (tech-8)** is one test, one page load at speed 20 with autopilot, to the
+  surge and on to midnight with the C5 rescue clicked through. Measured on the cloud worker on
+  28 Oct 2026: about 42 s for the test and 51 s for the file with the worker's start. Its budget is
+  45 s, 15 s over the plan's 30 s, because midnight alone costs 40 s from boot (see "Measured
+  floors").
+- **Serial, the table adds up to 1516 s**, just over 1500 s. Measured serial runs are longer: the
+  whole suite took about 27 minutes in one job (`docs/checks.md`), which is why CI shards it.
+  Nothing gates on the serial total.
+- **Sharded, the e2e step is the slowest shard.** From measured per-file times the four shards run
+  about 6.4, 7.7, 8.5 and 4.2 minutes of tests (`docs/checks.md`), so the step takes about 510 s,
+  well under 1500 s. `live-tour` adds about 51 s to whichever shard Playwright gives it; even the
+  slowest shard with it stays under 600 s. This is a projection from local and earlier CI timings:
+  only a CI run's `check-evidence.json` on the candidate commit shows the real figure.
+- **Folding the moment tests.** The plan had `live-tour` replace `live-skeleton.spec.ts`'s two
+  reach tests (surge within 25 s, midnight within 50 s; about 67 s together). That file is not
+  tech-8's to edit in this lane, so both still run; folding them would save about 67 s serial.
 - **Raising the cap is a control change.** `scripts/check.mjs` and `.github/workflows/ci.yml` are
-  protected paths. Only the owner (Rolando) can change the cap and the CI job timeout, through
-  the D9 control-change PR (tech-9). No lane edits them, and no lane gets under the cap by
-  weakening an assertion.
+  protected paths. Only the owner (Rolando) can change the cap and the CI job timeout. No lane
+  edits them, and no lane gets under the cap by weakening an assertion.
 
 Rules for every Live spec:
 

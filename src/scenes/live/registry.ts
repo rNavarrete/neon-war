@@ -1,7 +1,8 @@
 // The registry of views on the Live screen: one line per zone, naming the LiveView class that draws
-// it. A lane replaces its own line (and only that line) when its view lands; until then the zone
-// shows a PlaceholderView. The feed and the inventory are the board's, drawn by BoardScene, and have
-// no line here. The HUD scene creates every entry in this order (docs/LIVE.md).
+// it. Every line now names its lane's real view, so no zone is a PlaceholderView any more
+// (state.live.placeholders is empty); placeholderZones() stays so the hook and tests can prove it.
+// A lane changes only its own line. The feed and the inventory are the board's, drawn by
+// BoardScene, and have no line here. The HUD scene creates every entry in this order (docs/LIVE.md).
 
 import { AlertView } from '../hud/AlertView';
 import { ChartView } from '../hud/ChartView';
