@@ -425,21 +425,22 @@ describe('the cam’s geometry', () => {
 });
 
 describe('the cam’s art', () => {
-  it('loads all nine moods through the portrait keys, with the fallbacks while cam/* is not picked', () => {
-    // The cam set (D7) is requested, not picked: the manifest says so, and no request goes out.
-    expect(camFileLanded('art/chars/lux/cam/lean-in.webp')).toBe(false);
-    expect(camFileLanded('art/chars/lux/cam/relieved.webp')).toBe(false);
+  it('loads all nine moods through the portrait keys, the picked cam set for leaning and relieved', () => {
+    // luxcam-5: the cam set (D7) is picked, so the manifest says it landed and the cam draws it.
+    expect(camFileLanded('art/chars/lux/cam/lean-in.webp')).toBe(true);
+    expect(camFileLanded('art/chars/lux/cam/relieved.webp')).toBe(true);
     expect(camFileLanded('art/chars/lux/faces-board/deadpan.webp')).toBe(true);
-    expect(camTextureOf('leaning')).toBe('portrait:lux/faces-board/determined');
-    expect(camTextureOf('relieved')).toBe('portrait:lux/faces-board/smirk');
+    expect(camTextureOf('leaning')).toBe('portrait:lux/cam/lean-in');
+    expect(camTextureOf('relieved')).toBe('portrait:lux/cam/relieved');
     expect(camTextureOf('calm')).toBe('portrait:lux/faces-board/deadpan');
     expect(camTextureOf('gogglesUp')).toBe('portrait:lux/poses/goggles-up');
     const files = camPortraits();
     for (const mood of CAM_MOODS) expect(files.map((p) => p.key)).toContain(camTextureOf(mood));
-    for (const p of files) {
-      expect(onDisk(p.file), p.file).toBe(true);
-      expect(p.file.includes('/cam/')).toBe(false);
-    }
+    for (const p of files) expect(onDisk(p.file), p.file).toBe(true);
+    expect(files.filter((p) => p.file.includes('/cam/')).map((p) => p.key)).toEqual([
+      'portrait:lux/cam/lean-in',
+      'portrait:lux/cam/relieved',
+    ]);
     expect(new Set(files.map((p) => p.key)).size).toBe(files.length);
   });
 
@@ -489,6 +490,11 @@ const SIZES: Record<string, { w: number; h: number }> = {
   'portrait:lux/faces-room/exhausted': { w: 460, h: 431 },
   'portrait:lux/poses/goggles-up': { w: 382, h: 953 },
   'art:bg/bedroom-dark': { w: 1536, h: 1024 },
+  // luxcam-5: the picked cam set, backdrop and REC badge, at their real file sizes.
+  'portrait:lux/cam/lean-in': { w: 924, h: 548 },
+  'portrait:lux/cam/relieved': { w: 924, h: 548 },
+  'art:hud/cam-backdrop': { w: 824, h: 504 },
+  'art:hud/live/rec-badge': { w: 121, h: 48 },
 };
 
 function camStub(pointer = { x: 960, y: 540 }) {
@@ -608,9 +614,14 @@ describe('LuxCamView', () => {
     const empty = camStub();
     empty.scene.textures.exists = () => false;
     v.preload(empty.scene as never);
-    expect(empty.loaded).toContain(`${fileTexture('art/bg/bedroom-dark.webp')} art/bg/bedroom-dark.webp`);
+    // luxcam-5: the picked backdrop, REC badge and cam set load, not the bedroom stand-in.
+    expect(empty.loaded).toContain(`${fileTexture('art/hud/cam-backdrop.webp')} art/hud/cam-backdrop.webp`);
+    expect(empty.loaded).toContain(
+      `${fileTexture('art/hud/live/rec-badge.webp')} art/hud/live/rec-badge.webp`,
+    );
+    expect(empty.loaded.some((l) => l.includes('bedroom-dark'))).toBe(false);
     for (const p of camPortraits()) expect(empty.loaded).toContain(`${p.key} ${p.file}`);
-    expect(empty.loaded.some((l) => l.includes('/cam/'))).toBe(false);
+    expect(empty.loaded.some((l) => l.includes('/cam/'))).toBe(true);
     expect(CAM_BACKDROP_KEY).toBe('hud/cam-backdrop');
 
     v.create(scene as never, camHost(scene));
@@ -638,8 +649,10 @@ describe('LuxCamView', () => {
     v.create(scene as never, camHost(scene));
     const lens = camLayout(ZONES.cam).lens;
     const canvas = { left: 10, top: 20, width: 960, height: 540 };
-    const images = made.filter((m) => m.kind === 'Image');
+    // The backdrop, two faces and (luxcam-5) the REC badge; only the first three are lens images.
+    const images = made.filter((m) => m.kind === 'Image' && m.texture !== 'art:hud/live/rec-badge');
     expect(images).toHaveLength(3);
+    expect(made.filter((m) => m.kind === 'Image')).toHaveLength(4);
     let clock = 0;
     for (let i = 0; i < 1200; i++) {
       clock += 0.016;

@@ -465,79 +465,111 @@ export interface CamArt {
   readonly file: string;
   /** A picked file to draw while `file` has not landed (the cam set of batch 3), or null. */
   readonly fallback: string | null;
-  /** Draw scale (the lens is 388x230; faces at about 0.42). */
+  /** Draw scale of `file` (CAM_FITS[file].scale): never over 1, so nothing upscales. */
   readonly scale: number;
-  /** Which part of a tall image the lens shows: a face is centred, a full pose is cropped to its top. */
-  readonly crop: 'centre' | 'top';
   /** Seconds per breath (2 px up and down), slower when calm. */
   readonly breath: number;
 }
 
-const FACE = 0.42;
+/**
+ * How one file sits in the 388x230 lens (luxcam-5). Measured by eye on each file, in texture pixels:
+ * the head from the top of the hair to the chin, and the bottom of the NIRVANA print on her shirt.
+ * The scale puts the head at 140 to 160 px on screen without ever going over 1; `top` is the texture
+ * row drawn at the lens's top edge, chosen so the print stays in the lens through the breath and the
+ * parallax (a few pixels of hair are trimmed where both cannot fit).
+ */
+export interface CamFit {
+  readonly scale: number;
+  /** Top of the hair and the chin, in texture rows. */
+  readonly headTop: number;
+  readonly chin: number;
+  /** The texture row at the lens's top edge. */
+  readonly top: number;
+  /** The bottom row of the NIRVANA print that must stay in the lens, or null when none shows. */
+  readonly keep: number | null;
+}
 
-/** Every mood's art. leaning and relieved ask for the cam set (D7) and fall back to board faces. */
+/** The picked cam set (D7), by its requests, so the files are named once (in the manifest). */
+const LEAN_IN = requestFile('chars/lux/cam/lean-in');
+const RELIEVED = requestFile('chars/lux/cam/relieved');
+
+/** The fit of every file the cam can draw (the moods' files and their fallbacks). */
+export const CAM_FITS: Readonly<Record<string, CamFit>> = Object.freeze({
+  'art/chars/lux/faces-board/deadpan.webp': { scale: 0.64, headTop: 10, chin: 245, top: 14, keep: 360 },
+  'art/chars/lux/faces-board/determined.webp': { scale: 0.65, headTop: 10, chin: 235, top: 19, keep: 360 },
+  'art/chars/lux/faces-board/tense.webp': { scale: 0.65, headTop: 10, chin: 240, top: 13, keep: 354 },
+  'art/chars/lux/faces-board/shocked.webp': { scale: 0.64, headTop: 10, chin: 245, top: 12, keep: 358 },
+  'art/chars/lux/faces-board/smirk.webp': { scale: 0.66, headTop: 20, chin: 240, top: 21, keep: 357 },
+  'art/chars/lux/faces-board/triumphant.webp': { scale: 0.7, headTop: 25, chin: 240, top: 38, keep: 355 },
+  'art/chars/lux/faces-room/exhausted.webp': { scale: 0.72, headTop: 12, chin: 215, top: 12, keep: null },
+  'art/chars/lux/poses/goggles-up.webp': { scale: 1, headTop: 30, chin: 172, top: 52, keep: 274 },
+  [LEAN_IN]: { scale: 0.5, headTop: 35, chin: 335, top: 48, keep: 492 },
+  [RELIEVED]: { scale: 0.53, headTop: 0, chin: 268, top: 60, keep: 478 },
+});
+
+const NO_FIT: CamFit = Object.freeze({ scale: 0.42, headTop: 0, chin: 0, top: 0, keep: null });
+
+/** A file's fit; a file without one is drawn at 0.42 from its top. */
+export function camFit(file: string): CamFit {
+  return CAM_FITS[file] ?? NO_FIT;
+}
+
+const scaleOf = (file: string): number => camFit(file).scale;
+
+/** Every mood's art. leaning and relieved draw the picked cam set (D7), board faces as fallbacks. */
 export const CAM_ART: Readonly<Record<CamMood, CamArt>> = Object.freeze({
   calm: {
     file: 'art/chars/lux/faces-board/deadpan.webp',
     fallback: null,
-    scale: FACE,
-    crop: 'centre',
+    scale: scaleOf('art/chars/lux/faces-board/deadpan.webp'),
     breath: 4,
   },
   focused: {
     file: 'art/chars/lux/faces-board/determined.webp',
     fallback: null,
-    scale: FACE,
-    crop: 'centre',
+    scale: scaleOf('art/chars/lux/faces-board/determined.webp'),
     breath: 3.2,
   },
   leaning: {
-    file: requestFile('chars/lux/cam/lean-in'),
+    file: LEAN_IN,
     fallback: 'art/chars/lux/faces-board/determined.webp',
-    scale: FACE,
-    crop: 'centre',
+    scale: scaleOf(LEAN_IN),
     breath: 3,
   },
   tense: {
     file: 'art/chars/lux/faces-board/tense.webp',
     fallback: null,
-    scale: FACE,
-    crop: 'centre',
+    scale: scaleOf('art/chars/lux/faces-board/tense.webp'),
     breath: 2.2,
   },
   panicking: {
     file: 'art/chars/lux/faces-board/shocked.webp',
     fallback: null,
-    scale: FACE,
-    crop: 'centre',
+    scale: scaleOf('art/chars/lux/faces-board/shocked.webp'),
     breath: 1.2,
   },
   relieved: {
-    file: requestFile('chars/lux/cam/relieved'),
+    file: RELIEVED,
     fallback: 'art/chars/lux/faces-board/smirk.webp',
-    scale: FACE,
-    crop: 'centre',
+    scale: scaleOf(RELIEVED),
     breath: 4.5,
   },
   cheer: {
     file: 'art/chars/lux/faces-board/triumphant.webp',
     fallback: null,
-    scale: FACE,
-    crop: 'centre',
+    scale: scaleOf('art/chars/lux/faces-board/triumphant.webp'),
     breath: 1.8,
   },
   exhausted: {
     file: 'art/chars/lux/faces-room/exhausted.webp',
     fallback: null,
-    scale: FACE,
-    crop: 'centre',
+    scale: scaleOf('art/chars/lux/faces-room/exhausted.webp'),
     breath: 5,
   },
   gogglesUp: {
     file: 'art/chars/lux/poses/goggles-up.webp',
     fallback: null,
-    scale: FACE,
-    crop: 'top',
+    scale: scaleOf('art/chars/lux/poses/goggles-up.webp'),
     breath: 4,
   },
 });
@@ -572,6 +604,26 @@ export function camPortraits(): Portrait[] {
   return out;
 }
 
+/** The fit each mood draws today (its file, fallbacks applied), resolved once so a frame only looks it up. */
+export const CAM_FIT: Readonly<Record<CamMood, CamFit>> = Object.freeze(
+  Object.fromEntries(CAM_MOODS.map((m) => [m, camFit(camArtFile(m, camFileLanded))])) as Record<
+    CamMood,
+    CamFit
+  >,
+);
+
+/** The REC badge (docs/ART-REQUESTS.md hud/live/rec-badge), drawn no bigger than its 72x24 display box. */
+export const REC_BADGE_KEY = 'hud/live/rec-badge';
+export const REC_BADGE_BOX = { w: 72, h: 24 } as const;
+/** Where the badge's own lamp sits in it, as a share of its width and height: the REC dot goes there. */
+export const REC_BADGE_LAMP = { x: 0.215, y: 0.5 } as const;
+
+/** The largest scale that fits a tw x th texture in `box`, never over 1 (no upscaling). */
+export function fitScale(tw: number, th: number, box: { readonly w: number; readonly h: number }): number {
+  if (tw <= 0 || th <= 0) return 1;
+  return Math.min(1, box.w / tw, box.h / th);
+}
+
 /** The backdrop the art pipeline will drop (docs/ART-REQUESTS.md); the dark bedroom until then. */
 export const CAM_BACKDROP_KEY = 'hud/cam-backdrop';
 
@@ -590,7 +642,7 @@ export interface CamLayout {
   /** The zone itself: the plate. */
   readonly plate: Rect;
   readonly lens: Rect;
-  /** Top-left of the LUX_CAM label, the REC dot's centre, top-left of the REC word. */
+  /** Top-left of the LUX_CAM label, the REC dot's centre (the REC badge's lamp), top-left of the REC word. */
   readonly label: Point;
   readonly recDot: Point;
   readonly recText: Point;
@@ -615,7 +667,8 @@ export function camLayout(zone: Rect): CamLayout {
     lens,
     label: { x: lens.x + 4, y: mid - 9 },
     recDot: { x: lens.x + 100, y: mid },
-    recText: { x: lens.x + 110, y: mid - 9 },
+    // The REC word sits right of the badge (whose lamp is the REC dot), clear of its grille.
+    recText: { x: lens.x + 156, y: mid - 9 },
     bars: [
       { x: right - 30, y: mid + 8 },
       { x: right - 20, y: mid + 8 },
@@ -687,23 +740,20 @@ export function backdropScale(tw: number, th: number): number {
 }
 
 /**
- * Where a face's top-left goes (written into `out`): centred across the lens; a bust ('centre')
- * stands on the lens's bottom edge, a full pose ('top') shows its head and shoulders from the top.
- * `dx`, `dy` are the breath, shake and parallax offsets.
+ * Where a face's top-left goes (written into `out`): centred across the lens, with the fit's `top`
+ * row on the lens's top edge, so the head sits near the top and the print stays in. `dx`, `dy` are
+ * the breath, shake and parallax offsets.
  */
 export function placeFace(
   lens: Rect,
   tw: number,
-  th: number,
-  art: CamArt,
+  fit: CamFit,
   dx: number,
   dy: number,
   out: { x: number; y: number },
 ): { x: number; y: number } {
-  const w = tw * art.scale;
-  const h = th * art.scale;
-  out.x = lens.x + (lens.w - w) / 2 + dx;
-  out.y = (art.crop === 'top' ? lens.y + 8 : lens.y + lens.h - h + 6) + dy;
+  out.x = lens.x + (lens.w - tw * fit.scale) / 2 + dx;
+  out.y = lens.y - fit.top * fit.scale + dy;
   return out;
 }
 

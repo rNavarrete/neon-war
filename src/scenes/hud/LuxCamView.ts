@@ -1,4 +1,4 @@
-// Lux's cam (ZONES.cam) as a Live screen view: LUX_CAM and a REC dot over a 388x230 lens, the dark
+// Lux's cam (ZONES.cam) as a Live screen view: LUX_CAM and a REC badge over a 388x230 lens, the dark
 // bedroom behind her (it slides a little with the pointer), her face for the mood camStep picks
 // (crossfading 220 ms on a change, breathing, a short shake entering panic), scanlines, a slow roll
 // band and a vignette over the lens, and an amber frame that turns red while she panics. Three talk
@@ -32,8 +32,12 @@ import {
   CAM_ART,
   CAM_BACKDROP_KEY,
   CAM_FACE_PARALLAX,
+  CAM_FIT,
   CAM_HISTORY,
   CAM_PARALLAX,
+  REC_BADGE_BOX,
+  REC_BADGE_KEY,
+  REC_BADGE_LAMP,
   type CamExtras,
   type CamHistoryEntry,
   type CamLayout,
@@ -51,6 +55,7 @@ import {
   emptyCrop,
   fadeAlpha,
   fillCamView,
+  fitScale,
   initialCam,
   lensCrop,
   placeFace,
@@ -113,6 +118,7 @@ export class LuxCamView implements LiveView {
   private frameG: Phaser.GameObjects.Graphics | null = null;
   private roll: Phaser.GameObjects.Rectangle | null = null;
   private recDot: Phaser.GameObjects.Arc | null = null;
+  private badge: Phaser.GameObjects.Image | null = null;
   private bars: Phaser.GameObjects.Rectangle[] = [];
 
   /** The cam's state, the view it steps on (refilled every frame) and the bus facts. */
@@ -139,7 +145,7 @@ export class LuxCamView implements LiveView {
   private dy = Number.NaN;
 
   preload(scene: Phaser.Scene): void {
-    preloadArt(scene as never, [CAM_BACKDROP_KEY]);
+    preloadArt(scene as never, [CAM_BACKDROP_KEY, REC_BADGE_KEY]);
     for (const p of camPortraits()) if (!scene.textures.exists(p.key)) scene.load.image(p.key, p.file);
   }
 
@@ -199,7 +205,19 @@ export class LuxCamView implements LiveView {
       fontSize: '16px',
       color: COLORS.amberText,
     });
-    this.recDot = add.circle(L.recDot.x, L.recDot.y, 5, COLORS.red, 1);
+    // The REC badge (hud/live/rec-badge) once its texture is in, no bigger than its 72x24 box; the
+    // blinking dot sits on its lamp.
+    const badgeArt = resolveArt(REC_BADGE_KEY);
+    if (scene.textures.exists(badgeArt.texture)) {
+      const img = add
+        .image(L.recDot.x, L.recDot.y, badgeArt.texture)
+        .setOrigin(REC_BADGE_LAMP.x, REC_BADGE_LAMP.y);
+      img.setScale(fitScale(img.width, img.height, REC_BADGE_BOX));
+      img.setTint(badgeArt.tint);
+      img.setAlpha(badgeArt.alpha);
+      this.badge = img;
+    }
+    this.recDot = add.circle(L.recDot.x, L.recDot.y, 4, COLORS.red, 1);
     const rec = add.text(L.recText.x, L.recText.y, CAM_WORDS.rec, {
       fontFamily: FONT,
       fontSize: '16px',
@@ -211,7 +229,9 @@ export class LuxCamView implements LiveView {
 
     this.objects = [plate];
     if (this.backdrop) this.objects.push(this.backdrop);
-    this.objects.push(this.back.img, this.front.img, scan, this.roll, this.frameG, label, this.recDot, rec);
+    this.objects.push(this.back.img, this.front.img, scan, this.roll, this.frameG, label);
+    if (this.badge) this.objects.push(this.badge);
+    this.objects.push(this.recDot, rec);
     this.objects.push(...this.bars);
     for (const o of this.objects) (o as unknown as { setDepth(d: number): unknown }).setDepth(CAM_DEPTH);
 
@@ -384,12 +404,12 @@ export class LuxCamView implements LiveView {
   private placeOne(face: Face, dx: number, dy: number): void {
     const L = this.layout;
     if (!L) return;
-    const art = CAM_ART[face.mood];
+    const fit = CAM_FIT[face.mood];
     const img = face.img;
-    placeFace(L.lens, img.width, img.height, art, dx, dy, face.at);
-    img.setScale(art.scale);
+    placeFace(L.lens, img.width, fit, dx, dy, face.at);
+    if (img.scaleX !== fit.scale) img.setScale(fit.scale);
     img.setPosition(face.at.x, face.at.y);
-    const k = lensCrop(L.lens, face.at.x, face.at.y, img.width, img.height, art.scale, face.crop);
+    const k = lensCrop(L.lens, face.at.x, face.at.y, img.width, img.height, fit.scale, face.crop);
     img.setCrop(k.x, k.y, k.w, k.h);
   }
 
@@ -491,6 +511,7 @@ export class LuxCamView implements LiveView {
     this.frameG = null;
     this.roll = null;
     this.recDot = null;
+    this.badge = null;
     this.bars = [];
     this.layout = null;
     this.host = null;

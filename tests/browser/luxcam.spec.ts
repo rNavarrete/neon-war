@@ -298,3 +298,144 @@ test('a failure in C3 rewinds the night and the cam shows her exhausted, then le
   test.info().annotations.push({ type: 'moods', description: log.moods.join(' > ') });
   expect(errors).toEqual([]);
 });
+
+// ---- luxcam-5: the picked cam set, backdrop and REC badge, with screenshots to judge head size ----
+//
+// The art keys are asserted on hud.luxCam.art; the head height (140-160 px across moods) is a look,
+// judged by eye on test-results/screens/m4-luxcam-*.png, taken at 1920x1080 so a page pixel is a game
+// pixel (the *-cam.png files are the cam zone alone). Speed 1 here: a beat lasts its full 3 s.
+
+test.describe('luxcam-5 at 1920x1080', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
+  /** Save the whole page and the cam zone alone. */
+  async function camShots(page: Page, name: string): Promise<void> {
+    // The cam alone first: it is the smaller, faster shot, so it lands closest to the moment.
+    const z = await camZone(page);
+    await page.screenshot({
+      path: `test-results/screens/m4-luxcam-${name}-cam.png`,
+      clip: { x: z.x, y: z.y, width: z.w, height: z.h },
+    });
+    await shot(page, `m4-luxcam-${name}`);
+  }
+
+  /** Wait for `mood` with its crossfade done, then return the cam. */
+  async function settled(page: Page, mood: Mood | RegExp, timeout = 15_000): Promise<LuxCamTestState> {
+    await expect
+      .poll(
+        async () => {
+          const c = await cam(page);
+          return c.fading ? '(fading)' : c.mood;
+        },
+        { timeout, intervals: [50] },
+      )
+      .toMatch(typeof mood === 'string' ? new RegExp(`^${mood}$`) : mood);
+    return cam(page);
+  }
+
+  async function noMissingArt(page: Page): Promise<void> {
+    const missing = await page.evaluate(() => window.__neonTest?.state?.art?.missing ?? []);
+    expect(missing).toEqual([]);
+  }
+
+  test('relieved after a long panic, then a card in hand leans her in: the picked cam busts', async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    const { errors } = await openBoard(page, { speed: 1, autopilot: false });
+    await dismissJobCard(page);
+
+    // No box wired: the first requests fail and she panics (the board face, red frame).
+    let c = await settled(page, 'panicking');
+    expect(c.frame).toBe('red');
+    await camShots(page, 'panicking');
+    // Hold the stress past 6 s so ending it earns the relieved beat.
+    await expect.poll(async () => (await cam(page)).stressedFor, { timeout: 15_000 }).toBeGreaterThan(6.5);
+
+    // Wire one box: the errors stop, the panic lets go, and the relieved beat shows the picked bust.
+    const id = await page.evaluate(() => window.__neonShell!.place('s1'));
+    expect(id).not.toBeNull();
+    await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
+    await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);
+    c = await settled(page, 'relieved', 20_000);
+    expect(c.art).toBe('portrait:lux/cam/relieved');
+    expect(within(c.face, c.lens)).toBe(true);
+    // The bust is wider than the lens at its fit: it fills the lens across.
+    expect(c.face.w).toBeCloseTo(c.lens.w, 0);
+    expect(c.frame).toBe('amber');
+    await noMissingArt(page);
+    await camShots(page, 'relieved');
+
+    // Quiet again.
+    c = await settled(page, /^(calm|focused)$/, 20_000);
+    await camShots(page, c.mood);
+
+    // Press on the server card in the tray and carry it over the board without letting go.
+    const board = await page.evaluate(
+      () =>
+        (
+          window.__neonTest!.state as unknown as {
+            board: {
+              tray: { id: string; x: number; y: number }[];
+              slots: { id: string; x: number; y: number }[];
+            };
+          }
+        ).board,
+    );
+    const card = board.tray.find((t) => t.id === 'server')!;
+    const slot = board.slots.find((s) => s.id === 's2') ?? board.slots[board.slots.length - 1];
+    await page.mouse.move(card.x, card.y);
+    await page.mouse.down();
+    await page.mouse.move((card.x + slot.x) / 2, (card.y + slot.y) / 2, { steps: 6 });
+    await expect.poll(async () => (await cam(page)).dragging, { timeout: 5_000 }).toBe(true);
+    c = await settled(page, 'leaning');
+    expect(c.art).toBe('portrait:lux/cam/lean-in');
+    expect(within(c.face, c.lens)).toBe(true);
+    expect(c.face.w).toBeCloseTo(c.lens.w, 0);
+    await noMissingArt(page);
+    await camShots(page, 'leaning');
+    await page.mouse.move(slot.x, slot.y, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await cam(page)).dragging, { timeout: 5_000 }).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
+  test('past midnight: the cheer, then goggles up from 537 s on the tallest pose at its file size', async ({
+    page,
+  }) => {
+    test.setTimeout(45_000);
+    const { errors } = await openBoard(page, { speed: 1, autopilot: false });
+    await dismissJobCard(page);
+    // One wired box so the cam is quiet, then jump the clock past midnight to 4 s before the goggles
+    // go up: the held midnight cheers her, then the goggles go up before the debrief at 540.
+    const id = await page.evaluate(() => window.__neonShell!.place('s1'));
+    await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
+    await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);
+    await page.evaluate(() => window.__neonStory!.setNow(533));
+    // Software rendering at 1920x1080 runs few frames, so the 220 ms crossfade can take a while on
+    // the HUD clock: the goggles are shot once settled, or from 537.8 on, before the debrief at 540.
+    const deadline = Date.now() + 20_000;
+    let cheered = false;
+    for (;;) {
+      const s = await snap(page);
+      const c = s.hud?.luxCam;
+      const now = s.hud?.now ?? 0;
+      if (c && !s.story?.active && s.scene === 'board') {
+        if (c.mood === 'cheer' && !c.fading && !cheered) {
+          cheered = true;
+          expect(c.art).toBe('portrait:lux/faces-board/triumphant');
+          await camShots(page, 'cheer');
+        }
+        if (c.mood === 'gogglesUp' && (!c.fading || now >= 537.8)) break;
+      }
+      if (Date.now() > deadline) throw new Error(`no gogglesUp on the board; last mood ${c?.mood} at ${now}`);
+      await page.waitForTimeout(40);
+    }
+    const g = await cam(page);
+    await camShots(page, 'goggles-up');
+    expect(g.art).toBe('portrait:lux/poses/goggles-up');
+    expect(within(g.face, g.lens)).toBe(true);
+    await noMissingArt(page);
+    expect(errors).toEqual([]);
+  });
+});
