@@ -24,14 +24,22 @@ import {
   COMMS_SLOTS,
   type CommsLayout,
   type CommsState,
+  LOG_CLOSED,
+  LOG_ROWS,
+  type LogState,
   NO_COMMS,
   bandAlpha,
+  clickLog,
   commsLayout,
   enqueueComms,
   extendForVoice,
+  logLines,
+  logOpen,
   nameOf,
+  onRect,
   slotOf,
   stepComms,
+  stepLog,
   tag,
   triageMood,
   typedOf,
@@ -47,7 +55,11 @@ const DARK_ALPHA = 0.3;
 /** The nameplate a dark crew slot wears. */
 const DARK_NAME = '---';
 /** The band's own words: its title. Slot names are the crew's names; tags are lineMeta's. */
-export const COMMS_TEXT = { title: 'COMMS' } as const;
+export const COMMS_TEXT = { title: 'COMMS', replay: '\u21bb' } as const;
+/** The older two log rows sit back. */
+const LOG_OLDER_ALPHA = 0.65;
+/** Replays the hook remembers. */
+const REPLAYED_MAX = 12;
 
 /** Bus events remembered for the hook. */
 const EMITTED_MAX = 24;
@@ -101,6 +113,20 @@ export class CommsView implements LiveView {
   private houseTextures: [string, string] = ['', ''];
   private houseArt: [boolean, boolean] = [false, false];
   private houseGlyph: Phaser.GameObjects.Graphics | null = null;
+
+  /** The reread log (comms-3): hover or pin, its rows and the replay glyph. */
+  private log: LogState = LOG_CLOSED;
+  private logRows: Phaser.GameObjects.Text[] = [];
+  private replayGlyph: Phaser.GameObjects.Text | null = null;
+  /** The lines the log rows show, newest last, and the band state they were read from. */
+  private logIds: LineId[] = [];
+  private logFor: CommsState | null = null;
+  private shownLogOpen = false;
+  private replayed: LineId[] = [];
+  /** The board's drag (bus drag): hover is ignored while it is non-null. */
+  private dragKind: string | null = null;
+  /** The run is held (a card, a scene): clicks on the band are ignored. */
+  private held = true;
 
   preload(scene: Phaser.Scene): void {
     preloadAvatars(scene as never, [
@@ -185,6 +211,27 @@ export class CommsView implements LiveView {
       maxLines: 3,
     });
 
+    this.logRows = L.log.map((row, i) =>
+      add
+        .text(row.x, row.y, '', {
+          fontFamily: FONT_SANS,
+          fontSize: '20px',
+          color: COLORS.heroText,
+          wordWrap: { width: row.w },
+          maxLines: 1,
+        })
+        .setAlpha(i < LOG_ROWS - 1 ? LOG_OLDER_ALPHA : 1)
+        .setVisible(false),
+    );
+    this.replayGlyph = add
+      .text(L.replay.x + L.replay.w / 2, L.replay.y + L.replay.h / 2, COMMS_TEXT.replay, {
+        fontFamily: FONT_SANS,
+        fontSize: '26px',
+        color: COLORS.cyanText,
+      })
+      .setOrigin(0.5)
+      .setVisible(false);
+
     this.root = add.container(0, 0, [
       plate,
       title,
@@ -197,12 +244,21 @@ export class CommsView implements LiveView {
       this.nameText,
       this.tagText,
       this.lineText,
+      ...this.logRows,
+      this.replayGlyph,
     ]);
+
+    const onDown = (p: Phaser.Input.Pointer): void => this.onPointerDown(p.x, p.y);
+    scene.input.on('pointerdown', onDown);
 
     this.off.push(
       host.bus.on('voiceStart', (v) => {
         this.state = extendForVoice(this.state, v.id, this.clock, v.seconds);
       }),
+      host.bus.on('drag', (d) => {
+        this.dragKind = d.kind;
+      }),
+      () => scene.input?.off('pointerdown', onDown),
       provideCommsHook(scene, () => this.snapshot()),
     );
     this.drawLine(null);
@@ -260,6 +316,59 @@ export class CommsView implements LiveView {
       this.ring!.setAlpha(alpha);
     }
     if (frame.rescued !== this.shownPresent) this.setPresent(frame.rescued);
+    this.held = frame.paused;
+    this.updateLog();
+  }
+
+  // ---- the reread log ----
+
+  /** Hover (ignored during a drag) and pin decide whether the log replaces the line. */
+  private updateLog(): void {
+    const scene = this.scene!;
+    const r = this.rect!;
+    const p = scene.input.activePointer;
+    const over = onRect(r, p.x, p.y);
+    // A press that started off the band and is still down is a drag passing over it (board-2's bus
+    // drag says so too, once it lands).
+    const dragging = this.dragKind !== null || (p.isDown && !onRect(r, p.downX, p.downY));
+    const now = scene.game.loop.now / 1000;
+    this.log = stepLog(this.log, over, dragging, now);
+    const open = logOpen(this.log, now);
+    if (open === this.shownLogOpen && (!open || this.logFor === this.state)) return;
+    this.shownLogOpen = open;
+    for (const o of [this.nameText!, this.tagText!, this.pill!, this.lineText!]) o.setVisible(!open);
+    this.replayGlyph!.setVisible(open);
+    if (!open) {
+      for (const row of this.logRows) row.setVisible(false);
+      return;
+    }
+    this.logFor = this.state;
+    this.logIds = logLines(this.state.history, this.state.current, LOG_ROWS);
+    // Newest on the last row; fewer lines leave the top rows empty.
+    const skip = LOG_ROWS - this.logIds.length;
+    for (let i = 0; i < LOG_ROWS; i++) {
+      const id = i >= skip ? this.logIds[i - skip] : null;
+      this.logRows[i].setText(id ? `${nameOf(id)}  ${LINES[id].text}` : '').setVisible(id !== null);
+    }
+  }
+
+  private onPointerDown(x: number, y: number): void {
+    if (!this.rect || !this.L || this.held) return;
+    if (this.shownLogOpen && onRect(this.L.replay, x, y)) {
+      this.replay();
+      return;
+    }
+    if (this.dragKind !== null) return;
+    this.log = clickLog(this.log, onRect(this.rect, x, y));
+  }
+
+  /** The replay glyph: ask the mixer for the newest line's voice again. */
+  private replay(): void {
+    const id = this.logIds[this.logIds.length - 1];
+    if (!id) return;
+    this.emit('voice', id);
+    this.replayed.push(id);
+    if (this.replayed.length > REPLAYED_MAX) this.replayed.shift();
   }
 
   /** hud.bark: the same ids and text BarkView's queue reported. */
@@ -281,6 +390,11 @@ export class CommsView implements LiveView {
     this.faces = [];
     this.labels = [];
     this.houseGlyph = null;
+    this.logRows = [];
+    this.replayGlyph = null;
+    this.log = LOG_CLOSED;
+    this.shownLogOpen = false;
+    this.logFor = null;
     this.scene = null;
     this.bus = null;
   }
@@ -429,13 +543,19 @@ export class CommsView implements LiveView {
       history: [...this.state.history],
       dropped: [...this.state.dropped],
       log: {
-        open: false,
-        pinned: false,
-        lines: [],
+        open: this.shownLogOpen,
+        pinned: this.log.pinned,
+        lines: this.shownLogOpen
+          ? this.logIds.map((id) => ({ id, name: nameOf(id), text: LINES[id].text }))
+          : logLines(this.state.history, this.state.current, LOG_ROWS).map((id) => ({
+              id,
+              name: nameOf(id),
+              text: LINES[id].text,
+            })),
         band: pagePoint({ x: L.text.x + 200, y: r.y + r.h / 2 }, canvas),
         outside: pagePoint({ x: L.text.x + 200, y: r.y - 60 }, canvas),
         replay: pagePoint({ x: L.replay.x + L.replay.w / 2, y: L.replay.y + L.replay.h / 2 }, canvas),
-        replayed: [],
+        replayed: [...this.replayed],
       },
       leader: null,
       triage: c && triageMood(c.id) ? { mood: triageMood(c.id)! } : null,

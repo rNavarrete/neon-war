@@ -5,19 +5,25 @@ import {
   COMMS_SLOTS,
   type CommsState,
   FADE_SECONDS,
+  LOG_CLOSED,
+  LOG_ROWS,
   NO_COMMS,
   STALE_CHAINED_SECONDS,
   STALE_SECONDS,
   bandAlpha,
+  clickLog,
   commsLayout,
   dwellFor,
   enqueueComms,
   extendForVoice,
   logLines,
+  logOpen,
   nameOf,
+  onRect,
   slotOf,
   staleAfter,
   stepComms,
+  stepLog,
   tag,
   triageMood,
 } from '../src/scenes/hud/comms';
@@ -300,5 +306,64 @@ describe('comms log and fade', () => {
     expect(stepComms(s, 1, CPS)).toBe(s);
     const idle = stepComms(s, 10, CPS);
     expect(stepComms(idle, 11, CPS)).toBe(idle);
+  });
+});
+
+// comms-3: the reread log.
+describe('comms reread log', () => {
+  it('opens after a 400 ms hover and closes on leaving', () => {
+    let s = LOG_CLOSED;
+    s = stepLog(s, true, false, 10);
+    expect(logOpen(s, 10.2)).toBe(false);
+    expect(stepLog(s, true, false, 10.2)).toBe(s);
+    expect(logOpen(s, 10.4)).toBe(true);
+    s = stepLog(s, false, false, 11);
+    expect(logOpen(s, 11)).toBe(false);
+  });
+
+  it('ignores hover while something is dragged across the band', () => {
+    let s = LOG_CLOSED;
+    for (let t = 0; t < 2; t += 0.05) {
+      s = stepLog(s, true, true, t);
+      expect(logOpen(s, t)).toBe(false);
+    }
+    // A hover that was open closes when a drag comes over it.
+    s = stepLog(LOG_CLOSED, true, false, 0);
+    expect(logOpen(s, 1)).toBe(true);
+    s = stepLog(s, true, true, 1);
+    expect(logOpen(s, 1.5)).toBe(false);
+  });
+
+  it('pins on a click on the band until the next click on it, across leaving and other clicks', () => {
+    let s = clickLog(LOG_CLOSED, true);
+    expect(s.pinned).toBe(true);
+    s = stepLog(s, false, false, 5);
+    expect(logOpen(s, 5)).toBe(true);
+    // A click on the board or the dial leaves it pinned.
+    expect(clickLog(s, false)).toBe(s);
+    s = clickLog(s, true);
+    expect(s.pinned).toBe(false);
+    expect(logOpen(s, 6)).toBe(false);
+    // A click off the band never pins.
+    expect(clickLog(LOG_CLOSED, false)).toBe(LOG_CLOSED);
+  });
+
+  it('keeps the last 3 shown ids with their speakers across a new line', () => {
+    let s = NO_COMMS;
+    let t = 0;
+    for (const id of ['C1.triage.01', 'C1.triage.02', 'C1.lux.01'] as LineId[]) {
+      s = say(s, id, t);
+      t = s.current!.until;
+    }
+    expect(logLines(s.history, s.current, LOG_ROWS).map(nameOf)).toEqual(['TRIAGE', 'TRIAGE', 'LUX']);
+    s = say(s, 'C1.triage.03', t);
+    expect(logLines(s.history, s.current, LOG_ROWS)).toEqual(['C1.triage.02', 'C1.lux.01', 'C1.triage.03']);
+  });
+
+  it('finds points on a rect', () => {
+    const z = ZONES.comms;
+    expect(onRect(z, z.x, z.y)).toBe(true);
+    expect(onRect(z, z.x + z.w / 2, z.y + z.h / 2)).toBe(true);
+    expect(onRect(z, z.x + z.w / 2, z.y - 1)).toBe(false);
   });
 });

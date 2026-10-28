@@ -255,3 +255,47 @@ export function commsLayout(r: CommsRect) {
 }
 
 export type CommsLayout = ReturnType<typeof commsLayout>;
+
+// ---- the reread log (comms-3) ----
+
+/** A hover this long (real seconds) opens the log. */
+export const LOG_HOVER_SECONDS = 0.4;
+/** Rows the log shows. */
+export const LOG_ROWS = 3;
+
+export interface LogState {
+  /** Real seconds the pointer came to rest over the band (not dragging), or null. */
+  readonly hoverSince: number | null;
+  /** A click pinned the log open. */
+  readonly pinned: boolean;
+}
+
+export const LOG_CLOSED: LogState = { hoverSince: null, pinned: false };
+
+/**
+ * The hover at real time `now`: over the band and not dragging starts (or keeps) the hover; leaving
+ * the band or dragging something across it drops it. Returns `s` when nothing changed.
+ */
+export function stepLog(s: LogState, over: boolean, dragging: boolean, now: number): LogState {
+  const hovering = over && !dragging;
+  if (hovering) return s.hoverSince === null ? { ...s, hoverSince: now } : s;
+  return s.hoverSince === null ? s : { ...s, hoverSince: null };
+}
+
+/**
+ * A click: on the band it pins the log, and the next click on the band unpins it. Clicks elsewhere
+ * (the board, the dial, the keys) leave it as it is, so the player can play with the log pinned.
+ */
+export function clickLog(s: LogState, onBand: boolean): LogState {
+  return onBand ? { ...s, pinned: !s.pinned } : s;
+}
+
+/** Whether the log shows at real time `now`: pinned, or hovered for LOG_HOVER_SECONDS. */
+export function logOpen(s: LogState, now: number): boolean {
+  return s.pinned || (s.hoverSince !== null && now - s.hoverSince >= LOG_HOVER_SECONDS - 1e-9);
+}
+
+/** Whether a game point lies on a rect (edges included). */
+export function onRect(r: CommsRect, x: number, y: number): boolean {
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
