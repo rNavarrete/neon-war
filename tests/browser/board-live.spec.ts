@@ -2,6 +2,7 @@ import { type Page, expect, test } from '@playwright/test';
 import type { BoardTestState } from '../../src/scenes/board/hook';
 import type { LiveTestState } from '../../src/scenes/live/hook';
 import type { Rect } from '../../src/scenes/live/layout';
+import { inboundLaneRates } from '../../src/scenes/board/channel';
 
 // The board on the Live screen (board lane, M1): the feed's tilted table, its parts and slots inside
 // the feed zone, the skyline above it and no goggles overlay. Positions come from the test hook in
@@ -36,10 +37,10 @@ async function dismissJobCard(page: Page): Promise<void> {
   await expect.poll(async () => (await hud())?.jobCard?.open).toBe(false);
 }
 
-async function openBoard(page: Page): Promise<void> {
+async function openBoard(page: Page, query = ''): Promise<void> {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
-  await page.goto('/?test&scene=board');
+  await page.goto(`/?test&scene=board${query}`);
   await expect
     .poll(
       () =>
@@ -189,4 +190,70 @@ test('one read of the run per frame: the board draws from the shared Frame it re
   }
   // Between frames the board's Frame is the very object frame() hands every other view.
   await expect.poll(async () => (await board(page)).snapshotCurrent).toBe(true);
+});
+
+type BoardPart = BoardTestState['parts'][number];
+const part = async (page: Page, id: string): Promise<BoardPart | undefined> =>
+  (await board(page)).parts.find((p) => p.id === id);
+
+async function wire(page: Page, from: string, to: string): Promise<void> {
+  await drag(page, (await part(page, from))!, (await part(page, to))!);
+  await expect
+    .poll(async () => (await board(page)).wires.some((w) => w.from === from && w.to === to))
+    .toBe(true);
+}
+
+test('the channel (board-4): bank marks, level on the 0..400 scale, the ROOM tick on wired capacity, no chevrons', async ({
+  page,
+}) => {
+  await openBoard(page, '&speed=4');
+  let b = await board(page);
+  const c = b.channel;
+  // The five bank labels at the mouth, bottom to top.
+  expect(c.max).toBe(400);
+  expect(c.marks.map((m) => m.label)).toEqual(['0', '1/4', '1/2', '3/4', 'MAX']);
+  for (let i = 1; i < c.marks.length; i++) expect(c.marks[i].y).toBeLessThan(c.marks[i - 1].y);
+  for (const m of c.marks) expect(m.x).toBeGreaterThanOrEqual(b.area.x - 0.1);
+  expect(c.chevrons).toBe(0);
+  // The fill is min(1, demand / 400), the cubes follow the session rate map.
+  expect(c.level).toBeCloseTo(Math.min(1, c.demand / 400), 2);
+  expect(c.lanePps).toBeCloseTo(inboundLaneRates(c.demand), 2);
+  expect(c.lanes.reduce((a, x) => a + x, 0)).toBeCloseTo(c.lanePps, 1);
+  expect(c.capacityLevel).toBe(0);
+
+  // Racked only (the clock holds in C1 until the first build): the ROOM tick stays at 0.
+  const id = await placeServer(page, 's1');
+  b = await board(page);
+  expect(b.channel.capacityLevel).toBe(0);
+  expect(b.channel.wired).toBe(0);
+
+  // Wired gateway -> server -> database and online: the tick moves to 60 / 400.
+  await wire(page, 'gateway', id);
+  await wire(page, id, 'database');
+  await expect
+    .poll(async () => (await board(page)).channel.capacityLevel, { timeout: 20_000 })
+    .toBeCloseTo(0.15, 3);
+  b = await board(page);
+  expect(b.channel.wired).toBe(60);
+  expect(b.channel.roomY).toBeLessThan(b.channel.marks[0].y);
+  expect(b.channel.roomY).toBeGreaterThan(b.channel.marks[1].y);
+  expect(b.channel.level).toBeCloseTo(Math.min(1, b.channel.demand / 400), 2);
+
+  // A second server racked and up but fed by nothing: the tick never moves for it.
+  const idle = await placeServer(page, 's2');
+  await expect.poll(async () => (await part(page, idle))?.status, { timeout: 20_000 }).toBe('online');
+  for (let i = 0; i < 3; i++) {
+    b = await board(page);
+    expect(b.channel.capacityLevel).toBeCloseTo(0.15, 3);
+    expect(b.channel.wired).toBe(60);
+  }
+
+  // Cut the feed: the tick falls back to 0.
+  const w = b.wires.find((x) => x.from === 'gateway')!;
+  await page.mouse.click(w.x, w.y);
+  await expect.poll(async () => (await board(page)).selectedWire).toBe(w.key);
+  const cut = (await board(page)).cutButton!;
+  await page.mouse.click(cut.x, cut.y);
+  await expect.poll(async () => (await board(page)).channel.capacityLevel).toBe(0);
+  expect((await board(page)).channel.wired).toBe(0);
 });

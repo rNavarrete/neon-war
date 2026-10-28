@@ -56,6 +56,17 @@ import {
   partLook,
   partLookInto,
 } from './board/view';
+import {
+  type ChannelState,
+  bankMarkPoints,
+  channelInto,
+  emptyChannel,
+  fillInboundRates,
+  lanePps,
+  levelY,
+} from './board/channel';
+import { LABELS } from './hud/labels';
+import { settings } from '../game/settings';
 import { SCENES } from './keys';
 
 // Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
@@ -173,11 +184,26 @@ export class BoardScene extends Phaser.Scene {
   private lastParts: readonly unknown[] | null = null;
   private pool = new PacketPool();
   private packetSprites: Phaser.GameObjects.Image[] = [];
-  private inboundG!: Phaser.GameObjects.Graphics;
+  /** The channel this frame (board-4), refilled in place, and what its graphics last drew. */
+  private chan: ChannelState = emptyChannel();
+  private fillG!: Phaser.GameObjects.Graphics;
+  private roomG!: Phaser.GameObjects.Graphics;
+  private roomText!: Phaser.GameObjects.Text;
+  private forecastG!: Phaser.GameObjects.Graphics;
+  private drawnLevel = NaN;
+  private drawnRetry = NaN;
+  private drawnRoom = NaN;
+  private drawnForecast: number | null | undefined = undefined;
+  /** The four corners of a channel band, reused for every fill. */
+  private readonly band = [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+  ];
   private packetRates: Record<string, number> = {};
   private hotParts = new Set<string>();
   private readonly at = { x: 0, y: 0 };
-  private chevronShift = 0;
   private skipTags: Phaser.GameObjects.Text[] = [];
   private cards: TrayCard[] = [];
   private inventory!: InventoryView;
@@ -235,6 +261,11 @@ export class BoardScene extends Phaser.Scene {
     this.pool = new PacketPool();
     this.packetSprites = [];
     this.skipTags = [];
+    this.chan = emptyChannel();
+    this.drawnLevel = NaN;
+    this.drawnRetry = NaN;
+    this.drawnRoom = NaN;
+    this.drawnForecast = undefined;
     this.inventory = new InventoryView(this);
     this.countedParts = null;
     this.countedCredits = NaN;
@@ -358,7 +389,129 @@ export class BoardScene extends Phaser.Scene {
         .lineBetween(mouth.x, mouth.top, port.x, port.top)
         .lineBetween(mouth.x, mouth.bottom, port.x, port.bottom);
     }
-    this.inboundG = this.add.graphics().setDepth(1);
+    this.drawBank();
+  }
+
+  /**
+   * The channel's instruments (board-4): the amber fill and its red retry band, the cyan ROOM tick
+   * at the wired boxes' req/s, the dashed forecast level, and the five bank marks at the mouth on
+   * the shared 0..400 scale. The marks are drawn once; the rest redraw only when their level moves.
+   */
+  private drawBank(): void {
+    const { mouth } = CHANNEL;
+    this.fillG = this.add.graphics().setDepth(0.5);
+    this.forecastG = this.add.graphics().setDepth(0.6);
+    this.roomG = this.add.graphics().setDepth(0.7);
+    const ticks = this.add.graphics().setDepth(0.8);
+    ticks.lineStyle(2, AMBER, 0.8);
+    for (const m of bankMarkPoints()) {
+      ticks.lineBetween(mouth.x, m.y, mouth.x + 4, m.y);
+      this.add
+        .text(m.x, m.y, m.label, {
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          fontStyle: 'bold',
+          color: '#ffb02e',
+          stroke: '#05070f',
+          strokeThickness: 3,
+        })
+        .setOrigin(0, 0.5)
+        .setDepth(0.8);
+    }
+    this.roomText = this.add
+      .text(0, 0, LABELS.gauge.room, {
+        fontFamily: 'monospace',
+        fontSize: '12px',
+        fontStyle: 'bold',
+        color: '#2de2e6',
+        stroke: '#05070f',
+        strokeThickness: 3,
+      })
+      .setOrigin(1, 1)
+      .setDepth(0.8)
+      .setVisible(false);
+  }
+
+  /** Bring the channel's drawing in line with this frame's state; steady frames draw nothing. */
+  private drawChannel(c: ChannelState): void {
+    const { mouth, port } = CHANNEL;
+    const level = Math.round(c.level * 1000) / 1000;
+    const retry = Math.round(c.retryShare * 1000) / 1000;
+    if (level !== this.drawnLevel || retry !== this.drawnRetry) {
+      this.drawnLevel = level;
+      this.drawnRetry = retry;
+      const g = this.fillG;
+      g.clear();
+      if (level > 0) {
+        // The amber fill from the floor to the level, then the red retry band on its top.
+        const split = level * (1 - retry);
+        this.fillBand(g, 0, split, AMBER, 0.32);
+        if (retry > 0) this.fillBand(g, split, level, RED, 0.55);
+        g.lineStyle(2, AMBER, 0.9).lineBetween(
+          mouth.x,
+          levelY(level, mouth.x),
+          port.x,
+          levelY(level, port.x),
+        );
+      }
+    }
+    const room = Math.round(c.capacityLevel * 1000) / 1000;
+    if (room !== this.drawnRoom) {
+      this.drawnRoom = room;
+      const g = this.roomG;
+      g.clear();
+      if (room > 0) {
+        const y0 = levelY(room, mouth.x);
+        const y1 = levelY(room, port.x);
+        g.lineStyle(6, CYAN, 0.25).lineBetween(mouth.x, y0, port.x, y1);
+        g.lineStyle(2, CYAN, 1).lineBetween(mouth.x, y0, port.x, y1);
+        this.roomText.setPosition(port.x - 4, y1 - 2).setVisible(true);
+      } else {
+        this.roomText.setVisible(false);
+      }
+    }
+    if (c.forecast !== this.drawnForecast) {
+      this.drawnForecast = c.forecast;
+      const g = this.forecastG;
+      g.clear();
+      if (c.forecast !== null) {
+        g.lineStyle(2, AMBER, 1);
+        // Dashes along the level from the mouth to the port.
+        const steps = 10;
+        for (let i = 0; i < steps; i += 2) {
+          const xa = mouth.x + ((port.x - mouth.x) * i) / steps;
+          const xb = mouth.x + ((port.x - mouth.x) * (i + 1)) / steps;
+          g.lineBetween(xa, levelY(c.forecast, xa), xb, levelY(c.forecast, xb));
+        }
+      }
+    }
+    // The forecast pulses at 1 Hz; steady under reduce flicker.
+    if (c.forecast !== null) {
+      this.forecastG.setAlpha(
+        settings().reduceFlicker ? 0.9 : 0.55 + 0.45 * Math.abs(Math.sin(Math.PI * (this.time.now / 1000))),
+      );
+    }
+  }
+
+  /** Fill the channel between two levels (0..1) with one colour. */
+  private fillBand(
+    g: Phaser.GameObjects.Graphics,
+    from: number,
+    to: number,
+    colour: number,
+    alpha: number,
+  ): void {
+    const { mouth, port } = CHANNEL;
+    const q = this.band;
+    q[0].x = mouth.x;
+    q[0].y = levelY(to, mouth.x);
+    q[1].x = port.x;
+    q[1].y = levelY(to, port.x);
+    q[2].x = port.x;
+    q[2].y = levelY(from, port.x);
+    q[3].x = mouth.x;
+    q[3].y = levelY(from, mouth.x);
+    g.fillStyle(colour, alpha).fillPoints(asVectors(q), true);
   }
 
   /** Draw the table once, in the feed's own coordinates, and keep it as a texture: one image a frame. */
@@ -477,7 +630,7 @@ export class BoardScene extends Phaser.Scene {
 
     this.drawWires(flow.wires, flow.skipped);
     this.drawPreview(parts);
-    this.drawInbound(f.demand, dt);
+    this.drawChannel(channelInto(this.chan, f));
     this.stepPackets(dt, flow.wires, f.demand);
     this.placeButtons(parts);
 
@@ -640,25 +793,13 @@ export class BoardScene extends Phaser.Scene {
     return t;
   }
 
-  /** The channel's chevrons, drifting toward the gateway faster as demand climbs. */
-  private drawInbound(demand: number, dt: number): void {
-    const g = this.inboundG;
-    g.clear();
-    const lane = INBOUND_LANES[1];
-    const x0 = CHANNEL.mouth.x + 12;
-    const x1 = CHANNEL.port.x - 24;
-    const y = lane[0].y;
-    const speed = 30 + Math.min(demand, 300) * 0.6;
-    this.chevronShift = (this.chevronShift + dt * speed) % 34;
-    g.lineStyle(4, AMBER, 0.55);
-    for (let x = x0 + this.chevronShift; x < x1; x += 34) {
-      g.lineBetween(x, y - 10, x + 10, y).lineBetween(x + 10, y, x, y + 10);
-    }
-  }
-
   private stepPackets(dt: number, rates: Readonly<Record<string, number>>, demand: number): void {
     // Every wire on the board, plus the inbound lanes sharing the block's demand, refilled in place.
-    const all = fillPacketRates(this.packetRates, rates, demand, INBOUND_KEYS);
+    const all = fillInboundRates(
+      fillPacketRates(this.packetRates, rates, demand, INBOUND_KEYS),
+      demand,
+      INBOUND_KEYS,
+    );
     this.pool.step(dt, all, this.travelOf);
     const items = this.pool.items;
     while (this.packetSprites.length < items.length) {
@@ -907,6 +1048,22 @@ export class BoardScene extends Phaser.Scene {
         skipped: f.flow.skipped.includes(w.key),
       })),
       offline,
+      channel: {
+        demand: round(this.chan.demand),
+        max: this.chan.max,
+        level: round(this.chan.level),
+        capacityLevel: round(this.chan.capacityLevel),
+        wired: round(f.wiredCapacity),
+        forecast: this.chan.forecast === null ? null : round(this.chan.forecast),
+        whatIf: null,
+        retryShare: round(this.chan.retryShare),
+        marks: bankMarkPoints().map((m) => ({ label: m.label, value: m.value, ...page(m.x, m.y) })),
+        lanePps: round(this.chan.lanePps),
+        lanes: INBOUND_KEYS.map((_, i) => round(lanePps(this.chan.demand, i, INBOUND_KEYS.length))),
+        chevrons: 0,
+        roomY: page(CHANNEL.mouth.x, levelY(this.chan.capacityLevel, CHANNEL.mouth.x)).y,
+        levelY: page(CHANNEL.mouth.x, levelY(this.chan.level, CHANNEL.mouth.x)).y,
+      },
       skipped: [...f.flow.skipped],
       packets: { pool: this.pool.size, active: this.pool.active },
       rewinds: f.rewinds.map((w) => ({ at: round(w.at), to: w.to })),

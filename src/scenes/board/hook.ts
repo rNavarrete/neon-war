@@ -61,6 +61,33 @@ export interface BoardTestState {
   refusal: string | null;
   /** What the pointer is dragging: a tray card id, 'wire', or null. */
   dragging: string | null;
+  /**
+   * The channel at the feed's left edge (board-4), on the shared 0..400 scale: `level` is
+   * min(1, demand / max), `capacityLevel` the wired boxes' req/s / max (the ROOM tick; never the
+   * racked total), `forecast` the coming surge's level while its warning is up (else null),
+   * `retryShare` the red band's share of the fill, `marks` the five bank labels at the mouth in page
+   * CSS pixels (bottom to top), `lanePps` the cubes a second streaming in (all lanes) and `lanes`
+   * each lane's share. `whatIf` is the drag ghost's level (board-8; null until then). `chevrons` is
+   * how many chevrons are drawn: none.
+   */
+  channel: {
+    demand: number;
+    max: number;
+    level: number;
+    capacityLevel: number;
+    /** The wired boxes' req/s the ROOM tick stands for (Frame.wiredCapacity). */
+    wired: number;
+    forecast: number | null;
+    whatIf: number | null;
+    retryShare: number;
+    marks: (Point & { label: string; value: number })[];
+    lanePps: number;
+    lanes: number[];
+    chevrons: number;
+    /** Page y of the ROOM tick and of the fill's level at the mouth. */
+    roomY: number;
+    levelY: number;
+  };
   /** Board frames synced so far. */
   frame: number;
   /**
