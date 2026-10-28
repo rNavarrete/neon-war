@@ -4,6 +4,7 @@
 import type { PartKind } from '../../sim/board';
 import type { Rect } from '../live/layout';
 import type { Point } from './layout';
+import type { InventoryCounts } from './tray';
 import type { PartStatus } from './view';
 
 export interface BoardTestState {
@@ -19,7 +20,13 @@ export interface BoardTestState {
   demand: number;
   /** Each slot's pad centre, and `rect` its drop box, in page CSS pixels. */
   slots: (Point & { id: string; part: string | null; locked: boolean; rect: Rect })[];
-  tray: (Point & { id: string; label: string; locked: boolean })[];
+  /**
+   * Every card in the inventory row, at its centre: `count` is how many the player could use now
+   * (0 for a drawer mini) and `price` its cost in credits (0 for the crew's gift, null for a mini).
+   */
+  tray: (Point & { id: string; label: string; locked: boolean; count: number; price: number | null })[];
+  /** The inventory zone (TRAY_AREA) in page CSS pixels, and the three cards' counts. */
+  inventory: { area: Rect; counts: InventoryCounts };
   parts: (Point & {
     id: string;
     kind: PartKind;

@@ -25,8 +25,8 @@ export interface Box extends Point {
 
 /** The feed zone as edges: {left 455, right 1910, top 110, bottom 640}. */
 export const BOARD_AREA = rectToArea(ZONES.feed);
-/** The tray of parts, bottom centre. */
-export const TRAY_AREA = { left: 560, right: 1360, top: 890, bottom: 1072 } as const;
+/** The inventory zone as edges: {left 455, right 1510, top 800, bottom 965}. */
+export const TRAY_AREA = rectToArea(ZONES.inventory);
 
 /** The table top: its far edge (y 222, x 575-1790) and its near edge (y 612, x 462-1903). */
 export const TABLE = {

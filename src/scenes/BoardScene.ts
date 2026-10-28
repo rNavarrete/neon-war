@@ -17,12 +17,10 @@ import {
   SERVER_PADS,
   TABLE,
   TABLE_FACE,
-  TRAY_AREA,
   WIRE_PICK,
   type Point,
   channelAt,
   distToPath,
-  inBox,
   partAt,
   partBox,
   partCentre,
@@ -38,7 +36,15 @@ import {
 } from './board/layout';
 import { ZONES, pageRect } from './live/layout';
 import { PacketPool, progress, travelSeconds } from './board/packets';
-import { LOCKED_KINDS, type TrayCard, lockedReason, trayCards } from './board/tray';
+import { InventoryView } from './board/InventoryView';
+import {
+  type InventoryCounts,
+  LOCKED_KINDS,
+  type TrayCard,
+  inventoryCounts,
+  lockedReason,
+  trayCards,
+} from './board/tray';
 import { type PartLook, loadColour, loadLabel, partLook } from './board/view';
 import { SCENES } from './keys';
 
@@ -155,7 +161,11 @@ export class BoardScene extends Phaser.Scene {
   private chevronShift = 0;
   private skipTags: Phaser.GameObjects.Text[] = [];
   private cards: TrayCard[] = [];
-  private cardViews = new Map<string, { art: Phaser.GameObjects.Image; lock: Phaser.GameObjects.Image }>();
+  private inventory!: InventoryView;
+  private counts: InventoryCounts = { server: 0, overclock: 0, balancer: 0 };
+  private countedParts: readonly Part[] | null = null;
+  private countedGiven = false;
+  private countedCredits = NaN;
   private balancerUnlocked = false;
   private ghost!: Phaser.GameObjects.Image;
   private refusalText!: Phaser.GameObjects.Text;
@@ -192,7 +202,9 @@ export class BoardScene extends Phaser.Scene {
     this.pool = new PacketPool();
     this.packetSprites = [];
     this.skipTags = [];
-    this.cardViews = new Map();
+    this.inventory = new InventoryView(this);
+    this.countedParts = null;
+    this.countedCredits = NaN;
     this.drag = null;
     this.selectedPart = null;
     this.selectedWire = null;
@@ -335,45 +347,27 @@ export class BoardScene extends Phaser.Scene {
     p.destroy();
   }
 
+  /** The inventory zone: drawn by InventoryView, its pointer kept here. */
   private drawTray(): void {
-    const { left, right, top, bottom } = TRAY_AREA;
-    const g = this.add.graphics().setDepth(20);
-    g.fillStyle(0x05070f, 0.88).fillRoundedRect(left, top, right - left, bottom - top, 18);
-    g.lineStyle(2, CYAN, 0.6).strokeRoundedRect(left, top, right - left, bottom - top, 18);
-    g.lineStyle(1, CYAN, 0.25).lineBetween(905, top + 14, 905, bottom - 14);
-
-    this.balancerUnlocked = balancerGiven(run());
+    const r = run();
+    this.balancerUnlocked = balancerGiven(r);
     this.cards = trayCards(this.balancerUnlocked);
-    for (const c of this.cards) {
-      const frame = this.add.image(c.x, c.y, 'part-card').setDisplaySize(c.w, c.h).setDepth(21);
-      if (c.locked) frame.setAlpha(0.6);
-      const art = this.add.image(c.x, c.y - (c.main ? 8 : 0), c.art).setDepth(22);
-      art.setScale(Math.min((c.w * 0.72) / art.width, (c.h * (c.main ? 0.62 : 0.7)) / art.height));
-      const lock = this.add.image(0, 0, 'icon-lock').setDepth(23);
-      lock.setScale((c.main ? 34 : 18) / lock.height);
-      lock.setPosition(c.x + c.w / 2 - (c.main ? 18 : 9), c.y + c.h / 2 - (c.main ? 22 : 11));
-      this.cardViews.set(c.id, { art, lock });
-      this.paintCard(c);
-      if (c.main) {
-        this.add
-          .text(c.x, c.y + c.h / 2 - 4, c.label, {
-            fontFamily: 'monospace',
-            fontSize: '15px',
-            fontStyle: 'bold',
-            color: '#2de2e6',
-          })
-          .setOrigin(0.5, 1)
-          .setDepth(23);
-      }
-    }
+    this.inventory.create(this.cards);
+    this.syncCounts(r.session.board.credits, r.session.board.parts, this.balancerUnlocked);
   }
 
-  private paintCard(c: TrayCard): void {
-    const v = this.cardViews.get(c.id);
-    if (!v) return;
-    v.lock.setVisible(c.locked);
-    if (c.locked) v.art.setTint(0x4a4f63);
-    else v.art.clearTint();
+  /**
+   * Re-count the cards when what they count from changes: the parts, the gift, or the credits
+   * crossing a whole credit (upkeep drips them down every frame). Nothing allocates otherwise.
+   */
+  private syncCounts(credits: number, parts: readonly Part[], given: boolean): void {
+    const whole = Math.floor(credits);
+    if (parts === this.countedParts && given === this.countedGiven && whole === this.countedCredits) return;
+    this.countedParts = parts;
+    this.countedGiven = given;
+    this.countedCredits = whole;
+    this.counts = inventoryCounts(credits, parts, given);
+    this.inventory.setCounts(this.counts);
   }
 
   private makeButton(icon: string, ring: number): Phaser.GameObjects.Container {
@@ -393,8 +387,10 @@ export class BoardScene extends Phaser.Scene {
     if (unlocked !== this.balancerUnlocked) {
       this.balancerUnlocked = unlocked;
       this.cards = trayCards(unlocked);
-      for (const c of this.cards) this.paintCard(c);
+      this.inventory.setLocks(this.cards);
     }
+    this.syncCounts(board.credits, board.parts, unlocked);
+    this.inventory.setInFlight(this.drag?.kind === 'card' ? this.drag.id : null);
 
     if (board.wires !== this.lastWires || board.parts !== this.lastParts) this.rebuildWires();
 
@@ -672,7 +668,7 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
 
-    const card = this.cards.find((c) => inBox(c, p.x, p.y));
+    const card = this.inventory.cardAt(p.x, p.y);
     if (card) {
       this.selectedPart = null;
       this.selectedWire = null;
@@ -807,7 +803,15 @@ export class BoardScene extends Phaser.Scene {
       credits: round(board.credits),
       demand: round(r.demand),
       slots,
-      tray: this.cards.map((c) => ({ id: c.id, label: c.label, locked: c.locked, ...page(c.x, c.y) })),
+      tray: this.cards.map((c) => ({
+        id: c.id,
+        label: c.label,
+        locked: c.locked,
+        ...page(c.x, c.y),
+        count: this.inventory.countOf(c.id),
+        price: c.price,
+      })),
+      inventory: { area: pageRect(ZONES.inventory, rect), counts: { ...this.counts } },
       parts: board.parts.flatMap((part) => {
         const c = partCentre(part);
         if (!c) return [];

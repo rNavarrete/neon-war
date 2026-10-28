@@ -119,3 +119,47 @@ test('the feed: every part and slot inside the feed zone, the skyline above the 
 
   await page.screenshot({ path: 'test-results/screens/board-live-c1.png' });
 });
+
+test('the inventory row: cards with prices and counts in the inventory zone, the drawer not for tonight', async ({
+  page,
+}) => {
+  await openBoard(page);
+  const { board: b, live } = await sections(page);
+  const zone = live.zones.inventory;
+  expect(b.inventory.area).toEqual(zone);
+  for (const t of b.tray) {
+    expect(t.x, t.id).toBeGreaterThanOrEqual(zone.x);
+    expect(t.x, t.id).toBeLessThanOrEqual(zone.x + zone.w);
+    expect(t.y, t.id).toBeGreaterThanOrEqual(zone.y);
+    expect(t.y, t.id).toBeLessThanOrEqual(zone.y + zone.h);
+  }
+
+  const byId = Object.fromEntries(b.tray.map((t) => [t.id, t]));
+  // 400 credits buy five 80-credit servers; no server to fit a kit to yet; the balancer not given.
+  expect(byId.server).toMatchObject({ price: 80, count: 5, locked: false });
+  expect(byId.overclock).toMatchObject({ price: 60, count: 0, locked: false });
+  expect(byId.balancer).toMatchObject({ price: 0, count: 0, locked: true });
+  expect(b.inventory.counts).toEqual({ server: 5, overclock: 0, balancer: 0 });
+  const minis = b.tray.filter((t) => !['server', 'overclock', 'balancer'].includes(t.id));
+  expect(minis).toHaveLength(20);
+  for (const m of minis) expect(m).toMatchObject({ price: null, count: 0, locked: true });
+
+  // Placing a server spends 80 (and upkeep drips a little more): the server count follows the
+  // credits, and there is now one server to fit a kit to.
+  await placeServer(page, 's1');
+  await expect.poll(async () => (await board(page)).inventory.counts.overclock).toBe(1);
+  const after = await board(page);
+  const servers = Math.min(Math.floor(after.credits / 80), 5);
+  expect([3, 4]).toContain(servers);
+  expect(after.inventory.counts).toEqual({ server: servers, overclock: 1, balancer: 0 });
+  expect(after.tray.find((t) => t.id === 'server')!.count).toBe(servers);
+  expect(after.tray.find((t) => t.id === 'overclock')!.count).toBe(1);
+
+  // A drawer mini is not for tonight, and says so without naming its kind.
+  const mini = minis[5];
+  await page.mouse.click(mini.x, mini.y);
+  await expect.poll(async () => (await board(page)).refusal).toMatch(/not tonight/i);
+  expect((await board(page)).refusal!.toLowerCase()).not.toContain(mini.label);
+
+  await page.screenshot({ path: 'test-results/screens/board-live-inventory.png' });
+});
