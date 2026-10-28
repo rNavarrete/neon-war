@@ -2,7 +2,7 @@ import script from '../docs/SCRIPT.md?raw';
 import strings from '../src/strings.ts?raw';
 import { PLAY_FLAGS, flagsFrom } from '../src/scenes/live/flags';
 import { countDisplayList, liveTestState, perfTestState } from '../src/scenes/live/hook';
-import { LAYOUT_VERSION, ZONES, ZONE_IDS, pageRect } from '../src/scenes/live/layout';
+import { LAYOUT_VERSION, ZONES, ZONE_IDS, type ZoneId, pageRect } from '../src/scenes/live/layout';
 import {
   BOARD_ZONES,
   REGISTRY,
@@ -22,6 +22,9 @@ import { bus } from '../src/game/bus';
 
 // The Live screen's skeleton (tech-3): the flags, the registry's shape, the placeholder's budget and
 // the hook sections, all without Phaser (the placeholder gets a stub scene).
+
+/** The registry zones no lane has drawn yet, in registry order (each lane takes its zones out). */
+const STILL_PLACEHOLDERS: ZoneId[] = ['alert', 'map', 'cam', 'gauge', 'scope', 'comms', 'chat'];
 
 describe('live flags', () => {
   it('turns lite on under ?test and off in play', () => {
@@ -62,13 +65,16 @@ describe('live registry', () => {
   it('makes a fresh placeholder for every line, each in its own zone', () => {
     const views = createViews();
     expect(views.map((v) => v.zone)).toEqual(REGISTRY_ZONES);
-    expect(views.every((v) => v instanceof PlaceholderView)).toBe(true);
-    expect(placeholderZones(views)).toEqual(REGISTRY_ZONES);
+    expect(views.filter((v) => v instanceof PlaceholderView).map((v) => v.zone)).toEqual(STILL_PLACEHOLDERS);
+    expect(placeholderZones(views)).toEqual(STILL_PLACEHOLDERS);
     const again = createViews();
     for (let i = 0; i < views.length; i++) expect(again[i]).not.toBe(views[i]);
     // A lane's view in place of a placeholder drops out of the placeholder list.
-    const custom = { ...views[0], zone: 'title' as const };
-    expect(placeholderZones([custom, ...views.slice(1)])).toEqual(REGISTRY_ZONES.slice(1));
+    const at = views.findIndex((v) => v.zone === STILL_PLACEHOLDERS[0]);
+    const custom = { ...views[at], zone: STILL_PLACEHOLDERS[0] };
+    expect(placeholderZones([...views.slice(0, at), custom, ...views.slice(at + 1)])).toEqual(
+      STILL_PLACEHOLDERS.slice(1),
+    );
   });
 });
 
@@ -180,7 +186,7 @@ describe('live hook sections', () => {
     expect(Object.keys(live.zones)).toEqual(ZONE_IDS);
     for (const id of ZONE_IDS) expect(live.zones[id]).toEqual(pageRect(ZONES[id], canvas));
     expect(live.zones.feed).toEqual({ x: 303.3, y: 73.3, w: 970, h: 353.3 });
-    expect(live.placeholders).toEqual(REGISTRY_ZONES);
+    expect(live.placeholders).toEqual(STILL_PLACEHOLDERS);
   });
 
   it('counts the display lists by kind and rounds the frame rate', () => {

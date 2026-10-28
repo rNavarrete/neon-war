@@ -2,11 +2,33 @@
 // its value drawn in code, minus and plus buttons in the card's lower corners, drag and wheel to
 // turn it. SET is the deck's key 3 (the HUD calls pressSet). It doesn't know what the value means;
 // the HUD reads `value` and decides what SET records (req/s in C1, servers for the sizing prompt).
+// Once the player wires something while the C1 question is still open, the card dims and reads
+// 'your guess stays free' (dial.ts), and stays open and SET-able until SET.
 // Geometry from src/scenes/hud/layout.ts RIGHT, derived from CARDS.dialCard.
 
 import Phaser from 'phaser';
-import { type DialMode, dialFraction, dialValueAt, turnDial } from './dial';
+import { bus } from '../../game/bus';
+import { type DialMode, dialDimmed, dialFraction, dialLabel, dialValueAt, turnDial } from './dial';
 import { COLORS, FONT, RIGHT } from './layout';
+import { provideHudPart } from './panel';
+
+/** The dial card's look, mirrored as hud.dialCard. */
+export interface DialCardTestState {
+  /** Dimmed with the free-guess note: the player wired before answering C1. */
+  dimmed: boolean;
+  /** The words on the card's label now. */
+  label: string;
+}
+
+declare module './hook' {
+  interface HudTestState {
+    /** The dial card's look (gauges-2); hud.dial keeps what it holds. */
+    dialCard?: DialCardTestState;
+  }
+}
+
+/** The card's alpha while dimmed. */
+const DIM_ALPHA = 0.55;
 
 const SWEEP_START = 135;
 const SWEEP = 270;
@@ -32,6 +54,12 @@ export class DialView {
   private readonly valueText: Phaser.GameObjects.Text;
   private readonly label: Phaser.GameObjects.Text;
   private shown = '';
+  /** The question the HUD last asked the card to show. */
+  private question = '';
+  private shownLabel = '';
+  /** A wire went in since the run began (bus occurrence 'wired'); cleared by reset. */
+  private wired = false;
+  private dimmed = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -71,6 +99,18 @@ export class DialView {
 
     this.root.add([card, face, this.g, this.valueText, ...minus, ...plus, this.label]);
     this.root.setVisible(false);
+
+    const offWired = bus.on('occurrence', (o) => {
+      if (o.kind === 'wired') this.wired = true;
+    });
+    const offHook = provideHudPart(scene, 'dialCard', () => ({
+      dimmed: this.dimmed,
+      label: this.shownLabel,
+    }));
+    scene.events.once('shutdown', () => {
+      offWired();
+      offHook();
+    });
   }
 
   get visible(): boolean {
@@ -100,13 +140,14 @@ export class DialView {
       this.value = 0;
       this.locked = false;
     }
-    this.label.setText(label);
+    this.question = label;
   }
 
-  /** Back to zero and unlocked (a new run). */
+  /** Back to zero and unlocked, with nothing wired yet (a new run). */
   reset(): void {
     this.value = 0;
     this.locked = false;
+    this.wired = false;
   }
 
   lock(value: number): void {
@@ -116,6 +157,16 @@ export class DialView {
 
   /** Redraw the needle and the value (cheap; only re-sets text when it changes). */
   draw(): void {
+    const dimmed = dialDimmed(this.mode, this.locked ? this.value : null, this.wired);
+    if (dimmed !== this.dimmed) {
+      this.dimmed = dimmed;
+      this.root.setAlpha(dimmed ? DIM_ALPHA : 1);
+    }
+    const label = dialLabel(this.question, dimmed);
+    if (label !== this.shownLabel) {
+      this.shownLabel = label;
+      this.label.setText(label);
+    }
     const d = RIGHT.dial;
     const angle = Phaser.Math.DegToRad(SWEEP_START + SWEEP * dialFraction(this.value, this.mode));
     const cx = d.x + KNOB.dx;

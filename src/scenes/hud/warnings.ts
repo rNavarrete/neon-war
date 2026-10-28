@@ -1,7 +1,10 @@
 // What the surge and power-dip warnings show at a moment. Pure functions of sim time; the HUD draws
 // whatever they return.
 
+import type { Part } from '../../sim/board';
 import { BROWNOUT } from '../../sim/brownout';
+import { partAnchor } from '../board/layout';
+import { CARDS, type Point, centreOf } from '../live/layout';
 import { type Surge, SURGES } from '../../sim/demand';
 import type { LineId } from '../../strings';
 
@@ -77,4 +80,19 @@ export function dipWarningAt(
   if (ahead > BROWNOUT.powerDip.warningSeconds || ahead <= 0) return null;
   const lit = reduceFlicker || Math.floor(ahead * DIP_FLASH_HZ * 2) % 2 === 0;
   return { partId: dip.partId, lit, flashing: !reduceFlicker };
+}
+
+/** Where the dip mark sits when the board can't place the part: the centre of CARDS.dipFallback. */
+export const DIP_FALLBACK: Point = centreOf(CARDS.dipFallback);
+
+/**
+ * Where the power-dip mark is drawn, in game pixels: on the part, at the board's own anchor for it
+ * (partAnchor in src/scenes/board/layout.ts, the point board.parts[] reports), or on the fallback
+ * card when the board can't say where the part is. Replaces HudScene.partLocator.
+ */
+export function dipMarkAt(
+  board: { readonly parts: readonly Pick<Part, 'id' | 'kind' | 'slot'>[] },
+  partId: string,
+): Point {
+  return partAnchor(board, partId) ?? DIP_FALLBACK;
 }

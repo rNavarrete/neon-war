@@ -3,6 +3,8 @@
 // shows a PlaceholderView. The feed and the inventory are the board's, drawn by BoardScene, and have
 // no line here. The HUD scene creates every entry in this order (docs/LIVE.md).
 
+import { DeckView } from '../hud/DeckView';
+import { ClockView, TitleView } from '../hud/TitleView';
 import type { ZoneId } from './layout';
 import { type LiveView, PlaceholderView } from './view';
 
@@ -15,15 +17,15 @@ export interface RegistryEntry {
 }
 
 export const REGISTRY: readonly RegistryEntry[] = [
-  { zone: 'title', lane: 'gauges', make: () => new PlaceholderView('title') },
+  { zone: 'title', lane: 'gauges', make: () => new TitleView() },
   { zone: 'alert', lane: 'gauges', make: () => new PlaceholderView('alert') },
-  { zone: 'clock', lane: 'gauges', make: () => new PlaceholderView('clock') },
+  { zone: 'clock', lane: 'gauges', make: () => new ClockView() },
   { zone: 'map', lane: 'gauges', make: () => new PlaceholderView('map') },
   { zone: 'cam', lane: 'luxcam', make: () => new PlaceholderView('cam') },
   { zone: 'gauge', lane: 'gauges', make: () => new PlaceholderView('gauge') },
   { zone: 'scope', lane: 'gauges', make: () => new PlaceholderView('scope') },
   { zone: 'comms', lane: 'comms', make: () => new PlaceholderView('comms') },
-  { zone: 'deck', lane: 'gauges', make: () => new PlaceholderView('deck') },
+  { zone: 'deck', lane: 'gauges', make: () => new DeckView() },
   { zone: 'chat', lane: 'chat', make: () => new PlaceholderView('chat') },
 ];
 
