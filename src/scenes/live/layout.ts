@@ -55,7 +55,7 @@ export const ZONES = {
   map: { x: 16, y: 110, w: 408, h: 310 },
   /** Left column, middle: Lux's cam frame. */
   cam: { x: 16, y: 430, w: 408, h: 270 },
-  /** Left column, lower: the demand gauge with the estimate and sizing marks. */
+  /** Left column, lower: the demand gauge. */
   gauge: { x: 16, y: 710, w: 408, h: 170 },
   /** Left column, bottom: the scope, the chart with the demand and capacity lines. */
   scope: { x: 16, y: 890, w: 408, h: 180 },
@@ -82,13 +82,6 @@ export const ZONE_IDS: readonly ZoneId[] = Object.keys(ZONES) as ZoneId[];
  * click point tests/browser/hud.spec.ts reads from the hook still lands.
  */
 export const CARDS = {
-  /**
-   * The 230 px estimate dial on its card, top-right of the feed, while a dial question is open: x
-   * 1560-1900, y 120-370, the face centred on x 1730.
-   */
-  dialCard: { x: 1560, y: 120, w: 340, h: 250 },
-  /** The C6 sizing prompt beside the dial card: x 1210-1550, y 120-220. */
-  sizingPrompt: { x: 1210, y: 120, w: 340, h: 100 },
   /** The Solace banner (1431x700 art at 0.45), centred where the HUD slides it in today. */
   banner: centred(960, 330, 644, 316),
   /** The C1 job card (864x1252 art at 0.6), centred where the HUD opens it today. */

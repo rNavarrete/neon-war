@@ -1,8 +1,7 @@
 // Where the HUD's pieces sit, in 1920x1080 game space. Every number here is computed from the Live
 // screen's contract (src/scenes/live/layout.ts ZONES and CARDS, docs/LIVE.md): a piece is placed
-// from its zone's corner, so moving a zone moves its pieces. Only the job card, the Solace banner,
-// the dial card and the sizing prompt (and the dip warning, on its part or its fallback card) cover
-// the feed, and only while open. HUD_RECTS lists each piece's box and the zone or card it must stay
+// from its zone's corner, so moving a zone moves its pieces. Only the job card and the Solace banner
+// (and the dip warning, on its part or its fallback card) cover the feed, and only while open. HUD_RECTS lists each piece's box and the zone or card it must stay
 // inside, for tests/hud-layout.test.ts. Pure: no Phaser.
 
 import { CARDS, type CardId, type Rect, SCREEN_RECT, ZONES, type ZoneId, centreOf } from '../live/layout';
@@ -63,19 +62,11 @@ export const LEFT = {
   chartLegend: { x: scope.x + 30, y: scope.y + 163, w: 354, h: 16 },
 };
 
-// ---- the right: the dial card and the chat ----
+// ---- the right: the chat ----
 
-const dialCard = K.dialCard;
-const dialCentre = centreOf(dialCard);
 const chat = Z.chat;
 
 export const RIGHT = {
-  dialCard: { x: dialCard.x, y: dialCard.y, w: dialCard.w, h: dialCard.h },
-  /** The 230 px dial, centred on its card (the painted art is 823x835). */
-  dial: { x: dialCentre.x, y: dialCentre.y, size: 230 },
-  dialLabel: { x: dialCentre.x, y: dialCard.y + 4, w: 200, h: 22 },
-  dialMinus: { x: dialCard.x + 28, y: dialCard.y + dialCard.h - 28, r: 26 },
-  dialPlus: { x: dialCard.x + dialCard.w - 28, y: dialCard.y + dialCard.h - 28, r: 26 },
   /** The one chat column (block and stream merged): its panel is the zone, the rows the body. */
   chat: { x: chat.x, y: chat.y, w: chat.w, h: chat.h },
   chatTitle: { x: chat.x + 22, y: chat.y + 14 },
@@ -94,17 +85,16 @@ export type SlotName = (typeof SLOT_NAMES)[number];
 const KEY_LABELS = [
   { digit: '1', word: 'REGROUP' },
   { digit: '2', word: 'CUT 3F' },
-  { digit: '3', word: 'SET' },
 ] as const;
 
 export const BOTTOM = {
   /** The crew's five slots, r 42 at y 720, x 517 + 98 i (comms.ts commsLayout matches them). */
   slots: SLOT_NAMES.map((name, i) => ({ name, x: comms.x + 62 + 98 * i, y: comms.y + 75, r: 42 })),
-  /** The deck's keys, 80x64 at (1272, 1022), (1360, 1022), (1448, 1022). */
+  /** The deck's keys, 80x64 at (1272, 1022) and (1360, 1022); the third slot (SET) is empty. */
   keys: KEY_LABELS.map((k, i) => ({ ...k, x: deck.x + 817 + 88 * i, y: deck.y + 52, w: 80, h: 64 })),
 };
 
-export const KEY = { regroup: 0, cut: 1, set: 2 } as const;
+export const KEY = { regroup: 0, cut: 1 } as const;
 
 // ---- cards over the feed ----
 
@@ -115,7 +105,6 @@ export const BANNER_ART = { w: 1431, h: 700 } as const;
 const jobCard = K.jobCard;
 const jobCentre = centreOf(K.jobCard);
 const banner = centreOf(K.banner);
-const sizing = K.sizingPrompt;
 
 export const CENTRE = {
   /** The 864x1252 job card art at 0.6, centred on its card (the card is the art rounded to even pixels). */
@@ -124,8 +113,6 @@ export const CENTRE = {
   jobCardOk: { x: jobCentre.x, y: jobCard.y + jobCard.h - 35, w: 150, h: 50 },
   /** The 1431x700 Solace banner art at 0.45, centred on its card (the art rounded to even pixels). */
   banner: { x: banner.x, y: banner.y, scale: 0.45 },
-  /** The C6 sizing prompt, beside the dial card, its arrow pointing at the dial. */
-  sizing: { x: sizing.x, y: sizing.y, w: sizing.w, h: sizing.h },
   /** WIRING(board): where the dip warning goes when the board hasn't said where the part is. */
   dipFallback: centreOf(K.dipFallback),
 };
@@ -189,16 +176,6 @@ export const HUD_RECTS: readonly HudRect[] = [
     home: 'scope',
   },
   { id: 'scope.legend', rect: LEFT.chartLegend, home: 'scope' },
-  { id: 'dial.card', rect: RIGHT.dialCard, home: 'dialCard' },
-  {
-    id: 'dial.face',
-    rect: boxAround(RIGHT.dial.x, RIGHT.dial.y, RIGHT.dial.size, RIGHT.dial.size * (835 / 823)),
-    home: 'dialCard',
-  },
-  { id: 'dial.label', rect: boxAround(RIGHT.dialLabel.x, RIGHT.dialLabel.y + 11, 200, 22), home: 'dialCard' },
-  { id: 'dial.minus', rect: circle(RIGHT.dialMinus), home: 'dialCard' },
-  { id: 'dial.plus', rect: circle(RIGHT.dialPlus), home: 'dialCard' },
-  { id: 'sizing.prompt', rect: CENTRE.sizing, home: 'sizingPrompt' },
   { id: 'chat.panel', rect: RIGHT.chat, home: 'chat' },
   { id: 'chat.body', rect: RIGHT.chatBody, home: 'chat' },
   ...BOTTOM.slots.map((s): HudRect => ({ id: `comms.slot.${s.name}`, rect: circle(s), home: 'comms' })),
@@ -233,7 +210,7 @@ export const HUD_RECTS: readonly HudRect[] = [
 ];
 
 /** The cards allowed over the feed while open. */
-export const FEED_CARDS: readonly Home[] = ['jobCard', 'banner', 'dialCard', 'sizingPrompt', 'dipFallback'];
+export const FEED_CARDS: readonly Home[] = ['jobCard', 'banner', 'dipFallback'];
 
 /** The rect a home names. */
 export function homeRect(home: Home): Rect {

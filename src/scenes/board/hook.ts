@@ -224,13 +224,12 @@ export interface BoardTestState {
     reason: string | null;
   } | null;
   /**
-   * The what-if ghost (board-8, contract 'board.ghost'): while a card is over a target and no dial
-   * question is open (C1 until the estimate is SET, C6 until the sizing is SET), the card, what it
-   * is over, whether the drop is legal, its plate ('+60 room · boots 3 s · -80 cr', or '+0 room ·
+   * The what-if ghost (board-8, contract 'board.ghost'): while a card is over a target, the card,
+   * what it is over, whether the drop is legal, its plate ('+60 room · boots 3 s · -80 cr', or '+0 room ·
    * nothing feeds it' when no free feed could wire the box), the wired req/s now and after the drop
    * (ghostCapacity over wiredCapacity) and what it adds, the what-if level and the tick's label
    * ('ROOM +60', only when it adds room), whether the plate is on screen and the card snapped onto
-   * the target. Null when nothing is dragged over a target, or while the gate is shut.
+   * the target. Null when nothing is dragged over a target.
    */
   ghost: {
     card: string;

@@ -345,13 +345,6 @@ export const PICKED_ART: readonly PickedArt[] = [
     use: 'the C1 job card',
   },
   {
-    file: 'art/hud/estimate-dial.webp',
-    cut: size(823, 835),
-    display: size(230, 233),
-    zone: 'dialCard',
-    use: 'the estimate dial face',
-  },
-  {
     file: 'art/hud/warning-bar.webp',
     cut: size(537, 147),
     display: size(1040, 84),

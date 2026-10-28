@@ -2,7 +2,6 @@
 // "you saw it at" line under each term the taught trace has an entry for. Pure: the results and the
 // trace come in as data. There are no letter grades; each category is shown as its raw number.
 
-import type { RunNotes } from '../game/run';
 import { TERM_GROUP, TERM_KEYS, type TermGroup, type TermKey } from '../scenes/hud/lineMeta';
 import type { MomentKind, TaughtEntry, TaughtTrace } from '../scenes/hud/taught';
 import { twelveHour } from '../scenes/hud/format';
@@ -24,8 +23,6 @@ export interface DebriefResults {
   readonly ozzieTab: number;
   /** Whether the player decommissioned down after midnight (C7). */
   readonly scaledDown: boolean;
-  /** The C1 estimate dial in req/s, or null if never set. */
-  readonly estimate: number | null;
   /** Whether the block stayed lit at midnight. */
   readonly midnightHeld: boolean;
   /** Servers running at midnight. */
@@ -38,21 +35,12 @@ export type PendingResults = Pick<
   'droppedRequests' | 'wastedCredits' | 'scaledDown' | 'midnightHeld' | 'serversAtMidnight'
 >;
 
-/**
- * PLACEHOLDER: "estimate close" has no threshold yet (GAME.md: the debrief's grade thresholds are
- * not set). This borrows the C1 dial's "about right" band from docs/SCRIPT.md (C1.triage.03: the
- * player sets 25 to 35). Rolando to confirm.
- */
-export const ESTIMATE_CLOSE_RANGE = { min: 25, max: 35 } as const;
-
-export function estimateClose(estimate: number | null): boolean {
-  return estimate !== null && estimate >= ESTIMATE_CLOSE_RANGE.min && estimate <= ESTIMATE_CLOSE_RANGE.max;
-}
-
 /** Rei's grade lines for these results, in the order docs/SCRIPT.md lists them. */
 export function debriefLines(r: DebriefResults): LineId[] {
   const lines: LineId[] = ['C8.rei.open'];
-  lines.push(estimateClose(r.estimate) && r.midnightHeld ? 'C8.rei.sizing.good' : 'C8.rei.sizing.bad');
+  // Graded on what was built (GAME.md "Final sizing"): midnight held without boxes that only cost.
+  const sizedRight = r.midnightHeld && r.serversAtMidnight < BROWNOUT.finalSizing.waste;
+  lines.push(sizedRight ? 'C8.rei.sizing.good' : 'C8.rei.sizing.bad');
   lines.push(r.banner === 'pay' ? 'C8.rei.banner.pay' : 'C8.rei.banner.skip');
   if (r.ozzieTab > BROWNOUT.ozzie.front) lines.push('C8.rei.debt', 'C8.ozzie.debt');
   if (r.serversAtMidnight >= BROWNOUT.finalSizing.waste) lines.push('C8.rei.waste');
@@ -61,14 +49,13 @@ export function debriefLines(r: DebriefResults): LineId[] {
   return lines;
 }
 
-/** Build the results from the run's session and notes plus what only ENG-503's sim knows. */
-export function debriefResults(session: Session, notes: RunNotes, pending: PendingResults): DebriefResults {
+/** Build the results from the run's session plus what only ENG-503's sim knows. */
+export function debriefResults(session: Session, pending: PendingResults): DebriefResults {
   return {
     ...pending,
     trustLeft: session.trust,
     banner: session.banner?.choice ?? null,
     ozzieTab: (session.ozzie.fronted ? BROWNOUT.ozzie.front : 0) + session.ozzie.debt,
-    estimate: notes.estimate,
   };
 }
 
@@ -112,10 +99,9 @@ export const TERM_NAMES: Readonly<Record<TermKey, string>> = (() => {
 
 /**
  * DRAFT pending D8 (the owner approves the wording): what each moment was, in the crew's words, for
- * the grey line under its term. `n` is the number the moment carries (the dial value, the boxes).
+ * the grey line under its term. `n` is the number the moment carries (the boxes).
  */
 export const MOMENT_WORDS: Readonly<Record<MomentKind, (n: number | null) => string>> = {
-  estimateSet: (n) => `you set the dial to ${n ?? '?'} a second`,
   firstLive: () => 'your first box went live',
   kitFitted: () => 'you fitted the kit to a box',
   secondBox: () => 'a second box went on the rack',
@@ -124,7 +110,6 @@ export const MOMENT_WORDS: Readonly<Record<MomentKind, (n: number | null) => str
   bigBoxDark: () => 'the big box went dark',
   retriesRising: () => 'refreshes piled on top',
   laundryCut: () => 'you cut the laundry floor loose',
-  sizingSet: (n) => `you picked ${n ?? '?'} boxes for midnight`,
   diesInAtMidnight: () => 'a box read DIES IN at midnight',
   heldWithSpare: (n) => `midnight held on ${n ?? '?'} boxes, one of them dark`,
   decommission: () => 'you switched a box off',

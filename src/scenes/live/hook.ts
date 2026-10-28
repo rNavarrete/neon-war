@@ -44,7 +44,7 @@ export interface PerfSection extends PerfTestState {
    * the texts among them. `objects` and `texts` above count hidden ones too (cards not up, the log).
    */
   drawn: { objects: number; texts: number };
-  /** The HUD's objects no registered view made: the host's own pieces (cards, dial, chat column). */
+  /** The HUD's objects no registered view made: the host's own pieces (cards, chat column). */
   host: { objects: number; texts: number };
   /** Every registered view by zone: its declared budget and what it has on the list now. */
   zones: Partial<Record<ZoneId, ZonePerf>>;

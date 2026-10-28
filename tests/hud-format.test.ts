@@ -1,28 +1,9 @@
 import { Run } from '../src/game/run';
-import {
-  DIAL_FREE_NOTE,
-  SERVER_MODE_FROM,
-  applyEstimate,
-  applySizing,
-  dialDimmed,
-  dialFraction,
-  dialLabel,
-  dialModeAt,
-  dialValueAt,
-  turnDial,
-} from '../src/scenes/hud/dial';
 import { chartCeiling, countdownText, errorState, secondsToMidnight } from '../src/scenes/hud/format';
-import {
-  dialQuestionOpen,
-  dismissJobCard,
-  jobCardDue,
-  openJobCard,
-  sizingPromptOpen,
-} from '../src/scenes/hud/jobCard';
-import { CENTRE, RIGHT } from '../src/scenes/hud/layout';
+import { dismissJobCard, jobCardDue, openJobCard } from '../src/scenes/hud/jobCard';
 import { DIP_FALLBACK, dipMarkAt } from '../src/scenes/hud/warnings';
 import { partAnchor, partCentre, toPage } from '../src/scenes/board/layout';
-import { CARDS, SCREEN, ZONES, centreOf, inside, pagePoint } from '../src/scenes/live/layout';
+import { CARDS, SCREEN, centreOf, pagePoint } from '../src/scenes/live/layout';
 import { BROWNOUT } from '../src/sim/brownout';
 import { SERVER_SLOTS } from '../src/sim/tick';
 
@@ -67,51 +48,6 @@ describe('chat error state', () => {
   });
 });
 
-describe('estimate dial', () => {
-  it('counts req/s until the midnight forecast, then servers', () => {
-    expect(dialModeAt(15)).toBe('reqps');
-    expect(dialModeAt(BROWNOUT.challenges.c6 - 11)).toBe('reqps');
-    expect(dialModeAt(BROWNOUT.challenges.c6 - 10)).toBe('servers');
-    expect(dialModeAt(BROWNOUT.challenges.c6)).toBe('servers');
-  });
-
-  it('turns in steps and stays on its scale', () => {
-    expect(turnDial(0, 6, 'reqps')).toBe(30);
-    expect(turnDial(30, -1, 'reqps')).toBe(25);
-    expect(turnDial(0, -3, 'reqps')).toBe(0);
-    expect(turnDial(595, 5, 'reqps')).toBe(600);
-    expect(turnDial(3, 1, 'servers')).toBe(4);
-    expect(turnDial(8, 1, 'servers')).toBe(8);
-  });
-
-  it('maps a drag angle to a snapped value and back', () => {
-    expect(dialValueAt(0.05, 'reqps')).toBe(30);
-    expect(dialValueAt(0.5, 'servers')).toBe(4);
-    expect(dialFraction(300, 'reqps')).toBe(0.5);
-    expect(dialValueAt(2, 'servers')).toBe(8);
-  });
-
-  it('a wrong guess costs nothing: credits, trust and the board stay the same', () => {
-    const r = new Run();
-    const before = r.session;
-    expect(applyEstimate(r, 480)).toBe(true);
-    expect(r.notes.estimate).toBe(480);
-    expect(r.session).toBe(before);
-    expect(r.session.board.credits).toBe(BROWNOUT.credits.starting);
-    expect(r.session.trust).toBe(BROWNOUT.trust.starting);
-  });
-
-  it('keeps the first answer for the debrief', () => {
-    const r = new Run();
-    applyEstimate(r, 30);
-    expect(applyEstimate(r, 480)).toBe(false);
-    expect(r.notes.estimate).toBe(30);
-    expect(applySizing(r, 4)).toBe(true);
-    expect(applySizing(r, 6)).toBe(false);
-    expect(r.notes).toEqual({ estimate: 30, sizing: 4 });
-  });
-});
-
 describe('job card', () => {
   it('holds the board until clicked away, starts C1, and does not come back', () => {
     const r = new Run();
@@ -128,61 +64,6 @@ describe('job card', () => {
     const r = new Run();
     r.now = BROWNOUT.challenges.c2;
     expect(jobCardDue(r)).toBe(false);
-  });
-});
-
-// ---- gauges-2: the cards over the feed ----
-
-describe('the dial card follows the dock truth table', () => {
-  const C = BROWNOUT.challenges;
-  const midnight = BROWNOUT.clock.midnight;
-  // now, job card open, estimate, sizing -> dial question open, sizing prompt open
-  const table: [number, boolean, number | null, number | null, boolean, boolean][] = [
-    [C.c1, true, null, null, false, false], // under the job card: nothing docks
-    [C.c1, false, null, null, true, false], // C1, card closed, no estimate: the dial asks
-    [C.c2 + 30, false, null, null, true, false], // still unanswered later on: still asks
-    [C.c1, false, 30, null, false, false], // estimate SET: the card goes
-    [SERVER_MODE_FROM - 1, false, 30, null, false, false], // just before the sizing prompt
-    [SERVER_MODE_FROM, false, 30, null, true, true], // C6 forecast: the dial counts boxes
-    [SERVER_MODE_FROM, false, null, null, true, true], // the C1 estimate never set: C6 asks anyway
-    [SERVER_MODE_FROM, true, 30, null, false, false], // a card up: nothing docks
-    [C.c6 + 30, false, 30, 4, false, false], // sizing SET: gone
-    [midnight, false, 30, null, false, false], // midnight: too late to ask
-  ];
-  it.each(table)(
-    'now %s, card %s, estimate %s, sizing %s',
-    (now, cardOpen, estimate, sizing, asks, prompt) => {
-      const a = { now, cardOpen, estimate, sizing };
-      expect(dialQuestionOpen(a)).toBe(asks);
-      expect(sizingPromptOpen(a)).toBe(prompt);
-    },
-  );
-});
-
-describe('the dial card dims after the first wire in C1', () => {
-  it('dims only while the C1 question is open and something is wired; the card stays open', () => {
-    expect(dialDimmed('reqps', null, false)).toBe(false);
-    expect(dialDimmed('reqps', null, true)).toBe(true);
-    expect(dialDimmed('reqps', 30, true)).toBe(false);
-    expect(dialDimmed('servers', null, true)).toBe(false);
-    expect(DIAL_FREE_NOTE).toBe('your guess stays free');
-    expect(dialLabel('HOW MANY A SECOND?', true)).toBe(DIAL_FREE_NOTE);
-    expect(dialLabel('HOW MANY A SECOND?', false)).toBe('HOW MANY A SECOND?');
-    // Dimming is a look only: the question stays open (hud.dial.visible) until SET.
-    const ask = { now: BROWNOUT.challenges.c1 + 5, cardOpen: false, estimate: null, sizing: null };
-    expect(dialQuestionOpen(ask)).toBe(true);
-  });
-});
-
-describe('the cards are read from the Live layout', () => {
-  it('puts the dial and its buttons on CARDS.dialCard and the sizing prompt on CARDS.sizingPrompt', () => {
-    expect(RIGHT.dialCard).toEqual(CARDS.dialCard);
-    expect(RIGHT.dial).toMatchObject(centreOf(CARDS.dialCard));
-    for (const b of [RIGHT.dialMinus, RIGHT.dialPlus]) {
-      expect(inside({ x: b.x - b.r, y: b.y - b.r, w: 2 * b.r, h: 2 * b.r }, CARDS.dialCard)).toBe(true);
-    }
-    expect(CENTRE.sizing).toEqual(CARDS.sizingPrompt);
-    for (const id of ['dialCard', 'sizingPrompt'] as const) expect(inside(CARDS[id], ZONES.feed)).toBe(true);
   });
 });
 

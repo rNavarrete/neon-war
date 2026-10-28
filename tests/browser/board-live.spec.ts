@@ -969,9 +969,7 @@ async function clickStoryOn(page: Page): Promise<void> {
 
 type Shell = { paused: boolean };
 type HudBits = {
-  notes: { estimate: number | null; sizing: number | null };
-  sizingPrompt: { open: boolean };
-  dial: { visible: boolean };
+  surge: { startsAt: number } | null;
 };
 const shell = (page: Page) =>
   page.evaluate(() => (window.__neonTest!.state as unknown as { shell?: Shell }).shell ?? null);
@@ -989,7 +987,7 @@ async function hold(page: Page, from: Pt, to: Pt): Promise<void> {
 /** The debrief's words a plate must never print (docs/SCRIPT.md C8.terms, the four the ticket names). */
 const DEBRIEF_WORDS = ['capacity', 'headroom', 'health check', 'load balancer'];
 
-test('C1 to C3 (board-8): legality tints, the ghost waits for SET then tells the truth about the feed, plates, Esc and Delete, keys 1/2/3 left alone', async ({
+test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the feed, plates, Esc and Delete, keys 1/2 left alone', async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -1001,8 +999,8 @@ test('C1 to C3 (board-8): legality tints, the ghost waits for SET then tells the
   const lbPad = b.slots.find((s) => s.id === 'lb')!;
   const credits = b.credits;
 
-  // A card drag tints every pad by legality and reports what it is over; in C1 the estimate is not
-  // SET yet, so there is no ghost and no what-if tick.
+  // A card drag tints every pad by legality and reports what it is over. There is no estimate step,
+  // so the ghost shows from the first drag.
   await hold(page, card, s1Pad);
   b = await board(page);
   expect(b.dragging).toBe('server');
@@ -1024,8 +1022,7 @@ test('C1 to C3 (board-8): legality tints, the ghost waits for SET then tells the
     s5: 'legal',
     s6: 'legal',
   });
-  expect(b.ghost, 'no ghost until the estimate is SET').toBeNull();
-  expect(b.channel.whatIf).toBeNull();
+  expect((await expectGhost(page, 's1')).ghost).toMatchObject({ over: 's1', adds: 60 });
   await page.mouse.move(lbPad.x, lbPad.y, { steps: 3 });
   await expect.poll(async () => (await board(page)).dragOver?.over).toBe('lb');
   expect((await board(page)).dragOver).toMatchObject({ state: 'wrong', legal: false });
@@ -1040,12 +1037,7 @@ test('C1 to C3 (board-8): legality tints, the ghost waits for SET then tells the
   expect(b.pads.every((p) => p.legality === null)).toBe(true);
   expect((await shell(page))?.paused, 'Esc during a drag does not open the pause menu').toBe(false);
 
-  // Key 3 reaches the deck through the board: it SETs the estimate.
-  expect((await hudBits(page))!.notes.estimate).toBeNull();
-  await page.keyboard.press('3');
-  await expect.poll(async () => (await hudBits(page))!.notes.estimate).not.toBeNull();
-
-  // Now the ghost shows: over s1 with the gateway free it adds 60, the what-if tick reads ROOM +60,
+  // The ghost again: over s1 with the gateway free it adds 60, the what-if tick reads ROOM +60,
   // and no credits are spent while it hovers.
   await hold(page, card, s1Pad);
   b = await expectGhost(page, 's1');
@@ -1135,19 +1127,19 @@ async function expectGhost(page: Page, over: string): Promise<BoardTestState> {
   return board(page);
 }
 
-test('C6 (board-8): the ghost and the what-if tick stay away while the sizing prompt is open, and come once it is SET', async ({
+test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behind the crew splitter', async ({
   page,
 }) => {
   test.setTimeout(120_000);
-  // Best play at speed 12 to the midnight forecast: the sizing prompt opens at 440 and stays until SET
-  // or midnight at 510 (about 6 s at this speed).
+  // Best play at speed 12 to the midnight forecast (440, the surge at 450): no sizing prompt holds
+  // the ghost back.
   await liveOpen(page, { speed: 12 });
   await liveReach(page, 'c1');
   const deadline = Date.now() + 90_000;
   for (;;) {
     const h = await hudBits(page);
-    if (h?.sizingPrompt.open) break;
-    if (Date.now() > deadline) throw new Error('the sizing prompt never opened');
+    if (h?.surge?.startsAt === 450) break;
+    if (Date.now() > deadline) throw new Error('the midnight forecast never came');
     await clickStoryOn(page);
     await page.waitForTimeout(40);
   }
@@ -1157,26 +1149,12 @@ test('C6 (board-8): the ghost and the what-if tick stay away while the sizing pr
   expect(empty.length).toBeGreaterThan(0);
   const pad = empty[empty.length - 1];
   await hold(page, card, pad);
-  // One read of both sections, so the prompt and the board are seen on the same frame.
-  const both = () =>
-    page.evaluate(() => {
-      const s = window.__neonTest!.state as unknown as { board: BoardTestState; hud: HudBits };
-      return { board: s.board, prompt: s.hud.sizingPrompt.open };
-    });
-  let seen = await both();
-  for (let i = 0; i < 100 && seen.board.dragOver?.over !== pad.id; i++) seen = await both();
-  b = seen.board;
-  expect(b.dragOver?.over).toBe(pad.id);
-  expect(seen.prompt, 'the sizing prompt is still open').toBe(true);
+  await expect.poll(async () => (await board(page)).dragOver?.over).toBe(pad.id);
+  b = await board(page);
   // An empty pad: legal, or short of credits by now (the ghost shows either way; only the drop differs).
   expect(['legal', 'poor']).toContain(b.dragOver!.state);
-  expect(b.ghost, 'no ghost while the player sizes alone').toBeNull();
-  expect(b.channel.whatIf).toBeNull();
 
-  // SET the sizing (key 3 still reaches the deck with a card in hand): the ghost comes, wired
-  // behind the crew's splitter, adding 60.
-  await page.keyboard.press('3');
-  await expect.poll(async () => (await hudBits(page))!.notes.sizing).not.toBeNull();
+  // The ghost comes, wired behind the crew's splitter, adding 60.
   b = await expectGhost(page, pad.id);
   expect(b.ghost).toMatchObject({ adds: 60, tick: 'ROOM +60' });
   expect(b.ghost!.plate).toMatch(/^\+60 room · boots 3 s · -80 cr$/);

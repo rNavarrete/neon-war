@@ -1,7 +1,6 @@
 import { Bus } from '../src/game/bus';
 import { readFrame } from '../src/game/frame';
-import { Run, newRun, run } from '../src/game/run';
-import { dismissJobCard } from '../src/scenes/hud/jobCard';
+import { Run } from '../src/game/run';
 import { AlertView } from '../src/scenes/hud/AlertView';
 import { DeckView } from '../src/scenes/hud/DeckView';
 import { ZONES } from '../src/scenes/live/layout';
@@ -113,45 +112,14 @@ describe('DeckView feeds hud.laundry, hud.regroup and the deck bounds', () => {
     view.update(readFrame(r), { now: 1, dt: 0.016 });
     expect(view.laundryHook()).toMatchObject({ available: false, cut: false });
     expect(view.regroupHook()).toMatchObject({ visible: false, active: false, spent: false });
-    // One hit area per key, in 1, 2, 3 order.
-    expect(view.keyHits()).toHaveLength(3);
+    // One hit area per key, in 1, 2 order.
+    expect(view.keyHits()).toHaveLength(2);
     view.shutdown();
     expect(view.keyHits()).toEqual([]);
   });
 });
 
-describe('the deck presses SET through the host', () => {
-  it('calls LiveHost.pressSet, and does nothing on a host without one', () => {
-    newRun(1);
-    dismissJobCard(run());
-    let sets = 0;
-    const view = new DeckView();
-    view.create(stubScene() as never, {
-      scene: null as never,
-      bus: new Bus(),
-      rect: ZONES.deck,
-      flags: { lite: true },
-      pressSet: () => (sets++, true),
-    });
-    view.update(readFrame(run()), { now: 1, dt: 0.016 });
-    view.press('three', 'click');
-    expect(sets).toBe(1);
-    expect(view.snapshot().presses.at(-1)).toMatchObject({ key: 'three', acted: true });
-    view.shutdown();
-
-    const bare = new DeckView();
-    bare.create(stubScene() as never, {
-      scene: null as never,
-      bus: new Bus(),
-      rect: ZONES.deck,
-      flags: { lite: true },
-    });
-    bare.update(readFrame(run()), { now: 1, dt: 0.016 });
-    bare.press('three', 'click');
-    expect(bare.snapshot().presses.at(-1)).toMatchObject({ key: 'three', acted: false });
-    bare.shutdown();
-  });
-
+describe('the deck and the dial', () => {
   it('reaches no private dial on the scene', () => {
     expect(deckSource).not.toMatch(/DialHolder|\.dial\?\./);
   });

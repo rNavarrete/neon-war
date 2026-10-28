@@ -137,8 +137,6 @@ type Chart = {
   capacity: number;
   wiredCapacity: number;
   ceiling: number;
-  estimateLine: number | null;
-  sizingLine: number | null;
   racked: boolean;
   forecast: { startsAt: number; demand: number; peak: number } | null;
   now: number;
@@ -184,12 +182,11 @@ describe('the scope', () => {
     expect(scopeCeiling(5000)).toBe(400);
   });
 
-  it('draws two absolute lines and dashed marks, never a difference series', () => {
+  it('draws two absolute lines, never a difference series', () => {
     // Demand and the wired room are each drawn as their own line from their own ring.
     expect(chartViewSource.match(/this\.drawLine\(/g)).toHaveLength(2);
     expect(chartViewSource).toMatch(/this\.drawLine\(g, this\.ring, COLORS\.amber/);
     expect(chartViewSource).toMatch(/this\.drawLine\(g, this\.wired, COLORS\.cyan/);
-    expect(chartViewSource).toMatch(/this\.dashed\(g, scopeY\(L, this\.estimate/);
     // No series of demand less capacity (or the other way round), and no "diff" anything, in the
     // code (the comments may say what the scope is not).
     const code = chartViewSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
@@ -225,18 +222,6 @@ describe('the scope’s hook', () => {
     for (const t of texts) expect(t.text).not.toMatch(/head\s*room|throughput|capacity|requests per second/i);
     view.shutdown();
     expect(view.made).toEqual({ objects: 0, texts: 0 });
-  });
-
-  it('draws the estimate line once SET and the sizing line at sizing x 60', () => {
-    const { view } = scopeView();
-    const base = readFrame(new Run());
-    view.update({ ...base, notes: { estimate: null, sizing: null } } as Frame);
-    expect(chart().estimateLine).toBeNull();
-    view.update({ ...base, notes: { estimate: 30, sizing: null } } as Frame);
-    expect(chart().estimateLine).toBe(30);
-    view.update({ ...base, notes: { estimate: 30, sizing: 4 } } as Frame);
-    expect(chart().sizingLine).toBe(240);
-    view.shutdown();
   });
 
   it('shows a forecast region exactly while forecastAt(now) is non-null, and never otherwise', () => {

@@ -3,7 +3,7 @@ import type { HudTestState } from '../../../src/scenes/hud/hook';
 import type { StoryTestState } from '../../../src/story/state';
 
 // Shared helpers for the Live screen's browser specs (tech-6). Every lane's spec opens the board,
-// clicks the job card away, turns the dial, reaches a moment of the night and saves a screenshot
+// clicks the job card away, reaches a moment of the night and saves a screenshot
 // through these instead of copying the boilerplate from hud.spec.ts and story.spec.ts.
 //
 // They only read window.__neonTest.state (the hook is a test mirror) and drive the mouse at the
@@ -87,19 +87,6 @@ export async function fullState(page: Page): Promise<Record<string, unknown>> {
   const s = await page.evaluate(() => (window.__neonTest?.state ?? null) as Record<string, unknown> | null);
   if (!s) throw new Error('window.__neonTest.state is missing: was the page opened with ?test?');
   return s;
-}
-
-/** Turn the dial to `value` with its plus and minus buttons, then press SET. */
-export async function setDial(page: Page, value: number): Promise<void> {
-  let h = await hud(page);
-  expect(h.dial.visible, 'setDial: hud.dial.visible').toBe(true);
-  for (let guard = 0; h.dial.value !== value && guard < 200; guard++) {
-    const p = h.dial.value < value ? h.dial.plus : h.dial.minus;
-    await page.mouse.click(p.x, p.y);
-    h = await hud(page);
-  }
-  expect(h.dial.value, `setDial: hud.dial.value never reached ${value}`).toBe(value);
-  await page.mouse.click(h.dial.set.x, h.dial.set.y);
 }
 
 /** Save a screenshot to test-results/screens/<name>.png, where CI uploads it for review. */

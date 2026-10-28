@@ -69,10 +69,6 @@ function view(over: Partial<CueView> = {}): CueView {
     overloaded: false,
     overclocked: false,
     cardClosed: false,
-    dialTouched: false,
-    estimate: null,
-    sizing: null,
-    sizingOpen: false,
     bannerShown: false,
     banner: null,
     laundryCut: false,
@@ -101,12 +97,19 @@ describe('bark and chat cues', () => {
     expect(LINES['C1.triage.02'].text).toBe("480 a second! I'm great at math.");
   });
 
-  it('C1: a close estimate gets the sheepish line, a wrong one the thinking line', () => {
-    expect(play([view({ cardClosed: true, estimate: 30 })])).toContain('C1.triage.03');
-    const wrong = play([view({ cardClosed: true, estimate: 480 })]);
-    expect(wrong).toContain('C1.triage.04');
-    expect(wrong).not.toContain('C1.triage.03');
-    expect(wrong.indexOf('C1.triage.04')).toBeLessThan(wrong.indexOf('C1.triage.05'));
+  it('C1: Lux corrects the 480, then the scrap box line; TRIAGE owns up to 30 only once a box is live', () => {
+    const closed = { cardClosed: true };
+    const fired = play([0, 2, 4, 6, 8].map((s) => view({ ...closed, now: C.c1 + s })));
+    expect(fired).toEqual(['C1.triage.01', 'C1.triage.02', 'C1.lux.01', 'C1.triage.05']);
+    const live = { cardClosed: true, capacity: 60, dropped: 0, servers: 1 };
+    const later = play([
+      ...[0, 2, 4, 6, 8].map((s) => view({ ...closed, now: C.c1 + s })),
+      view({ ...live, now: C.c1 + 20 }),
+    ]);
+    expect(later).toContain('C1.triage.03');
+    expect(later.indexOf('C1.triage.03')).toBeGreaterThan(later.indexOf('C1.triage.05'));
+    // The wrong-guess reply never plays: there is no guess.
+    expect(later).not.toContain('C1.triage.04');
   });
 
   it('C1: a server going live gets both chats; 10 s at 30 against 60 gets the happy bark', () => {
@@ -138,11 +141,12 @@ describe('bark and chat cues', () => {
     expect(fired).toEqual(expect.arrayContaining(['C3.triage.02', 'C3.lux.01']));
   });
 
-  it('C6: the prompt opens with Rei, TRIAGE does the math after 8 s, and the answer gets a reaction', () => {
-    const open = { now: 440, sizingOpen: true };
-    expect(play([view(open), view({ ...open, now: 448 })])).toEqual(['C6.rei.01', 'C6.triage.01']);
-    expect(play([view({ now: 445, sizing: 2 })])).toContain('C6.mika.01');
-    expect(play([view({ now: 445, sizing: 6 })])).toContain('C6.ozzie.01');
+  it('C6: the forecast opens with Rei, TRIAGE does the math after 8 s, and the boxes running get a reaction', () => {
+    const open = { now: C.c6 - 10, cardClosed: true, servers: 3 };
+    expect(play([view(open), view({ ...open, now: C.c6 - 2 })])).toEqual(['C6.rei.01', 'C6.triage.01']);
+    expect(play([view({ ...open, servers: 2 })])).toContain('C6.mika.01');
+    expect(play([view({ ...open, servers: 6 })])).toContain('C6.ozzie.01');
+    expect(play([view({ ...open, now: C.c6 - 11 })])).toEqual([]);
   });
 
   it('C6: midnight held cleanly gets "Clean.", with drops "Ugly. But it held."', () => {
@@ -463,8 +467,6 @@ describe('frozen views: a cue is a function of the Frame, only holds and delays 
 describe('cueViewOf over a real run', () => {
   const host: CueHost = {
     cardClosed: true,
-    dialTouched: false,
-    sizingOpen: false,
     bannerShown: false,
     decommissionsAfterMidnight: 0,
   };

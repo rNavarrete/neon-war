@@ -317,7 +317,7 @@ export function stepLog(s: LogState, over: boolean, dragging: boolean, now: numb
 
 /**
  * A click: on the band it pins the log, and the next click on the band unpins it. Clicks elsewhere
- * (the board, the dial, the keys) leave it as it is, so the player can play with the log pinned.
+ * (the board, the keys) leave it as it is, so the player can play with the log pinned.
  */
 export function clickLog(s: LogState, onBand: boolean): LogState {
   return onBand ? { ...s, pinned: !s.pinned } : s;
@@ -601,8 +601,8 @@ export function leaderSubject(id: LineId): Subject {
 
 /**
  * The locate names a zone or key subject may be registered under, in the order tried: its own
- * name first, then the name the owning lane registers it by ('dial' for the dial card, 'credits'
- * for the title's credits chip, 'inventory:server' for the inventory row). Pure.
+ * name first, then the name the owning lane registers it by ('credits' for the title's credits
+ * chip, 'inventory:server' for the inventory row). Pure.
  */
 export function locateNames(subject: Exclude<Subject, null>): readonly string[] {
   if (subject.startsWith('key:')) return [subject];
@@ -611,7 +611,6 @@ export function locateNames(subject: Exclude<Subject, null>): readonly string[] 
 }
 
 const LOCATE_ALIASES: Readonly<Record<string, readonly string[]>> = {
-  dialCard: ['dialCard', 'dial'],
   title: ['title', 'credits'],
   inventory: ['inventory', 'inventory:server'],
 };

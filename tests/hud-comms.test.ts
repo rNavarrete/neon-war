@@ -79,8 +79,6 @@ import { type Occurrence, detectOccurrences } from '../src/game/occurrences';
 import { newRun } from '../src/game/run';
 import { chatOf } from '../src/scenes/hud/chat';
 import { type CueHost, NEW_DIRECTOR, cueViewOf, direct, emptyCueView } from '../src/scenes/hud/cues';
-import { applyEstimate, applySizing } from '../src/scenes/hud/dial';
-import { sizingPromptOpen } from '../src/scenes/hud/jobCard';
 import { isLesson } from '../src/scenes/hud/lineMeta';
 import { BROWNOUT } from '../src/sim/brownout';
 
@@ -263,14 +261,14 @@ describe('comms order and pre-emption', () => {
 
 describe('comms stale drop', () => {
   it('drops a queued HINT older than 12 s unshown; it never enters history', () => {
-    expect(staleAfter('C1.triage.03')).toBe(STALE_SECONDS);
+    expect(staleAfter('C2.triage.01')).toBe(STALE_SECONDS);
     let s = say(NO_COMMS, 'C1.triage.01', 0);
     s = { ...s, current: { ...s.current!, until: 30 } };
-    s = enqueueComms(s, 'C1.triage.03', 1);
+    s = enqueueComms(s, 'C2.triage.01', 1);
     s = stepComms(s, 30, CPS);
     expect(s.current).toBeNull();
-    expect(s.history).not.toContain('C1.triage.03');
-    expect(s.dropped).toEqual(['C1.triage.03']);
+    expect(s.history).not.toContain('C2.triage.01');
+    expect(s.dropped).toEqual(['C2.triage.01']);
   });
 
   it('gives delay-chained lines 20 s', () => {
@@ -735,31 +733,30 @@ describe('comms-8: the leader line', () => {
   });
 
   it('tries each zone’s lane name too, and survives a locator that throws or reads off screen', () => {
-    expect(locateNames('zone:dialCard')).toEqual(['dialCard', 'dial']);
     expect(locateNames('zone:title')).toEqual(['title', 'credits']);
     expect(locateNames('key:two')).toEqual(['key:two']);
     expect(locateNames('zone:alert')).toEqual(['alert']);
     const f = board(1);
-    const offDial = register('dial', () => ({ x: 1775, y: 245 }));
+    const offCredits = register('credits', () => ({ x: 1775, y: 245 }));
     const offAlert = register('alert', () => {
       throw new Error('mid-shutdown');
     });
     const offKey = register('key:two', () => null);
     try {
-      expect(resolveLeader('C1.triage.01', f)).toEqual({
-        subject: 'zone:dialCard',
-        target: 'dial',
+      expect(resolveLeader('C7.ozzie.01', f)).toEqual({
+        subject: 'zone:title',
+        target: 'credits',
         to: { x: 1775, y: 245 },
       });
       expect(resolveLeader('C4.triage.01', f)).toBeNull();
       expect(resolveLeader('C4.lux.01', f)).toBeNull();
       // A newer registration replaces an older one; the older one's off leaves it alone.
-      const again = register('dial', () => ({ x: 10, y: 20 }));
-      offDial();
-      expect(locate('dial')).toEqual({ x: 10, y: 20 });
+      const again = register('credits', () => ({ x: 10, y: 20 }));
+      offCredits();
+      expect(locate('credits')).toEqual({ x: 10, y: 20 });
       again();
     } finally {
-      offDial();
+      offCredits();
       offAlert();
       offKey();
     }
@@ -855,18 +852,8 @@ function nightCues(): Fired[] {
   const v = emptyCueView();
   let s = NEW_DIRECTOR;
   let clock = 0;
-  let promptAt: number | null = null;
   const out: Fired[] = [];
   for (let n = 0; n < 20_000 && r.now < C.c8 && !r.play.failure; n++) {
-    if (r.notes.estimate === null) applyEstimate(r, 30);
-    const sizingOpen = sizingPromptOpen({
-      now: r.now,
-      cardOpen: false,
-      estimate: r.notes.estimate,
-      sizing: r.notes.sizing,
-    });
-    if (sizingOpen) promptAt ??= clock;
-    if (sizingOpen && promptAt !== null && clock - promptAt >= 10) applySizing(r, BROWNOUT.finalSizing.holds);
     r.tick(0.1);
     clock = Math.round((clock + 0.1) * 1e6) / 1e6;
     const f = frame(r);
@@ -874,8 +861,6 @@ function nightCues(): Fired[] {
     prev = f;
     const host: CueHost = {
       cardClosed: true,
-      dialTouched: true,
-      sizingOpen,
       bannerShown: f.now >= C.c2,
       decommissionsAfterMidnight: 0,
     };

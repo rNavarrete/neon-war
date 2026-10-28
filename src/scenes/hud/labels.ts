@@ -37,20 +37,13 @@ export const LABELS = {
     coming: 'coming',
     room: 'room',
     racked: 'racked, not fed',
-    guess: 'your guess',
-    boxes: 'your boxes',
     ahead: 'ahead',
   },
   deck: {
     /** The bar of room left over the wired boxes. */
     title: 'ROOM LEFT',
     noBox: 'NO BOX',
-    keys: { one: '1 REGROUP', two: '2 CUT 3F', three: '3 SET' },
-  },
-  dial: {
-    /** Under the dial card once the first box is wired: the guess was never graded. */
-    free: 'your guess stays free',
-    set: 'SET',
+    keys: { one: '1 REGROUP', two: '2 CUT 3F' },
   },
   inventory: {
     server: 'SERVER',

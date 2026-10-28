@@ -22,7 +22,7 @@ interface Tour {
     gauge: { visible: boolean; demand: number; max: number; title: string };
     chart: { demand: number; ceiling: number; plot: { w: number; h: number } };
     comms: { slots: { name: string; present: boolean }[]; history: string[] };
-    deck: { regroup: string; keys: { one: Obj; two: Obj; three: Obj }; play: { drawn: boolean } };
+    deck: { regroup: string; keys: { one: Obj; two: Obj } };
     chat: { feed: { who: string; text: string }[]; block: string[]; stream: string[] };
     audience: { watching: number } | null;
   };
@@ -82,8 +82,7 @@ function expectEveryZone(s: Tour, moment: string): void {
     `${moment}: hud.comms.history has a Triage line`,
   ).toBe(true);
   // deck
-  expect(Object.keys(h.deck.keys).sort(), `${moment}: hud.deck.keys`).toEqual(['one', 'three', 'two']);
-  expect(h.deck.play.drawn, `${moment}: hud.deck.play.drawn`).toBe(true);
+  expect(Object.keys(h.deck.keys).sort(), `${moment}: hud.deck.keys`).toEqual(['one', 'two']);
   // chat
   expect(h.chat.feed.length, `${moment}: hud.chat.feed`).toBeGreaterThan(0);
   expect(h.chat.block.length + h.chat.stream.length, `${moment}: hud.chat block + stream`).toBeGreaterThan(0);

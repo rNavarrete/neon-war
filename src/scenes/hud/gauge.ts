@@ -1,15 +1,14 @@
 // The COMING /s gauge in the instrument panel (ZONES.gauge), as pure rules. A fixed 0..400 arc with
 // ticks every 100: a cyan ROOM band to the wired capacity (the room that is actually fed), a dashed
 // extension for wired boxes still booting, the amber needle easing toward demand, a red wedge from
-// what is served to what is coming while calls drop, a white tick at the C1 estimate and a magenta
-// tick at the C6 sizing x 60. Words come from labels.ts in the crew's terms: COMING /s, ROOM, "room
+// what is served to what is coming while calls drop. Words come from labels.ts in the crew's terms: COMING /s, ROOM, "room
 // N/s", NO ROOM YET before anything is wired and OVER BY n/s once more comes than the room takes.
 //
 // Pure: no Phaser, no clock. Time comes in as `dt` (the HUD clock's step) and the run as a Frame.
 
 import type { Frame } from '../../game/frame';
 import { type Part, type Wire, capacityOf } from '../../sim/board';
-import { BROWNOUT, BROWNOUT_RULES } from '../../sim/brownout';
+import { BROWNOUT_RULES } from '../../sim/brownout';
 import type { Rect } from '../live/layout';
 import { clamp } from './format';
 import { LABELS, gaugeSubLine, overBy } from './labels';
@@ -118,12 +117,6 @@ export interface GaugeState {
   needle: number;
   /** The top of the scale. */
   max: number;
-  /** The white tick: the C1 estimate once SET, else null. */
-  estimateMark: number | null;
-  /** The magenta tick: the C6 sizing x 60 once SET, else null. */
-  sizingMark: number | null;
-  /** The mark the gauge leads with: the sizing tick after the C6 SET, the estimate before. */
-  tick: number | null;
   /** NO ROOM YET with nothing wired, OVER BY n/s when more comes than the room takes, else null. */
   strip: string | null;
   /** The line under the big number: "room N/s", "dropping N/s" or "no box yet". */
@@ -139,17 +132,9 @@ export function emptyGauge(): GaugeState {
     booting: 0,
     needle: 0,
     max: GAUGE_MAX,
-    estimateMark: null,
-    sizingMark: null,
-    tick: null,
     strip: LABELS.gauge.noRoom,
     sub: gaugeSubLine(0, 0),
   };
-}
-
-/** The sizing tick: the C6 answer (servers) times one server's req/s. */
-export function sizingMarkOf(sizing: number | null): number | null {
-  return sizing === null ? null : sizing * BROWNOUT.server.capacity;
 }
 
 /** The strip's words: NO ROOM YET before anything is wired, OVER BY n/s when over, else null. */
@@ -161,16 +146,7 @@ export function gaugeStrip(demand: number, wired: number): string | null {
 /** What gaugeState reads from a frame. */
 export type GaugeInput = Pick<
   Frame,
-  | 'now'
-  | 'demand'
-  | 'served'
-  | 'dropped'
-  | 'wiredCapacity'
-  | 'parts'
-  | 'wires'
-  | 'offline'
-  | 'offlineUntil'
-  | 'notes'
+  'now' | 'demand' | 'served' | 'dropped' | 'wiredCapacity' | 'parts' | 'wires' | 'offline' | 'offlineUntil'
 >;
 
 /** What the strip's words depend on: -1 with nothing wired, else the rounded req/s over (0 when not). */
@@ -206,9 +182,6 @@ export function stepGauge(out: GaugeState, memo: GaugeMemo, f: GaugeInput, dt: n
   out.booting = bootingCapacity(f.parts, f.wires, f.offline, f.offlineUntil, f.now);
   out.needle = easeNeedle(out.needle, f.demand, dt);
   out.max = GAUGE_MAX;
-  out.estimateMark = f.notes.estimate;
-  out.sizingMark = sizingMarkOf(f.notes.sizing);
-  out.tick = out.sizingMark ?? out.estimateMark;
   const sk = stripKey(f.demand, wired);
   if (sk !== memo.stripKey) {
     memo.stripKey = sk;

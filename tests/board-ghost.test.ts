@@ -1,19 +1,18 @@
 import { wiredCapacity } from '../src/game/frame';
 import { type Board, type Part, type Wire, connect, place } from '../src/sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../src/sim/brownout';
-import { GHOST_ID, freeFeed, ghostCapacity, ghostInfo, ghostOpen } from '../src/scenes/board/ghost';
+import { GHOST_ID, freeFeed, ghostCapacity, ghostInfo } from '../src/scenes/board/ghost';
 import { padState } from '../src/scenes/board/layout';
 import { DEMAND_SCALE_MAX } from '../src/scenes/hud/thresholds';
 
 // The what-if ghost (board-8, LRN-6): the room the wired boxes would have after the drop, told
-// truthfully about the feed, and hidden while the player answers a dial question alone.
+// truthfully about the feed.
 
 const gw: Part = { id: 'gateway', kind: 'gateway', slot: null };
 const db: Part = { id: 'database', kind: 'database', slot: null };
 const lb: Part = { id: 'balancer', kind: 'balancer', slot: null };
 const srv = (id: string, slot: string): Part => ({ id, kind: 'server', slot });
 const w = (from: string, to: string): Wire => ({ from, to });
-const C = BROWNOUT.challenges;
 const prices = { server: BROWNOUT.server.cost, overclock: BROWNOUT.overclock.cost };
 
 /** The board as the sim would hold it, so the ghost can be checked against a real drop and wire. */
@@ -139,33 +138,11 @@ describe('ghostCapacity (board-8)', () => {
   });
 });
 
-describe('the ghost waits for SET (board-8)', () => {
-  it('C1: hidden until the estimate is SET', () => {
-    expect(ghostOpen(C.c1 + 5, { estimate: null, sizing: null })).toBe(false);
-    expect(ghostOpen(C.c1 + 5, { estimate: 30, sizing: null })).toBe(true);
-    expect(ghostOpen(C.c3 + 5, { estimate: 30, sizing: null })).toBe(true);
-  });
-
-  it('C6: hidden while the sizing prompt is open, until the sizing is SET', () => {
-    for (const now of [C.c6 - 5, C.c6, C.c6 + 30]) {
-      expect(ghostOpen(now, { estimate: 30, sizing: null }), `at ${now}`).toBe(false);
-      expect(ghostOpen(now, { estimate: 30, sizing: 4 }), `at ${now}`).toBe(true);
-    }
-  });
-
+describe('the ghost gate (board-8)', () => {
   it('gives no ghost at all while shut: board.ghost null, whatIf null', () => {
     const board = { parts: [gw, db], wires: [] };
     expect(ghostInfo(board, BROWNOUT_RULES, [], 'server', 's1', 's1', 'legal', false)).toBeNull();
-    const open = ghostInfo(
-      board,
-      BROWNOUT_RULES,
-      [],
-      'server',
-      's1',
-      's1',
-      'legal',
-      ghostOpen(C.c1 + 5, { estimate: 30, sizing: null }),
-    );
+    const open = ghostInfo(board, BROWNOUT_RULES, [], 'server', 's1', 's1', 'legal', true);
     expect(open?.whatIf).toBeCloseTo(60 / DEMAND_SCALE_MAX, 9);
   });
 });

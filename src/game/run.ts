@@ -27,14 +27,6 @@ import { bus } from './bus';
 
 export type ActionResult = { ok: true } | { ok: false; reason: string };
 
-/** What the player told the game, kept for the HUD and the debrief. */
-export interface RunNotes {
-  /** The C1 estimate dial, in req/s, once set. */
-  estimate: number | null;
-  /** The C6 sizing answer, in servers, once set. */
-  sizing: number | null;
-}
-
 /** Longest step one frame may take, so a stalled tab doesn't jump the sim forward. */
 export const MAX_FRAME_SECONDS = 0.25;
 
@@ -46,7 +38,6 @@ const SEED = 2026;
 
 export class Run {
   play: Play = createPlay({ slots: SERVER_SLOTS, parts: STARTING_PARTS, seed: SEED });
-  notes: RunNotes = { estimate: null, sizing: null };
   /** Why the board is stopped right now (pause menu, job card, a scene); empty while it runs. */
   private holds = new Set<string>();
   private ended = false;
@@ -61,8 +52,8 @@ export class Run {
 
   /**
    * True while C1 waits for the player's first build. The clock and the block's demand start only
-   * once a server is wired from the gateway through to the database, so reading the job card, setting
-   * the dial and dragging the first server can't fail the block before it was ever up.
+   * once a server is wired from the gateway through to the database, so reading the job card and
+   * dragging the first server can't fail the block before it was ever up.
    */
   get waitingForFirstBuild(): boolean {
     const t = this.now;

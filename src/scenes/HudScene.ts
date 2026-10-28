@@ -13,7 +13,6 @@ import { provideTestState } from '../testHook';
 import { CommsView } from './hud/CommsView';
 import { type ChartView, scopeViewOf } from './hud/ChartView';
 import { ChatFeedView } from './hud/ChatFeedView';
-import { DialView } from './hud/DialView';
 import { chatOf } from './hud/chat';
 import {
   type CueView,
@@ -24,12 +23,11 @@ import {
   direct,
   emptyCueView,
 } from './hud/cues';
-import { type DialMode, applyEstimate, applySizing, dialModeAt } from './hud/dial';
 import { CARD_TEXT_POOL, type CardTextSpec, bannerTexts, dressCardText, jobCardTexts } from './hud/cardText';
 import { countdownText } from './hud/format';
 import { type HudBounds, type HudTestState, type PagePoint, hudSection } from './hud/hook';
-import { dialQuestionOpen, dismissJobCard, jobCardDue, openJobCard, sizingPromptOpen } from './hud/jobCard';
-import { BANNER_BUTTONS, BOTTOM, CENTRE, COLORS, FONT, type Home, KEY, RIGHT } from './hud/layout';
+import { dismissJobCard, jobCardDue, openJobCard } from './hud/jobCard';
+import { BANNER_BUTTONS, BOTTOM, CENTRE, COLORS, FONT, type Home, KEY } from './hud/layout';
 import { laundryCutAt, upcomingDip } from './hud/pending503';
 import { shownCredits, shownTrust } from './hud/title';
 import { type DipWarning, dipMarkAt, dipWarningAt, surgeWarningAt } from './hud/warnings';
@@ -40,20 +38,17 @@ import { storyEnd } from '../story/state';
 import { SCENES } from './keys';
 import { type LiveFlags, PLAY_FLAGS, flagsFrom } from './live/flags';
 import { type CountedObject, type Filtered, PerfMeter, liveTestState } from './live/hook';
-import { CARDS, ZONES, type ZoneId, centreOf, pagePoint, pageRect } from './live/layout';
+import { ZONES, type ZoneId, pagePoint, pageRect } from './live/layout';
 import { createViews } from './live/registry';
 import type { LiveHost, LiveView } from './live/view';
 
 const C = BROWNOUT.challenges;
 const MIDNIGHT = BROWNOUT.clock.midnight;
-/** The sizing prompt's centre in game pixels, for hud.sizingPrompt. */
-const SIZING_AT = centreOf(CARDS.sizingPrompt);
 
 const HUD_ART = [
   'chart-window',
   'chat-panel',
   'job-card',
-  'estimate-dial',
   'warning-bar',
   'textbox',
   'button',
@@ -77,9 +72,8 @@ const cardGuarded = (): boolean => performance.now() - storyEnd.at < CARD_GUARD_
  * The board's HUD, drawn over BoardScene with a transparent background and staged into the Live
  * screen's zones (src/scenes/live/layout.ts, docs/LIVE.md). It hosts the zone views (the registry:
  * the title cluster and the clock are TitleView and ClockView, the alert band AlertView, the deck's
- * keys 1 REGROUP, 2 CUT 3F, 3 SET DeckView, LIVE CHAT ChatFeedView).
- * Over the feed, only while asked: the job card, the Solace banner, the dial card, the sizing prompt
- * and the power-dip warning. It reads run() every frame and only calls the run's actions; the rules
+ * keys 1 REGROUP and 2 CUT 3F DeckView, LIVE CHAT ChatFeedView).
+ * Over the feed, only while asked: the job card, the Solace banner and the power-dip warning. It reads run() every frame and only calls the run's actions; the rules
  * stay in src/sim/.
  */
 export class HudScene extends Phaser.Scene {
@@ -107,7 +101,6 @@ export class HudScene extends Phaser.Scene {
   private unsubscribe: (() => void)[] = [];
 
   private director: DirectorState = NEW_DIRECTOR;
-  private dialTouched = false;
   private bannerShown = false;
   private decommissionsAfterMidnight = 0;
   private lastSurgeAt = -1;
@@ -116,13 +109,6 @@ export class HudScene extends Phaser.Scene {
   private dip: DipWarning | null = null;
   /** Where the dip mark was last placed, in game pixels (one object, reused). */
   private readonly dipAt: { x: number; y: number } = { x: 0, y: 0 };
-  /** What the dial question reads, one object reused every update. */
-  private readonly ask: { now: number; cardOpen: boolean; estimate: number | null; sizing: number | null } = {
-    now: 0,
-    cardOpen: false,
-    estimate: null,
-    sizing: null,
-  };
   /** Every id the director fired this run, in order, as sent out on the bus as `cue` (for the hook). */
   private firedCues: LineId[] = [];
   /** What the cues read this frame (cueViewOf writes into it; it is also the last frame's view). */
@@ -130,21 +116,16 @@ export class HudScene extends Phaser.Scene {
   /** What only the HUD knows, handed to cueViewOf; one object reused every update. */
   private readonly cueHost: {
     cardClosed: boolean;
-    dialTouched: boolean;
-    sizingOpen: boolean;
     bannerShown: boolean;
     decommissionsAfterMidnight: number;
   } = {
     cardClosed: false,
-    dialTouched: false,
-    sizingOpen: false,
     bannerShown: false,
     decommissionsAfterMidnight: 0,
   };
 
   // Views, built in create().
   private chart!: ChartView;
-  private dial!: DialView;
   /** The comms band (the registry's comms view): every bark the cue table fires goes to it. */
   private comms: CommsView | null = null;
   /** The alert band and the deck (registry views): hud.bounds and hud.laundry/regroup read them. */
@@ -167,7 +148,6 @@ export class HudScene extends Phaser.Scene {
   private readonly bannerWords: CardTextSpec[] = bannerTexts();
   /** Which card the pooled texts are dressed for now. */
   private dressedFor: 'job' | 'banner' | null = null;
-  private sizingPanel!: Phaser.GameObjects.Container;
 
   constructor() {
     super(SCENES.hud);
@@ -232,14 +212,7 @@ export class HudScene extends Phaser.Scene {
     }
     this.building = null;
     this.chart = scopeViewOf(this.views);
-    this.dial = new DialView(this, {
-      touched: () => {
-        this.dialTouched = true;
-      },
-      set: (value) => this.onDialSet(value),
-    });
     this.buildDipMark();
-    this.buildSizingPrompt();
     this.cardTexts = [];
     this.dressedFor = null;
     for (let i = 0; i < CARD_TEXT_POOL; i++) this.cardTexts.push(this.add.text(0, 0, ''));
@@ -277,7 +250,6 @@ export class HudScene extends Phaser.Scene {
     const real = Math.min(this.game.loop.rawDelta / 1000, MAX_FRAME_SECONDS);
     const step = r.paused ? 0 : real * r.speed;
     this.clock += step;
-    const now = r.now;
     const f = this.readFrame(r);
     this.liveClock.now = this.clock;
     this.liveClock.dt = step;
@@ -287,22 +259,11 @@ export class HudScene extends Phaser.Scene {
     }
     this.building = null;
 
-    const estimate = r.notes.estimate;
-    const sizing = r.notes.sizing;
-    const ask = this.ask;
-    ask.now = now;
-    ask.cardOpen = this.cardOpen;
-    ask.estimate = estimate;
-    ask.sizing = sizing;
-    const asked = dialQuestionOpen(ask);
-    const sizingOpen = sizingPromptOpen(ask);
-    this.updateDial(r, asked);
     this.updateSurge(r);
     this.updateDip(r);
     this.updateBanner(r);
-    this.sizingPanel.setVisible(sizingOpen);
 
-    this.runDirector(f, sizingOpen);
+    this.runDirector(f);
     if (this.perf.frame(delta)) this.samplePerf();
   }
 
@@ -350,7 +311,6 @@ export class HudScene extends Phaser.Scene {
       get flags(): LiveFlags {
         return flags();
       },
-      pressSet: (): boolean => this.dial?.pressSet() ?? false,
     };
   }
 
@@ -363,7 +323,6 @@ export class HudScene extends Phaser.Scene {
     this.director = NEW_DIRECTOR;
     this.comms?.reset();
     this.chatFeed?.reset(this.clock);
-    this.dialTouched = false;
     this.bannerShown = false;
     this.decommissionsAfterMidnight = 0;
     // A fresh run: nothing carries over from the last run's view (dropped in C6, the rescue clock).
@@ -372,7 +331,6 @@ export class HudScene extends Phaser.Scene {
     this.lastSurgeAt = -1;
     if (this.ready) {
       this.chart.ring.clear();
-      this.dial.reset();
       if (jobCardDue(r)) {
         this.cardOpen = true;
         openJobCard(r);
@@ -421,47 +379,6 @@ export class HudScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
     this.dipMark = this.add.container(0, 0, [icon, this.dipText]).setVisible(false);
-  }
-
-  // ---- dial and sizing prompt ----
-
-  /** The dial card shows only while a dial question is open (src/scenes/hud/jobCard.ts). */
-  private updateDial(r: Run, asked: boolean): void {
-    const mode: DialMode = dialModeAt(r.now);
-    this.dial.setVisible(asked);
-    this.dial.setMode(mode, mode === 'reqps' ? 'HOW MANY A SECOND?' : 'BOXES FOR MIDNIGHT');
-    const answer = mode === 'reqps' ? r.notes.estimate : r.notes.sizing;
-    if (answer !== null && !this.dial.locked) this.dial.lock(answer);
-    this.dial.draw();
-  }
-
-  private onDialSet(value: number): void {
-    const r = run();
-    bus.emit('sfx', { key: 'ui-click' });
-    if (this.dial.mode === 'reqps') applyEstimate(r, value);
-    else applySizing(r, value);
-  }
-
-  private buildSizingPrompt(): void {
-    const s = CENTRE.sizing;
-    const box = panel(this, 'hud:textbox', 0, 0, s.w, s.h, { k: 0.6 });
-    const text = this.add
-      .text((s.w - 56) / 2 + 8, s.h / 2, line('C6.prompt'), {
-        fontFamily: FONT,
-        fontSize: '21px',
-        color: COLORS.white,
-        align: 'center',
-        wordWrap: { width: s.w - 80 },
-      })
-      .setOrigin(0.5);
-    // The arrow is drawn, not typed, so the prompt costs one text (docs/LIVE.md "Budgets").
-    const arrow = this.add.graphics({ x: s.w - 34, y: s.h / 2 });
-    arrow.lineStyle(4, COLORS.magenta, 1);
-    arrow.lineBetween(-13, 0, 11, 0);
-    arrow.fillStyle(COLORS.magenta, 1);
-    arrow.fillTriangle(13, 0, 2, -9, 2, 9);
-    this.tweens.add({ targets: arrow, x: s.w - 24, duration: 500, yoyo: true, repeat: -1 });
-    this.sizingPanel = this.add.container(s.x, s.y, [box, text, arrow]).setVisible(false);
   }
 
   // ---- job card ----
@@ -578,11 +495,9 @@ export class HudScene extends Phaser.Scene {
    * only the HUD knows (cueViewOf), then direct(). Each fired id goes out on the bus as `cue` and is
    * routed to the bark queue or a chat.
    */
-  private runDirector(f: Frame, sizingOpen: boolean): void {
+  private runDirector(f: Frame): void {
     const host = this.cueHost;
     host.cardClosed = !this.cardOpen;
-    host.dialTouched = this.dialTouched;
-    host.sizingOpen = sizingOpen;
     host.bannerShown = this.bannerShown;
     host.decommissionsAfterMidnight = this.decommissionsAfterMidnight;
     const v = cueViewOf(this.view, f, this.occurrences, this.clock, host, this.view);
@@ -638,24 +553,13 @@ export class HudScene extends Phaser.Scene {
       clock: f.clock,
       countdown: countdownText(f.now),
       jobCard: { open: this.cardOpen, x: ok.x, y: ok.y },
-      dial: {
-        visible: built && this.dial.visible,
-        mode: built ? this.dial.mode : dialModeAt(r.now),
-        value: built ? this.dial.value : 0,
-        locked: built && this.dial.locked,
-        minus: this.toPage(RIGHT.dialMinus.x, RIGHT.dialMinus.y),
-        plus: this.toPage(RIGHT.dialPlus.x, RIGHT.dialPlus.y),
-        set: this.keyPoint(KEY.set),
-      },
-      notes: { ...r.notes },
       chart: built
         ? {
             demand: this.chart.ring.lastDemand,
             capacity: this.chart.ring.lastCapacity,
             ceiling: this.chart.ceiling,
-            estimateLine: r.notes.estimate,
           }
-        : { demand: 0, capacity: 0, ceiling: 0, estimateLine: null },
+        : { demand: 0, capacity: 0, ceiling: 0 },
       sim: {
         demand: r.demand,
         block: r.blockDemand,
@@ -694,10 +598,6 @@ export class HudScene extends Phaser.Scene {
         spent: false,
         button: this.keyPoint(KEY.regroup),
       },
-      sizingPrompt: {
-        open: built && this.sizingPanel.visible,
-        ...this.toPagePoint(SIZING_AT.x, SIZING_AT.y),
-      },
       bark: this.comms?.barkSnapshot() ?? { current: null, text: null, history: [] },
       cues: { fired: [...this.firedCues], silenced: chatSilenced(this.director) },
       // The chat view provides hud.chat (block and stream kept, the feed beside them) over this.
@@ -724,8 +624,6 @@ export class HudScene extends Phaser.Scene {
       getBounds(): { x: number; y: number; width: number; height: number };
     };
     const pieces: [string, Home, Bounded][] = [
-      ['dial', 'dialCard', this.dial.container],
-      ['sizing', 'sizingPrompt', this.sizingPanel],
       ['jobCard', 'jobCard', this.cardArt],
       ['banner', 'banner', this.banner],
     ];

@@ -18,17 +18,14 @@ describe('provideHudSection', () => {
       right: 400,
       clockRight: 1790,
     }));
-    const offDial = provideHudSection('dialCard', () => ({
-      dimmed: false,
-      label: 'HOW MANY A SECOND?',
-    }));
+    const offMeasure = provideHudSection('measure', () => ({ wires: 1, firstWireAt: 20 }));
     const h = read(hudSection(base()));
     expect(h.ready).toBe(true);
     expect(h.now).toBe(12);
     expect(h.title).toEqual({ live: 'live', watching: 3, right: 400, clockRight: 1790 });
-    expect(h.dialCard).toEqual({ dimmed: false, label: 'HOW MANY A SECOND?' });
+    expect(h.measure).toEqual({ wires: 1, firstWireAt: 20 });
     offTitle();
-    offDial();
+    offMeasure();
     expect(hudSectionNames()).toEqual([]);
   });
 
@@ -39,7 +36,7 @@ describe('provideHudSection', () => {
       right: 0,
       clockRight: null,
     }));
-    const offB = provideHudSection('dialCard', () => ({ dimmed: true, label: 'your guess stays free' }));
+    const offB = provideHudSection('measure', () => ({ wires: 2, firstWireAt: 5 }));
     const offA2 = provideHudSection('title', () => ({
       live: 'live',
       watching: 2,
@@ -48,7 +45,7 @@ describe('provideHudSection', () => {
     }));
     let h = read(hudSection(base()));
     expect((h.title as { live: string }).live).toBe('live');
-    expect(h.dialCard).toEqual({ dimmed: true, label: 'your guess stays free' });
+    expect(h.measure).toEqual({ wires: 2, firstWireAt: 5 });
     // The first provider's remover is stale: the replacement stays.
     offA();
     h = read(hudSection(base()));
@@ -56,9 +53,9 @@ describe('provideHudSection', () => {
     offA2();
     h = read(hudSection(base()));
     expect(h.title).toBeUndefined();
-    expect(h.dialCard).toEqual({ dimmed: true, label: 'your guess stays free' });
+    expect(h.measure).toEqual({ wires: 2, firstWireAt: 5 });
     offB();
-    expect(read(hudSection(base())).dialCard).toBeUndefined();
+    expect(read(hudSection(base())).measure).toBeUndefined();
   });
 
   it('reads each section every time the hook is read', () => {

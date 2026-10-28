@@ -1,10 +1,9 @@
 // The scope (ZONES.scope) as a Live screen view: LAST 60 s on a 354 x 145 plot with two absolute
 // lines, never a difference graph: the amber line is what is coming, the cyan line the room the
 // wired boxes have; where every live box could serve more than the wired ones (a box racked but not
-// fed, the C3 lesson) that larger room shows as a dotted cyan line. The white dashed line is the C1
-// guess, the magenta dashed line the C6 sizing x 60. Right of the playhead, the last 10 s of the
-// plot are the forecast region: dim, with the coming curve drawn ahead, exactly while the sim
-// forecasts a rise (forecastAt). One Graphics redrawn every frame from preallocated rings; words
+// fed, the C3 lesson) that larger room shows as a dotted cyan line. Right of the playhead, the last
+// 10 s of the plot are the forecast region: dim, with the coming curve drawn ahead, exactly while
+// the sim forecasts a rise (forecastAt). One Graphics redrawn every frame from preallocated rings; words
 // change only when their rounded numbers do. hud.chart mirrors it for tests.
 //
 // Phaser is a type here only, so the registry and its node tests can import this file.
@@ -12,7 +11,6 @@
 import type Phaser from 'phaser';
 import type { Frame } from '../../game/frame';
 import { demandAt } from '../../sim/demand';
-import { BROWNOUT } from '../../sim/brownout';
 import type { LiveBudget, LiveHost, LiveView } from '../live/view';
 import {
   ChartRing,
@@ -42,11 +40,8 @@ import {
 } from './panel';
 import { preloadArt } from '../plates';
 
-const DASH = 10;
-const GAP = 7;
 /** Racked-but-unfed room counts as different from the wired room above half a call a second. */
 const RACKED_FROM = 0.5;
-const ESTIMATE_COLOR = 0xffffff;
 /** The label tab under the title and the bracket corners (kit.ts), sized for the scope's 13 px words. */
 const TAB_H = 20;
 const SCOPE_CORNERS = 26;
@@ -64,12 +59,8 @@ export interface ScopeTestState {
   capacity: number;
   /** The y axis's top. */
   ceiling: number;
-  /** The white dashed guess: notes.estimate once SET. */
-  estimateLine: number | null;
   /** The last wired room plotted: the solid cyan line. */
   wiredCapacity: number;
-  /** The magenta dashed line: notes.sizing x 60 once SET. */
-  sizingLine: number | null;
   /** The dotted racked line shows now (some live box is not fed). */
   racked: boolean;
   /** The forecast region, while the sim forecasts a rise; null otherwise. */
@@ -107,8 +98,6 @@ export class ChartView implements LiveView {
   private off: (() => void)[] = [];
   private readonly forecastState: ScopeForecast = { startsAt: 0, demand: 0, peak: 0 };
   private forecast: ScopeForecast | null = null;
-  private estimate: number | null = null;
-  private sizing: number | null = null;
   private racked = false;
   private shownDemand = -1;
   private shownWired = -1;
@@ -190,13 +179,9 @@ export class ChartView implements LiveView {
     this.ring.push(now, frame.demand, frame.capacity);
     this.wired.push(now, frame.wiredCapacity, 0);
     this.now = now;
-    this.estimate = frame.notes.estimate;
-    this.sizing = frame.notes.sizing !== null ? frame.notes.sizing * BROWNOUT.server.capacity : null;
     this.forecast = scopeForecastInto(this.forecastState, now);
     this.racked = frame.capacity - frame.wiredCapacity > RACKED_FROM;
-    this.ceiling = scopeCeiling(
-      Math.max(this.ring.max(), this.estimate ?? 0, this.sizing ?? 0, this.forecast?.peak ?? 0),
-    );
+    this.ceiling = scopeCeiling(Math.max(this.ring.max(), this.forecast?.peak ?? 0));
     this.draw();
     this.updateWords(frame.demand, frame.wiredCapacity);
   }
@@ -234,9 +219,6 @@ export class ChartView implements LiveView {
     this.drawRacked(g);
     this.drawLine(g, this.wired, COLORS.cyan, 2);
     this.drawLine(g, this.ring, COLORS.amber, 3);
-
-    if (this.estimate !== null) this.dashed(g, scopeY(L, this.estimate, this.ceiling), ESTIMATE_COLOR, 0.85);
-    if (this.sizing !== null) this.dashed(g, scopeY(L, this.sizing, this.ceiling), COLORS.magenta, 0.9);
   }
 
   /** One absolute series (demand from `ring`, or the wired room from `wired`), oldest first. */
@@ -275,12 +257,6 @@ export class ChartView implements LiveView {
     }
   }
 
-  private dashed(g: Phaser.GameObjects.Graphics, y: number, color: number, alpha: number): void {
-    const { left, right } = this.layout.plot;
-    g.lineStyle(2, color, alpha);
-    for (let x = left; x < right; x += DASH + GAP) g.lineBetween(x, y, Math.min(x + DASH, right), y);
-  }
-
   private updateWords(demand: number, wired: number): void {
     if (!this.legend || !this.topLabel || !this.rackedNote || !this.ahead) return;
     const d = Math.round(demand);
@@ -313,9 +289,7 @@ export class ChartView implements LiveView {
       demand: this.ring.lastDemand,
       capacity: this.ring.lastCapacity,
       ceiling: this.ceiling,
-      estimateLine: this.estimate,
       wiredCapacity: this.wired.lastDemand,
-      sizingLine: this.sizing,
       racked: this.racked,
       forecast: f ? { startsAt: f.startsAt, demand: f.demand, peak: f.peak } : null,
       now: this.now,

@@ -59,7 +59,7 @@ describe('frame(run)', () => {
     expect(routing).toHaveBeenCalledTimes(2);
   });
 
-  it('refills on a hold, a release, a dial answer and a new run', () => {
+  it('refills on a hold, a release and a new run', () => {
     const r = new Run();
     r.now = C.c1;
     const a = frame(r);
@@ -72,15 +72,10 @@ describe('frame(run)', () => {
     const c = frame(r);
     expect(c).not.toBe(b);
     expect(c.paused).toBe(false);
-    r.notes = { ...r.notes, estimate: 30 };
-    const d = frame(r);
-    expect(d).not.toBe(c);
-    expect(d.notes).toEqual({ estimate: 30, sizing: null });
     const other = new Run();
     other.now = C.c1;
     const e = frame(other);
-    expect(e).not.toBe(d);
-    expect(e.notes).toEqual({ estimate: null, sizing: null });
+    expect(e).not.toBe(c);
     // Switching back is a change too: the memo holds one run at a time.
     expect(frame(r)).not.toBe(e);
   });
@@ -114,7 +109,6 @@ describe('frame(run)', () => {
     expect(f.dips).toEqual([]);
     expect(f.regroup).toEqual(r.play.regroup);
     expect(f.banner).toBeNull();
-    expect(f.notes).toBe(r.notes);
     expect(f.flow).toEqual(r.flow);
     expect(f.served).toBe(r.flow.served);
     expect(f.dropped).toBe(r.flow.dropped);

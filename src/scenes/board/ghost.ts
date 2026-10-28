@@ -3,16 +3,13 @@
 // It tells the truth about wiring: a new box only adds room when a free feed can wire it (the
 // gateway feeds one part, so once its out-wire is taken a second box adds nothing until the crew's
 // splitter arrives). The number is wiredCapacity, the same rule the ROOM LEFT bar, the gauge's band
-// and the channel's ROOM tick read, on the board as it would be. It stays hidden while a dial
-// question is open (C1 until the estimate is SET, C6 until the sizing is SET): the player counts
-// alone first. Pure: no Phaser, no clock; time comes in as `now`.
+// and the channel's ROOM tick read, on the board as it would be. Pure: no Phaser, no clock; time
+// comes in as `now`.
 
 import { wiredCapacity } from '../../game/frame';
-import type { RunNotes } from '../../game/run';
 import type { BoardRules, Part, Wire } from '../../sim/board';
 import { BROWNOUT } from '../../sim/brownout';
 import { DEMAND_SCALE_MAX } from '../hud/thresholds';
-import { dialQuestionOpen } from '../hud/jobCard';
 import { LABELS, ghostPlate } from '../hud/labels';
 import { type PadState, dropLegal } from './layout';
 
@@ -102,14 +99,6 @@ export function ghostCapacity(
 function databaseOf(board: GhostBoard): string | null {
   for (const p of board.parts) if (p.kind === 'database') return p.id;
   return null;
-}
-
-/**
- * Whether the ghost may show: never while a dial question is open (C1 until the estimate is SET,
- * the C6 sizing prompt until the sizing is SET), the same rule the dial card follows.
- */
-export function ghostOpen(now: number, notes: Pick<RunNotes, 'estimate' | 'sizing'>): boolean {
-  return !dialQuestionOpen({ now, cardOpen: false, estimate: notes.estimate, sizing: notes.sizing });
 }
 
 /** What the ghost shows over one target, and what the hook mirrors as board.ghost. */

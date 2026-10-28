@@ -85,18 +85,9 @@ describe('live layout contract', () => {
     expect(rectToArea(ZONES.inventory)).toEqual({ left: 455, right: 1510, top: 800, bottom: 965 });
   });
 
-  it('places the dial card and the sizing prompt over the top of the feed', () => {
-    // The lead's card rects (gauges-2, tech-4): dialCard x 1560-1900, y 120-370 with the 230 px face
-    // centred on x 1730; sizingPrompt x 1210-1550, y 120-220.
-    expect(CARDS.dialCard).toEqual({ x: 1560, y: 120, w: 340, h: 250 });
-    expect(CARDS.sizingPrompt).toEqual({ x: 1210, y: 120, w: 340, h: 100 });
-    expect(rectToArea(CARDS.dialCard)).toEqual({ left: 1560, right: 1900, top: 120, bottom: 370 });
-    expect(rectToArea(CARDS.sizingPrompt)).toEqual({ left: 1210, right: 1550, top: 120, bottom: 220 });
-    expect(centreOf(CARDS.dialCard).x).toBe(1730);
-    expect(inside(CARDS.dialCard, ZONES.feed)).toBe(true);
-    expect(inside(CARDS.sizingPrompt, ZONES.feed)).toBe(true);
-    expect(overlaps(CARDS.dialCard, CARDS.sizingPrompt)).toBe(false);
-    expect(CARD_IDS).toEqual(['dialCard', 'sizingPrompt', 'banner', 'jobCard', 'dipFallback']);
+  it('lists the cards over the feed: the banner, the job card and the dip fallback', () => {
+    // The dial card and the sizing prompt went with the estimate step: the feed's top right is clear.
+    expect(CARD_IDS).toEqual(['banner', 'jobCard', 'dipFallback']);
   });
 
   it("keeps the banner, job card and dip fallback on today's HUD centres, over the feed", () => {

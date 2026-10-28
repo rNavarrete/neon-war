@@ -1,7 +1,7 @@
 // One read of the run per sim change, shared by every view on the Live screen. A Frame is a plain
 // snapshot of what src/game/run.ts exposes (the sim, the routing, the warnings, the waiting flags)
 // so views read fields instead of calling run().flow and re-routing the board each. frame(run)
-// memoises: it returns the identical object until the sim, the notes or a hold changes, then reads
+// memoises: it returns the identical object until the sim or a hold changes, then reads
 // everything once more. Pure apart from the memo: no Phaser, no clock; time comes from the run.
 
 import { type Flow, type Part, type Wire, capacityOf, errorShare } from '../sim/board';
@@ -10,7 +10,7 @@ import type { BannerChoice } from '../sim/economy';
 import { type PowerDip, type RescueCause, darkParts, laundryCutAvailable } from '../sim/failures';
 import type { Failure, Midnight, Play, Rewind } from '../sim/play';
 import { type SurgeWarning, fallForecastAt, surgeWarningAt } from '../scenes/hud/warnings';
-import type { Run, RunNotes } from './run';
+import type { Run } from './run';
 
 /** The power dip whose 2 s flicker warning is showing: the part it takes and the sim time it goes dark. */
 export interface UpcomingDip {
@@ -96,8 +96,6 @@ export interface Frame {
   readonly failure: Failure | null;
   readonly rewinds: readonly Rewind[];
   readonly crewMet: boolean;
-  /** The dial answers (the C1 estimate, the C6 sizing), once set. */
-  readonly notes: RunNotes;
 }
 
 /**
@@ -194,7 +192,6 @@ export function readFrame(r: Run): Frame {
     failure: play.failure,
     rewinds: play.rewinds,
     crewMet: play.crewMet,
-    notes: r.notes,
   };
 }
 
@@ -202,7 +199,6 @@ export function readFrame(r: Run): Frame {
 interface Memo {
   run: Run;
   play: Play;
-  notes: RunNotes;
   paused: boolean;
   frame: Frame;
 }
@@ -210,16 +206,16 @@ interface Memo {
 let memo: Memo | null = null;
 
 /**
- * The frame for this run, read once per sim change. Calling it again before the sim, the notes or a
- * hold changes returns the identical object and reads nothing from the run (no routing).
+ * The frame for this run, read once per sim change. Calling it again before the sim or a hold
+ * changes returns the identical object and reads nothing from the run (no routing).
  */
 export function frame(r: Run): Frame {
   const paused = r.paused;
-  if (memo && memo.run === r && memo.play === r.play && memo.notes === r.notes && memo.paused === paused) {
+  if (memo && memo.run === r && memo.play === r.play && memo.paused === paused) {
     return memo.frame;
   }
   const next = readFrame(r);
-  memo = { run: r, play: r.play, notes: r.notes, paused, frame: next };
+  memo = { run: r, play: r.play, paused, frame: next };
   return next;
 }
 

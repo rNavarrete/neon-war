@@ -26,8 +26,8 @@ export const LINE_TAGS: readonly LineTag[] = ['HINT', 'WARNING', 'CREW', 'LUX', 
 export const PART_ROLES = ['idle', 'hot', 'dark', 'overclocked', 'balancer'] as const;
 export type PartRole = (typeof PART_ROLES)[number];
 
-/** The deck's three keys, as the deck lane names them (1 REGROUP, 2 CUT 3F, 3 SET). */
-export type KeyName = 'one' | 'two' | 'three';
+/** The deck's keys, as the deck lane names them (1 REGROUP, 2 CUT 3F). */
+export type KeyName = 'one' | 'two';
 
 /** What a line points at: a part (by id or role), a zone or card of the Live screen, a deck key, or nothing. */
 export type Subject =
@@ -116,7 +116,8 @@ export const LESSON_IDS: readonly LineId[] = [
  * at nothing.
  */
 export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>>> = {
-  'C1.triage.01': 'zone:dialCard',
+  // TRIAGE's 30, at the gauge that reads it.
+  'C1.triage.03': 'zone:gauge',
   'C1.triage.05': 'zone:inventory',
   'C1.triage.06': 'zone:gauge',
   'C2.triage.pay': 'zone:scope',
@@ -147,6 +148,8 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
 
 /** The debrief terms each line shows before they are named. Lines not listed teach nothing on their own. */
 export const TEACHES: Readonly<Partial<Record<LineId, readonly TermKey[]>>> = {
+  // 120 flats every 4 s is 30 a second: the job card's sum, owned up to as the gauge reads it.
+  'C1.triage.03': ['requirements', 'requestsPerSecond', 'estimate'],
   'C1.triage.06': ['capacity', 'headroom'],
   'C2.triage.after': ['headroom'],
   'C3.triage.01': ['scalingUp', 'scalingOut'],

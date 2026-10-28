@@ -5,7 +5,7 @@
 // from the Frame (the surge and fall forecasts, the dip warning, the failure, midnight, retries and
 // the crew). The headline leads with the number and the words follow it ("250/s · NEIGHBOURS
 // REROUTED HERE"); the cause is the sub-line, the challenge's own forecast (C<n>.warn.01) or flicker
-// (C<n>.flicker.01) line, and in C6 the outage (C6.alert.dip) until the sizing is SET. RAID is only
+// (C<n>.flicker.01) line, and in C6 the outage (C6.alert.dip). RAID is only
 // ever the tag in the well at the right end, never the headline. No word on the band is a debrief
 // term (tests/hud-alerts.test.ts and tests/teaching.test.ts scan them).
 //
@@ -63,7 +63,6 @@ export interface AlertInput {
   readonly dip: { readonly partId: string; readonly at: number } | null;
   readonly failure: { readonly cause: FailureCause } | null;
   readonly midnight: { readonly held: boolean; readonly dropped: number } | null;
-  readonly notes: { readonly sizing: number | null };
 }
 
 /** The band's state for one frame; also what the hook mirrors as hud.alert. */
@@ -207,8 +206,8 @@ export function stepAlert(out: AlertState, f: AlertInput, reduceFlicker: boolean
       if (!s) break;
       title = FORECAST_TITLES[s.surge.startsAt] ?? 'C3.alert.title';
       number = s.surge.demand;
-      // GAME.md's own C6 forecast names the outage: the sub-line says so until the sizing is SET.
-      sub = s.surge.startsAt === C.c6 && f.notes.sizing === null ? 'C6.alert.dip' : s.line;
+      // GAME.md's own C6 forecast names the outage in its sub-line.
+      sub = s.surge.startsAt === C.c6 ? 'C6.alert.dip' : s.line;
       chipSeconds = s.inSeconds;
       break;
     }
@@ -238,6 +237,28 @@ export function stepAlert(out: AlertState, f: AlertInput, reduceFlicker: boolean
   out.lit = lit;
   out.flashing = flashing;
   return changed;
+}
+
+// ---- the start of C1: what to do first ----
+
+/** What the start-of-C1 hint reads (a Frame fits, plus the HUD's own job card flag). */
+export interface StartHintInput {
+  readonly now: number;
+  /** The C1 job card is open (nothing to do yet but read it). */
+  readonly cardOpen: boolean;
+  readonly parts: readonly { readonly kind: string }[];
+}
+
+/**
+ * The hint the band shows at the start of C1, while no alert is up: once the job card closes, until
+ * the first server is on the board, drag a SERVER card onto a glowing pad. Null otherwise (and while
+ * the job card is up, before C1 and from C2). The words are in the crew's terms (no debrief term);
+ * steady, they never flash. Pure, allocates nothing.
+ */
+export function startHintOf(f: StartHintInput): LineId | null {
+  if (f.cardOpen || f.now < C.c1 || f.now >= C.c2) return null;
+  for (let i = 0; i < f.parts.length; i++) if (f.parts[i].kind === 'server') return null;
+  return 'C1.alert.place';
 }
 
 /** A fresh state for one input (tests; the view refills one state in place). */

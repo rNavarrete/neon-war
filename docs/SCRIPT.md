@@ -48,12 +48,12 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C1.card.what | ui | Job card | | What must work: calls, streams, the lift, the heating alarms. |
 | C1.card.bar | ui | Job card | | The bar: nobody goes dark at midnight. |
 | C1.card.rate | ui | Job card | | Each flat pings the net about every 4 seconds. |
-| C1.triage.01 | bark | TRIAGE (eager) | card closes, dial appears | "Ooh, a dial! How many a second are coming? I'll guess first." |
+| C1.triage.01 | bark | TRIAGE (eager) | card closes | "Ooh, a card! How many a second are coming? I'll guess first." |
 | C1.triage.02 | bark | TRIAGE (wrong-and-proud) | 2 s later | "480 a second! I'm great at math." |
-| C1.lux.01 | bark | Lux | player touches the dial | "You multiplied. Divide." |
-| C1.triage.03 | bark | TRIAGE (sheepish) | player sets 25 to 35 | "...30. That's what I meant. Obviously." |
-| C1.triage.04 | bark | TRIAGE (thinking) | player sets any other number | "Hm. Let's watch the real line and see who's right." |
-| C1.triage.05 | bark | TRIAGE (eager) | dial set, tray glows | "One scrap box does 60. Rack it and wire it: gateway, box, database." |
+| C1.lux.01 | bark | Lux | 2 s after TRIAGE's 480 | "You multiplied. Divide." |
+| C1.triage.03 | bark | TRIAGE (sheepish) | first box live, 2 s or more after Lux | "...30. That's what I meant. Obviously." |
+| C1.triage.04 | bark | TRIAGE (thinking) | not played (the estimate step is gone; the take stays recorded) | "Hm. Let's watch the real line and see who's right." |
+| C1.triage.05 | bark | TRIAGE (eager) | 2 s after Lux, tray glows | "One scrap box does 60. Rack it and wire it: gateway, box, database." |
 | C1.chat.01 | chat | block: mrs okafor | server goes live | It's back! Bless you Lux |
 | C1.chat.02 | chat | stream: viewer | server goes live | first try lol |
 | C1.triage.06 | bark | TRIAGE (happy) | 10 s at 30 against 60 | "30 coming, 60 of room. Look at all that room." |
@@ -169,11 +169,10 @@ The crew go quiet and the call is Lux's. The outcome lines branch on what holds 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C6.warn.01 | ui | Forecast | 23:59:00 | MIDNIGHT: everyone calls and streams at once. About 150 a second. |
-| C6.rei.01 | bark | Rei | sizing prompt opens | "Your call. How many?" |
-| C6.prompt | ui | Sizing prompt | | How many boxes for midnight? |
-| C6.triage.01 | bark | TRIAGE (thinking) | prompt open 8 s | "150 coming, 60 a box. That's two and a half boxes. You can't buy half a box." |
-| C6.ozzie.01 | bark | Ozzie | player sets 5 or more | "Now you're talking." |
-| C6.mika.01 | bark | Mika | player sets 2 | "Brave." |
+| C6.rei.01 | bark | Rei | the midnight forecast shows | "Your call. How many?" |
+| C6.triage.01 | bark | TRIAGE (thinking) | forecast up 8 s | "150 coming, 60 a box. That's two and a half boxes. You can't buy half a box." |
+| C6.ozzie.01 | bark | Ozzie | forecast up, 5 or more boxes running | "Now you're talking." |
+| C6.mika.01 | bark | Mika | forecast up, 2 or fewer boxes running | "Brave." |
 | C6.tv.01 | bark | TV downstairs | 23:59:30 | "Thirty seconds, Halation!" |
 | C6.flicker.01 | ui | Dip warning | 23:59:48 | POWER FLICKER |
 | C6.triage.02 | bark | TRIAGE (panicking) | 23:59:50, a server goes dark | "Not now! Not NOW!" |
@@ -201,15 +200,15 @@ The crew go quiet and the call is Lux's. The outcome lines branch on what holds 
 
 Goggles up, back in the rainy room with fireworks outside. Rei grades the night over her earbuds, and the real
 terms are named for the first time. Grade lines branch on the raw results; the thresholds behind "some requests
-dropped" and "estimate close" are not set yet, so a ticket that needs exact numbers stops and asks.
+dropped" are not set yet, so a ticket that needs exact numbers stops and asks.
 
 ### Rei grades the night
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C8.rei.open | scene | Rei | debrief opens | "Right. Let's see what you did." |
-| C8.rei.sizing.good | scene | Rei | estimate close and midnight held | "You counted before you built. Most people don't." |
-| C8.rei.sizing.bad | scene | Rei | estimate far off or midnight failed | "You built first and counted later. Count first." |
+| C8.rei.sizing.good | scene | Rei | midnight held on fewer than 5 boxes | "You counted before you built. Most people don't." |
+| C8.rei.sizing.bad | scene | Rei | midnight failed, or 5 or more boxes ran | "You built first and counted later. Count first." |
 | C8.rei.banner.pay | scene | Rei | paid the banner | "And you paid Solace. For a minute of nothing." |
 | C8.rei.banner.skip | scene | Rei | ignored or binned it | "You didn't take Solace's offer. Good." |
 | C8.rei.debt | scene | Rei | Ozzie's tab above 100 | "You owe Ozzie. He will remember." |
@@ -222,7 +221,7 @@ dropped" and "estimate close" are not set yet, so a ticket that needs exact numb
 
 | ID | Kind | Group | Line |
 | --- | --- | --- | --- |
-| C8.terms.sizing | ui | Sizing | **Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one box did 60). **Back-of-the-envelope estimate** (the dial). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening). |
+| C8.terms.sizing | ui | Sizing | **Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one box did 60). **Back-of-the-envelope estimate** (flats times calls, before you build). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening). |
 | C8.terms.scaling | ui | Scaling | **Scaling up** (the overclock kit: quick, but it has a ceiling and a reboot). **Scaling out** (more boxes). **Load balancer** with **health checks** (splits traffic, skips dark boxes). **Scaling down** (turning them off after). |
 | C8.terms.failure | ui | Failure | **Single point of failure** (one big box). **Cascading failure** (one part falls, the next follows). **Retry storm** (everyone hitting refresh). **Load shedding** (cutting the laundry loose). **Redundancy, N+1** (the peak plus one spare). |
 
@@ -294,6 +293,7 @@ header has no lines yet. UI micro-copy (labels, key caps) is not a line and stay
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
+| C1.alert.place | ui | Alert | C1 after the job card closes, until the first server is on the board | drag a SERVER card onto a glowing pad |
 | C3.alert.title | ui | Alert | the C3 forecast headline, after the number | EVERYONE FILMING |
 | C3.alert.down | ui | Alert | a failure freezes the board, before the rewind | BLOCK DOWN |
 | C4.alert.title | ui | Alert | the C4 forecast and the surge, after the number | NEIGHBOURS REROUTED HERE |
@@ -305,7 +305,8 @@ header has no lines yet. UI micro-copy (labels, key caps) is not a line and stay
 | C7.alert.title | ui | Alert | the after-midnight forecast headline, after the number | FIREWORKS |
 
 The alert band prints the number first and these words after it; the sub-line is the challenge's
-forecast or flicker line. Wording is a draft until the owner approves it (decision D8).
+forecast or flicker line. The C1 hint is the exception: with no alert up it stands alone on the
+band, with no number. Wording is a draft until the owner approves it (decision D8).
 
 ### Comms lane <!-- anchor: comms -->
 

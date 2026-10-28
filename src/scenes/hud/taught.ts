@@ -1,12 +1,11 @@
 // The taught trace (learning-4, decision D10): when the player saw each of the debrief's terms in
 // practice, before it was named. Every entry ties one C8 term key to a moment on the night's clock:
 // a line the comms band showed that teaches it (lineMeta's `teaches`: the lesson lines, and the
-// WARNINGs C4.triage.02/.03 and C6.triage.02), a dial answer (the C1 estimate, the C6 sizing), an
-// occurrence on the board (the first SKIPPED, the big box going dark, a box counting DIES IN at
+// WARNINGs C4.triage.02/.03 and C6.triage.02), an occurrence on the board (the first SKIPPED, the big box going dark, a box counting DIES IN at
 // midnight, midnight held with the spare...) or something the player did (the kit, a decommission).
 // The debrief prints one grey line per term from it (src/story/debrief.ts seenLines).
 //
-// Beside it, `hud.measure`: the dial answers with the sim time each was set, and the board's wires.
+// Beside it, `hud.measure`: the board's wires and when the first went in.
 //
 // The top half is pure (no Phaser, no clock: time comes in as `at`), unit-tested in node. The
 // recorder at the bottom listens on the bus and reads frame(run()) when something arrives; it never
@@ -15,7 +14,7 @@
 import { type GameEvents, bus } from '../../game/bus';
 import { type Frame, frame } from '../../game/frame';
 import type { Occurrence } from '../../game/occurrences';
-import { type Run, type RunNotes, run } from '../../game/run';
+import { type Run, run } from '../../game/run';
 import { BROWNOUT } from '../../sim/brownout';
 import type { LineId } from '../../strings';
 import { provideHudSection } from './hook';
@@ -23,9 +22,8 @@ import { TERM_GROUP, type TermGroup, type TermKey, metaOf } from './lineMeta';
 
 const C = BROWNOUT.challenges;
 
-/** Moments that teach a term without a line: dial answers, board occurrences and player actions. */
+/** Moments that teach a term without a line: board occurrences and player actions. */
 export const MOMENT_KINDS = [
-  'estimateSet',
   'firstLive',
   'kitFitted',
   'secondBox',
@@ -34,7 +32,6 @@ export const MOMENT_KINDS = [
   'bigBoxDark',
   'retriesRising',
   'laundryCut',
-  'sizingSet',
   'diesInAtMidnight',
   'heldWithSpare',
   'decommission',
@@ -43,8 +40,6 @@ export type MomentKind = (typeof MOMENT_KINDS)[number];
 
 /** The debrief terms each moment shows in practice. */
 export const MOMENT_TEACHES: Readonly<Record<MomentKind, readonly TermKey[]>> = {
-  // The job card asks how many a second; the dial is the back-of-the-envelope answer.
-  estimateSet: ['requirements', 'requestsPerSecond', 'estimate'],
   // One box wired gateway to database: what one box can do.
   firstLive: ['capacity'],
   // The kit makes one box bigger.
@@ -61,8 +56,6 @@ export const MOMENT_TEACHES: Readonly<Record<MomentKind, readonly TermKey[]>> = 
   retriesRising: ['retryStorm'],
   // Cutting the laundry floor loose sheds load.
   laundryCut: ['loadShedding'],
-  // Sizing for the midnight peak, not the evening.
-  sizingSet: ['peakVsAverage'],
   // At midnight one box falls and the next follow (D2: the sim's one cascade).
   diesInAtMidnight: ['cascadingFailure'],
   // The dip took one box and the spare carried midnight.
@@ -78,7 +71,7 @@ export interface TaughtEntry {
   readonly line: LineId | null;
   /** The moment that showed it, or null for a line. */
   readonly moment: MomentKind | null;
-  /** A number the moment carries (the dial value, the boxes at midnight), else null. */
+  /** A number the moment carries (the boxes at midnight), else null. */
   readonly value: number | null;
   /** Sim seconds it was seen. */
   readonly at: number;
@@ -198,36 +191,13 @@ export function termsSeen(trace: TaughtTrace): TermKey[] {
 // ---- hud.measure ----
 
 export interface MeasureState {
-  /** The C1 dial answer (req/s) and the sim seconds it was set, or null. */
-  estimate: number | null;
-  estimateAt: number | null;
-  /** The C6 sizing answer (boxes) and the sim seconds it was set, or null. */
-  sizing: number | null;
-  sizingAt: number | null;
   /** Wires on the board now, and the sim seconds the first wire went in (null before). */
   wires: number;
   firstWireAt: number | null;
 }
 
 export function emptyMeasure(): MeasureState {
-  return { estimate: null, estimateAt: null, sizing: null, sizingAt: null, wires: 0, firstWireAt: null };
-}
-
-/**
- * The measure after the notes read `notes` at sim time `at`: an answer is stamped the first time it
- * is seen set, and keeps that stamp. Returns `m` itself when nothing changed, else a new object.
- */
-export function measureNotes(m: MeasureState, notes: RunNotes, at: number): MeasureState {
-  const estimate = notes.estimate !== null && m.estimate === null;
-  const sizing = notes.sizing !== null && m.sizing === null;
-  if (!estimate && !sizing) return m;
-  return {
-    ...m,
-    estimate: estimate ? notes.estimate : m.estimate,
-    estimateAt: estimate ? at : m.estimateAt,
-    sizing: sizing ? notes.sizing : m.sizing,
-    sizingAt: sizing ? at : m.sizingAt,
-  };
+  return { wires: 0, firstWireAt: null };
 }
 
 // ---- the recorder: the bus and frame(run()) into the trace ----
@@ -259,8 +229,7 @@ class TaughtRecorder {
       const m = momentOfAction(a);
       if (m) this.trace = seeMoment(this.trace, m, f.now, f.clock);
     });
-    // A SET changes only the notes, which no event carries: the cue table answers it on the same
-    // frame (C1.triage.03/.04/.05, C6's reactions), and a perf sample comes at least once a second.
+    // The wire count changes with the board: a cue or a perf sample (at least once a second) reads it.
     bus.on('cue', () => this.sync());
     bus.on('perfSample', () => this.sync());
   }
@@ -270,7 +239,7 @@ class TaughtRecorder {
     return this.runRef === r;
   }
 
-  /** Start over on a fresh run, stamp any dial answer newly set, and return this frame. */
+  /** Start over on a fresh run, note the wires, and return this frame. */
   sync(): Frame {
     const r = run();
     if (r !== this.runRef) {
@@ -279,14 +248,6 @@ class TaughtRecorder {
       this.measure = emptyMeasure();
     }
     const f = frame(r);
-    const before = this.measure;
-    this.measure = measureNotes(before, f.notes, f.now);
-    if (this.measure.estimate !== null && before.estimate === null) {
-      this.trace = seeMoment(this.trace, 'estimateSet', f.now, f.clock, this.measure.estimate);
-    }
-    if (this.measure.sizing !== null && before.sizing === null) {
-      this.trace = seeMoment(this.trace, 'sizingSet', f.now, f.clock, this.measure.sizing);
-    }
     if (this.measure.wires !== f.wires.length) this.measure = { ...this.measure, wires: f.wires.length };
     return f;
   }
@@ -306,7 +267,7 @@ export function taughtMeasure(): MeasureState {
 
 declare module './hook' {
   interface HudTestState {
-    /** The dial answers with when each was set, and the board's wires (learning-4). */
+    /** The board's wires and when the first went in (learning-4). */
     measure?: MeasureState;
     /** The taught trace: each term the player has seen in practice, with the moment (learning-4). */
     taught?: TaughtEntry[];

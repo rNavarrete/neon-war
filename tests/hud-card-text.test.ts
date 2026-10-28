@@ -45,18 +45,18 @@ describe('the host text budget', () => {
   });
 
   it('the host makes 13 texts or less in all', () => {
-    const total = HOST_TEXTS.cards + HOST_TEXTS.dip + HOST_TEXTS.sizing + HOST_TEXTS.dial;
+    const total = HOST_TEXTS.cards + HOST_TEXTS.dip;
     expect(total).toBeLessThanOrEqual(HOST_TEXT_BUDGET);
     expect(HOST_TEXT_BUDGET).toBe(13);
   });
 
-  it('HudScene adds texts only for the pool, the dip line and the sizing line', () => {
+  it('HudScene adds texts only for the pool and the dip line', () => {
     const calls = hudSource.match(/this\.add\s*\.text\(/g) ?? [];
-    expect(calls.length).toBe(3);
+    expect(calls.length).toBe(2);
     expect(hudSource).toMatch(
       /for \(let i = 0; i < CARD_TEXT_POOL; i\+\+\) this\.cardTexts\.push\(this\.add\.text\(/,
     );
-    // The sizing prompt's arrow is drawn, not typed.
+    // No typed arrows.
     expect(hudSource).not.toMatch(/'→'/);
   });
 });

@@ -20,7 +20,6 @@ import {
   gaugeLayout,
   gaugeState,
   gaugeStrip,
-  sizingMarkOf,
   stepGauge,
 } from '../src/scenes/hud/gauge';
 import { dismissJobCard, openJobCard } from '../src/scenes/hud/jobCard';
@@ -95,43 +94,6 @@ describe('the scale', () => {
     let n = 0;
     for (let i = 0; i < 60; i++) n = easeNeedle(n, 250, 5 / 60);
     expect(n).toBe(250);
-  });
-});
-
-describe('the marks', () => {
-  it('shows the estimate tick only after SET, equal to notes.estimate, and sizing x 60 after the C6 SET', () => {
-    const before = gaugeState(frameWith({ notes: { estimate: null, sizing: null } }));
-    expect(before.estimateMark).toBeNull();
-    expect(before.sizingMark).toBeNull();
-    expect(before.tick).toBeNull();
-
-    const set = gaugeState(frameWith({ notes: { estimate: 30, sizing: null } }));
-    expect(set.estimateMark).toBe(30);
-    expect(set.sizingMark).toBeNull();
-    expect(set.tick).toBe(30);
-
-    const sized = gaugeState(frameWith({ notes: { estimate: 30, sizing: 4 } }));
-    expect(sized.estimateMark).toBe(30);
-    expect(sized.sizingMark).toBe(4 * ONE_BOX);
-    expect(sized.sizingMark).toBe(240);
-    expect(sized.tick).toBe(240);
-    expect(sizingMarkOf(3)).toBe(180);
-    expect(sizingMarkOf(null)).toBeNull();
-  });
-
-  it('follows the run’s notes as the dial writes them', () => {
-    const { r } = wiredRun();
-    const st = emptyGauge();
-    const memo = emptyGaugeMemo();
-    stepGauge(st, memo, readFrame(r), 0.016);
-    expect(st.estimateMark).toBeNull();
-    r.notes = { estimate: 30, sizing: null };
-    stepGauge(st, memo, readFrame(r), 0.016);
-    expect(st.estimateMark).toBe(r.notes.estimate);
-    r.notes = { estimate: 30, sizing: 4 };
-    stepGauge(st, memo, readFrame(r), 0.016);
-    expect(st.sizingMark).toBe(r.notes.sizing! * 60);
-    expect(st.tick).toBe(240);
   });
 });
 
@@ -355,7 +317,6 @@ describe('GaugeView', () => {
       readout: `${Math.round(f.demand)}/s`,
       sub: 'room 60/s',
       strip: null,
-      estimateMark: null,
       ticks: ['0', '100', '200', '300', '400'],
     });
     // The ROOM tag rides the band.

@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import { artRequest, isPicked } from '../../src/game/artManifest';
 import type { CommsTestState } from '../../src/scenes/live/views/comms';
-import { dismissJobCard, hud, openBoard, reach, setDial, shot } from './live/reach';
+import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 
 // The comms band (comms-2, comms-3): every bark shows in ZONES.comms with its speaker, tag and typed
 // line, the five slots sit inside the band, hud.bark keeps answering as before, and the band never
@@ -132,8 +132,8 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
     expect(c.log.open).toBe(true);
     expect(c.log.lines.map((l) => l.id)).toEqual(['C1.triage.01', 'C1.triage.02']);
     expect(c.log.lines.map((l) => l.name)).toEqual(['TRIAGE', 'TRIAGE']);
-    // Set the dial (clicks off the band): Lux and TRIAGE answer while the log stays pinned.
-    await setDial(page, 30);
+    // A click off the band, then Lux answers TRIAGE's 480 while the log stays pinned.
+    await page.mouse.click(c.log.outside.x, c.log.outside.y);
     await expect
       .poll(async () => (await comms(page)).history, { timeout: 30_000, intervals: [50] })
       .toContain('C1.lux.01');
@@ -146,7 +146,7 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
   });
 
   await test.step('the replay glyph re-requests the newest line', async () => {
-    // Let the SET answers play out (nothing more comes until a box is built), so the newest holds.
+    // Let Lux and TRIAGE play out (nothing more comes until a box is built), so the newest holds.
     await expect
       .poll(
         async () => {
@@ -729,7 +729,7 @@ test('comms-8: the leader points at the idle box for C3.triage.02; null without 
   expect(plain.every((s) => s.leader === null)).toBe(true);
   // Zone lines: null while nobody registered the zone, at the registered point once someone has.
   const zoneNames: Record<string, string[]> = {
-    'C1.triage.01': ['dialCard', 'dial'],
+    'C1.triage.06': ['gauge'],
     'C3.triage.01': ['inventory', 'inventory:server'],
   };
   for (const [id, names] of Object.entries(zoneNames)) {

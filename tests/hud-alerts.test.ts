@@ -15,6 +15,7 @@ import {
   emptyAlert,
   round5,
   slideOffset,
+  startHintOf,
   stepAlert,
   stripeScroll,
 } from '../src/scenes/hud/alerts';
@@ -43,7 +44,6 @@ function at(now: number, over: Partial<AlertInput> = {}): AlertInput {
     dip: null,
     failure: null,
     midnight: null,
-    notes: { sizing: null },
     ...over,
   };
 }
@@ -148,19 +148,11 @@ const CASES: {
     line: null,
   },
   {
-    name: 'the midnight forecast before SET names the outage',
+    name: 'the midnight forecast names the outage',
     input: at(C.c6 - 10),
     kind: 'forecast',
     title: 'C6.alert.title',
     line: 'C6.alert.dip',
-    number: 150,
-  },
-  {
-    name: 'the midnight forecast after SET is the forecast line',
-    input: at(C.c6 - 10, { notes: { sizing: 4 } }),
-    kind: 'forecast',
-    title: 'C6.alert.title',
-    line: 'C6.warn.01',
     number: 150,
   },
   {
@@ -486,5 +478,43 @@ describe('the nine alert lines', () => {
 
   it('names the outage in the C6 sub-line until SET', () => {
     expect(LINES['C6.alert.dip'].text.toLowerCase()).toContain('loses power');
+  });
+});
+
+describe('the start of C1: the band says what to do first', () => {
+  const server = { kind: 'server' };
+  const gateway = { kind: 'gateway' };
+  const hintAt = (now: number, over: Partial<Parameters<typeof startHintOf>[0]> = {}) =>
+    startHintOf({ now, cardOpen: false, parts: [gateway], ...over });
+
+  it('asks for a server once the job card closes, until one is on the board', () => {
+    expect(hintAt(C.c1)).toBe('C1.alert.place');
+    expect(hintAt(C.c1 + 30)).toBe('C1.alert.place');
+    expect(hintAt(C.c1 + 5, { parts: [gateway, server] })).toBeNull();
+    expect(LINES['C1.alert.place'].text).toBe('drag a SERVER card onto a glowing pad');
+  });
+
+  it('says nothing under the job card, before C1 or from C2', () => {
+    expect(hintAt(C.c1, { cardOpen: true })).toBeNull();
+    expect(hintAt(C.c1 - 1)).toBeNull();
+    expect(hintAt(C.c2)).toBeNull();
+    expect(hintAt(C.c6)).toBeNull();
+  });
+
+  it('is a ui line with no debrief term (the band shows it alone, with no number)', () => {
+    const bold = (['C8.terms.sizing', 'C8.terms.scaling', 'C8.terms.failure'] as const).flatMap((id) =>
+      [...LINES[id].text.matchAll(/\*\*(.+?)\*\*/g)].map((m) => m[1]),
+    );
+    const banned = [
+      ...bold.flatMap((t) => t.split(/,\s*/)).map((t) => t.toLowerCase()),
+      'headroom',
+      'throughput',
+      'balancer',
+      'scaling',
+      'capacity',
+    ];
+    expect(LINES['C1.alert.place'].kind).toBe('ui');
+    const lower = LINES['C1.alert.place'].text.toLowerCase();
+    expect(banned.filter((b) => lower.includes(b))).toEqual([]);
   });
 });

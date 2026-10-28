@@ -1,20 +1,20 @@
 // The deck (ZONES.deck) as a Live screen view: the room-left bar on the left (HeadroomView), and the
-// three keys on the right, 1 REGROUP, 2 CUT 3F and 3 SET, each clicked or pressed on the keyboard.
+// two keys on the right, 1 REGROUP and 2 CUT 3F, each clicked or pressed on the keyboard. (3 SET went
+// with the estimate dial; its slot is left empty.)
 // The rules are pure in deck.ts; this file draws them and calls the run's actions:
 //
 //   1 REGROUP  run().regroup(): quarter speed for 10 s, once, after the crew hands it over
 //   2 CUT 3F   cutLaundry(run()) with the wire-cut sound, in the district surge
-//   3 SET      the open dial question's SET (the dial card records its value)
 //
 // A press does nothing while the job card or the banner is open, while the board is held (the pause
-// menu, a story scene, a failure); the dial card and the sizing prompt never block key 3. Every key
+// menu, a story scene, a failure). Every key
 // sits at its final place and is interactive from its first frame: a key becoming ready changes only
 // its colour and alpha, so a click the moment it lights lands. Regroup's ready pulse is steady under
 // reduce flicker (and the ?test lite flag).
 //
 // These are the only keys on the deck (the HUD scene's own legacy keys are gone): this view takes
-// every click there and every digit 1, 2, 3; hud.regroup, hud.laundry and hud.deck mirror it, and the
-// HUD scene lists its hit areas as hud.bounds deck.1..3. hud.headroom mirrors the bar.
+// every click there and every digit 1, 2; hud.regroup, hud.laundry and hud.deck mirror it, and the
+// HUD scene lists its hit areas as hud.bounds deck.1..2. hud.headroom mirrors the bar.
 //
 // Phaser is a type here only, so the registry and its node tests can import this file.
 
@@ -33,7 +33,6 @@ import {
   KEY_NAMES,
   type KeyName,
   type RegroupKey,
-  type SetKey,
   cutDoneWord,
   emptyDeck,
   keyAlpha,
@@ -51,7 +50,7 @@ import { COLORS, FONT } from './layout';
 import { cutLaundry } from './pending503';
 import { type PagePoint, provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
-import { KIT, type KeyCap, PLAY_SIZE, keyCap } from './kit';
+import { KIT, type KeyCap, keyCap } from './kit';
 import { GAUGES_DEPTH, type PanelTestState } from './panel';
 import { preloadArt, resolveArt } from '../plates';
 
@@ -107,14 +106,10 @@ export interface DeckPress {
 export interface DeckTestState {
   regroup: RegroupKey;
   cut: CutKey;
-  set: SetKey;
-  /** The SET key under the name the zone plan gave it (decision D3 renamed GO to SET). */
-  go: SetKey;
   ring: number;
   pulse: number;
   blocked: boolean;
   bannerOpen: boolean;
-  dialOpen: boolean;
   keys: Record<KeyName, DeckKeyTestState>;
   /** The CUT 3F tooltip is showing (hover). */
   tooltip: boolean;
@@ -122,8 +117,6 @@ export interface DeckTestState {
   presses: DeckPress[];
   /** Every press since the view was made, counted. */
   pressed: number;
-  /** The play glyph (hud/icons/play) on the SET key: drawn, and lit with the key. */
-  play?: { drawn: boolean; lit: boolean };
 }
 
 declare module './hook' {
@@ -143,14 +136,11 @@ const CUT_DONE = cutDoneWord();
 /** How many presses hud.deck.presses keeps. */
 export const DECK_PRESSES = 20;
 
-/** The digit keys' key codes: 1, 2, 3 on the main row. */
-const KEY_CODES: Readonly<Record<KeyName, number>> = { one: 49, two: 50, three: 51 };
+/** The digit keys' key codes: 1 and 2 on the main row. */
+const KEY_CODES: Readonly<Record<KeyName, number>> = { one: 49, two: 50 };
 
-/** The deck's kit pieces: the three keycaps and the play glyph (docs/ART-REQUESTS.md batch 4). */
-const DECK_KIT = [KIT.keyIdle, KIT.keyReady, KIT.keyPressed, KIT.play] as const;
-
-/** The play glyph's tint when its key is not lit. */
-const PLAY_DIM = 0x8a8aa0;
+/** The deck's kit pieces: the three keycaps (docs/ART-REQUESTS.md batch 4). */
+const DECK_KIT = [KIT.keyIdle, KIT.keyReady, KIT.keyPressed] as const;
 
 /** One drawn key. */
 interface KeyParts {
@@ -184,8 +174,6 @@ export class DeckView implements LiveView {
   readonly deck: DeckState = emptyDeck();
   private keys: Partial<Record<KeyName, KeyParts>> = {};
   private ring: Phaser.GameObjects.Graphics | null = null;
-  private play: Phaser.GameObjects.Image | null = null;
-  private shownPlayLit: boolean | null = null;
   /** The HUD clock this frame (for the pressed cap). */
   private hudNow = 0;
   /** The texture each cap draws from, when the scene has it. */
@@ -212,7 +200,6 @@ export class DeckView implements LiveView {
     laundryCut: null,
     laundryCutAvailable: false,
     banner: null,
-    notes: { estimate: null, sizing: null },
     cardOpen: false,
   };
 
@@ -234,7 +221,7 @@ export class DeckView implements LiveView {
 
     const add = scene.add;
     const rects = keyRects();
-    // The picked keycaps and play glyph, when the scene has their files (a node test's stub does not).
+    // The picked keycaps, when the scene has their files (a node test's stub does not).
     const tx = scene.textures as Partial<Phaser.Textures.TextureManager> | undefined;
     const has = (key: string): string | null => {
       const a = resolveArt(key);
@@ -251,8 +238,7 @@ export class DeckView implements LiveView {
       if (t) this.capTexture[cap] = t;
     }
     const caps = Object.keys(this.capTexture).length === 3;
-    this.shownPlayLit = null;
-    // One opaque backing under the three keys, never dimmed, so the HUD's own keys never show through.
+    // One opaque backing under the keys, never dimmed, so the HUD's own keys never show through.
     const back = add.graphics();
     back.fillStyle(COLORS.ink, 1);
     for (const name of KEY_NAMES) {
@@ -272,16 +258,9 @@ export class DeckView implements LiveView {
         : null;
       const dim = caps ? null : drawPlate(add.graphics(), r, false);
       const lit = caps ? null : drawPlate(add.graphics(), r, true).setVisible(false);
-      // SET carries the play glyph right of its digit.
-      const playTexture = name === 'three' ? has(KIT.play) : null;
-      const dx = playTexture ? -12 : 0;
       const digit = add
-        .text(cx + dx, cy - 10, words.digit, { fontFamily: FONT, fontSize: '26px', color: COLORS.dim })
+        .text(cx, cy - 10, words.digit, { fontFamily: FONT, fontSize: '26px', color: COLORS.dim })
         .setOrigin(0.5);
-      if (playTexture) {
-        this.play = add.image(cx + 14, cy - 10, playTexture).setDisplaySize(PLAY_SIZE, PLAY_SIZE);
-        this.play.setDepth(GAUGES_DEPTH);
-      }
       const word = add
         .text(cx, cy + 17, words.word, { fontFamily: FONT, fontSize: '12px', color: COLORS.dim })
         .setOrigin(0.5);
@@ -345,7 +324,7 @@ export class DeckView implements LiveView {
       }
     }
 
-    // The leader line ends at a key's middle (game px, made once): key:one, key:two, key:three.
+    // The leader line ends at a key's middle (game px, made once): key:one, key:two.
     for (const name of KEY_NAMES) {
       const r = rects[name];
       const mid = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
@@ -373,7 +352,6 @@ export class DeckView implements LiveView {
     input.laundryCut = frame.laundryCut;
     input.laundryCutAvailable = frame.laundryCutAvailable;
     input.banner = frame.banner;
-    input.notes = frame.notes;
     input.cardOpen = cardOpen;
     stepDeck(d, input, clock.now, steady);
     for (const name of KEY_NAMES) this.drawKey(name);
@@ -399,12 +377,9 @@ export class DeckView implements LiveView {
   private act(key: KeyName): boolean {
     const r = run();
     if (key === 'one') return r.regroup().ok;
-    if (key === 'two') {
-      const res = cutLaundry(r);
-      if (res.ok) this.bus?.emit('sfx', { key: 'wire-cut' });
-      return res.ok;
-    }
-    return this.host?.pressSet?.() ?? false;
+    const res = cutLaundry(r);
+    if (res.ok) this.bus?.emit('sfx', { key: 'wire-cut' });
+    return res.ok;
   }
 
   /** Show a key lit or dim and set its words when its state changes; set its alpha when that changes. */
@@ -417,10 +392,6 @@ export class DeckView implements LiveView {
       k.shownLit = lit;
       k.lit?.setVisible(lit);
       k.dim?.setVisible(!lit);
-      if (name === 'three' && this.play && lit !== this.shownPlayLit) {
-        this.shownPlayLit = lit;
-        this.play.setTint(lit ? 0xffffff : PLAY_DIM);
-      }
       const color = lit ? COLORS.heroText : COLORS.dim;
       k.digit.setColor(color);
       if (word !== k.word.text) k.word.setText(word).setFontSize(word.length > 8 ? 11 : 12);
@@ -444,7 +415,6 @@ export class DeckView implements LiveView {
       k.lit?.setAlpha(alpha);
       k.digit.setAlpha(alpha);
       k.word.setAlpha(alpha);
-      if (name === 'three') this.play?.setAlpha(alpha);
     }
   }
 
@@ -520,18 +490,14 @@ export class DeckView implements LiveView {
     return {
       regroup: d.regroup,
       cut: d.cut,
-      set: d.set,
-      go: d.set,
       ring: d.ring,
       pulse: d.pulse,
       blocked: d.blocked,
       bannerOpen: d.bannerOpen,
-      dialOpen: d.dialOpen,
       keys,
       tooltip: this.shownTooltip,
       presses: this.presses.map((p) => ({ ...p })),
       pressed: this.pressed,
-      play: { drawn: this.play !== null, lit: this.shownPlayLit === true },
     };
   }
 
@@ -570,8 +536,6 @@ export class DeckView implements LiveView {
     this.keys = {};
     this.ring?.destroy();
     this.ring = null;
-    this.play?.destroy();
-    this.play = null;
     this.back?.destroy();
     this.back = null;
     this.tooltip?.destroy();

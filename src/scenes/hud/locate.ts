@@ -1,7 +1,7 @@
 // Where named things on the Live screen sit, for the comms band's leader line (contract 'locate').
 // A lane that draws something a line may point at registers a function that says where it is now;
-// the band asks by name. Names in use: inventory, inventory:<card>, key:one / key:two / key:three,
-// headroom, gauge, scope, alert, dial (and dialCard), title, credits, channel. Anything not
+// the band asks by name. Names in use: inventory, inventory:<card>, key:one / key:two,
+// headroom, gauge, scope, alert, title, credits, channel. Anything not
 // registered (yet) answers null, and the band then draws no leader.
 //
 // Points are game pixels (the 1920x1080 space every scene draws in), not page pixels. Pure module

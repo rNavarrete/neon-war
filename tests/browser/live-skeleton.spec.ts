@@ -61,8 +61,8 @@ test('the Live skeleton: zones on the page, ten placeholders, perf numbers and l
   expect(perf.graphics).toBeGreaterThanOrEqual(10);
   expect(perf.objects.board).toBeGreaterThan(0);
   expect(perf.lite).toBe(true);
-  // Tech follow-up 3: the host's own texts (the cards, the dial, the dip and sizing lines) are all
-  // made at create, and stay inside the host's 13 (docs/LIVE.md "Budgets").
+  // Tech follow-up 3: the host's own texts (the cards and the dip line) are all made at create, and
+  // stay inside the host's 13 (docs/LIVE.md "Budgets").
   expect((perf as PerfSection).host.texts, 'perf.host.texts').toBeLessThanOrEqual(13);
 
   await page.screenshot({ path: 'test-results/screens/live-skeleton.png' });
@@ -123,7 +123,7 @@ test('reach midnight at speed 20 with autopilot: clock 00:00 within 50 s, the re
 
 // tech-4: the legacy HUD restaged into the zones. At C1, C4 and C6 every restaged piece that shows
 // is drawn (its display bounds, from state.hud.bounds) inside its zone or card, nothing but the
-// cards covers the feed, and the dial card shows exactly while a dial question is open.
+// cards covers the feed, and no dial card or sizing prompt is ever drawn (the estimate step is gone).
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Bounds = { id: string; home: string; visible: boolean; rect: Rect };
@@ -131,16 +131,7 @@ type Hud = {
   ready: boolean;
   now: number;
   jobCard: { open: boolean; x: number; y: number };
-  dial: {
-    visible: boolean;
-    value: number;
-    minus: { x: number; y: number };
-    plus: { x: number; y: number };
-    set: { x: number; y: number };
-  };
-  notes: { estimate: number | null; sizing: number | null };
   surge: { startsAt: number } | null;
-  sizingPrompt: { open: boolean; x?: number; y?: number };
   bounds: Bounds[];
   title?: { right: number; clockRight: number | null };
   cues: { fired: string[]; silenced: boolean };
@@ -154,7 +145,7 @@ type StoryState = {
   skip: { visible: boolean; x: number; y: number };
 };
 
-const CARD_HOMES = ['jobCard', 'banner', 'dialCard', 'sizingPrompt', 'dipFallback'];
+const CARD_HOMES = ['jobCard', 'banner', 'dipFallback'];
 
 async function hudState(page: Page): Promise<Hud> {
   return page.evaluate(() => window.__neonTest!.state.hud as unknown as Hud);
@@ -176,9 +167,10 @@ async function expectRestaged(page: Page, moment: string, read?: Hud): Promise<B
   const homes = await homeRects(page);
   const { bounds } = read ?? (await hudState(page));
   // 15 legacy pieces until the HUD stopped drawing its own title cluster and clock (TitleView and
-  // ClockView draw them now): the alert, the scope, the dial, the sizing prompt, the chat, the comms
-  // band, the three deck keys, the job card and the banner are left.
-  expect(bounds.length, moment).toBeGreaterThanOrEqual(11);
+  // ClockView draw them now), 11 until the estimate step went with the dial, the sizing prompt and
+  // key 3: the alert, the scope, the chat, the comms band, the two deck keys, the job card and the
+  // banner are left.
+  expect(bounds.length, moment).toBeGreaterThanOrEqual(8);
   const eps = 1;
   const shown = bounds.filter((b) => b.visible);
   for (const b of shown) {
@@ -200,25 +192,6 @@ async function expectRestaged(page: Page, moment: string, read?: Hud): Promise<B
     }
   }
   return shown;
-}
-
-async function turnDialTo(page: Page, value: number): Promise<void> {
-  // At speed 20 a dial question is open for only a few real seconds (C1's until the C2 banner blocks
-  // the deck at 90, C6's sizing until midnight at 510), so after one click shows the step the rest
-  // go in one burst with a single read after it, rather than a hook read per click.
-  let h = await hudState(page);
-  for (let guard = 0; h.dial.value !== value && guard < 40; guard++) {
-    const p = h.dial.value < value ? h.dial.plus : h.dial.minus;
-    const before = h.dial.value;
-    await page.mouse.click(p.x, p.y);
-    h = await hudState(page);
-    const step = Math.abs(h.dial.value - before);
-    const more = step > 0 ? Math.floor(Math.abs(value - h.dial.value) / step) : 0;
-    for (let i = 0; i < more; i++) await page.mouse.click(p.x, p.y);
-    if (more > 0) h = await hudState(page);
-  }
-  expect(h.dial.value).toBe(value);
-  await page.mouse.click(h.dial.set.x, h.dial.set.y);
 }
 
 async function clickThroughScene(page: Page, scriptId: string): Promise<void> {
@@ -245,10 +218,9 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     .poll(() => page.evaluate(() => window.__neonTest?.state.hud?.ready ?? false), { timeout: 15_000 })
     .toBe(true);
 
-  await test.step('the job card is up: no dial yet', async () => {
+  await test.step('the job card is up: no dial', async () => {
     const h = await hudState(page);
     expect(h.jobCard.open).toBe(true);
-    expect(h.dial.visible).toBe(false);
     const ids = (await expectRestaged(page, 'job card')).map((b) => b.id);
     expect(ids).toContain('jobCard');
     expect(ids).not.toContain('dial');
@@ -256,25 +228,24 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     await expect.poll(async () => (await hudState(page)).jobCard.open).toBe(false);
   });
 
-  await test.step('C1: the dial card is up until SET', async () => {
+  await test.step('C1: straight to the build, no dial card', async () => {
     const h = await hudState(page);
-    expect(h.dial.visible).toBe(true);
     const ids = (await expectRestaged(page, 'C1')).map((b) => b.id);
-    for (const id of ['scope', 'dial', 'chat', 'comms']) {
+    for (const id of ['scope', 'chat', 'comms']) {
       expect(ids, id).toContain(id);
     }
+    expect(ids).not.toContain('dial');
+    expect(ids).not.toContain('sizing');
     // The legacy title cluster and clock are gone; the gauges views draw them in their zones.
     const all = h.bounds.map((b) => b.id);
     for (const id of ['title', 'clock.text', 'clock.countdown', 'clock.panel'])
       expect(all, id).not.toContain(id);
     expect(h.title!.right).toBeLessThanOrEqual(440);
     expect(h.title!.clockRight!).toBeLessThanOrEqual(1800);
-    for (const id of ['deck.1', 'deck.2', 'deck.3']) expect(ids, id).toContain(id);
+    for (const id of ['deck.1', 'deck.2']) expect(ids, id).toContain(id);
+    expect(all).not.toContain('deck.3');
     expect(ids).not.toContain('jobCard');
     await page.screenshot({ path: 'test-results/screens/live-restage-c1.png' });
-    await turnDialTo(page, 30);
-    await expect.poll(async () => (await hudState(page)).notes.estimate).toBe(30);
-    await expect.poll(async () => (await hudState(page)).dial.visible).toBe(false);
   });
 
   await test.step('C1: the host loop fires the trigger table through cueViewOf and sends each id as a cue', async () => {
@@ -309,7 +280,6 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
       .toBe(true);
     await page.screenshot({ path: 'test-results/screens/live-restage-c4.png' });
     const read = h as unknown as Hud;
-    expect(read.dial.visible).toBe(false);
     const ids = (await expectRestaged(page, 'C4', read)).map((b) => b.id);
     expect(ids).toContain('alert');
     expect(ids).not.toContain('dial');
@@ -317,27 +287,14 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
 
   await clickThroughScene(page, 'C5');
 
-  await test.step('C6: the sizing prompt beside the dial card, both gone after SET', async () => {
+  await test.step('C6: the midnight forecast, with no sizing prompt and no dial card', async () => {
     await expect
-      .poll(async () => (await hudState(page)).sizingPrompt.open, { timeout: 120_000, intervals: [25] })
-      .toBe(true);
-    const h = await hudState(page);
-    expect(h.dial.visible).toBe(true);
+      .poll(async () => (await hudState(page)).surge?.startsAt ?? null, { timeout: 120_000, intervals: [25] })
+      .toBe(450);
     const ids = (await expectRestaged(page, 'C6')).map((b) => b.id);
-    expect(ids).toContain('sizing');
-    expect(ids).toContain('dial');
-    // hud.sizingPrompt reports the prompt's centre: CARDS.sizingPrompt's, beside the dial card.
-    const homes = await homeRects(page);
-    const sp = homes.sizingPrompt;
-    expect(Math.abs(h.sizingPrompt.x! - (sp.x + sp.w / 2))).toBeLessThanOrEqual(0.2);
-    expect(Math.abs(h.sizingPrompt.y! - (sp.y + sp.h / 2))).toBeLessThanOrEqual(0.2);
-    expect(sp.x + sp.w).toBeLessThanOrEqual(homes.dialCard.x);
+    expect(ids).not.toContain('sizing');
+    expect(ids).not.toContain('dial');
     await page.screenshot({ path: 'test-results/screens/live-restage-c6.png' });
-    await turnDialTo(page, 4);
-    await expect.poll(async () => (await hudState(page)).notes.sizing).toBe(4);
-    const after = await hudState(page);
-    expect(after.sizingPrompt.open).toBe(false);
-    expect(after.dial.visible).toBe(false);
   });
 
   expect(errors).toEqual([]);

@@ -55,8 +55,11 @@ would be the wrong voice.
 Lines whose words changed in `src/strings.ts` since they were recorded. Words are compared without
 the performance tags, the stage directions in brackets and quotes.
 
-None. Two lines differ only in stage directions written into the text (`C5.rei.cut` has
-"(beat)", `C5.rei.04` has "(to Lux)"); the spoken words match the takes.
+- `C1.triage.01`: "Ooh, a dial!" became "Ooh, a card!" when the estimate dial was removed. The
+  old take still plays until it is re-recorded.
+
+Two lines differ only in stage directions written into the text (`C5.rei.cut` has "(beat)",
+`C5.rei.04` has "(to Lux)"); the spoken words match the takes.
 
 ## Speaker changed
 

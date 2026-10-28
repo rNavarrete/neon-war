@@ -42,18 +42,6 @@ async function waitForNow(page: Page, t: number, timeout = 240_000): Promise<Hud
   return hud(page);
 }
 
-/** Turn the dial to `value` with its plus and minus buttons, then press SET. */
-async function setDial(page: Page, value: number): Promise<void> {
-  let h = await hud(page);
-  for (let guard = 0; h.dial.value !== value && guard < 200; guard++) {
-    const p = h.dial.value < value ? h.dial.plus : h.dial.minus;
-    await page.mouse.click(p.x, p.y);
-    h = await hud(page);
-  }
-  expect(h.dial.value).toBe(value);
-  await page.mouse.click(h.dial.set.x, h.dial.set.y);
-}
-
 type Story = {
   active: boolean;
   scriptId: string | null;
@@ -88,7 +76,8 @@ test('the session opens on the job card, and clicking it away starts C1', async 
   let h = await hud(page);
   expect(h.jobCard.open).toBe(true);
   expect(h.paused).toBe(true);
-  expect(h.dial.visible).toBe(false);
+  // Under the job card the band asks nothing yet.
+  expect(h.alert?.hint ?? null).toBeNull();
   // The in-world clock opens at 23:51:30, eight and a half minutes before midnight.
   expect(h.clock).toBe('23:51:30');
   expect(h.countdown).toBe('8:30');
@@ -98,8 +87,9 @@ test('the session opens on the job card, and clicking it away starts C1', async 
   h = await hud(page);
   expect(h.paused).toBe(false);
   expect(h.now).toBeGreaterThanOrEqual(15);
-  expect(h.dial.visible).toBe(true);
-  expect(h.dial.mode).toBe('reqps');
+  // No estimate step: the band says what to do first, straight to the build.
+  expect(h.alert?.hint).toBe('C1.alert.place');
+  expect(h.alert?.hintText).toBe('drag a SERVER card onto a glowing pad');
   // TRIAGE guesses first, never pausing the board.
   await expect
     .poll(async () => (await hud(page)).bark.current, { timeout: 40_000, intervals: [50] })
@@ -109,24 +99,18 @@ test('the session opens on the job card, and clicking it away starts C1', async 
   expect(h.paused).toBe(false);
 });
 
-test('the estimate dial records 30 and leaves a dashed guess line on the chart', async ({ page }) => {
+test('C1: Lux and TRIAGE do the sum once a box is live, and the chart, trust and credits match the sim', async ({
+  page,
+}) => {
   test.setTimeout(180_000);
   await openBoard(page, 20, true);
   await dismissJobCard(page);
-  await setDial(page, 30);
-  await expect.poll(async () => (await hud(page)).notes.estimate).toBe(30);
-  let h = await hud(page);
-  expect(h.dial.locked).toBe(true);
-  expect(h.chart.estimateLine).toBe(30);
   await expect
     .poll(async () => (await hud(page)).bark.history, { timeout: 60_000 })
     .toEqual(expect.arrayContaining(['C1.lux.01', 'C1.triage.03']));
 
-  // Let the real line draw in for a while; the guess stays.
+  // Let the real line draw in for a while.
   await waitForNow(page, 60);
-  h = await hud(page);
-  expect(h.notes.estimate).toBe(30);
-  // The guess itself costs nothing (also unit-tested in tests/hud-format.test.ts).
   // The chart's last plotted values match the sim within 1 req/s. At speed 20 retries move demand
   // between a plot and a read, so wait for a frame where both are read together.
   await expect
@@ -149,7 +133,7 @@ test('the estimate dial records 30 and leaves a dashed guess line on the chart',
       { timeout: 20_000, intervals: [25] },
     )
     .toBeLessThanOrEqual(1);
-  h = await hud(page);
+  const h = await hud(page);
   expect(h.chat.block.length + h.chat.stream.length).toBeGreaterThan(0);
   await page.screenshot({ path: 'test-results/screens/hud-c1.png' });
 });
@@ -180,7 +164,7 @@ for (const choice of ['pay', 'ignore', 'bin'] as const) {
   });
 }
 
-test('the surge, the laundry cut, the dip flicker, Regroup, the sizing prompt and midnight', async ({
+test('the surge, the laundry cut, the dip flicker, Regroup, the midnight forecast and midnight', async ({
   page,
 }) => {
   test.setTimeout(300_000);
@@ -275,22 +259,16 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the sizing prompt an
 
   await waitForNow(page, 430);
 
-  await test.step('C6: the midnight surge is warned and the sizing prompt asks for servers', async () => {
+  await test.step('C6: the midnight surge is warned, with no sizing question', async () => {
     await expect
       .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
       .toBe(450);
     let h = await hud(page);
     expect(450 - h.surge!.shownAt!).toBeGreaterThanOrEqual(10);
     expect(h.surge?.demand).toBe(150);
-    await expect.poll(async () => (await hud(page)).sizingPrompt.open).toBe(true);
     h = await hud(page);
-    expect(h.dial.mode).toBe('servers');
     expect(h.now).toBeLessThan(510);
     await page.screenshot({ path: 'test-results/screens/hud-c6.png' });
-    await setDial(page, 4);
-    await expect.poll(async () => (await hud(page)).notes.sizing).toBe(4);
-    h = await hud(page);
-    expect(h.sizingPrompt.open).toBe(false);
   });
 
   await test.step('the countdown reaches 0:00 at midnight, not before', async () => {

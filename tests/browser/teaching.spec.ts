@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import { CARDS, ZONES, overlaps } from '../../src/scenes/live/layout';
 import { LINES } from '../../src/strings';
-import { type Snap, dismissJobCard, hud, openBoard, setDial, shot, snap } from './live/reach';
+import { type Snap, dismissJobCard, hud, openBoard, shot, snap } from './live/reach';
 
 // The learning lane's teaching criteria in the browser (learning-5, docs/LIVE.md: 150 s). Every
 // assertion reads window.__neonTest.state; the mouse is the only input. Where a moment is a time
@@ -67,8 +67,6 @@ function openModals(s: Snap) {
   const out: { id: string; rect: (typeof CARDS)[keyof typeof CARDS] }[] = [];
   if (h.jobCard.open) out.push({ id: 'jobCard', rect: CARDS.jobCard });
   if (h.banner.open) out.push({ id: 'banner', rect: CARDS.banner });
-  if (h.sizingPrompt.open) out.push({ id: 'sizingPrompt', rect: CARDS.sizingPrompt });
-  if (h.dial.visible) out.push({ id: 'dialCard', rect: CARDS.dialCard });
   return out;
 }
 
@@ -106,7 +104,7 @@ test('1. demand against room is readable at 60, 200, 300, 455 and 515, nothing o
           expect(overlaps(m.rect, z), `${m.id} over the readout at ${h.now}`).toBe(false);
       }
       if (at === 455) {
-        // The C6 forecast led with MIDNIGHT and named the outage under it (sizing not yet SET). It
+        // The C6 forecast led with MIDNIGHT and named the outage under it. It
         // comes down when the surge starts at 450, so it is read on the way rather than at 455.
         expect(forecasts.length, 'hud.alert read as the C6 forecast between 430 and 455').toBeGreaterThan(0);
         for (const f of forecasts) {
@@ -172,9 +170,8 @@ test('3. a missed line can be reread from the band log, and the log stays open a
   const ids = c.log.lines.map((l) => l.id);
   expect(ids).toContain('C1.triage.01');
   for (const l of c.log.lines) expect(l.text).toBe(LINES[l.id].text);
-  // A new line (the dial answered) arrives under the hover: the log stays open and takes it in.
+  // A new line (Lux's answer to the 480) arrives under the hover: the log stays open and takes it in.
   await page.mouse.move(c.log.outside.x, c.log.outside.y);
-  await setDial(page, 30);
   await page.mouse.move(c.log.band.x, c.log.band.y);
   await expect
     .poll(async () => (await hud(page)).comms?.history.length ?? 0, { timeout: 10_000 })

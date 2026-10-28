@@ -354,7 +354,6 @@ test('the debrief grades the night, names the terms, ends with the interview car
     banner: 'pay',
     ozzieTab: 230,
     scaledDown: true,
-    estimate: 30,
     midnightHeld: true,
     serversAtMidnight: 5,
   } as const;
@@ -374,7 +373,8 @@ test('the debrief grades the night, names the terms, ends with the interview car
   }
   expect(grades).toEqual([
     'C8.rei.open',
-    'C8.rei.sizing.good',
+    // Graded on the boxes built: midnight held, but on 5 (one only cost).
+    'C8.rei.sizing.bad',
     'C8.rei.banner.pay',
     'C8.rei.debt',
     'C8.ozzie.debt',

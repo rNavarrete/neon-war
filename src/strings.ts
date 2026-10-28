@@ -52,7 +52,7 @@ export const LINES = {
   'C1.triage.01': {
     kind: 'bark',
     speaker: 'TRIAGE (eager)',
-    text: "Ooh, a dial! How many a second are coming? I'll guess first.",
+    text: "Ooh, a card! How many a second are coming? I'll guess first.",
   },
   'C1.triage.02': {
     kind: 'bark',
@@ -256,7 +256,6 @@ export const LINES = {
     text: 'MIDNIGHT: everyone calls and streams at once. About 150 a second.',
   },
   'C6.rei.01': { kind: 'bark', speaker: 'Rei', text: 'Your call. How many?' },
-  'C6.prompt': { kind: 'ui', speaker: 'Sizing prompt', text: 'How many boxes for midnight?' },
   'C6.triage.01': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
@@ -326,7 +325,7 @@ export const LINES = {
   'C8.terms.sizing': {
     kind: 'ui',
     speaker: 'Sizing',
-    text: "**Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one box did 60). **Back-of-the-envelope estimate** (the dial). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening).",
+    text: "**Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one box did 60). **Back-of-the-envelope estimate** (flats times calls, before you build). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening).",
   },
   'C8.terms.scaling': {
     kind: 'ui',
@@ -429,6 +428,7 @@ export const LINES = {
   // its anchor, and nowhere else, as one edit here and one row in the script's matching section.
   // anchor: board
   // anchor: gauges
+  'C1.alert.place': { kind: 'ui', speaker: 'Alert', text: 'drag a SERVER card onto a glowing pad' },
   'C3.alert.title': { kind: 'ui', speaker: 'Alert', text: 'EVERYONE FILMING' },
   'C3.alert.down': { kind: 'ui', speaker: 'Alert', text: 'BLOCK DOWN' },
   'C4.alert.title': { kind: 'ui', speaker: 'Alert', text: 'NEIGHBOURS REROUTED HERE' },

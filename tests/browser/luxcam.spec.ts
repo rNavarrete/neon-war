@@ -2,13 +2,13 @@ import { type Page, expect, test } from '@playwright/test';
 import type { LuxCamTestState } from '../../src/scenes/hud/luxcam';
 import type { Rect } from '../../src/scenes/live/layout';
 import { LINES, type LineId } from '../../src/strings';
-import { dismissJobCard, openBoard, reach, setDial, shot, snap } from './live/reach';
+import { dismissJobCard, openBoard, reach, shot, snap } from './live/reach';
 
 // Lux's cam (luxcam-2, luxcam-3), asserted on window.__neonTest.state.hud.luxCam: it draws inside
 // ZONES.cam with the face and the backdrop only inside the 388x230 lens, its art is the texture on
 // the front face, REC blinks on the HUD clock (steady with reduce flicker) and the talk bars follow
 // Lux's lines. Short on purpose: speed 20 with the autopilot for the first two, and a third page at
-// speed 4 without it, where touching the dial makes Lux answer (C1.lux.01) on the band.
+// speed 4 without it, where Lux answers TRIAGE's 480 (C1.lux.01) on the band.
 
 async function cam(page: Page): Promise<LuxCamTestState> {
   const c = await page.evaluate(() => window.__neonTest?.state?.hud?.luxCam ?? null);
@@ -100,8 +100,7 @@ test('the talk bars: speaking is true exactly while Lux’s line is on the band'
   test.setTimeout(60_000);
   const { errors } = await openBoard(page, { speed: 4, autopilot: false });
   await dismissJobCard(page);
-  // Touching the dial makes Lux answer (C1.lux.01) once the band is free.
-  await setDial(page, 30);
+  // Lux answers TRIAGE's 480 (C1.lux.01) once the band is free.
   const seen = { lux: 0, other: 0, quiet: 0 };
   const deadline = Date.now() + 40_000;
   let luxDone = false;

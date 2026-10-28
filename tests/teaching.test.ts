@@ -41,7 +41,7 @@ import {
   direct,
   emptyCueView,
 } from '../src/scenes/hud/cues';
-import { ghostCapacity, ghostOpen } from '../src/scenes/board/ghost';
+import { ghostCapacity } from '../src/scenes/board/ghost';
 import {
   CHAT_PACE,
   chatSetFor,
@@ -75,16 +75,13 @@ import {
   litSegments,
 } from '../src/scenes/hud/headroom';
 import { camStep, emptyCamView, initialCam } from '../src/scenes/hud/luxcam';
-import { applyEstimate, applySizing } from '../src/scenes/hud/dial';
 import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
-import { sizingPromptOpen } from '../src/scenes/hud/jobCard';
 import {
   EMPTY_TRACE,
   MOMENT_KINDS,
   MOMENT_TEACHES,
   type TaughtTrace,
   emptyMeasure,
-  measureNotes,
   momentOfAction,
   momentOfOccurrence,
   seeLine,
@@ -226,7 +223,7 @@ describe('lineMeta', () => {
       const [kind, name] = s.split(':');
       if (kind === 'part') expect(parts.has(name), id).toBe(true);
       else if (kind === 'zone') expect(zones.has(name), id).toBe(true);
-      else expect(kind === 'key' && ['one', 'two', 'three'].includes(name), id).toBe(true);
+      else expect(kind === 'key' && ['one', 'two'].includes(name), id).toBe(true);
     }
     expect(metaOf('C4.lux.01')?.subject).toBe('key:two');
     expect(metaOf('C3.lux.01')?.subject).toBe('part:gateway');
@@ -277,9 +274,9 @@ describe('no term before the debrief', () => {
     for (const l of literals) expect(termsIn(l), l).toEqual([]);
   });
 
-  it('prints the crew words: COMING /s, ROOM, ROOM LEFT, SPLITTER (crew gift), your guess stays free', () => {
+  it('prints the crew words: COMING /s, ROOM, ROOM LEFT, SPLITTER (crew gift)', () => {
     const labels = allLabels();
-    for (const w of ['COMING /s', 'ROOM', 'ROOM LEFT', 'SPLITTER (crew gift)', 'your guess stays free']) {
+    for (const w of ['COMING /s', 'ROOM', 'ROOM LEFT', 'SPLITTER (crew gift)']) {
       expect(labels, w).toContain(w);
     }
     expect(roomLeftLabel(90, 120)).toBe('ROOM LEFT 25% · 90 of 120');
@@ -399,9 +396,8 @@ interface Played {
 }
 
 /**
- * Best play through the night on the run() singleton, with the HUD's bus traffic replayed: the C1
- * estimate set to 30 at once, the C6 sizing set to 4 ten HUD seconds after the prompt opens
- * (TRIAGE's division lands at 8 s), and optionally the laundry cut as soon as it is offered.
+ * Best play through the night on the run() singleton, with the HUD's bus traffic replayed, and
+ * optionally the laundry cut as soon as it is offered.
  */
 function playNight(opts: { laundry: boolean }): Played {
   resetFrame();
@@ -412,21 +408,9 @@ function playNight(opts: { laundry: boolean }): Played {
   const v = emptyCueView();
   let s = NEW_DIRECTOR;
   let clock = 0;
-  let promptAt: number | null = null;
   let beforeDebrief: TaughtTrace = EMPTY_TRACE;
   for (let n = 0; n < 20_000 && r.now < C.c8 && !r.play.failure; n++) {
-    if (r.notes.estimate === null) applyEstimate(r, 30);
     if (opts.laundry && frame(r).laundryCutAvailable && !r.play.laundryCut) r.cutLaundry();
-    const sizingOpen = sizingPromptOpen({
-      now: r.now,
-      cardOpen: false,
-      estimate: r.notes.estimate,
-      sizing: r.notes.sizing,
-    });
-    if (sizingOpen) promptAt ??= clock;
-    if (sizingOpen && promptAt !== null && clock - promptAt >= 10) {
-      applySizing(r, BROWNOUT.finalSizing.holds);
-    }
     r.tick(0.1);
     clock += 0.1;
     const f = frame(r);
@@ -434,8 +418,6 @@ function playNight(opts: { laundry: boolean }): Played {
     prev = f;
     const host: CueHost = {
       cardClosed: true,
-      dialTouched: true,
-      sizingOpen,
       bannerShown: f.now >= C.c2,
       decommissionsAfterMidnight: 0,
     };
@@ -449,27 +431,6 @@ function playNight(opts: { laundry: boolean }): Played {
 }
 
 describe('hud.measure (learning-4)', () => {
-  it('after C1 SET, hud.measure.estimate equals notes.estimate and estimateAt is > 0', () => {
-    resetFrame();
-    const r = newRun(1, null);
-    r.now = C.c1 + 4;
-    bus.emit('perfSample', { at: 1, fps: 60, objects: 0, texts: 0, graphics: 0 });
-    expect(hudHook().measure).toEqual(emptyMeasure());
-    expect(applyEstimate(r, 30)).toBe(true);
-    // The cue table answers a SET on the same frame (C1.triage.03).
-    bus.emit('cue', { id: 'C1.triage.03', kind: 'bark', at: 4 });
-    const m = hudHook().measure;
-    expect(m?.estimate).toBe(r.notes.estimate);
-    expect(m?.estimate).toBe(30);
-    expect(m?.estimateAt).toBeGreaterThan(0);
-    expect(m?.estimateAt).toBe(C.c1 + 4);
-    expect(m?.sizing).toBeNull();
-    // A later frame keeps the first stamp.
-    r.now = C.c1 + 9;
-    bus.emit('perfSample', { at: 9, fps: 60, objects: 0, texts: 0, graphics: 0 });
-    expect(hudHook().measure?.estimateAt).toBe(C.c1 + 4);
-  });
-
   it('counts the board wires and stamps the first one', () => {
     resetFrame();
     const r = newRun(1, null);
@@ -485,20 +446,6 @@ describe('hud.measure (learning-4)', () => {
     expect(m.firstWireAt).toBe(C.c1 + 2);
     expect(hudHook().measure).toEqual(m);
     expect(termsSeen(taughtTrace())).toContain('capacity');
-  });
-
-  it('stamps an answer once and returns the same object when nothing changed', () => {
-    const m0 = emptyMeasure();
-    const m1 = measureNotes(m0, { estimate: 30, sizing: null }, 20);
-    expect(m1).not.toBe(m0);
-    expect(m0.estimate).toBeNull();
-    expect(m1).toMatchObject({ estimate: 30, estimateAt: 20, sizing: null, sizingAt: null });
-    expect(measureNotes(m1, { estimate: 30, sizing: null }, 40)).toBe(m1);
-    expect(measureNotes(m1, { estimate: 30, sizing: 4 }, 470)).toMatchObject({
-      estimateAt: 20,
-      sizing: 4,
-      sizingAt: 470,
-    });
   });
 });
 
@@ -539,7 +486,7 @@ describe('the taught trace (learning-4)', () => {
     expect(EMPTY_TRACE).toHaveLength(0);
   });
 
-  it('reads the moments: SET, the first SKIPPED, the dark big box, a decommission, the dip survived with 4', () => {
+  it('reads the moments: the first SKIPPED, the dark big box, a decommission, the dip survived with 4', () => {
     const facts = (parts: unknown[], midnight: unknown = null) => ({ parts, midnight }) as unknown as Frame;
     const none = facts([]);
     const big = facts([{ id: 's1', kind: 'server', slot: 'a', boost: 1.5 }]);
@@ -562,10 +509,11 @@ describe('the taught trace (learning-4)', () => {
     expect(momentOfAction({ type: 'decommission', id: 's4', refund: 40 })).toBe('decommission');
     expect(momentOfAction({ type: 'overclock', id: 's1' })).toBe('kitFitted');
     expect(momentOfAction({ type: 'wire', from: 'a', to: 'b' })).toBeNull();
-    const t = seeMoment(EMPTY_TRACE, 'estimateSet', 20, '23:51:50', 30);
+    // The first three sizing terms are TRIAGE's 30 now (no estimate step): a line, not a moment.
+    const t = seeLine(EMPTY_TRACE, 'C1.triage.03', 20, '23:51:50');
     expect(t.map((e) => e.term)).toEqual(['requirements', 'requestsPerSecond', 'estimate']);
-    expect(t[2]).toMatchObject({ moment: 'estimateSet', line: null, value: 30 });
-    expect(seeMoment(t, 'estimateSet', 25, '23:51:55', 30)).toBe(t);
+    expect(t[2]).toMatchObject({ moment: null, line: 'C1.triage.03', value: null });
+    expect(seeLine(t, 'C1.triage.03', 25, '23:51:55')).toBe(t);
   });
 
   it('on the best-play run has at least one entry per C8 term group before the debrief', () => {
@@ -580,11 +528,12 @@ describe('the taught trace (learning-4)', () => {
     expect(TERM_KEYS.filter((k) => !seen.includes(k))).toEqual(['loadShedding']);
     // The moments D10 names are among the entries.
     const moments = new Set(beforeDebrief.map((e) => e.moment));
-    for (const m of ['estimateSet', 'firstSkipped', 'bigBoxDark', 'decommission', 'heldWithSpare'] as const) {
+    for (const m of ['firstSkipped', 'bigBoxDark', 'decommission', 'heldWithSpare'] as const) {
       expect(moments.has(m), m).toBe(true);
     }
     // C4.triage.02/.03 count although they are WARNINGs; cascading failure points at C6.triage.02 (D2).
     const lines = new Set(beforeDebrief.map((e) => e.line));
+    expect(lines.has('C1.triage.03')).toBe(true);
     expect(lines.has('C4.triage.02')).toBe(true);
     expect(lines.has('C4.triage.03')).toBe(true);
     expect(beforeDebrief.find((e) => e.term === 'cascadingFailure')?.line).toBe('C6.triage.02');
@@ -620,7 +569,7 @@ describe('the debrief "you saw it at" lines (learning-4, D10)', () => {
 
   it('prints one grey line per term with an entry (its first sighting) in the debrief order, none for the rest', () => {
     let t = seeLine(EMPTY_TRACE, 'C4.triage.03', 310, '23:56:40');
-    t = seeMoment(t, 'estimateSet', 20, '23:51:50', 30);
+    t = seeLine(t, 'C1.triage.03', 20, '23:51:50');
     t = seeMoment(t, 'retriesRising', 312, '23:56:42');
     const lines = seenLines(t);
     expect(lines.map((l) => l.term)).toEqual(['requirements', 'requestsPerSecond', 'estimate', 'retryStorm']);
@@ -628,9 +577,9 @@ describe('the debrief "you saw it at" lines (learning-4, D10)', () => {
       term: 'requirements',
       group: 'sizing',
       name: 'Requirements',
-      text: 'you saw it at 23:51:50: you set the dial to 30 a second',
+      text: `you saw it at 11:51:50 PM: “${LINES['C1.triage.03'].text}”`,
     });
-    expect(lines[3].text).toBe(`you saw it at 23:56:40: “${LINES['C4.triage.03'].text}”`);
+    expect(lines[3].text).toBe(`you saw it at 11:56:40 PM: “${LINES['C4.triage.03'].text}”`);
     expect(seenLines(EMPTY_TRACE)).toEqual([]);
   });
 
@@ -640,7 +589,9 @@ describe('the debrief "you saw it at" lines (learning-4, D10)', () => {
       expect(words.length, m).toBeGreaterThan(0);
       expect(termsIn(words), m).toEqual([]);
       const e = { term: MOMENT_TEACHES[m][0], group: 'sizing', line: null, moment: m, value: 4, at: 1 };
-      expect(seenText({ ...e, group: 'sizing', clock: '23:51:31' })).toBe(`you saw it at 23:51:31: ${words}`);
+      expect(seenText({ ...e, group: 'sizing', clock: '23:51:31' })).toBe(
+        `you saw it at 11:51:31 PM: ${words}`,
+      );
     }
   });
 
@@ -649,7 +600,7 @@ describe('the debrief "you saw it at" lines (learning-4, D10)', () => {
     const lines = seenLines(beforeDebrief);
     expect(lines).toHaveLength(TERM_KEYS.length - 1);
     expect(new Set(lines.map((l) => l.group))).toEqual(new Set(['sizing', 'scaling', 'failure']));
-    for (const l of lines) expect(l.text, l.term).toMatch(/^you saw it at \d\d:\d\d:\d\d: .+/);
+    for (const l of lines) expect(l.text, l.term).toMatch(/^you saw it at \d{1,2}:\d\d:\d\d [AP]M: .+/);
   });
 });
 
@@ -735,8 +686,6 @@ describe('teaching (a): hints fire on sim triggers only (learning-5)', () => {
     const f = frame(r);
     const host: CueHost = {
       cardClosed: false,
-      dialTouched: false,
-      sizingOpen: false,
       bannerShown: false,
       decommissionsAfterMidnight: 0,
     };
@@ -807,31 +756,27 @@ describe('teaching (d): TRIAGE never answers (learning-5)', () => {
     'C1.triage.05',
   ];
 
-  it('before the first wire with estimate null, no fired C1 TRIAGE line says 30', () => {
+  it('before the first wire, no fired C1 TRIAGE line says 30', () => {
     const fired: LineId[] = [];
-    for (const dialTouched of [false, true]) {
-      let s = NEW_DIRECTOR;
-      for (let clock = 0; clock <= 120; clock += 0.5) {
-        const v = cueView({ cardClosed: true, dialTouched, now: C.c1, estimate: null, capacity: 0, clock });
-        const out = direct(s, v);
-        s = out.state;
-        fired.push(...out.fired);
-      }
+    let s = NEW_DIRECTOR;
+    for (let clock = 0; clock <= 120; clock += 0.5) {
+      const v = cueView({ cardClosed: true, now: C.c1, capacity: 0, clock });
+      const out = direct(s, v);
+      s = out.state;
+      fired.push(...out.fired);
     }
     const triage = fired.filter((id) => TRIAGE_C1.includes(id));
     expect(triage).toContain('C1.triage.01');
     for (const id of triage) expect(LINES[id].text, id).not.toMatch(/\b30\b/);
   });
 
-  it('with sizing null, no fired C6 TRIAGE line names three or four boxes', () => {
+  it('at the midnight forecast, no fired C6 TRIAGE line names three or four boxes', () => {
     let s = NEW_DIRECTOR;
     const fired: LineId[] = [];
     for (let clock = 0; clock <= 120; clock += 0.5) {
       const v = cueView({
         now: C.c6 + Math.min(clock, 50),
         cardClosed: true,
-        sizingOpen: true,
-        sizing: null,
         rescued: true,
         rescueClock: 0,
         servers: 3,
@@ -1016,7 +961,7 @@ describe("teaching (h): Lux's face is a function of what she reads (learning-5)"
 });
 
 describe('teaching (i): the what-if ghost shows the room a drop would add (learning-5)', () => {
-  it('+60 for a box the gateway can feed, +0 with no free feed, x2 for the kit, gated by the dial', () => {
+  it('+60 for a box the gateway can feed, +0 with no free feed, x2 for the kit', () => {
     resetFrame();
     const r = newRun(1, null);
     r.now = C.c1;
@@ -1034,9 +979,6 @@ describe('teaching (i): the what-if ghost shows the room a drop would add (learn
     expect(ghostCapacity(racked, BROWNOUT_RULES, [], 'overclock', box.slot!)).toBe(
       BROWNOUT.server.capacity * BROWNOUT.overclock.factor,
     );
-    // Hidden while the C1 question is open; shown once the guess is SET.
-    expect(ghostOpen(C.c1 + 1, { estimate: null, sizing: null })).toBe(false);
-    expect(ghostOpen(C.c1 + 1, { estimate: 30, sizing: null })).toBe(true);
   });
 });
 

@@ -63,7 +63,7 @@ import {
 } from './board/packets';
 import { flagsFrom } from './live/flags';
 import { BROWNOUT, BROWNOUT_RULES } from '../sim/brownout';
-import { type GhostInfo, ghostInfo, ghostOpen } from './board/ghost';
+import { type GhostInfo, ghostInfo } from './board/ghost';
 import { PlateCache, REPLACE_LABEL } from './board/plate';
 import { BoardSnapshot } from './board/snapshot';
 import { type InventoryArt, InventoryView } from './board/InventoryView';
@@ -1839,7 +1839,7 @@ export class BoardScene extends Phaser.Scene {
    * The what-if ghost while a card is dragged (board-8): the pad's state, the ghost's numbers
    * (ghostInfo over wiredCapacity, recomputed only when the target or the Frame changes), the
    * dragged card snapping onto a legal target with a dashed outline and its plate, and the what-if
-   * tick on the channel. Hidden while a dial question is open (ghostOpen).
+   * tick on the channel.
    */
   private updateGhost(f: Frame): void {
     const d = this.drag;
@@ -1858,7 +1858,7 @@ export class BoardScene extends Phaser.Scene {
         this.over.id,
         this.over.slot !== null && this.over.slot !== LB_SLOT_ID ? this.over.slot : null,
         state,
-        ghostOpen(f.now, f.notes),
+        true,
       );
     }
     const g = this.ghostInfo;

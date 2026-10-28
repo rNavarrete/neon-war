@@ -3,7 +3,7 @@ import type { GaugeTestState } from '../../src/scenes/hud/GaugeView';
 import type { ScopeTestState } from '../../src/scenes/hud/ChartView';
 import type { HudTestState } from '../../src/scenes/hud/hook';
 import { forecastAt } from '../../src/sim/demand';
-import { dismissJobCard, hud, openBoard, reach, setDial, shot } from './live/reach';
+import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 
 // The instrument panel in the left column (docs/LIVE.md): the COMING /s gauge in ZONES.gauge
 // (gauges-5) and the scope in ZONES.scope (gauges-6), asserted on window.__neonTest.state.hud.
@@ -48,8 +48,6 @@ test('the COMING /s gauge: NO ROOM YET before the first build, in crew words', a
   expect(h.gauge.ticks).toEqual(['0', '100', '200', '300', '400']);
   expect(h.gauge.capacity).toBe(0);
   expect(h.gauge.strip).toBe('NO ROOM YET');
-  expect(h.gauge.estimateMark).toBeNull();
-  expect(h.gauge.tick).toBeNull();
   // Batch 5: the painted face is baked into the plate and the painted needle turns, both at half.
   expect(h.gauge.face).toBe('hud/gauge-face');
   expect(h.gauge.needleArt).toEqual({ key: 'hud/gauge-needle', scale: 0.5 });
@@ -59,24 +57,10 @@ test('the COMING /s gauge: NO ROOM YET before the first build, in crew words', a
   expect(errors).toEqual([]);
 });
 
-test('the COMING /s gauge at speed 5: estimate tick after SET, needle on demand, OVER BY in the raid', async ({
-  page,
-}) => {
+test('the COMING /s gauge at speed 5: needle on demand, OVER BY in the raid', async ({ page }) => {
   test.setTimeout(150_000);
   const { errors } = await openBoard(page, { speed: 5, autopilot: true });
   await reach(page, 'c1');
-
-  await test.step('C1: no tick until SET, then the tick is notes.estimate', async () => {
-    let h = await gaugeHud(page);
-    expect(h.dial.visible).toBe(true);
-    expect(h.gauge.estimateMark).toBeNull();
-    await setDial(page, 30);
-    await expect.poll(async () => (await gaugeHud(page)).gauge.estimateMark, { timeout: 5_000 }).toBe(30);
-    h = await gaugeHud(page);
-    expect(h.notes.estimate).toBe(30);
-    expect(h.gauge.tick).toBe(30);
-    expect(h.gauge.sizingMark).toBeNull();
-  });
 
   await test.step('a settled frame: the needle within 1 req/s of demand, the band on the wired room', async () => {
     await expect
@@ -131,7 +115,6 @@ test('the COMING /s gauge at speed 5: estimate tick after SET, needle on demand,
     expect(h.gauge.capacity).toBe(h.headroom!.wiredCapacity);
     expect(h.gauge.strip).toBe(`OVER BY ${Math.round(h.gauge.demand - h.gauge.capacity)}/s`);
     expect(h.gauge.demand).toBeGreaterThan(h.gauge.capacity);
-    expect(h.gauge.estimateMark).toBe(30);
     expectCrewWords(h.gauge);
     await shot(page, 'live-m2-gauge');
   });
@@ -139,17 +122,11 @@ test('the COMING /s gauge at speed 5: estimate tick after SET, needle on demand,
 });
 
 // gauges-6: the scope in ZONES.scope keeps hud.chart and adds the wired line and the forecast region.
-test('the scope: the guess line after SET, wired room, a forecast region exactly while a rise is forecast', async ({
-  page,
-}) => {
+test('the scope: wired room, a forecast region exactly while a rise is forecast', async ({ page }) => {
   test.setTimeout(90_000);
   const { errors } = await openBoard(page, { speed: 20, autopilot: true });
   await reach(page, 'c1');
-  await setDial(page, 30);
-  await expect.poll(async () => (await hud(page)).notes.estimate, { timeout: 5_000 }).toBe(30);
   let c = (await hud(page)).chart as ScopeTestState;
-  expect(c.estimateLine).toBe(30);
-  expect(c.sizingLine).toBeNull();
   expect(c.plot.h).toBeGreaterThanOrEqual(140);
   expect(c.plot).toEqual({ w: 354, h: 145 });
   expect(c.title).toBe('LAST 60 s');

@@ -8,7 +8,6 @@
 // reads it back. Pure: no Phaser.
 
 import type { LineId } from '../../strings';
-import type { DialMode } from './dial';
 
 export interface PagePoint {
   x: number;
@@ -25,18 +24,8 @@ export interface HudTestState {
   clock: string;
   countdown: string;
   jobCard: { open: boolean; x: number; y: number };
-  dial: {
-    visible: boolean;
-    mode: DialMode;
-    value: number;
-    locked: boolean;
-    minus: PagePoint;
-    plus: PagePoint;
-    set: PagePoint;
-  };
-  notes: { estimate: number | null; sizing: number | null };
   /** The last values plotted on the chart, and the sim's right now. */
-  chart: { demand: number; capacity: number; ceiling: number; estimateLine: number | null };
+  chart: { demand: number; capacity: number; ceiling: number };
   /** `block` is what the block sends before retries (the laundry cut sheds from it). */
   sim: { demand: number; block: number; capacity: number; trust: number; credits: number };
   /** Trust and credits as shown on screen. */
@@ -59,8 +48,6 @@ export interface HudTestState {
   banner: { open: boolean; choice: string | null; pay: PagePoint; ignore: PagePoint; bin: PagePoint };
   laundry: { available: boolean; cut: boolean; button: PagePoint };
   regroup: { visible: boolean; active: boolean; spent: boolean; button: PagePoint };
-  /** The C6 sizing prompt: whether it shows, and its centre (CARDS.sizingPrompt) in page CSS pixels. */
-  sizingPrompt: { open: boolean; x: number; y: number };
   bark: { current: LineId | null; text: string | null; history: LineId[] };
   /**
    * The trigger table as the host loop ran it: every id fired this run, in order, each also sent on

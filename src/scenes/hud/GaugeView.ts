@@ -1,7 +1,7 @@
 // The COMING /s gauge (ZONES.gauge) as a Live screen view: a fixed 0..400 arc with ticks every 100,
 // the cyan ROOM band to the wired capacity with a dashed extension for boxes still booting, the
-// amber needle easing toward demand, a red wedge from served to demand while calls drop, the white
-// estimate tick (C1) and the magenta sizing x 60 tick (C6), the big number, and the crew's words
+// amber needle easing toward demand, a red wedge from served to demand while calls drop, the big
+// number, and the crew's words
 // beside it ("room N/s", NO ROOM YET, OVER BY n/s). The rules are pure in gauge.ts; this file draws
 // them and mirrors hud.gauge for tests.
 //
@@ -59,10 +59,6 @@ export interface GaugeTestState {
   /** The needle's eased value. */
   needle: number;
   max: number;
-  estimateMark: number | null;
-  sizingMark: number | null;
-  /** The mark the gauge leads with: sizing x 60 after the C6 SET, the estimate before. */
-  tick: number | null;
   /** The words on screen. */
   title: string;
   readout: string;
@@ -90,7 +86,6 @@ declare module './hook' {
 
 /** The gauge's alpha while the board is held. */
 const HELD_ALPHA = 0.5;
-const ESTIMATE_COLOR = 0xffffff;
 /** The label tab's height under the title, and the bracket corners' size (kit.ts). */
 const TAB_H = 26;
 const GAUGE_CORNERS = 26;
@@ -132,8 +127,6 @@ export class GaugeView implements LiveView {
     booting: NaN,
     served: NaN,
     dropped: NaN,
-    est: NaN,
-    size: NaN,
   };
   /** How many times the moving parts were redrawn (for tests). */
   draws = 0;
@@ -242,7 +235,7 @@ export class GaugeView implements LiveView {
     this.shownStrip = '';
     this.shownAlpha = -1;
     this.shownRoomX = NaN;
-    this.drawn = { needle: NaN, capacity: NaN, booting: NaN, served: NaN, dropped: NaN, est: NaN, size: NaN };
+    this.drawn = { needle: NaN, capacity: NaN, booting: NaN, served: NaN, dropped: NaN };
     this.off.push(provideHudSection('gauge', () => this.snapshot()));
     // The leader line ends at the needle's hub (game px; one point, made once).
     const hub = { x: L.centre.x, y: L.centre.y };
@@ -259,17 +252,13 @@ export class GaugeView implements LiveView {
       st.capacity !== d.capacity ||
       st.booting !== d.booting ||
       st.served !== d.served ||
-      st.dropped !== d.dropped ||
-      !Object.is(st.estimateMark ?? NaN, d.est) ||
-      !Object.is(st.sizingMark ?? NaN, d.size)
+      st.dropped !== d.dropped
     ) {
       d.needle = st.needle;
       d.capacity = st.capacity;
       d.booting = st.booting;
       d.served = st.served;
       d.dropped = st.dropped;
-      d.est = st.estimateMark ?? NaN;
-      d.size = st.sizingMark ?? NaN;
       this.drawDial();
     }
 
@@ -349,9 +338,6 @@ export class GaugeView implements LiveView {
       g.slice(L.centre.x, L.centre.y, L.outer, gaugeAngle(st.served), gaugeAngle(st.demand), false);
       g.fillPath();
     }
-    // The estimate (white) and sizing (magenta) ticks across the band.
-    if (st.estimateMark !== null) this.mark(g, st.estimateMark, ESTIMATE_COLOR);
-    if (st.sizingMark !== null) this.mark(g, st.sizingMark, COLORS.magenta);
     // The needle and its hub: the painted needle turns on its own (update), else a code line.
     if (this.needle) return;
     const tip = arcPoint(L, st.needle, L.needle);
@@ -359,14 +345,6 @@ export class GaugeView implements LiveView {
     g.lineBetween(L.centre.x, L.centre.y, tip.x, tip.y);
     g.fillStyle(COLORS.amber, 1);
     g.fillCircle(L.centre.x, L.centre.y, 7);
-  }
-
-  private mark(g: Phaser.GameObjects.Graphics, v: number, color: number): void {
-    const L = this.layout;
-    const a = arcPoint(L, v, L.outer + 8);
-    const b = arcPoint(L, v, L.inner - 8);
-    g.lineStyle(3, color, 0.95);
-    g.lineBetween(a.x, a.y, b.x, b.y);
   }
 
   /** hud.gauge, built only when the hook is read. */
@@ -381,9 +359,6 @@ export class GaugeView implements LiveView {
       booting: s.booting,
       needle: s.needle,
       max: s.max,
-      estimateMark: s.estimateMark,
-      sizingMark: s.sizingMark,
-      tick: s.tick,
       title: this.title?.text ?? '',
       readout: this.readout?.text ?? '',
       sub: this.sub?.text ?? '',

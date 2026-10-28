@@ -13,7 +13,6 @@ import { locate, registeredNames } from '../src/scenes/hud/locate';
 import type { LiveView } from '../src/scenes/live/view';
 import { ZONES, inside } from '../src/scenes/live/layout';
 import { BROWNOUT } from '../src/sim/brownout';
-import dialSource from '../src/scenes/hud/DialView.ts?raw';
 import boardSource from '../src/scenes/BoardScene.ts?raw';
 
 // Cross-lane swap 6: the views a leader line points at register where they are with locate.ts, so
@@ -26,7 +25,7 @@ const SOURCES = import.meta.glob('../src/**/*.ts', {
   eager: true,
 }) as Record<string, string>;
 
-/** Every name some source registers with locate.ts (a key loop over KEY_NAMES counts as all three). */
+/** Every name some source registers with locate.ts (a key loop over KEY_NAMES counts as every key). */
 function registeringNames(): Map<string, string> {
   const out = new Map<string, string>();
   for (const [path, text] of Object.entries(SOURCES)) {
@@ -86,11 +85,9 @@ describe('every zone a leader line names has a registering view', () => {
       gauge: 'GaugeView.ts',
       alert: 'AlertView.ts',
       scope: 'ChartView.ts',
-      dial: 'DialView.ts',
       credits: 'TitleView.ts',
       'key:one': 'DeckView.ts',
       'key:two': 'DeckView.ts',
-      'key:three': 'DeckView.ts',
       inventory: 'BoardScene.ts',
     };
     for (const [name, file] of Object.entries(want)) expect(names.get(name), name).toMatch(file);
@@ -103,7 +100,7 @@ describe('the views register in create and unregister in shutdown', () => {
       [new GaugeView(), 'gauge', ['gauge']],
       [new ChartView(), 'scope', ['scope']],
       [new TitleView(), 'title', ['credits']],
-      [new DeckView(), 'deck', ['key:one', 'key:two', 'key:three']],
+      [new DeckView(), 'deck', ['key:one', 'key:two']],
     ];
     for (const [view, zone, names] of cases) {
       build(view, ZONES[zone]);
@@ -122,12 +119,11 @@ describe('the views register in create and unregister in shutdown', () => {
     }
   });
 
-  it('the three keys sit left to right', () => {
+  it('the two keys sit left to right', () => {
     const deck = new DeckView();
     build(deck, ZONES.deck);
-    const [a, b, c] = KEY_NAMES.map((k) => locate(`key:${k}`)!);
+    const [a, b] = KEY_NAMES.map((k) => locate(`key:${k}`)!);
     expect(a.x).toBeLessThan(b.x);
-    expect(b.x).toBeLessThan(c.x);
     deck.shutdown();
   });
 
@@ -147,11 +143,6 @@ describe('the views register in create and unregister in shutdown', () => {
     expect(p!.y).toBeLessThanOrEqual(ZONES.alert.y + ZONES.alert.h);
     view.shutdown();
     expect(registeredNames()).not.toContain('alert');
-  });
-
-  it('DialView registers the dial while its card shows, and unregisters on the scene shutdown', () => {
-    expect(dialSource).toMatch(/registerLocate\('dial', \(\) => \(this\.root\.visible \? face0 : null\)\)/);
-    expect(dialSource).toMatch(/scene\.events\.once\('shutdown', \(\) => \{[^}]*offLocate\(\);/);
   });
 
   it('BoardScene registers the inventory (and the channel mouth) and unregisters on shutdown', () => {

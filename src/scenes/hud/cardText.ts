@@ -85,11 +85,10 @@ export function bannerTexts(): CardTextSpec[] {
 export const CARD_TEXT_POOL = Math.max(jobCardTexts().length, bannerTexts().length);
 
 /**
- * Every Text the HUD host makes (perf.host.texts): the shared card pool, the dip warning's one
- * line, the sizing prompt's one line (its arrow is drawn, not typed) and the dial card's four
- * (DialView: the question, the value, minus and plus).
+ * Every Text the HUD host makes (perf.host.texts): the shared card pool and the dip warning's one
+ * line.
  */
-export const HOST_TEXTS = { cards: CARD_TEXT_POOL, dip: 1, sizing: 1, dial: 4 } as const;
+export const HOST_TEXTS = { cards: CARD_TEXT_POOL, dip: 1 } as const;
 
 /** The host's text budget in docs/LIVE.md's table. */
 export const HOST_TEXT_BUDGET = 13;

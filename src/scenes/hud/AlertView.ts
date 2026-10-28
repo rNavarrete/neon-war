@@ -5,6 +5,10 @@
 // reduce flicker (or the ?test lite flag) nothing moves. It tells the bus when an alert goes up and
 // comes down ('alert' / 'alertEnd', one at a time) and mirrors itself as hud.alert.
 //
+// With nothing up at the start of C1, the band carries the first step instead (startHintOf): once
+// the job card closes, "drag a SERVER card onto a glowing pad" until the first server is on the board. A hint is not an alert: it tells the bus
+// nothing, plays no sound, never slides or flashes, and any alert takes the band over at once.
+//
 // The rules are pure in alerts.ts; this file only draws them. It is the only alert band (the HUD
 // scene's legacy surge/fall band is gone) and plays the band's sound, the forecast's included; the
 // HUD scene lists its container as hud.bounds 'alert'.
@@ -14,7 +18,9 @@
 import type Phaser from 'phaser';
 import type { Bus } from '../../game/bus';
 import type { Frame } from '../../game/frame';
+import { run } from '../../game/run';
 import { settings } from '../../game/settings';
+import { type LineId, line } from '../../strings';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import {
   type AlertKind,
@@ -26,9 +32,11 @@ import {
   alertSound,
   emptyAlert,
   slideOffset,
+  startHintOf,
   stepAlert,
   stripeScroll,
 } from './alerts';
+import { jobCardDue } from './jobCard';
 import { COLORS, FONT, FONT_SANS } from './layout';
 import { provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
@@ -67,6 +75,10 @@ export interface AlertTestState extends AlertState {
   history: AlertHistoryEntry[];
   /** The baked plate: the alert plate and end cap drawn (m4 panel kit). */
   panel?: PanelTestState | null;
+  /** The start-of-C1 hint on the band now (no alert up), or null. */
+  hint: LineId | null;
+  /** The hint's words as shown ('' with none). */
+  hintText: string;
 }
 
 declare module './hook' {
@@ -86,6 +98,10 @@ const STRIPES_KEY = 'alert:stripes';
 function loadOnce(scene: Phaser.Scene, key: string, file: string): void {
   if (!scene.textures.exists(key)) scene.load.image(key, file);
 }
+
+/** The headline's size for an alert, and for a C1 hint (which has no number and runs longer). */
+const HEADLINE_PX = 30;
+const HINT_PX = 24;
 
 /** Headline colours: amber is the hero; red only when the block is dropping (dark). */
 const HEADLINE_COLOR: Readonly<Record<AlertKind, string>> = {
@@ -132,6 +148,15 @@ export class AlertView implements LiveView {
   private shownKind: AlertKind | null = null;
   private shownStripes = false;
   private shownLit = true;
+  /** The start-of-C1 hint up now, and the one the headline was last dressed for. */
+  private hint: LineId | null = null;
+  private shownHint: LineId | null = null;
+  /** What the hint reads, one object refilled every frame. */
+  private readonly hintInput: {
+    now: number;
+    cardOpen: boolean;
+    parts: readonly { readonly kind: string }[];
+  } = { now: 0, cardOpen: true, parts: [] };
 
   preload(scene: Phaser.Scene): void {
     loadOnce(scene, ICON.key, ICON.file);
@@ -225,6 +250,8 @@ export class AlertView implements LiveView {
     this.shownKind = null;
     this.shownStripes = false;
     this.shownLit = true;
+    this.hint = null;
+    this.shownHint = null;
     this.off.push(provideHudSection('alert', () => this.snapshot()));
     // The leader line ends under the plate's middle, while an alert is up (game px, made once).
     const under = { x: L.plate.x + L.plate.w / 2, y: L.plate.y + L.plate.h };
@@ -259,7 +286,14 @@ export class AlertView implements LiveView {
     }
     if (changed || st.number !== prevNumber) this.record(frame);
 
-    const visible = st.kind !== 'none';
+    // With no alert up, the start of C1 says what to do first (no bus, no sound, no slide).
+    const hi = this.hintInput;
+    hi.now = frame.now;
+    hi.cardOpen = st.kind === 'none' && jobCardDue(run());
+    hi.parts = frame.parts;
+    this.hint = st.kind === 'none' ? startHintOf(hi) : null;
+
+    const visible = st.kind !== 'none' || this.hint !== null;
     if (visible !== this.visible) {
       this.visible = visible;
       root.setVisible(visible);
@@ -278,11 +312,25 @@ export class AlertView implements LiveView {
   /** Set the texts and colours that changed since the last frame. */
   private draw(): void {
     const st = this.state;
-    if (st.headline !== this.shownHeadline) {
-      this.shownHeadline = st.headline;
-      this.headline?.setText(st.headline);
+    const hint = this.hint;
+    if (hint !== this.shownHint) {
+      // The headline is dressed for a hint (cyan, smaller, no number) or back for an alert.
+      this.shownHint = hint;
+      this.shownKind = null;
+      this.shownHeadline = '';
+      this.headline?.setFontSize(hint ? HINT_PX : HEADLINE_PX);
+      // A hint has no sub-line under it, so it sits in the band's middle; an alert's headline on top.
+      const L = this.layout;
+      if (L)
+        this.headline?.setY(hint ? L.plate.y + Math.round((L.plate.h - HINT_PX * 1.25) / 2) : L.headline.y);
+      if (hint) this.headline?.setColor(COLORS.cyanText);
     }
-    if (st.kind !== this.shownKind) {
+    const headline = hint ? line(hint) : st.headline;
+    if (headline !== this.shownHeadline) {
+      this.shownHeadline = headline;
+      this.headline?.setText(headline);
+    }
+    if (!hint && st.kind !== this.shownKind) {
       this.shownKind = st.kind;
       this.headline?.setColor(HEADLINE_COLOR[st.kind]);
     }
@@ -333,6 +381,8 @@ export class AlertView implements LiveView {
       motion: { slide: m.slide, stripes: m.stripes, flash: m.flash },
       history: this.history.map((h) => ({ ...h })),
       panel: panelSnapshot(this.plate),
+      hint: this.hint,
+      hintText: this.hint ? line(this.hint) : '',
     };
   }
 

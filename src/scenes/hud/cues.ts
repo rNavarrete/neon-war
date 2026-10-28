@@ -1,7 +1,7 @@
 // When the board's barks and scripted chat lines fire (docs/SCRIPT.md "When" column): the one
 // trigger table of the Live screen. Each cue is a condition on a plain view of the run, the
 // CueView, which cueViewOf builds from the Frame (src/game/frame.ts), this frame's occurrences
-// (src/game/occurrences.ts) and the few things only the HUD knows (the job card, the dial, the
+// (src/game/occurrences.ts) and the few things only the HUD knows (the job card and the
 // banner). A predicate reads the CueView only; holds (`holdFor`) and delays (`after`) run on the HUD
 // clock. The director fires each cue once, in table order; a rewind clears the cues of the
 // challenges it goes back over. Pure: state in, new state and cues out, with the same objects
@@ -15,7 +15,6 @@ import { capacityOf } from '../../sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../../sim/brownout';
 import type { BannerChoice } from '../../sim/economy';
 import { LINES, type LineId } from '../../strings';
-import { estimateClose } from './dial';
 import { SURGE_WARNING_LEAD } from './warnings';
 
 const C = BROWNOUT.challenges;
@@ -43,11 +42,6 @@ export interface CueView {
   overclocked: boolean;
   /** The job card has been clicked away. */
   cardClosed: boolean;
-  /** The player has turned the estimate dial. */
-  dialTouched: boolean;
-  estimate: number | null;
-  sizing: number | null;
-  sizingOpen: boolean;
   bannerShown: boolean;
   banner: BannerChoice | null;
   laundryCut: boolean;
@@ -90,10 +84,6 @@ export interface CueView {
 export interface CueHost {
   /** The job card has been clicked away. */
   readonly cardClosed: boolean;
-  /** The player has turned the estimate dial. */
-  readonly dialTouched: boolean;
-  /** The C6 sizing prompt is open. */
-  readonly sizingOpen: boolean;
   /** The Solace banner has slid in. */
   readonly bannerShown: boolean;
   /** Decommissions made since midnight. */
@@ -131,6 +121,9 @@ const at = (v: CueView): number => v.clock ?? v.now;
 const between = (now: number, from: number, to: number): boolean => now >= from && now < to;
 
 const MIDNIGHT = BROWNOUT.clock.midnight;
+/** The midnight forecast is up: from its lead before C6 until midnight (once the job card is away). */
+const midnightForecast = (v: CueView): boolean =>
+  v.cardClosed && between(v.now, C.c6 - BROWNOUT.demand.forecastLeadSeconds, MIDNIGHT);
 
 /** The crew are in. */
 const rescued = (v: CueView): boolean => v.rescued ?? false;
@@ -150,10 +143,20 @@ export const CUES: readonly Cue[] = [
   // C1: job card and first server.
   { id: 'C1.triage.01', when: (v) => v.cardClosed && v.now < C.c3 },
   { id: 'C1.triage.02', follows: ['C1.triage.01'], when: (v, f) => after(f, 'C1.triage.01', 2, at(v)) },
-  { id: 'C1.lux.01', when: (v) => v.dialTouched && v.now < C.c3 },
-  { id: 'C1.triage.03', when: (v) => v.estimate !== null && estimateClose(v.estimate) },
-  { id: 'C1.triage.04', when: (v) => v.estimate !== null && !estimateClose(v.estimate) },
-  { id: 'C1.triage.05', when: (v) => v.estimate !== null && v.now < C.c3 },
+  // Lux corrects TRIAGE's 480 and TRIAGE says how to build; she owns up to 30 once the first box is
+  // live and the gauge reads the real line (never before the first wire: learning-5 (d)). There is
+  // no estimate step (C1.triage.04, the wrong-guess reply, is not played).
+  { id: 'C1.lux.01', follows: ['C1.triage.02'], when: (v, f) => after(f, 'C1.triage.02', 2, at(v)) },
+  {
+    id: 'C1.triage.05',
+    follows: ['C1.lux.01'],
+    when: (v, f) => v.now < C.c3 && after(f, 'C1.lux.01', 2, at(v)),
+  },
+  {
+    id: 'C1.triage.03',
+    follows: ['C1.lux.01'],
+    when: (v, f) => v.capacity > 0 && v.now < C.c3 && after(f, 'C1.lux.01', 2, at(v)),
+  },
   { id: 'C1.chat.01', when: (v) => v.capacity > 0 && v.now < C.c3 },
   { id: 'C1.chat.02', when: (v) => v.capacity > 0 && v.now < C.c3 },
   {
@@ -265,10 +268,11 @@ export const CUES: readonly Cue[] = [
   { id: 'C5.chat.01', when: (v) => boardBack(v) && v.now < C.c6 && v.dropped === 0 },
 
   // C6: midnight, your call.
-  { id: 'C6.rei.01', when: (v) => v.sizingOpen },
-  { id: 'C6.triage.01', holdFor: 8, when: (v) => v.sizingOpen },
-  { id: 'C6.ozzie.01', when: (v) => v.sizing !== null && v.sizing >= BROWNOUT.finalSizing.waste },
-  { id: 'C6.mika.01', when: (v) => v.sizing === BROWNOUT.finalSizing.drops },
+  // The midnight forecast is the call; the crew react to the boxes actually running.
+  { id: 'C6.rei.01', when: (v) => midnightForecast(v) },
+  { id: 'C6.triage.01', holdFor: 8, when: (v) => midnightForecast(v) },
+  { id: 'C6.ozzie.01', when: (v) => midnightForecast(v) && v.servers >= BROWNOUT.finalSizing.waste },
+  { id: 'C6.mika.01', when: (v) => midnightForecast(v) && v.servers <= BROWNOUT.finalSizing.drops },
   { id: 'C6.tv.01', when: (v) => between(v.now, MIDNIGHT - 30, MIDNIGHT - 20) },
   // The seeded dip before midnight takes a box dark.
   { id: 'C6.triage.02', when: (v) => between(v.now, C.c6, MIDNIGHT) && (v.darkPart ?? null) !== null },
@@ -408,10 +412,6 @@ export function emptyCueView(): CueView {
     overloaded: false,
     overclocked: false,
     cardClosed: false,
-    dialTouched: false,
-    estimate: null,
-    sizing: null,
-    sizingOpen: false,
     bannerShown: false,
     banner: null,
     laundryCut: false,
@@ -510,10 +510,6 @@ export function cueViewOf(
   v.overloaded = overloaded;
   v.overclocked = overclockedId !== null;
   v.cardClosed = host.cardClosed;
-  v.dialTouched = host.dialTouched;
-  v.estimate = f.notes.estimate;
-  v.sizing = f.notes.sizing;
-  v.sizingOpen = host.sizingOpen;
   v.bannerShown = host.bannerShown;
   v.banner = f.banner?.choice ?? null;
   v.laundryCut = f.laundryCut !== null;

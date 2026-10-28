@@ -111,7 +111,7 @@ export function playRewind(
 
 /** The night's results from the run, with what only ENG-503 knows from src/story/wiring.ts. */
 export function defaultDebriefResults(): DebriefResults {
-  return debriefResults(run().session, run().notes, storyWiring.pendingResults());
+  return debriefResults(run().session, storyWiring.pendingResults());
 }
 
 /** The debrief (C8), the interview-version card, Night Book page 1 and the title card. */

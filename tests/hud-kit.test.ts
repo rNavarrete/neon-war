@@ -272,7 +272,7 @@ function bakingScene(loaded = true) {
 describe('bakePanel', () => {
   it('bakes one texture per panel from the picked files, reuses it, and shows it as one image', () => {
     const { scene, rec } = bakingScene();
-    const r = CARDS.dialCard;
+    const r = CARDS.jobCard;
     const p = bakePanel(
       scene as never,
       'kit-test',
@@ -359,16 +359,15 @@ describe('the gauges lane views with the kit loaded', () => {
       else expect(owned.every((m) => m.destroyed)).toBe(true);
     });
 
-  it('deck: the keys wear the picked keycaps and SET carries the play glyph', () => {
+  it('deck: the two keys wear the picked keycaps, and no play glyph is drawn (SET is gone)', () => {
     const { scene, rec } = bakingScene();
     const v = new DeckView();
     v.create(scene as never, host(ZONES.deck));
-    expect(rec.images.filter((i) => i.key === artTexture(KIT.keyIdle))).toHaveLength(3);
-    expect(rec.images.filter((i) => i.key === artTexture(KIT.play))).toHaveLength(1);
+    expect(rec.images.filter((i) => i.key === artTexture(KIT.keyIdle))).toHaveLength(2);
+    expect(rec.images.filter((i) => i.key === artTexture(KIT.play))).toHaveLength(0);
     v.update(readFrame(new Run()), { now: 1, dt: 0.016 });
     const h = hudSection({} as HudTestState);
-    for (const k of ['one', 'two', 'three'] as const) expect(h.deck!.keys[k].cap).toBe(KIT.keyIdle);
-    expect(h.deck!.play).toEqual({ drawn: true, lit: false });
+    for (const k of ['one', 'two'] as const) expect(h.deck!.keys[k].cap).toBe(KIT.keyIdle);
     expect(h.headroom!.panel!.pieces).toEqual([KIT.divider, KIT.frame, KIT.corner]);
     v.shutdown();
   });

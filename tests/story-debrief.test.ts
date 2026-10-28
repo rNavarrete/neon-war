@@ -1,13 +1,6 @@
 import { BROWNOUT } from '../src/sim/brownout';
 import { brownoutSession } from '../src/sim/tick';
-import {
-  type DebriefResults,
-  ESTIMATE_CLOSE_RANGE,
-  debriefLines,
-  debriefResults,
-  estimateClose,
-  resultRows,
-} from '../src/story/debrief';
+import { type DebriefResults, debriefLines, debriefResults, resultRows } from '../src/story/debrief';
 
 const BEST: DebriefResults = {
   droppedRequests: 0,
@@ -16,13 +9,12 @@ const BEST: DebriefResults = {
   banner: 'ignore',
   ozzieTab: BROWNOUT.ozzie.front,
   scaledDown: true,
-  estimate: 30,
   midnightHeld: true,
   serversAtMidnight: 4,
 };
 
 describe('debrief lines', () => {
-  it('opens and closes with Rei, and praises a close estimate that held at midnight', () => {
+  it('opens and closes with Rei, and praises a build that held midnight without waste', () => {
     const lines = debriefLines(BEST);
     expect(lines[0]).toBe('C8.rei.open');
     expect(lines.at(-1)).toBe('C8.rei.close');
@@ -35,9 +27,9 @@ describe('debrief lines', () => {
     ]);
   });
 
-  it('calls sizing bad when the estimate was far off or midnight failed', () => {
-    expect(debriefLines({ ...BEST, estimate: 480 })).toContain('C8.rei.sizing.bad');
-    expect(debriefLines({ ...BEST, estimate: null })).toContain('C8.rei.sizing.bad');
+  it('calls sizing bad when midnight failed or ran on boxes that only cost', () => {
+    expect(debriefLines({ ...BEST, serversAtMidnight: 5 })).toContain('C8.rei.sizing.bad');
+    expect(debriefLines({ ...BEST, serversAtMidnight: 3 })).toContain('C8.rei.sizing.good');
     expect(debriefLines({ ...BEST, midnightHeld: false })).toContain('C8.rei.sizing.bad');
     expect(debriefLines({ ...BEST, midnightHeld: false })).not.toContain('C8.rei.sizing.good');
   });
@@ -60,14 +52,6 @@ describe('debrief lines', () => {
     expect(debriefLines({ ...BEST, scaledDown: false })).not.toContain('C8.rei.down');
   });
 
-  it('treats the C1 dial band as a close estimate (placeholder threshold)', () => {
-    expect(ESTIMATE_CLOSE_RANGE).toEqual({ min: 25, max: 35 });
-    expect(estimateClose(25)).toBe(true);
-    expect(estimateClose(35)).toBe(true);
-    expect(estimateClose(36)).toBe(false);
-    expect(estimateClose(null)).toBe(false);
-  });
-
   it('does not mutate the results it grades', () => {
     const r = { ...BEST };
     debriefLines(r);
@@ -76,7 +60,7 @@ describe('debrief lines', () => {
 });
 
 describe('debrief results', () => {
-  it("builds banner, trust, Ozzie's tab and the estimate from the run", () => {
+  it("builds banner, trust and Ozzie's tab from the run", () => {
     const base = brownoutSession();
     const session = {
       ...base,
@@ -91,8 +75,8 @@ describe('debrief results', () => {
       midnightHeld: true,
       serversAtMidnight: 4,
     };
-    const r = debriefResults(session, { estimate: 30, sizing: 4 }, pending);
-    expect(r).toEqual({ ...pending, trustLeft: 72, banner: 'pay', ozzieTab: 230, estimate: 30 });
+    const r = debriefResults(session, pending);
+    expect(r).toEqual({ ...pending, trustLeft: 72, banner: 'pay', ozzieTab: 230 });
   });
 
   it('shows one raw row per category, no letter grades', () => {
