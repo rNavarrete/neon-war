@@ -11,6 +11,7 @@ import { PauseScene } from './scenes/PauseScene';
 import { SettingsScene } from './scenes/SettingsScene';
 import { StoryScene } from './scenes/StoryScene';
 import { TitleScene } from './scenes/TitleScene';
+import { installArtHook } from './scenes/plates';
 import { autopilotOn, installTestHook, simSpeed, startScene, testHookEnabled } from './testHook';
 
 function startGame(): void {
@@ -48,6 +49,7 @@ function startGame(): void {
     scene: scenes,
   });
 
+  installArtHook(game);
   installTestHook(() => {
     // The scene the player is looking at: the first running one, never the always-on overlay.
     const active = game.scene.getScenes(true).find((s) => s.scene.key !== SCENES.overlay);
