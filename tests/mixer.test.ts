@@ -301,8 +301,14 @@ describe('missing voices', () => {
     expect(mixer.snapshot().missing).toEqual([C1_03]);
   });
 
-  it('ships no voice manifest yet, so the game requests no voice file', () => {
-    expect(bundledVoiceManifest()).toEqual({});
+  // Was "ships no voice manifest yet" (toEqual({})): the recorded voices have landed, so the build
+  // now bundles their manifest. tests/voice-files.test.ts checks it against the files on disk.
+  it('bundles the voice manifest of the recorded lines, both languages', () => {
+    const m = bundledVoiceManifest();
+    expect(m.ja).toContain('C1.triage.02');
+    expect(m.en).toContain('C1.lux.01');
+    expect(m.ja).toHaveLength(85);
+    expect(m.en).toHaveLength(85);
   });
 
   it('keeps the last 20 requests', () => {
