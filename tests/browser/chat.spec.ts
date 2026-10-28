@@ -193,7 +193,7 @@ const spellAt = (trace: ChatTraceTestState, t: number) =>
 test('the chat reacts to the placed server, then the surge: complaint, calling, thanks after the errors, at most 10 posts per 30 s', async ({
   page,
 }) => {
-  test.setTimeout(75_000);
+  test.setTimeout(100_000);
   // chat-6: the chat draws what the manifest says has landed (today nothing, so the code fallbacks),
   // with no texture warning in the console all night.
   const warnings: string[] = [];
@@ -201,8 +201,11 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
     if ((m.type() === 'warning' || m.type() === 'error') && /texture/i.test(m.text()))
       warnings.push(m.text());
   });
-  const { errors } = await openBoard(page);
-  const log = new ChatLog();
+  // C1 runs at speed 4: at speed 20 the block's first errors (already queued when the autopilot's
+  // first server lands, a few game seconds in) take the chat's paced slots ahead of the placed
+  // reaction. The surge part reopens the board at speed 20 below.
+  const first = await openBoard(page, { speed: 4 });
+  let log = new ChatLog();
   const art = await page.evaluate(() => window.__neonTest!.state.hud?.chatArt ?? null);
   expect(art).toEqual(chatArtOf());
 
@@ -219,12 +222,18 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
   expect(placed.id).toMatch(/^fill\.stream\.placed\./);
   expect(placed.at).toBeGreaterThanOrEqual(lastEmpty?.clock ?? 0);
   expect(placed.at - (lastEmpty?.clock ?? 0), log.ids()).toBeLessThanOrEqual(6);
+  await log.until(page, 'C1.chat.01 and C1.chat.02', () =>
+    ['C1.chat.01', 'C1.chat.02'].every((id) => log.rows.some((r) => r.id === id)),
+  );
   const ids = log.rows.map((r) => r.id);
   expect(ids).toContain('C1.chat.01');
   expect(ids).toContain('C1.chat.02');
   expect(ids.indexOf('C1.chat.01')).toBeLessThan(ids.indexOf('C1.chat.02'));
 
-  // The district surge, through the rescue, then on until a thanks row has posted after it.
+  // The district surge, through the rescue, then on until a thanks row has posted after it: a fresh
+  // night at speed 20 (reach's path), read from its start.
+  const { errors } = await openBoard(page);
+  log = new ChatLog();
   await log.during(page, reach(page, 'surge'));
   const surgeClock = log.samples[log.samples.length - 1].clock;
   await log.during(page, reach(page, 'rescue'));
@@ -265,6 +274,7 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
 
   test.info().annotations.push({ type: 'rows', description: log.ids() });
   expect(warnings).toEqual([]);
+  expect(first.errors).toEqual([]);
   expect(errors).toEqual([]);
   // Across the surge the chat never posts more than 10 rows (one of tolerance) in any 30 s of chat
   // clock, scripted rows included. Last, so every check above has run when it fails.
