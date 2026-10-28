@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
+import { dismissJobCard, hud, openBoard, reach, setDial, shot } from './live/reach';
 
 // The gauges lane's Live views (docs/LIVE.md), asserted on window.__neonTest.state.hud: the title
-// cluster and the clock (gauges-1).
+// cluster and the clock (gauges-1), the dial card over the feed (gauges-2).
 
 test('the title cluster: waiting for the first build, then live; WATCHING has no number yet; clock left of x 1800', async ({
   page,
@@ -29,5 +29,19 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
   h = await hud(page);
   // No audience event before the chat lane emits one (chat-3): still no number.
   expect(h.title!.watching).toBeNull();
+
+  // gauges-2: best play wired a server before answering, so the dial card dims and says the guess
+  // stays free, yet stays open and SETs.
+  await test.step('the dial card dims after the first wire and stays open until SET', async () => {
+    await expect.poll(async () => (await hud(page)).dialCard?.dimmed, { timeout: 5_000 }).toBe(true);
+    h = await hud(page);
+    expect(h.dialCard!.label).toBe('your guess stays free');
+    expect(h.dial.visible).toBe(true);
+    expect(h.notes.estimate).toBeNull();
+    await setDial(page, 30);
+    await expect.poll(async () => (await hud(page)).notes.estimate, { timeout: 5_000 }).toBe(30);
+    await expect.poll(async () => (await hud(page)).dial.visible, { timeout: 5_000 }).toBe(false);
+    expect((await hud(page)).dialCard!.dimmed).toBe(false);
+  });
   expect(second.errors).toEqual([]);
 });

@@ -58,6 +58,26 @@ export function applySizing(r: Run, servers: number): boolean {
   return true;
 }
 
+/**
+ * What the C1 dial card reads once the player has wired something before answering: the guess still
+ * costs nothing, so the card dims and says so, and SET still records it. WIRING(learning): this
+ * micro-copy moves to src/scenes/hud/labels.ts when learning-1 lands it.
+ */
+export const DIAL_FREE_NOTE = 'your guess stays free';
+
+/**
+ * Whether the dial card is dimmed: the C1 question (req/s) is still open and the player has already
+ * wired a part. The card stays open (hud.dial.visible) until SET; only its look changes.
+ */
+export function dialDimmed(mode: DialMode, estimate: number | null, wiredSinceAsked: boolean): boolean {
+  return mode === 'reqps' && estimate === null && wiredSinceAsked;
+}
+
+/** The label the dial card shows: the question, or the free-guess note while dimmed. */
+export function dialLabel(question: string, dimmed: boolean): string {
+  return dimmed ? DIAL_FREE_NOTE : question;
+}
+
 /** True when an estimate is close enough that TRIAGE owns up to it (25 to 35 req/s). */
 export function estimateClose(value: number): boolean {
   return value >= 25 && value <= 35;
