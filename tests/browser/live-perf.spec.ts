@@ -12,6 +12,8 @@ import { openBoard, reach, shot } from './live/reach';
 const REGISTERED = ZONE_IDS.filter((z) => z !== 'feed' && z !== 'inventory');
 const OBJECTS_MAX = 750;
 const TEXTS_MAX = 110;
+/** The board's share of the 110 (docs/LIVE.md "Perf budget"). */
+const BOARD_TEXTS_MAX = 28;
 const PACKETS_MAX = 160;
 
 async function perf(page: Page): Promise<PerfSection> {
@@ -48,6 +50,9 @@ function expectWithinBudgets(p: PerfSection, moment: string): void {
   expect(p.objects.board + p.objects.hud, `${moment}: objects`).toBeLessThanOrEqual(OBJECTS_MAX);
   expect(p.drawn.objects, `${moment}: drawn objects`).toBeLessThanOrEqual(OBJECTS_MAX);
   expect(p.drawn.texts, `${moment}: drawn texts`).toBeLessThanOrEqual(TEXTS_MAX);
+  // All texts, hidden ones included (the stronger check, now that the board keeps to its 28).
+  expect(p.texts, `${moment}: all texts`).toBeLessThanOrEqual(TEXTS_MAX);
+  expect(p.textsBy.board, `${moment}: board texts`).toBeLessThanOrEqual(BOARD_TEXTS_MAX);
   expect(p.textsBy.board + p.textsBy.hud).toBe(p.texts);
   expect(p.pools.packets, `${moment}: pools.packets`).toBeLessThanOrEqual(PACKETS_MAX);
   expect(p.fps.avg).toBeGreaterThan(0);

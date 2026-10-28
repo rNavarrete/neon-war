@@ -8,9 +8,10 @@ import { BROWNOUT } from '../src/sim/brownout';
 // Tech follow-up 5: why live-skeleton.spec's 'the power-dip mark sits on its part' sometimes never
 // saw the dip. The warning is up for BROWNOUT.powerDip.warningSeconds (2) of sim time, and a frame
 // advances the sim by min(frame, 0.25 s) times the test speed. At speed 20 a frame slower than
-// 100 ms (headless Chromium under 10 fps) steps 2 s or more at once and can jump the whole warning,
-// so no frame ever draws it. At speed 7 a frame steps 1.75 s at most, whatever the frame rate, so
-// the warning is always on at least one frame: the spec runs at speed 7.
+// 100 ms (headless Chromium under 10 fps) stepped 2 s or more at once and could jump the whole
+// warning, so no frame ever drew it. Run.tick now stops its slices on the tick a dip's warning starts
+// (as it stops at the rescue), so the warning is on at least one frame at any speed and frame rate,
+// and the spec runs at speed 20 again. At speed 7 it was always on even before that.
 
 /** Whether any frame of an autopilot run at `speed` with `ms` frames shows the C4 dip's warning. */
 function dipShown(speed: number, ms: number, phase: number): boolean {
@@ -31,10 +32,11 @@ describe('the dip warning against the frame step', () => {
     expect(BROWNOUT.powerDip.warningSeconds).toBe(2);
   });
 
-  it('can be jumped at speed 20 when frames take 250 ms (4 fps)', () => {
+  it('is never jumped at speed 20, even when frames take 250 ms (4 fps): Run.tick stops at warnAt', () => {
     const phases = [0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09];
     const shown = phases.filter((p) => dipShown(20, 250, p)).length;
-    expect(shown).toBeLessThan(phases.length);
+    expect(shown).toBe(phases.length);
+    for (const ms of [33, 100, 1000]) expect(dipShown(20, ms, 0.013), `${ms} ms`).toBe(true);
   });
 
   it('is always on a frame at speed 7, from 30 fps down to 1 fps', () => {

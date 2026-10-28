@@ -74,6 +74,8 @@ export interface ChatTestState {
   rows: ChatDrawnRow[];
   /** Reactions waiting to post. */
   queue: number;
+  /** Scripted ids the 10-per-30-s cap holds back, oldest first (they post before any paced row). */
+  waiting: string[];
 }
 
 export interface AudienceTestState {
@@ -127,6 +129,7 @@ export function chatSection(h: ChatHookInputs): ChatTestState {
     header: { ...h.header },
     rows: h.rows.map((r) => ({ ...r })),
     queue: s.queue.length,
+    waiting: s.waiting.map((w) => w.id),
   };
 }
 

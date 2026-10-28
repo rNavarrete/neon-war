@@ -20,7 +20,7 @@ import {
   step,
   useRegroup,
 } from '../sim/play';
-import { blockDemand, flickeringParts } from '../sim/failures';
+import { DIP_SCRIPT, blockDemand, dipWarnAt, flickeringParts } from '../sim/failures';
 import { capacityOf } from '../sim/board';
 import { SERVER_SLOTS, STARTING_PARTS } from '../sim/tick';
 import { bus } from './bus';
@@ -157,13 +157,20 @@ export class Run {
     }
     let left = Math.min(realSeconds, MAX_FRAME_SECONDS) * this.speed;
     const before = this.play;
-    // In slices, so a fast test speed stops on the tick the crew arrive instead of running on past it.
+    // In slices, so a fast test speed stops on the tick the crew arrive, and on the tick a power dip's
+    // 2 s warning starts, instead of running on past them: one slow frame at speed 20 (5 sim seconds)
+    // would otherwise jump the whole warning, and the frame after shows the part already dark.
     while (left > 0 && !this.play.failure) {
-      const slice = Math.min(left, MAX_SLICE_SECONDS);
+      const warn = nextDipWarn(this.play);
+      const toWarn = warn - this.now;
+      const slice = Math.min(left, MAX_SLICE_SECONDS, toWarn > 0 ? toWarn : left);
       const wasRescued = this.rescued;
+      const dips = this.play.dips.length;
       this.play = step(this.play, slice);
       left -= slice;
       if (!wasRescued && this.rescued) break;
+      // Only a warning this slice ran into: a clock set past warnAt (a jump) does not stop the frame.
+      if (toWarn > -1e-6 && this.play.dips.length > dips) break;
     }
     if (this.play !== before) this.announce(before, this.play);
   }
@@ -306,6 +313,16 @@ export class Run {
   private applyBoard(r: ReturnType<typeof connect>, after: () => void): ActionResult {
     return this.applySession(r.ok ? { ok: true, session: { ...this.session, board: r.board } } : r, after);
   }
+}
+
+/** When the next power dip that has not started yet starts its warning (Infinity: none left). */
+export function nextDipWarn(play: Play): number {
+  let at = Infinity;
+  outer: for (const d of DIP_SCRIPT) {
+    for (const p of play.dips) if (p.id === d.id) continue outer;
+    at = Math.min(at, dipWarnAt(d));
+  }
+  return at;
 }
 
 let current = new Run();
