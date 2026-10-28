@@ -44,14 +44,16 @@ import {
   stepDeck,
   tooltipAt,
 } from './deck';
-import { HeadroomView } from './HeadroomView';
+import { HEADROOM_KIT, HeadroomView } from './HeadroomView';
 import type { HeadroomColour } from './headroom';
 import { jobCardDue } from './jobCard';
 import { COLORS, FONT } from './layout';
 import { cutLaundry } from './pending503';
 import { type PagePoint, provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
-import { GAUGES_DEPTH } from './panel';
+import { KIT, type KeyCap, PLAY_SIZE, keyCap } from './kit';
+import { GAUGES_DEPTH, type PanelTestState } from './panel';
+import { preloadArt, resolveArt } from '../plates';
 
 /** What the hook mirrors as hud.headroom. */
 export interface HeadroomTestState {
@@ -73,6 +75,8 @@ export interface HeadroomTestState {
   label: string;
   /** The right edge of the bar, in game x (the keys sit right of it). */
   right: number;
+  /** The bar's baked plate (m4 panel kit). */
+  panel?: PanelTestState | null;
 }
 
 /** One key as the hook sees it. */
@@ -86,6 +90,8 @@ export interface DeckKeyTestState {
   alpha: number;
   /** Takes clicks (from its first frame, whatever its state). */
   interactive: boolean;
+  /** The picked keycap drawn now (idle, ready, or pressed just after a press that acted); null in code. */
+  cap?: KeyCap | null;
 }
 
 /** One press of a key, by click or keyboard, and whether it acted. */
@@ -116,6 +122,8 @@ export interface DeckTestState {
   presses: DeckPress[];
   /** Every press since the view was made, counted. */
   pressed: number;
+  /** The play glyph (hud/icons/play) on the SET key: drawn, and lit with the key. */
+  play?: { drawn: boolean; lit: boolean };
 }
 
 declare module './hook' {
@@ -138,11 +146,23 @@ export const DECK_PRESSES = 20;
 /** The digit keys' key codes: 1, 2, 3 on the main row. */
 const KEY_CODES: Readonly<Record<KeyName, number>> = { one: 49, two: 50, three: 51 };
 
+/** The deck's kit pieces: the three keycaps and the play glyph (docs/ART-REQUESTS.md batch 4). */
+const DECK_KIT = [KIT.keyIdle, KIT.keyReady, KIT.keyPressed, KIT.play] as const;
+
+/** The play glyph's tint when its key is not lit. */
+const PLAY_DIM = 0x8a8aa0;
+
 /** One drawn key. */
 interface KeyParts {
-  /** The key's plate unlit and lit, each drawn once; the key shows one of them. */
-  dim: Phaser.GameObjects.Graphics;
-  lit: Phaser.GameObjects.Graphics;
+  /** The picked keycap, its texture swapped by state (null when the scene has no art: code plates). */
+  cap: Phaser.GameObjects.Image | null;
+  /** The cap last shown. */
+  shownCap: KeyCap | null;
+  /** HUD time of the last press that acted, for the pressed cap; null before one. */
+  pressedAt: number | null;
+  /** The key's code plate unlit and lit, drawn once, only without the picked keycaps. */
+  dim: Phaser.GameObjects.Graphics | null;
+  lit: Phaser.GameObjects.Graphics | null;
   digit: Phaser.GameObjects.Text;
   word: Phaser.GameObjects.Text;
   /** The hit area (null on a scene without zones, such as a node test's stub). */
@@ -164,6 +184,12 @@ export class DeckView implements LiveView {
   readonly deck: DeckState = emptyDeck();
   private keys: Partial<Record<KeyName, KeyParts>> = {};
   private ring: Phaser.GameObjects.Graphics | null = null;
+  private play: Phaser.GameObjects.Image | null = null;
+  private shownPlayLit: boolean | null = null;
+  /** The HUD clock this frame (for the pressed cap). */
+  private hudNow = 0;
+  /** The texture each cap draws from, when the scene has it. */
+  private capTexture: Partial<Record<KeyCap, string>> = {};
   private back: Phaser.GameObjects.Graphics | null = null;
   private tooltip: Phaser.GameObjects.Text | null = null;
   private scene: Phaser.Scene | null = null;
@@ -190,6 +216,10 @@ export class DeckView implements LiveView {
     cardOpen: false,
   };
 
+  preload(scene: Phaser.Scene): void {
+    preloadArt(scene as never, [...HEADROOM_KIT, ...DECK_KIT]);
+  }
+
   create(scene: Phaser.Scene, host: LiveHost): void {
     this.scene = scene;
     this.host = host;
@@ -204,6 +234,24 @@ export class DeckView implements LiveView {
 
     const add = scene.add;
     const rects = keyRects();
+    // The picked keycaps and play glyph, when the scene has their files (a node test's stub does not).
+    const tx = scene.textures as Partial<Phaser.Textures.TextureManager> | undefined;
+    const has = (key: string): string | null => {
+      const a = resolveArt(key);
+      return !a.fallback &&
+        typeof add.image === 'function' &&
+        typeof tx?.get === 'function' &&
+        tx.exists?.(a.texture)
+        ? a.texture
+        : null;
+    };
+    this.capTexture = {};
+    for (const cap of [KIT.keyIdle, KIT.keyReady, KIT.keyPressed] as const) {
+      const t = has(cap);
+      if (t) this.capTexture[cap] = t;
+    }
+    const caps = Object.keys(this.capTexture).length === 3;
+    this.shownPlayLit = null;
     // One opaque backing under the three keys, never dimmed, so the HUD's own keys never show through.
     const back = add.graphics();
     back.fillStyle(COLORS.ink, 1);
@@ -218,11 +266,22 @@ export class DeckView implements LiveView {
       const cx = r.x + r.w / 2;
       const cy = r.y + r.h / 2;
       const words = keyWords(name);
-      const dim = drawPlate(add.graphics(), r, false);
-      const lit = drawPlate(add.graphics(), r, true).setVisible(false);
+      // The keycap at its display size, 80 x 64: the 160 x 128 file at the request's k 0.5.
+      const cap = caps
+        ? add.image(cx, cy, this.capTexture[KIT.keyIdle] as string).setDisplaySize(r.w, r.h)
+        : null;
+      const dim = caps ? null : drawPlate(add.graphics(), r, false);
+      const lit = caps ? null : drawPlate(add.graphics(), r, true).setVisible(false);
+      // SET carries the play glyph right of its digit.
+      const playTexture = name === 'three' ? has(KIT.play) : null;
+      const dx = playTexture ? -12 : 0;
       const digit = add
-        .text(cx, cy - 10, words.digit, { fontFamily: FONT, fontSize: '26px', color: COLORS.dim })
+        .text(cx + dx, cy - 10, words.digit, { fontFamily: FONT, fontSize: '26px', color: COLORS.dim })
         .setOrigin(0.5);
+      if (playTexture) {
+        this.play = add.image(cx + 14, cy - 10, playTexture).setDisplaySize(PLAY_SIZE, PLAY_SIZE);
+        this.play.setDepth(GAUGES_DEPTH);
+      }
       const word = add
         .text(cx, cy + 17, words.word, { fontFamily: FONT, fontSize: '12px', color: COLORS.dim })
         .setOrigin(0.5);
@@ -237,9 +296,12 @@ export class DeckView implements LiveView {
           this.hovering = false;
         });
       }
-      for (const o of [dim, lit, digit, word]) o.setDepth(GAUGES_DEPTH);
+      for (const o of [cap, dim, lit, digit, word]) o?.setDepth(GAUGES_DEPTH);
       zone?.setDepth(GAUGES_DEPTH);
       this.keys[name] = {
+        cap,
+        shownCap: cap ? KIT.keyIdle : null,
+        pressedAt: null,
         dim,
         lit,
         digit,
@@ -296,6 +358,7 @@ export class DeckView implements LiveView {
   }
 
   update(frame: Frame, clock: LiveClock): void {
+    this.hudNow = clock.now;
     this.headroom.update(frame, clock.now);
     this.now = frame.now;
     this.laundryCut = frame.laundryCut !== null;
@@ -325,6 +388,8 @@ export class DeckView implements LiveView {
   /** A click or a digit on `key`: act if the deck lets it, and remember the press for the hook. */
   press(key: KeyName, via: 'click' | 'key'): void {
     const acted = pressActs(this.deck, key) && this.act(key);
+    const k = this.keys[key];
+    if (acted && k) k.pressedAt = this.hudNow;
     this.pressed++;
     this.presses.push({ key, via, acted, at: this.now });
     if (this.presses.length > DECK_PRESSES) this.presses.shift();
@@ -350,21 +415,36 @@ export class DeckView implements LiveView {
     const word = name === 'two' && this.deck.cut === 'done' ? CUT_DONE : k.word0;
     if (lit !== k.shownLit || word !== k.word.text) {
       k.shownLit = lit;
-      k.lit.setVisible(lit);
-      k.dim.setVisible(!lit);
+      k.lit?.setVisible(lit);
+      k.dim?.setVisible(!lit);
+      if (name === 'three' && this.play && lit !== this.shownPlayLit) {
+        this.shownPlayLit = lit;
+        this.play.setTint(lit ? 0xffffff : PLAY_DIM);
+      }
       const color = lit ? COLORS.heroText : COLORS.dim;
       k.digit.setColor(color);
       if (word !== k.word.text) k.word.setText(word).setFontSize(word.length > 8 ? 11 : 12);
       k.word.setColor(color);
       if (k.zone?.input) k.zone.input.cursor = lit ? 'pointer' : '';
     }
+    // The cap: pressed for a moment after a press that acted, else ready when lit, else idle.
+    if (k.cap) {
+      const cap = keyCap(lit, this.hudNow, k.pressedAt);
+      if (cap !== k.shownCap) {
+        k.shownCap = cap;
+        const t = this.capTexture[cap];
+        if (t) k.cap.setTexture(t).setDisplaySize(k.rect.w, k.rect.h);
+      }
+    }
     const alpha = keyAlpha(this.deck, name);
     if (alpha !== k.alpha) {
       k.alpha = alpha;
-      k.dim.setAlpha(alpha);
-      k.lit.setAlpha(alpha);
+      k.cap?.setAlpha(alpha);
+      k.dim?.setAlpha(alpha);
+      k.lit?.setAlpha(alpha);
       k.digit.setAlpha(alpha);
       k.word.setAlpha(alpha);
+      if (name === 'three') this.play?.setAlpha(alpha);
     }
   }
 
@@ -434,6 +514,7 @@ export class DeckView implements LiveView {
         lit: keyLit(d, name),
         alpha: k?.alpha ?? 0,
         interactive: k?.zone?.input?.enabled ?? false,
+        cap: k?.shownCap ?? null,
       };
     }
     return {
@@ -450,6 +531,7 @@ export class DeckView implements LiveView {
       tooltip: this.shownTooltip,
       presses: this.presses.map((p) => ({ ...p })),
       pressed: this.pressed,
+      play: { drawn: this.play !== null, lit: this.shownPlayLit === true },
     };
   }
 
@@ -467,6 +549,7 @@ export class DeckView implements LiveView {
       lit: s.lit,
       label: this.headroom.labelText,
       right: this.headroom.right,
+      panel: this.headroom.panel,
     };
   }
 
@@ -477,8 +560,9 @@ export class DeckView implements LiveView {
     for (const name of KEY_NAMES) {
       const k = this.keys[name];
       if (!k) continue;
-      k.dim.destroy();
-      k.lit.destroy();
+      k.cap?.destroy();
+      k.dim?.destroy();
+      k.lit?.destroy();
       k.digit.destroy();
       k.word.destroy();
       k.zone?.destroy();
@@ -486,6 +570,8 @@ export class DeckView implements LiveView {
     this.keys = {};
     this.ring?.destroy();
     this.ring = null;
+    this.play?.destroy();
+    this.play = null;
     this.back?.destroy();
     this.back = null;
     this.tooltip?.destroy();
