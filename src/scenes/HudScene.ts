@@ -12,7 +12,7 @@ import type { BannerChoice } from '../sim/economy';
 import { LINES, type LineId, line } from '../strings';
 import { provideTestState } from '../testHook';
 import { BarkView } from './hud/BarkView';
-import { ChartView } from './hud/ChartView';
+import { type ChartView, scopeViewOf } from './hud/ChartView';
 import { ChatView } from './hud/ChatView';
 import { DialView } from './hud/DialView';
 import { type BarkState, NO_BARKS, enqueueBark, stepBarks } from './hud/barks';
@@ -252,7 +252,7 @@ export class HudScene extends Phaser.Scene {
     // The Live screen's views go first, so their placeholders sit under everything drawn below.
     for (const v of this.views) v.create(this, this.hostFor(v));
     this.buildAlert();
-    this.chart = new ChartView(this);
+    this.chart = scopeViewOf(this.views);
     this.dial = new DialView(this, {
       touched: () => {
         this.dialTouched = true;
@@ -300,13 +300,6 @@ export class HudScene extends Phaser.Scene {
 
     const estimate = r.notes.estimate;
     const sizing = r.notes.sizing;
-    this.chart.update(
-      now,
-      r.demand,
-      r.capacity,
-      estimate,
-      sizing !== null ? sizing * BROWNOUT.server.capacity : null,
-    );
     const ask = this.ask;
     ask.now = now;
     ask.cardOpen = this.cardOpen;
