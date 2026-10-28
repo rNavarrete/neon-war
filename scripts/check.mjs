@@ -2,7 +2,8 @@
 // The one trusted check command for this repo (ENG-140, governance G-B1/G-B5).
 //
 //   npm run check [-- --out <path>] [-- --contract-digest <sha256 hex>]
-//                 [-- --contract-claim-from-event]
+//                 [-- --contract-claim-from-event] [-- --e2e-from-shards <dir>]
+//   node scripts/check.mjs --e2e-shard <i>/<n> [--out <path>]
 //
 // --contract-claim-from-event (CI, pull_request events): read the PR title/body
 // from the GitHub event payload (GITHUB_EVENT_PATH) and record the contract
@@ -17,17 +18,43 @@
 // Exits 0 only when every step passed AND the working tree is clean (a dirty
 // tree is not a candidate commit).
 //
+// CI runs the e2e step as parallel shards (docs/checks.md, "Sharded e2e"):
+// --e2e-shard i/n runs only the environment step and `playwright test --shard=i/n`
+// and writes a shard evidence file (kind "e2e-shard"), never a check evidence
+// file. --e2e-from-shards <dir> runs every other step as usual and records the
+// e2e step from the shard files in <dir> (scripts/lib/e2e-shards.mjs): it passes
+// only when the set is complete (1..n, each once) and every shard is for this
+// commit and check revision, had a clean tree and passed. Without either flag the
+// check runs every step itself, e2e included, exactly as before.
+//
 // Deliberately NOT supported: narrowing the step list (--only) or changing
 // timeouts from the environment. The command must not be able to redefine its
 // own evidence. Changes to this file are flagged as a control change.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isControlPath } from './lib/control-change.mjs';
 import { parseContractClaim } from './lib/contract-claim.mjs';
+import {
+  SHARD_FILE_RE,
+  SHARD_KIND,
+  SHARD_SCHEMA_VERSION,
+  mergeShardEvidence,
+  parseShardSpec,
+  shardCommand,
+  shardFileName,
+} from './lib/e2e-shards.mjs';
 
 const CHECK_VERSION = '1';
 const SCHEMA_VERSION = 1;
@@ -62,11 +89,14 @@ const STEPS = [
   // 15 minutes: Session 0's suite plays the surge and the whole night on software WebGL (~10 min).
   { name: 'e2e', bin: 'playwright', args: ['test'], timeoutMs: 1_800_000 },
 ];
+const E2E_STEP = STEPS.find((s) => s.name === 'e2e');
 
 function usage(message) {
   if (message) console.error(`check: ${message}`);
   console.error(
-    'usage: node scripts/check.mjs [--out <path>] [--contract-digest <sha256 hex>] [--contract-claim-from-event]',
+    'usage: node scripts/check.mjs [--out <path>] [--contract-digest <sha256 hex>] [--contract-claim-from-event]\n' +
+      '                              [--e2e-from-shards <dir>]\n' +
+      '       node scripts/check.mjs --e2e-shard <i>/<n> [--out <path>]',
   );
   process.exit(1);
 }
@@ -78,6 +108,9 @@ function parseArgs(argv) {
     contractDigest: envDigest,
     contractDigestSource: envDigest ? 'env' : null,
     contractClaimFromEvent: false,
+    outGiven: false,
+    shard: null,
+    shardsDir: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -87,13 +120,33 @@ function parseArgs(argv) {
       if (v === undefined || v === '') usage(`${flag} needs a value`);
       return v;
     };
-    if (flag === '--out') opts.out = value();
-    else if (flag === '--contract-digest') {
+    if (flag === '--out') {
+      opts.out = value();
+      opts.outGiven = true;
+    } else if (flag === '--e2e-shard') {
+      if (opts.shard) usage('--e2e-shard given twice');
+      const spec = parseShardSpec(value());
+      if (!spec.ok) usage(spec.error);
+      opts.shard = { index: spec.index, total: spec.total };
+    } else if (flag === '--e2e-from-shards') {
+      if (opts.shardsDir !== null) usage('--e2e-from-shards given twice');
+      opts.shardsDir = value();
+    } else if (flag === '--contract-digest') {
       opts.contractDigest = value();
       opts.contractDigestSource = 'flag';
     } else if (flag === '--contract-claim-from-event' && inline === undefined)
       opts.contractClaimFromEvent = true;
     else usage(`unknown argument: ${arg} (the step list and timeouts are fixed)`);
+  }
+  if (opts.shard) {
+    // A shard records only the environment and its slice of e2e; contract claims belong to the check run.
+    if (opts.shardsDir !== null) usage('--e2e-shard and --e2e-from-shards cannot be combined');
+    if (opts.contractClaimFromEvent || opts.contractDigestSource === 'flag') {
+      usage('--e2e-shard records no contract; drop --contract-digest / --contract-claim-from-event');
+    }
+    opts.contractDigest = null;
+    opts.contractDigestSource = null;
+    if (!opts.outGiven) opts.out = shardFileName(opts.shard.index);
   }
   if (opts.contractDigest !== null) {
     opts.contractDigest = opts.contractDigest.toLowerCase();
@@ -397,6 +450,69 @@ function runStep(step, logDir) {
   });
 }
 
+// Every shard evidence file under dir (depth <= 3), found by file name. A file that
+// cannot be read is still listed so the merge reports it.
+function findShardFiles(dir) {
+  const found = [];
+  const walk = (d, depth) => {
+    let entries;
+    try {
+      entries = readdirSync(d, { withFileTypes: true });
+    } catch (err) {
+      if (depth === 0)
+        found.push({ file: d, readError: `cannot list shard dir: ${err.code ?? err.message}` });
+      return;
+    }
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) {
+        if (depth < 3) walk(p, depth + 1);
+      } else if (SHARD_FILE_RE.test(e.name)) {
+        const file = relative(dir, p);
+        if (!e.isFile()) {
+          found.push({ file, readError: 'not a regular file' });
+          continue;
+        }
+        try {
+          found.push({ file, text: readFileSync(p, 'utf8') });
+        } catch (err) {
+          found.push({ file, readError: err.code ?? err.message });
+        }
+      }
+    }
+  };
+  walk(dir, 0);
+  return found;
+}
+
+// The e2e step of a check run, recorded from shard evidence files instead of run here.
+function e2eFromShards(dir, cand, checkRevision, logDir) {
+  const started = Date.now();
+  const merged = mergeShardEvidence(findShardFiles(dir), { commit: cand.commit, checkRevision });
+  const n = merged.total ?? '?';
+  const command = `${E2E_STEP.bin} ${E2E_STEP.args.join(' ')}, merged from ${n} shards (--shard=1/${n} .. ${n}/${n})`;
+  const summary = [
+    ...merged.shards.map((s) => `shard ${s.index}/${n}: ${s.status} (${s.durationMs}ms) from ${s.file}`),
+    merged.ok
+      ? `all ${n} shards passed for commit ${cand.commit}`
+      : `e2e not verified from shards in ${dir}:\n${merged.reasons.map((r) => `- ${r}`).join('\n')}`,
+  ].join('\n');
+  const logs = merged.shards
+    .map((s) => `===== shard ${s.index}/${n} (${s.file}): ${s.status} =====\n${s.log.replace(/\n?$/, '\n')}`)
+    .join('');
+  writeFileSync(join(logDir, 'e2e.log'), `$ ${command}\n${logs}${summary}\n`);
+  return {
+    name: 'e2e',
+    command,
+    status: merged.ok ? 'pass' : 'fail',
+    exitCode: merged.ok ? 0 : 1,
+    // The shards ran in parallel, so the step took as long as the slowest one.
+    durationMs: merged.ok ? merged.durationMs : Math.max(merged.durationMs, Date.now() - started),
+    timeoutMs: E2E_STEP.timeoutMs,
+    logTail: merged.ok ? summary : tail(`${tail(logs, 100)}\n${summary}`),
+  };
+}
+
 function pad(s, n) {
   return String(s).padEnd(n);
 }
@@ -440,6 +556,7 @@ function appendStepSummary(evidence, outPath) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.shard) return shardMain(opts);
   const outPath = resolve(process.cwd(), opts.out);
   const logDir = join(ROOT, 'check-logs');
   mkdirSync(logDir, { recursive: true });
@@ -470,7 +587,10 @@ async function main() {
   } else {
     for (const step of STEPS) {
       process.stdout.write(`check: ${step.name} ... `);
-      const result = await runStep(step, logDir);
+      const result =
+        step === E2E_STEP && opts.shardsDir !== null
+          ? e2eFromShards(resolve(process.cwd(), opts.shardsDir), cand, checkRevision, logDir)
+          : await runStep(step, logDir);
       console.log(`${result.status} (${result.durationMs}ms)`);
       steps.push(result);
     }
@@ -502,6 +622,73 @@ async function main() {
   writeFileSync(outPath, `${JSON.stringify(evidence, null, 2)}\n`);
   printTable(evidence);
   console.log(`evidence:   ${outPath}`);
+  console.log(`logs:       ${logDir}`);
+  appendStepSummary(evidence, opts.out);
+  process.exitCode = evidence.outcome === 'pass' ? 0 : 1;
+}
+
+// --e2e-shard i/n: the environment step plus `playwright test --shard=i/n`, nothing else.
+// Writes shard evidence (kind "e2e-shard"). verify-evidence never accepts it as check
+// evidence (the other required steps are missing); only --e2e-from-shards reads it.
+async function shardMain(opts) {
+  const { index, total } = opts.shard;
+  const outPath = resolve(process.cwd(), opts.out);
+  const logDir = join(ROOT, 'check-logs');
+  mkdirSync(logDir, { recursive: true });
+  rmSync(outPath, { force: true });
+
+  const startedAt = new Date();
+  const cand = candidate();
+  const checkRevision = {
+    checkVersion: CHECK_VERSION,
+    checkScriptSha256: fileSha256(SCRIPT_PATH),
+    workflowSha256: fileSha256(WORKFLOW_PATH),
+    configSha256: configSha256(),
+  };
+  const steps = [];
+  const env = environmentStep();
+  steps.push(env);
+  writeFileSync(join(logDir, 'environment.log'), `${env.logTail}\n`);
+  let e2eLog = '';
+  if (env.status !== 'pass') {
+    console.error(`check: ${env.logTail}`);
+  } else {
+    const step = { ...E2E_STEP, args: [...E2E_STEP.args, `--shard=${index}/${total}`] };
+    process.stdout.write(`check: e2e shard ${index}/${total} ... `);
+    const result = await runStep(step, logDir);
+    console.log(`${result.status} (${result.durationMs}ms)`);
+    steps.push(result);
+    try {
+      e2eLog = readFileSync(join(logDir, 'e2e.log'), 'utf8');
+    } catch {
+      e2eLog = result.logTail;
+    }
+  }
+  cand.treeClean = cand.treeClean && treeIsClean();
+  const e2e = steps.find((s) => s.name === 'e2e');
+  const passed =
+    env.status === 'pass' && e2e?.status === 'pass' && e2e.command === shardCommand(index, total);
+  const finishedAt = new Date();
+  const evidence = {
+    kind: SHARD_KIND,
+    schemaVersion: SHARD_SCHEMA_VERSION,
+    command: `npm run check -- --e2e-shard ${index}/${total}`,
+    shard: { index, total },
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs: finishedAt.getTime() - startedAt.getTime(),
+    candidate: cand,
+    checkRevision,
+    environment: environment(),
+    steps,
+    outcome: passed && cand.treeClean && cand.commit ? 'pass' : 'fail',
+    // The whole e2e log, so the check run can put every shard's log in check-logs/e2e.log.
+    e2eLog,
+  };
+  mkdirSync(dirname(outPath), { recursive: true });
+  writeFileSync(outPath, `${JSON.stringify(evidence, null, 2)}\n`);
+  printTable(evidence);
+  console.log(`shard:      ${outPath}`);
   console.log(`logs:       ${logDir}`);
   appendStepSummary(evidence, opts.out);
   process.exitCode = evidence.outcome === 'pass' ? 0 : 1;

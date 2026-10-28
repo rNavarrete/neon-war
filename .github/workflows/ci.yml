@@ -1,5 +1,7 @@
 # CI for the one trusted check command (copied from factory-pilot-demo, ENG-140, governance G-B1..G-B5;
 # adds the Playwright browser and uploads the browser tests' screenshots).
+# The browser tests run as 4 parallel `e2e` shard jobs; the `check` job runs every other step
+# and records the e2e step from the shards' evidence (docs/checks.md, "Sharded e2e").
 # The `verified` job is the single status ENG-142's ruleset requires.
 # Changes to this file are a control change (see scripts/control-change.mjs, CODEOWNERS).
 name: CI
@@ -20,11 +22,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
+  e2e:
+    # One slice of the browser tests (playwright test --shard=N/4, split by file). Each shard
+    # writes shard evidence for the exact candidate commit; the check job merges the four and
+    # records e2e as passed only if all four are present, for this commit and check revision,
+    # from a clean tree, and passed. fail-fast off so every shard's result is recorded.
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
-      # Exact candidate commit: the PR head, not GitHub's synthetic merge ref.
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -38,15 +47,68 @@ jobs:
       - run: npm ci --ignore-scripts
       # The browser for the e2e step, at the version pinned in package-lock.json.
       - run: npx --no-install playwright install --with-deps chromium
+      - name: E2E shard (node scripts/check.mjs --e2e-shard, not via npm)
+        env:
+          NODE_OPTIONS: ''
+          SHARD: ${{ matrix.shard }}
+        run: node scripts/check.mjs --e2e-shard "$SHARD/4" --out "check-evidence-e2e-shard-$SHARD.json"
+      - name: Upload shard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-shard-${{ matrix.shard }}-${{ env.CANDIDATE_SHA }}
+          path: |
+            check-evidence-e2e-shard-${{ matrix.shard }}.json
+            check-logs/
+          if-no-files-found: warn
+      - name: Upload shard screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-shard-${{ matrix.shard }}-${{ env.CANDIDATE_SHA }}
+          path: test-results/screens/
+          if-no-files-found: warn
+
+  check:
+    # Runs after the shards even when one failed, so the evidence records the failure.
+    # Not when the run was cancelled (a superseded run is not evidence; `verified` then fails).
+    needs: e2e
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Exact candidate commit: the PR head, not GitHub's synthetic merge ref.
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # No install scripts: dependencies cannot run code before the check.
+      - run: npm ci --ignore-scripts
+      - name: Download shard evidence
+        # Outside the checkout, so the working tree stays clean. One folder per shard artifact.
+        # A missing or broken shard artifact is not an error here: check.mjs records it as a
+        # failed e2e step, which is the gate.
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: e2e-shard-*-${{ env.CANDIDATE_SHA }}
+          path: ${{ runner.temp }}/e2e-shards
       - name: Check (node scripts/check.mjs, not via npm)
         # On pull_request events, check.mjs reads the PR title/body from the event
         # payload file (GITHUB_EVENT_PATH), never via shell interpolation, and records
         # the CLAIMED contract digest (PR body "Contract-Digest:" line). A malformed or
-        # inconsistent claim fails the check.
+        # inconsistent claim fails the check. The e2e step is recorded from the shard
+        # evidence (--e2e-from-shards); every other step runs here.
         env:
           NODE_OPTIONS: ''
+          SHARDS_DIR: ${{ runner.temp }}/e2e-shards
           CLAIM_FLAG: ${{ github.event_name == 'pull_request' && '--contract-claim-from-event' || '' }}
-        run: node scripts/check.mjs --out check-evidence.json $CLAIM_FLAG
+        run: node scripts/check.mjs --out check-evidence.json --e2e-from-shards "$SHARDS_DIR" $CLAIM_FLAG
       - name: Verify evidence for the exact candidate commit
         # Control changes are reported by the control-change job and reviewed by a human.
         # CI records only the digest the PR CLAIMS; it is not trusted. No
@@ -63,8 +125,16 @@ jobs:
             check-evidence.json
             check-logs/
           if-no-files-found: warn
+      - name: Collect shard screenshots
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: screenshots-shard-*-${{ env.CANDIDATE_SHA }}
+          path: test-results/screens/
+          merge-multiple: true
       - name: Upload screenshots
-        # What the browser tests saw, for judging the look at review time.
+        # What the browser tests saw (all shards), for judging the look at review time.
         if: always()
         id: screens
         uses: actions/upload-artifact@v4
@@ -175,19 +245,22 @@ jobs:
     # was skipped or was cancelled, and passes ONLY if every dependency reported
     # 'success'. Skipped, cancelled, neutral or missing results all count as failure,
     # so a candidate cannot pass by having its checks not run.
-    needs: [check, check-selftest]
+    # `e2e` is the matrix: its result is success only if every shard succeeded.
+    needs: [e2e, check, check-selftest]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Require success from every check
         env:
+          E2E_RESULT: ${{ needs.e2e.result }}
           CHECK_RESULT: ${{ needs.check.result }}
           SELFTEST_RESULT: ${{ needs.check-selftest.result }}
         run: |
+          echo "e2e: $E2E_RESULT"
           echo "check: $CHECK_RESULT"
           echo "check-selftest: $SELFTEST_RESULT"
-          if [ "$CHECK_RESULT" != "success" ] || [ "$SELFTEST_RESULT" != "success" ]; then
+          if [ "$E2E_RESULT" != "success" ] || [ "$CHECK_RESULT" != "success" ] || [ "$SELFTEST_RESULT" != "success" ]; then
             echo "::error::not verified: every required job must report success (skipped/cancelled/neutral fail)"
             exit 1
           fi
