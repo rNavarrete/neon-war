@@ -158,3 +158,51 @@ describe('a cut voice fades out', () => {
     expect(fade![0]).toMatch(/volume: 0, duration: VOICE_CUT_FADE_MS/);
   });
 });
+
+describe('voiceStop for a clip still loading', () => {
+  /** A port whose loads finish only when `arrive` is called. */
+  class SlowPort extends FakePort {
+    readonly loading = new Set<string>();
+    override loadVoice(key: string, url: string): void {
+      this.calls.push(`load ${key} ${url}`);
+      this.loading.add(key);
+    }
+    arrive(): void {
+      for (const k of this.loading) this.ready.add(k);
+      this.loading.clear();
+    }
+  }
+
+  function slow() {
+    const bus = new Bus();
+    const mixer = new Mixer(bus, MANIFEST, () => ({ voices: 'ja', voiceVolume: 1 }));
+    const port = new SlowPort();
+    const started: string[] = [];
+    bus.on('voiceStart', (v) => started.push(v.id));
+    mixer.attach(port);
+    mixer.tick(0, 20);
+    bus.emit('line', { id: TRIAGE, speaker: '', tag: 'HINT', lesson: false, since: 0 });
+    return { bus, mixer, port, started };
+  }
+
+  it('drops the pending clip, so it never starts once it has loaded', () => {
+    const { bus, mixer, port, started } = slow();
+    expect(port.voiceReady('voice:ja:C1.triage.02')).toBe(false);
+    bus.emit('voiceStop', { id: TRIAGE });
+    port.arrive();
+    mixer.tick(0.1, 20);
+    mixer.tick(0.2, 20);
+    expect(started).toEqual([]);
+    expect(port.calls.some((c) => c.startsWith('play '))).toBe(false);
+    expect(mixer.snapshot().playing).toBeNull();
+  });
+
+  it('a voiceStop for another id leaves the pending clip to play once loaded', () => {
+    const { bus, mixer, port, started } = slow();
+    bus.emit('voiceStop', { id: LUX });
+    port.arrive();
+    mixer.tick(0.1, 20);
+    expect(started).toEqual([TRIAGE]);
+    expect(mixer.snapshot().playing).toBe(TRIAGE);
+  });
+});

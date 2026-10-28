@@ -9,7 +9,9 @@
 //   next; enqueued earlier it waits at the front. It never cuts a CREW line, another WARNING or a
 //   lesson line;
 // - a queued HINT, CREW or HOUSE line older than its staleAfter is dropped unshown; LUX, WARNING and
-//   lesson lines are never stale-dropped;
+//   lesson lines are never stale-dropped. A line ages only while the band could have moved on: the
+//   time a line ahead of it is held past its text dwell for its voice does not count, so a recorded
+//   clip never makes a line go stale that the text alone would have shown;
 // - the line's words fade over FADE_SECONDS once the queue runs dry.
 //
 // Pure: plain data in, new state out (the same object back when nothing changed), the HUD clock in
@@ -111,6 +113,8 @@ export interface CurrentLine {
   readonly since: number;
   /** HUD clock it ends. */
   readonly until: number;
+  /** HUD clock its text dwell ends (dwellFor): any time past it up to `until` is its voice's hold. */
+  readonly readUntil: number;
   /** A voice clip started for it (voiceStart), so `until` covers the clip. */
   readonly voiced: boolean;
 }
@@ -175,7 +179,7 @@ export function enqueueComms(s: CommsState, id: LineId, clock: number): CommsSta
 export function stepComms(s: CommsState, clock: number, cps: number): CommsState {
   if (s.current && clock < s.current.until) return s;
   let dropped = s.dropped;
-  let queue = s.queue;
+  let queue = s.current ? unageVoiceHold(s.queue, s.current) : s.queue;
   if (queue.some((q) => isStale(q, clock))) {
     const gone = queue.filter((q) => isStale(q, clock));
     queue = queue.filter((q) => !isStale(q, clock));
@@ -186,13 +190,27 @@ export function stepComms(s: CommsState, clock: number, cps: number): CommsState
     return { ...s, current: null, queue, dropped, idleSince: s.current ? s.current.until : s.idleSince };
   }
   const [next, ...rest] = queue;
+  const read = dwellFor(next.id, cps);
   return {
-    current: { id: next.id, since: clock, until: clock + dwellFor(next.id, cps), voiced: false },
+    current: { id: next.id, since: clock, until: clock + read, readUntil: clock + read, voiced: false },
     queue: rest,
     history: keepLast([...s.history, next.id], COMMS_HISTORY),
     dropped,
     idleSince: null,
   };
+}
+
+/**
+ * The queue once `ended` is over: each waiting line's age leaves out the part of `ended`'s voice hold
+ * (from its text dwell's end to `until`) that it waited through, so voices never age the queue. The
+ * same array when the line held nothing past its text.
+ */
+function unageVoiceHold(queue: readonly QueuedLine[], ended: CurrentLine): readonly QueuedLine[] {
+  if (!ended.voiced || ended.until <= ended.readUntil || queue.length === 0) return queue;
+  return queue.map((q) => {
+    const held = ended.until - Math.max(ended.readUntil, q.at);
+    return held > 0 ? { ...q, at: q.at + held } : q;
+  });
 }
 
 function isStale(q: QueuedLine, clock: number): boolean {

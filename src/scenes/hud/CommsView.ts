@@ -704,9 +704,10 @@ export class CommsView implements LiveView {
   }
 
   /**
-   * `window.__neonComms` under `?test` only: stands in for the mixer's voiceStart, which headless
-   * browsers never reach (no voice files, audio locked), so a spec can see the band hold a voiced
-   * line. Nothing at runtime reads it.
+   * `window.__neonComms` under `?test` only: reports a voiceStart of a chosen length, so a spec
+   * knows exactly how long the band must hold a voiced line. The mixer's own voiceStart for the
+   * recorded clip (public/audio/voice) also arrives in headless runs, and the band keeps the longer
+   * hold. Nothing at runtime reads it.
    */
   private installTestHandle(bus: Bus): void {
     window.__neonComms = {

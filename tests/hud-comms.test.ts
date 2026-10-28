@@ -72,6 +72,17 @@ import {
 } from '../src/scenes/hud/comms';
 import { locate, register, registeredNames } from '../src/scenes/hud/locate';
 import { SERVER_SLOTS } from '../src/sim/tick';
+import { bestPlay } from '../src/game/autopilot';
+import { type Frame, frame, resetFrame } from '../src/game/frame';
+import { mixerLangFor } from '../src/game/mixer';
+import { type Occurrence, detectOccurrences } from '../src/game/occurrences';
+import { newRun } from '../src/game/run';
+import { chatOf } from '../src/scenes/hud/chat';
+import { type CueHost, NEW_DIRECTOR, cueViewOf, direct, emptyCueView } from '../src/scenes/hud/cues';
+import { applyEstimate, applySizing } from '../src/scenes/hud/dial';
+import { sizingPromptOpen } from '../src/scenes/hud/jobCard';
+import { isLesson } from '../src/scenes/hud/lineMeta';
+import { BROWNOUT } from '../src/sim/brownout';
 
 // comms-1: the comms band's pure model (src/scenes/hud/comms.ts).
 
@@ -323,10 +334,9 @@ describe('comms log and fade', () => {
     }
     expect(logLines(s.history, s.current, 3)).toEqual(['C1.triage.02', 'C1.lux.01', 'C1.triage.03']);
     expect(logLines(['C1.triage.01'], null, 3)).toEqual(['C1.triage.01']);
-    expect(logLines(['C1.triage.01'], { id: 'C1.triage.02', since: 0, until: 4, voiced: false }, 3)).toEqual([
-      'C1.triage.01',
-      'C1.triage.02',
-    ]);
+    expect(
+      logLines(['C1.triage.01'], { id: 'C1.triage.02', since: 0, until: 4, readUntil: 4, voiced: false }, 3),
+    ).toEqual(['C1.triage.01', 'C1.triage.02']);
     expect(logLines([], null, 3)).toEqual([]);
   });
 
@@ -762,6 +772,215 @@ describe('comms-8: the leader line', () => {
     for (const p of [up, left]) {
       expect(p[0].x === p[1].x || p[0].y === p[1].y).toBe(true);
       expect(p[1].x === p[2].x || p[1].y === p[2].y).toBe(true);
+    }
+  });
+});
+
+// comms-6 with the recorded voices: a voiced line holds the band for its clip + 0.6 s, measured on
+// the HUD clock. At speed 1 that clock is the player's, so the node replay below is the product: the
+// cue table's firing times from best play, the band stepped at 60 fps, and each line's real clip
+// length (read from its MP3's frame headers) reported as voiceStart the moment the line starts.
+
+/** The bits of node:fs the replay reads with; the repo has no @types/node, so typed here. */
+interface Fs {
+  existsSync(path: string): boolean;
+  readFileSync(path: string): Uint8Array;
+}
+const fs = (
+  globalThis as unknown as { process: { getBuiltinModule(id: string): unknown } }
+).process.getBuiltinModule('node:fs') as Fs;
+const VOICE_DIR = new URL('../public/audio/voice/', import.meta.url).pathname;
+
+/** An MPEG-1/2 layer III file's length in seconds: its frames (ID3 tag skipped) times 1152 samples. */
+function mp3Seconds(b: Uint8Array): number {
+  const KBPS = [32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+  let i = 0;
+  if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33)
+    i = 10 + ((b[6] << 21) | (b[7] << 14) | (b[8] << 7) | b[9]);
+  let frames = 0;
+  let rate = 44100;
+  while (i + 4 <= b.length) {
+    if (b[i] !== 0xff || (b[i + 1] & 0xe0) !== 0xe0) {
+      i++;
+      continue;
+    }
+    const mpeg1 = ((b[i + 1] >> 3) & 3) === 3;
+    rate = (mpeg1 ? [44100, 48000, 32000] : [22050, 24000, 16000])[(b[i + 2] >> 2) & 3];
+    const kbps = KBPS[((b[i + 2] >> 4) & 15) - 1];
+    i += Math.floor(((mpeg1 ? 144 : 72) * kbps * 1000) / rate) + ((b[i + 2] >> 1) & 1);
+    frames++;
+  }
+  return (frames * 1152) / rate;
+}
+
+/** A line's clip length under a voices setting, or 0 when nothing plays (voices off, no file). */
+function clipSeconds(id: LineId, voices: 'ja' | 'en' | 'off'): number {
+  const lang = mixerLangFor(id, voices);
+  const path = lang ? `${VOICE_DIR}${lang}/${id}.mp3` : '';
+  return lang && fs.existsSync(path) ? mp3Seconds(fs.readFileSync(path)) : 0;
+}
+
+interface Fired {
+  readonly id: LineId;
+  readonly at: number;
+}
+
+/** The band lines the cue table fires through best play, on the HUD clock from c1, at speed 1. */
+function nightCues(): Fired[] {
+  const C = BROWNOUT.challenges;
+  resetFrame();
+  const r = newRun(1, bestPlay);
+  r.now = C.c1;
+  let prev: Frame | null = null;
+  const occ: Occurrence[] = [];
+  const v = emptyCueView();
+  let s = NEW_DIRECTOR;
+  let clock = 0;
+  let promptAt: number | null = null;
+  const out: Fired[] = [];
+  for (let n = 0; n < 20_000 && r.now < C.c8 && !r.play.failure; n++) {
+    if (r.notes.estimate === null) applyEstimate(r, 30);
+    const sizingOpen = sizingPromptOpen({
+      now: r.now,
+      cardOpen: false,
+      estimate: r.notes.estimate,
+      sizing: r.notes.sizing,
+    });
+    if (sizingOpen) promptAt ??= clock;
+    if (sizingOpen && promptAt !== null && clock - promptAt >= 10) applySizing(r, BROWNOUT.finalSizing.holds);
+    r.tick(0.1);
+    clock = Math.round((clock + 0.1) * 1e6) / 1e6;
+    const f = frame(r);
+    detectOccurrences(prev, f, occ);
+    prev = f;
+    const host: CueHost = {
+      cardClosed: true,
+      dialTouched: true,
+      sizingOpen,
+      bannerShown: f.now >= C.c2,
+      decommissionsAfterMidnight: 0,
+    };
+    cueViewOf(v, f, occ, clock, host, v);
+    const o = direct(s, v);
+    s = o.state;
+    for (const id of o.fired) if (!chatOf(id) && LINES[id].kind === 'bark') out.push({ id, at: clock });
+  }
+  return out;
+}
+
+/** The band over `cues` at 60 fps, each line voiced as it starts; what showed, when, and what was cut. */
+function replayBand(cues: readonly Fired[], voices: 'ja' | 'en' | 'off') {
+  let s = NO_COMMS;
+  const shown: { id: LineId; since: number; fired: number }[] = [];
+  const cut: LineId[] = [];
+  let k = 0;
+  const end = cues[cues.length - 1].at + 120;
+  for (let f = 0; f / 60 < end; f++) {
+    const clock = f / 60;
+    while (k < cues.length && cues[k].at <= clock) {
+      const prev = s;
+      s = enqueueComms(s, cues[k++].id, clock);
+      const c = cutShort(prev, s);
+      if (c) cut.push(c);
+    }
+    const prev = s;
+    s = stepComms(s, clock, CPS);
+    if (s.current && s.current.since !== prev.current?.since) {
+      const id = s.current.id;
+      s = extendForVoice(s, id, clock, clipSeconds(id, voices));
+      shown.push({ id, since: clock, fired: cues.find((q) => q.id === id)!.at });
+    }
+  }
+  const dropped = cues.filter((q) => !shown.some((x) => x.id === q.id)).map((q) => q.id);
+  return { shown, cut, dropped, state: s };
+}
+
+describe('comms-6: voiced lines and the queue at speed 1', () => {
+  it('does not age the waiting lines while a voice holds a line past its text dwell', () => {
+    let s = say(NO_COMMS, 'C1.triage.01', 0);
+    const read = s.current!.readUntil;
+    expect(read).toBe(s.current!.until);
+    s = enqueueComms(s, 'C5.rei.05', 0.5);
+    expect(staleAfter('C5.rei.05')).toBe(STALE_SECONDS);
+    // A 15 s clip: the band holds the line to 15.6, well past the CREW line's 12 s.
+    const voiced = extendForVoice(s, 'C1.triage.01', 0, 15);
+    expect(voiced.current!.until).toBeCloseTo(15.6, 9);
+    expect(voiced.current!.readUntil).toBe(read);
+    const after = stepComms(voiced, 15.6, CPS);
+    expect(after.current?.id).toBe('C5.rei.05');
+    expect(after.dropped).toEqual([]);
+    // The text dwell still ages it: the same wait on a line held 15.6 s without a voice drops it.
+    const unvoiced = stepComms({ ...s, current: { ...s.current!, until: 15.6 } }, 15.6, CPS);
+    expect(unvoiced.dropped).toEqual(['C5.rei.05']);
+  });
+
+  it('ages a line from the text dwell on: only the hold it waited through is left out', () => {
+    let s = say(NO_COMMS, 'C1.triage.01', 0);
+    const read = s.current!.readUntil;
+    s = extendForVoice(s, 'C1.triage.01', 0, 30);
+    // Enqueued 2 s into the voice hold: 28.6 - (read + 2) of hold is left out of its age.
+    s = enqueueComms(s, 'C2.triage.01', read + 2);
+    s = stepComms(s, 30.6, CPS);
+    expect(s.current?.id).toBe('C2.triage.01');
+    // A line waiting 12 s of text dwell after a voiced one still goes stale.
+    let t = say(NO_COMMS, 'C1.triage.01', 0);
+    t = extendForVoice(t, 'C1.triage.01', 0, 6);
+    t = enqueueComms(t, 'C5.rei.05', 0.5);
+    t = stepComms(t, t.current!.until, CPS);
+    expect(t.current?.id).toBe('C5.rei.05');
+    t = { ...t, current: { ...t.current!, until: t.current!.since + 30 } };
+    t = enqueueComms(t, 'C2.triage.01', t.current!.since + 1);
+    t = stepComms(t, t.current!.until, CPS);
+    expect(t.dropped).toEqual(['C2.triage.01']);
+  });
+
+  it('still lets a WARNING cut a voiced HINT 1.5 s in, ending its hold there', () => {
+    let s = say(NO_COMMS, 'C3.triage.02', 0);
+    s = extendForVoice(s, 'C3.triage.02', 0, 8);
+    expect(s.current!.voiced).toBe(true);
+    const warned = enqueueComms(s, 'C3.triage.04', 2);
+    expect(cutShort(s, warned)).toBe('C3.triage.02');
+    expect(warned.current!.until).toBe(2);
+    const next = stepComms(warned, 2, CPS);
+    expect(next.current?.id).toBe('C3.triage.04');
+    // Too early: it waits at the front for the whole voiced hold.
+    const early = enqueueComms(s, 'C3.triage.04', 1);
+    expect(cutShort(s, early)).toBeNull();
+    expect(early.queue[0].id).toBe('C3.triage.04');
+  });
+
+  it('drops no LUX, crew or HOUSE line through the night with the recorded voices on', () => {
+    const cues = nightCues();
+    expect(cues.length).toBeGreaterThan(20);
+    for (const t of ['CREW', 'HOUSE', 'LUX', 'WARNING'])
+      expect(
+        cues.some((c) => tag(c.id) === t),
+        t,
+      ).toBe(true);
+    const off = replayBand(cues, 'off');
+    const kept = (id: LineId): boolean =>
+      ['LUX', 'CREW', 'HOUSE', 'WARNING'].includes(tag(id)) || isLesson(id);
+    for (const voices of ['ja', 'en'] as const) {
+      const on = replayBand(cues, voices);
+      // The clips are real: most lines hold longer than their text.
+      const voiced = on.state.history.filter((id) => clipSeconds(id, voices) > 0);
+      expect(voiced.length, voices).toBeGreaterThan(0);
+      // Only HINT filler may go stale (best play's instant SET fires four C1 lines at once, and the
+      // last of them, C1.triage.05, is on the 12 s edge with or without voices).
+      for (const id of [...on.dropped, ...off.dropped]) {
+        expect(kept(id), `${voices} dropped ${id}`).toBe(false);
+        expect(tag(id), id).toBe('HINT');
+      }
+      // Every crew and HOUSE line the night fires shows.
+      for (const q of cues.filter((c) => ['CREW', 'HOUSE', 'LUX'].includes(tag(c.id))))
+        expect(on.state.history.includes(q.id) || on.shown.some((x) => x.id === q.id), q.id).toBe(true);
+      // Every WARNING shows, and pre-empts exactly as it does without voices.
+      for (const q of cues.filter((c) => tag(c.id) === 'WARNING'))
+        expect(
+          on.shown.some((x) => x.id === q.id),
+          q.id,
+        ).toBe(true);
+      expect(on.cut, voices).toEqual(off.cut);
     }
   });
 });
