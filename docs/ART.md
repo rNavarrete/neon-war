@@ -12,6 +12,7 @@ Notes:
 - `parts/` is the component catalog for the whole game: each part in four tiers (scrap, street, pro, solace). Brownout uses only the server, gateway, database and load balancer.
 - The overclock kit, job card and estimate dial were added later the same day (round 4, picks overclock-kit-b, job-card-a, estimate-dial-b). `board/overclock-kit` is the kit on its own for its tray card; `server-overclocked` is a server with the kit fitted, and `server-overclocked-hot` is the same server cooking in the surge. The job card and dial frames are empty: their text and numbers are drawn in code.
 - Sizes are the cut size in pixels. Scale sprites down rather than up where you can.
+- `src/game/artManifest.ts` lists every file here that the game loads, with its cut size, the size it is drawn at and where it shows. `tests/art-manifest.test.ts` re-measures each file and fails when the game loads a file the manifest lacks. The art the Live screen still needs is in `docs/ART-REQUESTS.md`.
 
 | Folder | Files (size) | From |
 | --- | --- | --- |
