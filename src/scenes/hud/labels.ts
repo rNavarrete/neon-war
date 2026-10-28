@@ -62,6 +62,17 @@ export const LABELS = {
     drawer: 'LOCKED · 20 PARTS',
     splitterLocked: "the crew hasn't given you one of those",
   },
+  map: {
+    /** The city map's title, Lux's building and the cut-off neighbours' tag. */
+    title: 'CITY GRID',
+    lux: 'LUX',
+    cutOff: 'CUT OFF',
+  },
+  comms: {
+    /** The comms band's title, and the glyph that asks for a line's voice again. */
+    title: 'COMMS',
+    replay: '\u21bb',
+  },
   /** The tags a part wears on the feed. */
   partTags: {
     unfed: 'UNFED',
@@ -69,6 +80,8 @@ export const LABELS = {
     skipped: 'SKIPPED',
     dark: 'DARK',
     diesIn: 'DIES IN',
+    /** A server that burned out and waits to be replaced. */
+    dead: 'DEAD',
   },
   /** The plain-words plate shown when hovering a part. */
   plates: {

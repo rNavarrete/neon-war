@@ -10,6 +10,13 @@ import { BROWNOUT } from '../src/sim/brownout';
 import hudSource from '../src/scenes/HudScene.ts?raw';
 import deckSource from '../src/scenes/hud/DeckView.ts?raw';
 import * as panelModule from '../src/scenes/hud/panel';
+import { type PartLook, loadLabel } from '../src/scenes/board/view';
+import { COMMS_TEXT } from '../src/scenes/hud/CommsView';
+import { MAP_WORDS } from '../src/scenes/hud/cityMap';
+import { LABELS, allLabels } from '../src/scenes/hud/labels';
+import mapViewSource from '../src/scenes/hud/MapView.ts?raw';
+import commsViewSource from '../src/scenes/hud/CommsView.ts?raw';
+import boardViewSource from '../src/scenes/board/view.ts?raw';
 
 // M2 follow-up (tech): the HUD scene's legacy alert band and deck keys are gone. AlertView is the
 // one band and plays the forecast's surge-warning itself; DeckView owns the keys and the digits, and
@@ -160,5 +167,24 @@ describe('views provide hud.* through provideHudSection only', () => {
   it('retires the provideHudPart shim from panel.ts', () => {
     expect('provideHudPart' in panelModule).toBe(false);
     for (const [file, src] of Object.entries(views)) expect(src.includes('provideHudPart'), file).toBe(false);
+  });
+});
+
+describe('labels.ts holds the map, comms and DEAD words', () => {
+  it('adds LABELS.map, LABELS.comms and partTags.dead', () => {
+    expect(LABELS.map).toEqual({ title: 'CITY GRID', lux: 'LUX', cutOff: 'CUT OFF' });
+    expect(LABELS.comms).toEqual({ title: 'COMMS', replay: '\u21bb' });
+    expect(LABELS.partTags.dead).toBe('DEAD');
+    for (const w of ['CITY GRID', 'LUX', 'CUT OFF', 'COMMS', '\u21bb', 'DEAD'])
+      expect(allLabels()).toContain(w);
+  });
+
+  it('the map, the comms band and the board print them from labels.ts', () => {
+    expect(MAP_WORDS).toBe(LABELS.map);
+    expect(COMMS_TEXT).toBe(LABELS.comms);
+    expect(loadLabel({ status: 'dead', left: 0 } as unknown as PartLook)).toBe(LABELS.partTags.dead);
+    expect(mapViewSource).not.toMatch(/'CITY GRID'|'CUT OFF'/);
+    expect(commsViewSource).not.toMatch(/'COMMS'/);
+    expect(boardViewSource).not.toMatch(/'DEAD'/);
   });
 });

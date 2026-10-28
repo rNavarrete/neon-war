@@ -16,7 +16,6 @@ import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import { preloadArt, resolveArt } from '../plates';
 import {
   FLOORS,
-  MAP_WORDS,
   type MapLayout,
   type MapPoint,
   type MapState,
@@ -41,6 +40,7 @@ import {
   windowLook,
   windowRect,
 } from './cityMap';
+import { LABELS } from './labels';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
 import { GAUGES_DEPTH } from './panel';
@@ -139,18 +139,18 @@ export class MapView implements LiveView {
     this.dots = add.graphics();
     this.sparkles = add.graphics();
     this.sparkles.setVisible(false);
-    const title = add.text(L.title.x, L.title.y, MAP_WORDS.title, {
+    const title = add.text(L.title.x, L.title.y, LABELS.map.title, {
       fontFamily: FONT,
       fontSize: '16px',
       color: COLORS.cyanText,
     });
     title.setAlpha(0.85);
-    const lux = add.text(L.luxLabel.x, L.luxLabel.y, MAP_WORDS.lux, {
+    const lux = add.text(L.luxLabel.x, L.luxLabel.y, LABELS.map.lux, {
       fontFamily: FONT,
       fontSize: '16px',
       color: COLORS.amberText,
     });
-    this.cutOff = add.text(L.cutOffLabel.x, L.cutOffLabel.y, MAP_WORDS.cutOff, {
+    this.cutOff = add.text(L.cutOffLabel.x, L.cutOffLabel.y, LABELS.map.cutOff, {
       fontFamily: FONT,
       fontSize: '13px',
       color: COLORS.redText,
