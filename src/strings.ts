@@ -424,6 +424,15 @@ export const LINES = {
   'fill.stream.slow.02': { kind: 'stream', speaker: 'stream', text: 'triage is panicking again lol' },
   'fill.stream.down.01': { kind: 'stream', speaker: 'stream', text: 'stream lagging bad' },
   'fill.stream.down.02': { kind: 'stream', speaker: 'stream', text: 'rip' },
+
+  // Lane lines (docs/SCRIPT.md "Lane lines"): each lane of the Live screen adds its own lines under
+  // its anchor, and nowhere else, as one edit here and one row in the script's matching section.
+  // anchor: board
+  // anchor: gauges
+  // anchor: comms
+  // anchor: chat
+  // anchor: luxcam
+  // anchor: learning
 } as const satisfies Record<string, Line>;
 
 export type LineId = keyof typeof LINES;

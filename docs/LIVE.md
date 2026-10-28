@@ -65,3 +65,65 @@ cover another lane's zone. The banner, job card and dip fallback keep the centre
   pixels, identically to `toPage` in `src/scenes/board/layout.ts` (rounded to a tenth), so a browser
   test can click what any lane's hook reports. `canvasRect` is the canvas's `getBoundingClientRect()`.
 - `ZONE_IDS` and `CARD_IDS` list the ids in table order; `ZoneId` and `CardId` are their types.
+
+## Views and the registry
+
+A lane draws its zone as a `LiveView` (`src/scenes/live/view.ts`): `zone`, a declared
+`budget: {objects, texts}`, optional `preload(scene)`, `create(scene, host)`, `update(frame, clock,
+occurrences)` and `shutdown()`. The host (`LiveHost`) is the HUD scene, the bus, the zone's rect and
+a live `flags` getter. `update` runs every frame and must not allocate: it reads the shared `Frame`,
+the HUD clock `{now, dt}` (real seconds times the test speed, stopped while the board is held) and
+this frame's occurrences, and moves only what changed.
+
+`src/scenes/live/registry.ts` has one line per zone naming the view class that draws it. A lane
+replaces its own line when its view lands and touches no other. The feed and the inventory are the
+board's and have no line; `BoardScene` draws them. Until a lane's view lands its zone shows a
+`PlaceholderView`: a dashed outline and the zone's name, under everything the HUD draws today,
+never interactive, two objects.
+
+`HudScene` hosts the registry: it makes every view in `init`, calls `preload`, `create` (first, so
+placeholders sit under the HUD's own objects), `update` each frame and `shutdown` with the scene.
+
+### Flags
+
+`src/scenes/live/flags.ts`: `flagsFrom(search)` gives `{lite}`; `lite` is true under `?test` and
+means reduced effects (no decorative particles, parallax or pulses). Lite changes looks only, never a
+hook value. Views read it through `host.flags`.
+
+### The frame and its occurrences
+
+`src/game/frame.ts`: `frame(run)` is the one read of the run per sim change, shared by every view
+(the flow, offline parts, capacity and wired capacity, demand, retries, served/dropped/error share,
+the warnings, the dips, the waiting flags, the rewinds, the notes). It returns the identical object
+until the play, the notes or a hold changes, so views never call `run().flow` themselves.
+
+`src/game/occurrences.ts`: `detectOccurrences(prev, next)` lists the edges between two frames as
+`{kind, id?, at}`: `placed`, `wired`, `cut`, `hot`, `died`, `dip`, `skipped`, `retriesRising`,
+`laundryCut`, `rescued`, `held`, `dark` (with an id a part went dark in a dip; without one the block
+went dark at midnight) and `fall`. Identical frames give none. The HUD emits each one on the bus as
+`occurrence` and hands the frame's list to every view's `update`.
+
+### Bus events
+
+`src/game/bus.ts` carries the lane boundaries as typed events: `drag` (board), `line` / `lineEnd`
+and `chatLine` (comms, chat), `alert` / `alertEnd` (gauges), `occurrence` (tech), `voice` /
+`voiceStart` / `voiceStop` / `voiceEnd` (the mixer) and `perfSample`. Every event before them is
+unchanged.
+
+### Hook sections
+
+`src/scenes/live/hook.ts` publishes two sections of `window.__neonTest.state` for browser tests;
+no view reads them.
+
+- `live.zones[zone]`: `pageRect(ZONES[zone], canvasRect)` for all twelve zones, in page CSS pixels.
+- `live.placeholders`: the registry zones still drawn by a `PlaceholderView`, in registry order.
+- `live.layoutVersion`: `LAYOUT_VERSION`.
+- `perf.objects.{board, hud}`: objects on each scene's display list; `perf.texts` and
+  `perf.graphics`: Text and Graphics objects on both together; `perf.fps.avg`: the frame rate;
+  `perf.lite`: the lite flag.
+
+### Script anchors
+
+Each lane adds the lines its views need under its own anchored section of `docs/SCRIPT.md` ("Lane
+lines") and the matching `// anchor: <lane>` comment inside `LINES` in `src/strings.ts`, as one
+two-file edit, and nowhere else. `tests/strings.test.ts` checks every line either way.

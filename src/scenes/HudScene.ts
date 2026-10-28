@@ -39,6 +39,11 @@ import { type DipWarning, dipWarningAt, fallForecastAt, surgeWarningAt } from '.
 import { GAME_HEIGHT, GAME_WIDTH } from './BoardScene';
 import { storyEnd } from '../story/state';
 import { SCENES } from './keys';
+import { type LiveFlags, PLAY_FLAGS, flagsFrom } from './live/flags';
+import { liveTestState, perfTestState } from './live/hook';
+import { ZONES } from './live/layout';
+import { createViews } from './live/registry';
+import type { LiveHost, LiveView } from './live/view';
 
 const C = BROWNOUT.challenges;
 const MIDNIGHT = BROWNOUT.clock.midnight;
@@ -97,6 +102,11 @@ export class HudScene extends Phaser.Scene {
   private lastFrame: Frame | null = null;
   /** This frame's occurrences, one array reused every update (see detectOccurrences). */
   private readonly occurrences: Occurrence[] = [];
+  /** The Live screen's views, one per registry line (src/scenes/live/registry.ts), made in init. */
+  private views: LiveView[] = [];
+  /** The HUD clock as views see it, one object reused every update. */
+  private readonly liveClock: { now: number; dt: number } = { now: 0, dt: 0 };
+  private flags: LiveFlags = PLAY_FLAGS;
   /** Bark and filler clock: real seconds times the test speed, stopped while the board is held. */
   private clock = 0;
   private cardOpen = false;
@@ -186,9 +196,23 @@ export class HudScene extends Phaser.Scene {
       this.earlyClick = () => canvas.removeEventListener('pointerdown', onDown);
     }
     provideTestState('hud', () => this.snapshot());
+
+    this.flags = flagsFrom(window.location.search);
+    this.views = createViews();
+    provideTestState('live', () => liveTestState(this.game.canvas.getBoundingClientRect(), this.views));
+    provideTestState('perf', () => {
+      const board = this.scene.get(SCENES.board) as Phaser.Scene | null;
+      return perfTestState(
+        board?.children?.list ?? [],
+        this.children.list,
+        this.game.loop.actualFps,
+        this.flags.lite,
+      );
+    });
   }
 
   preload(): void {
+    for (const v of this.views) v.preload?.(this);
     for (const k of HUD_ART) this.loadOnce(`hud:${k}`, `art/hud/${k}.webp`);
     for (const k of ICONS) this.loadOnce(`hud:icon-${k}`, `art/hud/icons/${k}.webp`);
     for (const k of AVATARS) this.loadOnce(`avatar:${k}`, `art/chars/avatars/${k}.webp`);
@@ -198,6 +222,8 @@ export class HudScene extends Phaser.Scene {
 
   create(): void {
     this.resetForRun(run());
+    // The Live screen's views go first, so their placeholders sit under everything drawn below.
+    for (const v of this.views) v.create(this, this.hostFor(v));
     this.buildTopStrip();
     this.chart = new ChartView(this);
     this.dial = new DialView(this, {
@@ -226,6 +252,8 @@ export class HudScene extends Phaser.Scene {
       this.unsubscribe = [];
       this.earlyClick?.();
       this.earlyClick = null;
+      for (const v of this.views) v.shutdown();
+      this.views = [];
     });
 
     this.earlyClick?.();
@@ -237,9 +265,13 @@ export class HudScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     const r = run();
     if (r !== this.runRef) this.resetForRun(r);
-    if (!r.paused) this.clock += (delta / 1000) * r.speed;
+    const step = r.paused ? 0 : (delta / 1000) * r.speed;
+    this.clock += step;
     const now = r.now;
-    this.readFrame(r);
+    const f = this.readFrame(r);
+    this.liveClock.now = this.clock;
+    this.liveClock.dt = step;
+    for (let i = 0; i < this.views.length; i++) this.views[i].update(f, this.liveClock, this.occurrences);
 
     this.updateTopStrip(r);
     const estimate = r.notes.estimate;
@@ -270,15 +302,29 @@ export class HudScene extends Phaser.Scene {
    * Read this update's frame of the run (memoised per sim change) and emit each occurrence since
    * the last one on the bus. The occurrence array is reused, so nothing is allocated on a quiet frame.
    */
-  private readFrame(r: Run): void {
+  private readFrame(r: Run): Frame {
     const f = frame(r);
     if (f === this.lastFrame) {
       this.occurrences.length = 0;
-      return;
+      return f;
     }
     detectOccurrences(this.lastFrame, f, this.occurrences);
     this.lastFrame = f;
     for (let i = 0; i < this.occurrences.length; i++) bus.emit('occurrence', this.occurrences[i]);
+    return f;
+  }
+
+  /** What a view gets at create: this scene, the bus, its zone's rect and the flags (read live). */
+  private hostFor(view: LiveView): LiveHost {
+    const flags = (): LiveFlags => this.flags;
+    return {
+      scene: this,
+      bus,
+      rect: ZONES[view.zone],
+      get flags(): LiveFlags {
+        return flags();
+      },
+    };
   }
 
   // ---- per-run state ----

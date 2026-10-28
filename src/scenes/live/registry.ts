@@ -1,0 +1,44 @@
+// The registry of views on the Live screen: one line per zone, naming the LiveView class that draws
+// it. A lane replaces its own line (and only that line) when its view lands; until then the zone
+// shows a PlaceholderView. The feed and the inventory are the board's, drawn by BoardScene, and have
+// no line here. The HUD scene creates every entry in this order (docs/LIVE.md).
+
+import type { ZoneId } from './layout';
+import { type LiveView, PlaceholderView } from './view';
+
+export interface RegistryEntry {
+  readonly zone: ZoneId;
+  /** The lane that owns the zone. */
+  readonly lane: 'board' | 'gauges' | 'comms' | 'chat' | 'luxcam' | 'learning';
+  /** Make a fresh view for the zone; called once per HUD scene start. */
+  readonly make: () => LiveView;
+}
+
+export const REGISTRY: readonly RegistryEntry[] = [
+  { zone: 'title', lane: 'gauges', make: () => new PlaceholderView('title') },
+  { zone: 'alert', lane: 'gauges', make: () => new PlaceholderView('alert') },
+  { zone: 'clock', lane: 'gauges', make: () => new PlaceholderView('clock') },
+  { zone: 'map', lane: 'gauges', make: () => new PlaceholderView('map') },
+  { zone: 'cam', lane: 'luxcam', make: () => new PlaceholderView('cam') },
+  { zone: 'gauge', lane: 'gauges', make: () => new PlaceholderView('gauge') },
+  { zone: 'scope', lane: 'gauges', make: () => new PlaceholderView('scope') },
+  { zone: 'comms', lane: 'comms', make: () => new PlaceholderView('comms') },
+  { zone: 'deck', lane: 'gauges', make: () => new PlaceholderView('deck') },
+  { zone: 'chat', lane: 'chat', make: () => new PlaceholderView('chat') },
+];
+
+/** The zones the registry draws, in registry order. */
+export const REGISTRY_ZONES: readonly ZoneId[] = REGISTRY.map((e) => e.zone);
+
+/** The zones the board draws itself, so they never get a registry line. */
+export const BOARD_ZONES: readonly ZoneId[] = ['feed', 'inventory'];
+
+/** A fresh view for every registry line, in registry order. */
+export function createViews(): LiveView[] {
+  return REGISTRY.map((e) => e.make());
+}
+
+/** The zones among `views` still drawn by a PlaceholderView, in order. */
+export function placeholderZones(views: readonly LiveView[]): ZoneId[] {
+  return views.filter((v) => v instanceof PlaceholderView).map((v) => v.zone);
+}

@@ -277,6 +277,44 @@ errors (50% or more). Neighbours use the four chat avatars: kenji, mrs okafor, y
 
 No filler line names a fix or a system-design term.
 
+## Lane lines
+
+Each lane of the Live screen (`docs/LIVE.md`) adds the lines its views need in its own section below,
+as one two-file edit: a row here and an entry under the matching `// anchor: <lane>` comment inside
+`LINES` in `src/strings.ts`. IDs keep the `<challenge>.<speaker>.<n>` form (or `fill.<chat>.<state>.<n>`
+for filler), so `tests/strings.test.ts` checks them like every other line. A section with only its
+header has no lines yet. UI micro-copy (labels, key caps) is not a line and stays out of these tables.
+
+### Board lane <!-- anchor: board -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+
+### Gauges lane <!-- anchor: gauges -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+
+### Comms lane <!-- anchor: comms -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+
+### Chat lane <!-- anchor: chat -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+
+### Luxcam lane <!-- anchor: luxcam -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+
+### Learning lane <!-- anchor: learning -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+
 ## Not settled yet
 
 - The crew lead's name is a placeholder (Rei Kuroda). Keep it in the strings file only.
