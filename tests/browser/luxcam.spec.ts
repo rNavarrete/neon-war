@@ -122,3 +122,179 @@ test('the talk bars: speaking is true exactly while Lux’s line is on the band'
   expect((await cam(page)).speaking).toBe(false);
   expect(errors).toEqual([]);
 });
+
+// ---- luxcam-4: the autopilot night, read as history, with three screenshots ----
+//
+// Two more page loads: the autopilot night to midnight and the goggles (about 49 s, the midnight
+// floor), and a C3 failure staged as story.spec does, with the clock jumped to 170 (about 12 s).
+// exhausted only follows a rewind, and C7 and C8 never fail (src/sim/play.ts), so it cannot sit
+// between cheer and gogglesUp on one night: the night run checks calm or focused, panicking,
+// relieved, cheer and gogglesUp in that order, and the C3 run checks exhausted after its rewind.
+
+type Mood = LuxCamTestState['mood'];
+
+/**
+ * Every mood change the cam reported while the night ran, in the order it happened: a sampler that
+ * merges hud.luxCam.history (the last 12 changes) read after read, so nothing is lost at speed 20.
+ */
+class CamLog {
+  readonly moods: Mood[] = [];
+  private readonly keys = new Set<string>();
+
+  add(c: LuxCamTestState): void {
+    for (const h of c.history) {
+      const key = `${h.mood}@${h.at}`;
+      if (this.keys.has(key)) continue;
+      this.keys.add(key);
+      this.moods.push(h.mood);
+    }
+  }
+
+  async read(page: Page): Promise<LuxCamTestState> {
+    const c = await cam(page);
+    this.add(c);
+    return c;
+  }
+
+  /** Read the cam every 25 ms until `done` holds for a read, or fail naming `what`. */
+  async until(
+    page: Page,
+    what: string,
+    done: (c: LuxCamTestState) => boolean,
+    timeout = 20_000,
+  ): Promise<LuxCamTestState> {
+    const deadline = Date.now() + timeout;
+    for (;;) {
+      const c = await this.read(page);
+      if (done(c)) return c;
+      if (Date.now() > deadline)
+        throw new Error(
+          `waited ${timeout / 1000} s for hud.luxCam ${what}; moods seen: ${this.moods.join(' > ')}`,
+        );
+      await page.waitForTimeout(25);
+    }
+  }
+
+  /** Sample in the background (every 150 ms) while `work` runs, so reach() loses no mood change. */
+  async during<T>(page: Page, work: Promise<T>): Promise<T> {
+    let running = true;
+    const sampler = (async () => {
+      while (running) {
+        try {
+          await this.read(page);
+        } catch {
+          // A read between scenes can miss the HUD; the next one catches up through history.
+        }
+        await page.waitForTimeout(150);
+      }
+    })();
+    try {
+      return await work;
+    } finally {
+      running = false;
+      await sampler;
+    }
+  }
+}
+
+/** The index of the first `want` mood at or after `from` in `moods`, or -1. */
+const nextOf = (moods: readonly Mood[], want: readonly Mood[], from: number): number => {
+  for (let i = from; i < moods.length; i++) if (want.includes(moods[i])) return i;
+  return -1;
+};
+
+test('the autopilot night on the cam: calm, panicking at the dip, relieved after the rescue, cheer at a held midnight, goggles up', async ({
+  page,
+}) => {
+  test.setTimeout(75_000);
+  const { errors } = await openBoard(page);
+  const log = new CamLog();
+
+  // C1: the first box serves and the cam is quiet (calm or focused, amber frame).
+  await log.during(page, reach(page, 'c1'));
+  let c = await log.until(page, 'mood calm or focused', (x) => x.mood === 'calm' || x.mood === 'focused');
+  expect(c.frame).toBe('amber');
+  await shot(page, 'luxcam-calm');
+
+  // C4: the district surge and the power dip at 305 send her into a panic, with the red frame.
+  await log.during(page, reach(page, 'surge'));
+  c = await log.until(page, 'mood panicking', (x) => x.mood === 'panicking');
+  expect(c.frame).toBe('red');
+  await shot(page, 'luxcam-surge');
+
+  // The rescue (clicked through by reach) brings relief; a held midnight brings the cheer.
+  await log.during(page, reach(page, 'midnight'));
+  c = await log.until(page, 'mood cheer', (x) => x.mood === 'cheer');
+  expect(c.frame).toBe('amber');
+  await shot(page, 'luxcam-held');
+
+  // 3 s before the debrief (sim 537) the goggles go up and stay up.
+  await log.until(page, 'mood gogglesUp', (x) => x.mood === 'gogglesUp');
+
+  // In order: calm or focused, then panicking, then relieved, then cheer, then gogglesUp.
+  const m = log.moods;
+  const quiet = nextOf(m, ['calm', 'focused'], 0);
+  const panic = nextOf(m, ['panicking'], quiet + 1);
+  const relieved = nextOf(m, ['relieved'], panic + 1);
+  const cheer = nextOf(m, ['cheer'], relieved + 1);
+  const goggles = nextOf(m, ['gogglesUp'], cheer + 1);
+  const order = `moods seen: ${m.join(' > ')}`;
+  test.info().annotations.push({ type: 'moods', description: m.join(' > ') });
+  expect(quiet, order).toBeGreaterThanOrEqual(0);
+  expect(panic, order).toBeGreaterThan(quiet);
+  expect(relieved, order).toBeGreaterThan(panic);
+  expect(cheer, order).toBeGreaterThan(relieved);
+  expect(goggles, order).toBeGreaterThan(cheer);
+  // Cheer comes once, at the held midnight; nothing follows the goggles.
+  expect(m.filter((x) => x === 'cheer')).toHaveLength(1);
+  expect(m.slice(goggles + 1), order).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('a failure in C3 rewinds the night and the cam shows her exhausted, then lets go', async ({ page }) => {
+  test.setTimeout(30_000);
+  const { errors } = await openBoard(page, { autopilot: false });
+  await dismissJobCard(page);
+  // One stock server and no kit, the way story.spec stages it: the evening climb cooks it in C3.
+  const id = await page.evaluate(() => window.__neonShell!.place('s1'));
+  expect(id).not.toBeNull();
+  await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
+  await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);
+  // Skip the quiet C1 and C2 stretch (seconds of wall clock even at speed 20): the run jumps to 23:54:20,
+  // ten seconds before C3, and its checkpoint at 180 is still taken on the way.
+  await page.evaluate(() => window.__neonStory!.setNow(170));
+
+  // TRIAGE's replay comes up; click it through (Skip when shown) until the cam has been exhausted.
+  const log = new CamLog();
+  const deadline = Date.now() + 20_000;
+  let replay = false;
+  let lastClick = 0;
+  while (!log.moods.includes('exhausted')) {
+    if (Date.now() > deadline)
+      throw new Error(
+        `no exhausted face after the C3 rewind (replay seen: ${replay}); moods: ${log.moods.join(' > ')}`,
+      );
+    const s = await snap(page);
+    if (s.hud?.luxCam) log.add(s.hud.luxCam);
+    const story = s.story;
+    if (story?.active) {
+      if (story.scriptId === 'rewind-replay') replay = true;
+      const p = story.skip.visible ? story.skip : story.click;
+      if (p && Date.now() - lastClick >= 80) {
+        await page.mouse.click(p.x, p.y);
+        lastClick = Date.now();
+        continue;
+      }
+    }
+    await page.waitForTimeout(25);
+  }
+  expect(replay, 'the rewind-replay scene came up').toBe(true);
+  // The beat is 3 s on the HUD clock, then the ladder takes over again.
+  const c = await log.until(page, 'a mood after exhausted', (x) => x.mood !== 'exhausted');
+  const i = c.history.findIndex((h) => h.mood === 'exhausted');
+  if (i >= 0 && i + 1 < c.history.length) {
+    expect(c.history[i + 1].at - c.history[i].at).toBeGreaterThanOrEqual(3 - 0.05);
+  }
+  test.info().annotations.push({ type: 'moods', description: log.moods.join(' > ') });
+  expect(errors).toEqual([]);
+});
