@@ -50,8 +50,8 @@ cover another lane's zone. The banner, job card and dip fallback keep the centre
 
 | Card           |    x |   y |   w |   h | Centre     | When                                                   |
 | -------------- | ---: | --: | --: | --: | ---------- | ------------------------------------------------------ |
-| `dialCard`     | 1650 | 120 | 250 | 250 | 1775, 245  | The 230 px dial, while a dial question is open         |
-| `sizingPrompt` | 1300 | 120 | 340 | 100 | 1470, 170  | The C6 sizing prompt, beside the dial                  |
+| `dialCard`     | 1560 | 120 | 340 | 250 | 1730, 245  | The 230 px dial, while a dial question is open         |
+| `sizingPrompt` | 1210 | 120 | 340 | 100 | 1380, 170  | The C6 sizing prompt, beside the dial                  |
 | `banner`       |  638 | 172 | 644 | 316 | 960, 330   | The Solace banner (1431x700 art at 0.45), in C2        |
 | `jobCard`      |  701 | 156 | 518 | 752 | 960, 532   | The C1 job card (864x1252 art at 0.6), until clicked   |
 | `dipFallback`  |  860 | 240 | 200 | 120 | 960, 300   | The power-dip warning when the board can't place it    |
@@ -83,6 +83,13 @@ never interactive, two objects.
 
 `HudScene` hosts the registry: it makes every view in `init`, calls `preload`, `create` (first, so
 placeholders sit under the HUD's own objects), `update` each frame and `shutdown` with the scene.
+Each frame, after the views' `update`, the host loop runs the trigger table
+(`src/scenes/hud/cues.ts`): `cueViewOf` builds the cues' view from the frame, its occurrences, the
+HUD clock and what only the HUD knows (into one reused object), `direct()` fires what is due, and
+each fired id goes out on the bus as `cue {id, kind: 'bark' | 'chat', at}` (`at` is the HUD clock).
+Bark ids go to the comms band's queue and chat ids to the chat; `C6.fail.chat` is the chat going
+silent, never a row, and no filler is posted while `chatSilenced` holds (until the rewind).
+`hud.cues {fired, silenced}` mirrors it for tests.
 
 ### Flags
 
@@ -107,8 +114,10 @@ went dark at midnight) and `fall`. Identical frames give none. The HUD emits eac
 
 `src/game/bus.ts` carries the lane boundaries as typed events: `drag` (board), `line` / `lineEnd`
 and `chatLine` (comms, chat), `alert` / `alertEnd` (gauges), `occurrence` (tech), `voice` /
-`voiceStart` / `voiceStop` / `voiceEnd` (the mixer) and `perfSample`. Every event before them is
-unchanged.
+`voiceStart` / `voiceStop` / `voiceEnd` (the mixer), `cue {id, kind, at}` (the host loop, below),
+`audience {watching}` (chat: the viewer count
+the title draws as WATCHING) and `perfSample`. Every event before them is unchanged. Lanes declare
+no events of their own by module augmentation: a new event is a line in `GameEvents`.
 
 ### Hook sections
 
@@ -121,6 +130,13 @@ no view reads them.
 - `perf.objects.{board, hud}`: objects on each scene's display list; `perf.texts` and
   `perf.graphics`: Text and Graphics objects on both together; `perf.fps.avg`: the frame rate;
   `perf.lite`: the lite flag.
+
+The `hud` section is one public snapshot. `HudScene` provides it once, as its own keys with every
+key a view file adds laid over them (`hudSection` in `src/scenes/hud/hook.ts`). A view adds
+`hud.<name>` with `provideHudSection(name, read)` from the same file, without editing `HudScene.ts`
+or `src/testHook.ts`: it declares the key on `HudTestState` by module augmentation, calls
+`provideHudSection` in `create` and the remover it returns in `shutdown`. `provideHudPart` in
+`src/scenes/hud/panel.ts` is the same call under the gauges views' older name.
 
 ### Script anchors
 

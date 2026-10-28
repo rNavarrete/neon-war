@@ -6,19 +6,6 @@
 import { BROWNOUT } from '../../sim/brownout';
 import type { Rect } from '../live/layout';
 
-// ---- the audience event ----
-
-declare module '../../game/bus' {
-  interface GameEvents {
-    /**
-     * How many are watching Lux's stream now (0..4, from the chat lane's viewersOf), emitted by the
-     * chat view on every change. The title draws it as WATCHING; before the first one it shows no
-     * number. WIRING(tech): this declaration moves into GameEvents in src/game/bus.ts.
-     */
-    audience: { watching: number };
-  }
-}
-
 // ---- the LIVE dot ----
 
 /**

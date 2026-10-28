@@ -80,6 +80,18 @@ export interface GameEvents {
   voiceStop: { id: LineId };
   /** The clip finished (or was stopped). */
   voiceEnd: { id: LineId };
+  /**
+   * A line of the trigger table fired (src/scenes/hud/cues.ts), once per id, emitted by the HUD's
+   * host loop: `kind` says where it goes (bark ids to the comms band, chat ids to the chat); `at` is
+   * the HUD clock.
+   */
+  cue: { id: LineId; kind: 'bark' | 'chat'; at: number };
+  /**
+   * How many are watching Lux's stream now (0..4, from the chat lane's viewersOf), emitted by the
+   * chat view on every change. The title draws it as WATCHING; before the first one it shows no
+   * number.
+   */
+  audience: { watching: number };
   /** One sample of the frame budget: the frame rate and what is on the display lists; `at` is the HUD clock. */
   perfSample: { at: number; fps: number; objects: number; texts: number; graphics: number };
 }

@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { LiveTestState, PerfTestState } from '../../src/scenes/live/hook';
 import { CARDS, LAYOUT_VERSION, ZONES, ZONE_IDS, pageRect } from '../../src/scenes/live/layout';
-import { openBoard, reach, shot } from './live/reach';
+import { dismissJobCard, openBoard, reach, shot } from './live/reach';
 
 // The Live screen's skeleton (tech-3): the twelve zones reported on the page, the placeholders the
 // registry still draws, and the perf section, asserted on window.__neonTest.state.live and .perf.
@@ -137,8 +137,12 @@ type Hud = {
   };
   notes: { estimate: number | null; sizing: number | null };
   surge: { startsAt: number } | null;
-  sizingPrompt: { open: boolean };
+  sizingPrompt: { open: boolean; x?: number; y?: number };
   bounds: Bounds[];
+  title?: { right: number; clockRight: number | null };
+  cues: { fired: string[]; silenced: boolean };
+  bark: { history: string[] };
+  chat: { block: string[]; stream: string[] };
 };
 type StoryState = {
   active: boolean;
@@ -168,7 +172,10 @@ async function homeRects(page: Page): Promise<Record<string, Rect>> {
 async function expectRestaged(page: Page, moment: string, read?: Hud): Promise<Bounds[]> {
   const homes = await homeRects(page);
   const { bounds } = read ?? (await hudState(page));
-  expect(bounds.length, moment).toBeGreaterThanOrEqual(15);
+  // 15 legacy pieces until the HUD stopped drawing its own title cluster and clock (TitleView and
+  // ClockView draw them now): the alert, the scope, the dial, the sizing prompt, the chat, the comms
+  // band, the three deck keys, the job card and the banner are left.
+  expect(bounds.length, moment).toBeGreaterThanOrEqual(11);
   const eps = 1;
   const shown = bounds.filter((b) => b.visible);
   for (const b of shown) {
@@ -242,24 +249,37 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     const h = await hudState(page);
     expect(h.dial.visible).toBe(true);
     const ids = (await expectRestaged(page, 'C1')).map((b) => b.id);
-    for (const id of [
-      'title',
-      'clock.text',
-      'clock.countdown',
-      'clock.panel',
-      'scope',
-      'dial',
-      'chat',
-      'comms',
-    ]) {
+    for (const id of ['scope', 'dial', 'chat', 'comms']) {
       expect(ids, id).toContain(id);
     }
+    // The legacy title cluster and clock are gone; the gauges views draw them in their zones.
+    const all = h.bounds.map((b) => b.id);
+    for (const id of ['title', 'clock.text', 'clock.countdown', 'clock.panel'])
+      expect(all, id).not.toContain(id);
+    expect(h.title!.right).toBeLessThanOrEqual(440);
+    expect(h.title!.clockRight!).toBeLessThanOrEqual(1800);
     for (const id of ['deck.1', 'deck.2', 'deck.3']) expect(ids, id).toContain(id);
     expect(ids).not.toContain('jobCard');
     await page.screenshot({ path: 'test-results/screens/live-restage-c1.png' });
     await turnDialTo(page, 30);
     await expect.poll(async () => (await hudState(page)).notes.estimate).toBe(30);
     await expect.poll(async () => (await hudState(page)).dial.visible).toBe(false);
+  });
+
+  await test.step('C1: the host loop fires the trigger table through cueViewOf and sends each id as a cue', async () => {
+    await expect
+      .poll(async () => (await hudState(page)).bark.history, { timeout: 30_000 })
+      .toEqual(expect.arrayContaining(['C1.triage.01', 'C1.triage.02']));
+    const h = await hudState(page);
+    // C1.triage.01 fires the frame the job card closes; C1.triage.02 two HUD seconds later.
+    expect(h.cues.fired.indexOf('C1.triage.01')).toBeGreaterThanOrEqual(0);
+    expect(h.cues.fired.indexOf('C1.triage.02')).toBeGreaterThan(h.cues.fired.indexOf('C1.triage.01'));
+    // Every bark shown was fired once by the table, and no id fires twice in a run without a rewind.
+    for (const id of h.bark.history) expect(h.cues.fired, id).toContain(id);
+    expect(new Set(h.cues.fired).size).toBe(h.cues.fired.length);
+    expect(h.cues.silenced).toBe(false);
+    // The scripted chat lines that fired are posted as rows.
+    expect(h.cues.fired).toContain('C1.chat.01');
   });
 
   await test.step('C4: the surge warning fills the alert band', async () => {
@@ -295,6 +315,12 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     const ids = (await expectRestaged(page, 'C6')).map((b) => b.id);
     expect(ids).toContain('sizing');
     expect(ids).toContain('dial');
+    // hud.sizingPrompt reports the prompt's centre: CARDS.sizingPrompt's, beside the dial card.
+    const homes = await homeRects(page);
+    const sp = homes.sizingPrompt;
+    expect(Math.abs(h.sizingPrompt.x! - (sp.x + sp.w / 2))).toBeLessThanOrEqual(0.2);
+    expect(Math.abs(h.sizingPrompt.y! - (sp.y + sp.h / 2))).toBeLessThanOrEqual(0.2);
+    expect(sp.x + sp.w).toBeLessThanOrEqual(homes.dialCard.x);
     await page.screenshot({ path: 'test-results/screens/live-restage-c6.png' });
     await turnDialTo(page, 4);
     await expect.poll(async () => (await hudState(page)).notes.sizing).toBe(4);
@@ -303,5 +329,59 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     expect(after.dial.visible).toBe(false);
   });
 
+  expect(errors).toEqual([]);
+});
+
+// Tech follow-up (gauges-2's dip mark): the power-dip mark sits on the part the dip takes, at the
+// point the board's hook reports for it, within 2 page px.
+
+type DipRead = {
+  now: number;
+  dip: { partId: string } | null;
+  dipMark: { x: number; y: number } | null;
+  parts: { id: string; x: number; y: number }[];
+};
+
+test('the power-dip mark sits on its part: |hud.dipMark - board.parts[id]| <= 2 page px', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
+  await dismissJobCard(page);
+  // No dip showing: no mark.
+  const before = (await page.evaluate(() => window.__neonTest!.state.hud)) as unknown as DipRead;
+  expect(before.dip).toBeNull();
+  expect(before.dipMark).toBeNull();
+  await expect
+    .poll(async () => (await hudState(page)).now, { timeout: 60_000, intervals: [100] })
+    .toBeGreaterThanOrEqual(290);
+  // The warning is up for 2 sim seconds: watch for it from inside the page, every frame.
+  const read = await page.evaluate(
+    () =>
+      new Promise<DipRead | null>((resolve) => {
+        const end = performance.now() + 60_000;
+        const look = (): void => {
+          const s = window.__neonTest!.state as unknown as {
+            hud: { now: number; dip: { partId: string } | null; dipMark: { x: number; y: number } | null };
+            board: { parts: { id: string; x: number; y: number }[] };
+          };
+          if (s.hud.dip) {
+            resolve({ now: s.hud.now, dip: s.hud.dip, dipMark: s.hud.dipMark, parts: s.board.parts });
+            return;
+          }
+          if (performance.now() > end) resolve(null);
+          else requestAnimationFrame(look);
+        };
+        look();
+      }),
+  );
+  expect(read, 'a dip warning showed').not.toBeNull();
+  const r = read!;
+  expect(r.dip!.partId).toMatch(/^server-/);
+  const part = r.parts.find((p) => p.id === r.dip!.partId);
+  expect(part, `board.parts has ${r.dip!.partId}`).toBeDefined();
+  expect(r.dipMark).not.toBeNull();
+  expect(Math.abs(r.dipMark!.x - part!.x)).toBeLessThanOrEqual(2);
+  expect(Math.abs(r.dipMark!.y - part!.y)).toBeLessThanOrEqual(2);
   expect(errors).toEqual([]);
 });

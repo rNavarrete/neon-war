@@ -1,5 +1,11 @@
 // The HUD's section of the read-only test hook (window.__neonTest.state.hud). Positions are page
 // CSS pixels, ready for page.mouse.click.
+//
+// The section is one public snapshot: HudScene provides `hud` once, as its own snapshot with every
+// sub-section a view file adds through provideHudSection laid over it (hudSection). A view adds
+// `hud.<name>` without editing HudScene.ts or src/testHook.ts: it declares the key on HudTestState
+// by module augmentation and calls provideHudSection from its create. Test mirror only: no view
+// reads it back. Pure: no Phaser.
 
 import type { LineId } from '../../strings';
 import type { DialMode } from './dial';
@@ -44,11 +50,23 @@ export interface HudTestState {
     shownAt: number | null;
   } | null;
   dip: { partId: string; lit: boolean; flashing: boolean } | null;
+  /**
+   * Where the power-dip mark sits while a dip warning shows, in page CSS pixels to a tenth: on the
+   * part (dipMarkAt in src/scenes/hud/warnings.ts, the point board.parts[] reports for it), or the
+   * centre of CARDS.dipFallback when the board can't place it. Null while no dip warning shows.
+   */
+  dipMark: PagePoint | null;
   banner: { open: boolean; choice: string | null; pay: PagePoint; ignore: PagePoint; bin: PagePoint };
   laundry: { available: boolean; cut: boolean; button: PagePoint };
   regroup: { visible: boolean; active: boolean; spent: boolean; button: PagePoint };
-  sizingPrompt: { open: boolean };
+  /** The C6 sizing prompt: whether it shows, and its centre (CARDS.sizingPrompt) in page CSS pixels. */
+  sizingPrompt: { open: boolean; x: number; y: number };
   bark: { current: LineId | null; text: string | null; history: LineId[] };
+  /**
+   * The trigger table as the host loop ran it: every id fired this run, in order, each also sent on
+   * the bus as `cue`; and whether the chat is silent (dark at midnight, until the rewind).
+   */
+  cues: { fired: LineId[]; silenced: boolean };
   chat: { block: string[]; stream: string[] };
   timeScale: number;
   /**
@@ -69,4 +87,39 @@ declare module '../../testHook' {
   interface TestSections {
     hud: HudTestState;
   }
+}
+
+// ---- sub-sections provided by view files ----
+
+/** The sub-sections view files have provided, by key; read each time the hook is read. */
+const sections = new Map<string, () => unknown>();
+
+/**
+ * Add (or replace) `hud.<name>` in the test hook, read from `read` each time the hook is read. The
+ * returned function takes it out again, unless another provider has replaced it since (call it from
+ * the view's shutdown). A section with the name of one of HudScene's own keys replaces that key.
+ */
+export function provideHudSection<K extends keyof HudTestState>(
+  name: K,
+  read: () => HudTestState[K],
+): () => void {
+  sections.set(name, read);
+  return () => {
+    if (sections.get(name) === read) sections.delete(name);
+  };
+}
+
+/**
+ * The `hud` section as the hook publishes it: `base` (HudScene's own snapshot, built fresh for this
+ * read) with every provided sub-section laid over it. Writes into `base` and returns it.
+ */
+export function hudSection(base: HudTestState): HudTestState {
+  const out = base as unknown as Record<string, unknown>;
+  for (const [name, read] of sections) out[name] = read();
+  return base;
+}
+
+/** The names provided right now, in the order they were first provided (tests). */
+export function hudSectionNames(): string[] {
+  return [...sections.keys()];
 }

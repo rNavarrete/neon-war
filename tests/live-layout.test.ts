@@ -1,3 +1,4 @@
+import liveDoc from '../docs/LIVE.md?raw';
 import { toPage } from '../src/scenes/board/layout';
 import { CENTRE } from '../src/scenes/hud/layout';
 import {
@@ -85,8 +86,13 @@ describe('live layout contract', () => {
   });
 
   it('places the dial card and the sizing prompt over the top of the feed', () => {
-    expect(CARDS.dialCard).toEqual({ x: 1650, y: 120, w: 250, h: 250 });
-    expect(CARDS.sizingPrompt).toEqual({ x: 1300, y: 120, w: 340, h: 100 });
+    // The lead's card rects (gauges-2, tech-4): dialCard x 1560-1900, y 120-370 with the 230 px face
+    // centred on x 1730; sizingPrompt x 1210-1550, y 120-220.
+    expect(CARDS.dialCard).toEqual({ x: 1560, y: 120, w: 340, h: 250 });
+    expect(CARDS.sizingPrompt).toEqual({ x: 1210, y: 120, w: 340, h: 100 });
+    expect(rectToArea(CARDS.dialCard)).toEqual({ left: 1560, right: 1900, top: 120, bottom: 370 });
+    expect(rectToArea(CARDS.sizingPrompt)).toEqual({ left: 1210, right: 1550, top: 120, bottom: 220 });
+    expect(centreOf(CARDS.dialCard).x).toBe(1730);
     expect(inside(CARDS.dialCard, ZONES.feed)).toBe(true);
     expect(inside(CARDS.sizingPrompt, ZONES.feed)).toBe(true);
     expect(overlaps(CARDS.dialCard, CARDS.sizingPrompt)).toBe(false);
@@ -134,5 +140,18 @@ describe('live layout contract', () => {
       }
     }
     expect(pageRect(ZONES.feed, canvases[0])).toEqual({ x: 303.3, y: 73.3, w: 970, h: 353.3 });
+  });
+
+  it('publishes every card rect in the docs/LIVE.md Cards table', () => {
+    for (const id of CARD_IDS) {
+      const row = new RegExp(
+        `^\\| \`${id}\`\\s*\\|\\s*(\\d+)\\s*\\|\\s*(\\d+)\\s*\\|\\s*(\\d+)\\s*\\|\\s*(\\d+)\\s*\\|\\s*(\\d+), (\\d+)`,
+        'm',
+      ).exec(liveDoc);
+      expect(row, id).not.toBeNull();
+      const [x, y, w, h, cx, cy] = row!.slice(1).map(Number);
+      expect({ x, y, w, h }, id).toEqual(CARDS[id]);
+      expect({ x: cx, y: cy }, id).toEqual(centreOf(CARDS[id]));
+    }
   });
 });

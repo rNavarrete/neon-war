@@ -6,8 +6,8 @@ import { type Occurrence, detectOccurrences } from '../game/occurrences';
 import { allPortraits } from '../game/portraits';
 import { type Run, run } from '../game/run';
 import { settings } from '../game/settings';
-import { capacityOf, errorShare } from '../sim/board';
-import { BROWNOUT, BROWNOUT_RULES } from '../sim/brownout';
+import { errorShare } from '../sim/board';
+import { BROWNOUT } from '../sim/brownout';
 import type { BannerChoice } from '../sim/economy';
 import { LINES, type LineId, line } from '../strings';
 import { provideTestState } from '../testHook';
@@ -26,10 +26,19 @@ import {
   pushChat,
   seededRandom,
 } from './hud/chat';
-import { type CueView, type DirectorState, NEW_DIRECTOR, direct } from './hud/cues';
+import {
+  CHAT_SILENCE,
+  type CueView,
+  type DirectorState,
+  NEW_DIRECTOR,
+  chatSilenced,
+  cueViewOf,
+  direct,
+  emptyCueView,
+} from './hud/cues';
 import { type DialMode, applyEstimate, applySizing, dialModeAt } from './hud/dial';
 import { countdownText, errorState } from './hud/format';
-import type { HudBounds, HudTestState, PagePoint } from './hud/hook';
+import { type HudBounds, type HudTestState, type PagePoint, hudSection } from './hud/hook';
 import { dialQuestionOpen, dismissJobCard, jobCardDue, openJobCard, sizingPromptOpen } from './hud/jobCard';
 import {
   BANNER_BUTTONS,
@@ -47,18 +56,21 @@ import {
 import { laundryCutAvailable } from '../sim/failures';
 import { cutLaundry, laundryCutAt, regroupAvailable, upcomingDip } from './hud/pending503';
 import { REGROUP_UNUSED, type RegroupState, regroupActive, regroupSpent, startRegroup } from './hud/regroup';
-import { type DipWarning, dipWarningAt, fallForecastAt, surgeWarningAt } from './hud/warnings';
+import { shownCredits, shownTrust } from './hud/title';
+import { type DipWarning, dipMarkAt, dipWarningAt, fallForecastAt, surgeWarningAt } from './hud/warnings';
 import { GAME_HEIGHT, GAME_WIDTH } from './BoardScene';
 import { storyEnd } from '../story/state';
 import { SCENES } from './keys';
 import { type LiveFlags, PLAY_FLAGS, flagsFrom } from './live/flags';
 import { liveTestState, perfTestState } from './live/hook';
-import { ZONES, pageRect } from './live/layout';
+import { CARDS, ZONES, centreOf, pagePoint, pageRect } from './live/layout';
 import { createViews } from './live/registry';
 import type { LiveHost, LiveView } from './live/view';
 
 const C = BROWNOUT.challenges;
 const MIDNIGHT = BROWNOUT.clock.midnight;
+/** The sizing prompt's centre in game pixels, for hud.sizingPrompt. */
+const SIZING_AT = centreOf(CARDS.sizingPrompt);
 
 const HUD_ART = [
   'chart-window',
@@ -66,7 +78,6 @@ const HUD_ART = [
   'job-card',
   'estimate-dial',
   'warning-bar',
-  'clock-panel',
   'textbox',
   'button',
   'button-hover',
@@ -76,9 +87,6 @@ const HUD_ART = [
 ];
 const ICONS = ['trust', 'credits', 'warning', 'power-dip', 'cut', 'clock'];
 const AVATARS = ['kenji', 'mrs-okafor', 'young-father', 'old-man-noodles'];
-
-/** Lux's face in the title cluster. */
-const LUX_AVATAR = 'portrait:lux/faces-board/determined';
 
 /** One of the deck's three keys: its cap, its digit and word, and whether it is lit (pressable). */
 interface DeckKey {
@@ -102,21 +110,16 @@ const cardGuarded = (): boolean => performance.now() - storyEnd.at < CARD_GUARD_
 
 /**
  * The board's HUD, drawn over BoardScene with a transparent background and staged into the Live
- * screen's zones (src/scenes/live/layout.ts, docs/LIVE.md): the title cluster (Lux, LIVE, trust and
- * credits), the alert band (surge and fall), the clock and countdown, the chart in the scope, the
- * barks as the comms band's line, one chat column, and the deck's keys (1 REGROUP, 2 CUT 3F, 3 SET).
+ * screen's zones (src/scenes/live/layout.ts, docs/LIVE.md). It hosts the zone views (the registry:
+ * the title cluster and the clock are TitleView and ClockView) and still draws the alert band (surge
+ * and fall), the chart in the scope, the barks as the comms band's line, one chat column, and the
+ * deck's keys (1 REGROUP, 2 CUT 3F, 3 SET).
  * Over the feed, only while asked: the job card, the Solace banner, the dial card, the sizing prompt
  * and the power-dip warning. It reads run() every frame and only calls the run's actions; the rules
  * stay in src/sim/.
  */
 export class HudScene extends Phaser.Scene {
   ready = false;
-  /**
-   * WIRING(board): where a part sits in game space, for the power-dip warning. The board sets this
-   * when it can say; until then the warning shows at CENTRE.dipFallback.
-   */
-  partLocator: ((partId: string) => { x: number; y: number } | null) | null = null;
-
   private runRef: Run | null = null;
   /** The frame the last update read, to detect occurrences against; null before the first. */
   private lastFrame: Frame | null = null;
@@ -146,14 +149,12 @@ export class HudScene extends Phaser.Scene {
   private dialTouched = false;
   private bannerShown = false;
   private decommissionsAfterMidnight = 0;
-  private droppedInC6 = false;
   private lastSurgeAt = -1;
   /** Sim time the current surge warning first went on screen. */
   private surgeShownAt = -1;
-  private shownSecond = -1;
-  private shownTrust = NaN;
-  private shownCredits = NaN;
   private dip: DipWarning | null = null;
+  /** Where the dip mark was last placed, in game pixels (one object, reused). */
+  private readonly dipAt: { x: number; y: number } = { x: 0, y: 0 };
   /** What the dial question reads, one object reused every update. */
   private readonly ask: { now: number; cardOpen: boolean; estimate: number | null; sizing: number | null } = {
     now: 0,
@@ -161,25 +162,23 @@ export class HudScene extends Phaser.Scene {
     estimate: null,
     sizing: null,
   };
-  private readonly view: CueView = {
-    now: 0,
-    demand: 0,
-    capacity: 0,
-    dropped: 0,
-    servers: 0,
-    idleServer: false,
-    overloaded: false,
-    overclocked: false,
+  /** Every id the director fired this run, in order, as sent out on the bus as `cue` (for the hook). */
+  private firedCues: LineId[] = [];
+  /** What the cues read this frame (cueViewOf writes into it; it is also the last frame's view). */
+  private readonly view: CueView = emptyCueView();
+  /** What only the HUD knows, handed to cueViewOf; one object reused every update. */
+  private readonly cueHost: {
+    cardClosed: boolean;
+    dialTouched: boolean;
+    sizingOpen: boolean;
+    bannerShown: boolean;
+    decommissionsAfterMidnight: number;
+  } = {
     cardClosed: false,
     dialTouched: false,
-    estimate: null,
-    sizing: null,
     sizingOpen: false,
     bannerShown: false,
-    banner: null,
-    laundryCut: false,
     decommissionsAfterMidnight: 0,
-    droppedInC6: false,
   };
 
   // Views, built in create().
@@ -187,12 +186,6 @@ export class HudScene extends Phaser.Scene {
   private dial!: DialView;
   private barkView!: BarkView;
   private chatView!: ChatView;
-  private title!: Phaser.GameObjects.Container;
-  private clockPanel!: Phaser.GameObjects.Image;
-  private clockText!: Phaser.GameObjects.Text;
-  private countdown!: Phaser.GameObjects.Text;
-  private trustText!: Phaser.GameObjects.Text;
-  private creditsText!: Phaser.GameObjects.Text;
   private warning!: Phaser.GameObjects.Container;
   private warningNumber!: Phaser.GameObjects.Text;
   private warningLine!: Phaser.GameObjects.Text;
@@ -228,7 +221,8 @@ export class HudScene extends Phaser.Scene {
       canvas.addEventListener('pointerdown', onDown);
       this.earlyClick = () => canvas.removeEventListener('pointerdown', onDown);
     }
-    provideTestState('hud', () => this.snapshot());
+    // One public snapshot: the scene's own keys with every view's provideHudSection keys over them.
+    provideTestState('hud', () => hudSection(this.snapshot()));
 
     this.flags = flagsFrom(window.location.search);
     this.views = createViews();
@@ -257,9 +251,7 @@ export class HudScene extends Phaser.Scene {
     this.resetForRun(run());
     // The Live screen's views go first, so their placeholders sit under everything drawn below.
     for (const v of this.views) v.create(this, this.hostFor(v));
-    this.buildTitle();
     this.buildAlert();
-    this.buildClock();
     this.chart = new ChartView(this);
     this.dial = new DialView(this, {
       touched: () => {
@@ -306,7 +298,6 @@ export class HudScene extends Phaser.Scene {
     this.liveClock.dt = step;
     for (let i = 0; i < this.views.length; i++) this.views[i].update(f, this.liveClock, this.occurrences);
 
-    this.updateTopStrip(r);
     const estimate = r.notes.estimate;
     const sizing = r.notes.sizing;
     this.chart.update(
@@ -331,7 +322,7 @@ export class HudScene extends Phaser.Scene {
     this.setKey(KEY.set, asked && !this.dial.locked, 1);
     this.sizingPanel.setVisible(sizingOpen);
 
-    this.runDirector(r, sizingOpen);
+    this.runDirector(f, sizingOpen);
     this.updateBarks();
     this.updateFiller(r);
   }
@@ -386,7 +377,9 @@ export class HudScene extends Phaser.Scene {
     this.dialTouched = false;
     this.bannerShown = false;
     this.decommissionsAfterMidnight = 0;
-    this.droppedInC6 = false;
+    // A fresh run: nothing carries over from the last run's view (dropped in C6, the rescue clock).
+    Object.assign(this.view, emptyCueView());
+    this.firedCues = [];
     this.lastSurgeAt = -1;
     if (this.ready) {
       this.chatView.show([]);
@@ -400,55 +393,7 @@ export class HudScene extends Phaser.Scene {
     }
   }
 
-  // ---- top strip: the title cluster, the alert band, the clock ----
-
-  /** Lux in her ring, the LIVE dot, and the trust and credits chips, in ZONES.title. */
-  private buildTitle(): void {
-    const a = TOP.avatar;
-    const g = this.add.graphics();
-    g.fillStyle(COLORS.ink, 0.9);
-    g.fillCircle(a.x, a.y, a.r);
-    g.lineStyle(3, COLORS.cyan, 0.9);
-    g.strokeCircle(a.x, a.y, a.r);
-    for (const c of [TOP.trust, TOP.credits]) {
-      g.fillStyle(COLORS.ink, 0.75);
-      g.fillRoundedRect(c.x, c.y, c.w, c.h, 8);
-      g.lineStyle(1, COLORS.cyan, 0.45);
-      g.strokeRoundedRect(c.x, c.y, c.w, c.h, 8);
-    }
-    const face = this.add.image(a.x, a.y, LUX_AVATAR);
-    face.setScale((a.r * 1.4) / Math.max(face.width, face.height));
-    const dot = this.add.circle(TOP.live.x, TOP.live.y, TOP.live.r, COLORS.magenta, 1);
-    const live = this.add
-      .text(TOP.liveText.x, TOP.liveText.y, 'LIVE', {
-        fontFamily: FONT,
-        fontSize: '18px',
-        color: COLORS.magentaText,
-      })
-      .setOrigin(0, 0.5);
-    const chip = (c: typeof TOP.trust, icon: string): [Phaser.GameObjects.Image, Phaser.GameObjects.Text] => {
-      const i = this.add.image(c.x + 22, c.y + c.h / 2, icon);
-      i.setScale((c.h - 8) / Math.max(i.width, i.height));
-      const t = this.add
-        .text(c.x + 44, c.y + c.h / 2, '', { fontFamily: FONT, fontSize: '26px', color: COLORS.white })
-        .setOrigin(0, 0.5);
-      return [i, t];
-    };
-    const [trustIcon, trustText] = chip(TOP.trust, 'hud:icon-trust');
-    const [creditsIcon, creditsText] = chip(TOP.credits, 'hud:icon-credits');
-    this.trustText = trustText;
-    this.creditsText = creditsText;
-    this.title = this.add.container(0, 0, [
-      g,
-      face,
-      dot,
-      live,
-      trustIcon,
-      trustText,
-      creditsIcon,
-      creditsText,
-    ]);
-  }
+  // ---- the alert band ----
 
   /** The alert band (surge and fall), filling ZONES.alert while it has something to say. */
   private buildAlert(): void {
@@ -477,48 +422,6 @@ export class HudScene extends Phaser.Scene {
       .setVisible(false);
   }
 
-  /** The in-world clock and the countdown, in ZONES.clock (the pause button there is the overlay's). */
-  private buildClock(): void {
-    const p = TOP.clockPanel;
-    this.clockPanel = this.add
-      .image(p.x, p.y, 'hud:clock-panel')
-      .setOrigin(0)
-      .setDisplaySize(p.size, p.size * (207 / 213));
-    const icon = this.add.image(p.x + p.size / 2, p.y + p.size / 2, 'hud:icon-clock');
-    icon.setScale((p.size * 0.6) / Math.max(icon.width, icon.height));
-    this.clockText = this.add.text(TOP.clockText.x, TOP.clockText.y, '', {
-      fontFamily: FONT,
-      fontSize: '40px',
-      color: COLORS.cyanText,
-    });
-    this.countdown = this.add.text(TOP.countdown.x, TOP.countdown.y, '', {
-      fontFamily: FONT,
-      fontSize: '22px',
-      color: COLORS.heroText,
-    });
-  }
-
-  private updateTopStrip(r: Run): void {
-    const second = Math.floor(r.now);
-    if (second !== this.shownSecond) {
-      this.shownSecond = second;
-      this.clockText.setText(r.clock());
-      this.countdown.setText(`midnight in ${countdownText(r.now)}`);
-    }
-    const trust = Math.round(r.session.trust);
-    if (trust !== this.shownTrust) {
-      this.shownTrust = trust;
-      this.trustText.setText(String(trust));
-      this.trustText.setColor(trust < BROWNOUT.rescue.trustBelow ? COLORS.heroText : COLORS.white);
-    }
-    const credits = Math.floor(r.session.board.credits);
-    if (credits !== this.shownCredits) {
-      this.shownCredits = credits;
-      this.creditsText.setText(String(credits));
-      this.creditsText.setColor(credits < 0 ? COLORS.heroText : COLORS.white);
-    }
-  }
-
   private updateWarnings(r: Run): void {
     const surge = surgeWarningAt(r.now);
     if (surge) {
@@ -545,7 +448,10 @@ export class HudScene extends Phaser.Scene {
 
     this.dip = dipWarningAt(upcomingDip(r), r.now, settings().reduceFlicker);
     if (this.dip) {
-      const at = this.partLocator?.(this.dip.partId) ?? CENTRE.dipFallback;
+      // On the part, at the board's own anchor for it (board.parts[]), or on the fallback card.
+      const at = dipMarkAt(r.session.board, this.dip.partId);
+      this.dipAt.x = at.x;
+      this.dipAt.y = at.y;
       this.dipMark.setPosition(at.x, at.y);
       this.dipText.setText(line(r.now < C.c5 ? 'C4.flicker.01' : 'C6.flicker.01'));
     }
@@ -847,52 +753,33 @@ export class HudScene extends Phaser.Scene {
 
   // ---- barks and chat ----
 
-  private runDirector(r: Run, sizingOpen: boolean): void {
-    const v = this.view;
-    v.now = r.now;
-    v.clock = this.clock;
-    v.demand = r.demand;
-    v.capacity = r.capacity;
-    v.dropped = r.flow.dropped > 1e-6 ? r.flow.dropped : 0;
-    let servers = 0;
-    let idle = false;
-    let overloaded = false;
-    let overclocked = false;
-    for (const p of r.session.board.parts) {
-      if (p.kind !== 'server') continue;
-      servers++;
-      if ((p.boost ?? 1) > 1) overclocked = true;
-      if ((r.session.offlineUntil[p.id] ?? 0) > r.now) continue;
-      const load = r.flow.load[p.id] ?? 0;
-      if (load <= 0) idle = true;
-      if (v.dropped > 0 && load >= capacityOf(p, BROWNOUT_RULES) - 1e-6) overloaded = true;
-    }
-    v.servers = servers;
-    v.idleServer = idle;
-    v.overloaded = overloaded;
-    v.overclocked = overclocked;
-    v.cardClosed = !this.cardOpen;
-    v.dialTouched = this.dialTouched;
-    v.estimate = r.notes.estimate;
-    v.sizing = r.notes.sizing;
-    v.sizingOpen = sizingOpen;
-    v.bannerShown = this.bannerShown;
-    v.banner = r.session.banner?.choice ?? null;
-    v.laundryCut = laundryCutAt(r) !== null;
-    if (v.dropped > 0 && r.now >= C.c6 - BROWNOUT.demand.forecastLeadSeconds && r.now <= MIDNIGHT + 1) {
-      this.droppedInC6 = true;
-    }
-    v.droppedInC6 = this.droppedInC6;
-    v.decommissionsAfterMidnight = this.decommissionsAfterMidnight;
-
+  /**
+   * One frame of the director: the CueView from this frame, its occurrences, the HUD clock and what
+   * only the HUD knows (cueViewOf), then direct(). Each fired id goes out on the bus as `cue` and is
+   * routed to the bark queue or a chat.
+   */
+  private runDirector(f: Frame, sizingOpen: boolean): void {
+    const host = this.cueHost;
+    host.cardClosed = !this.cardOpen;
+    host.dialTouched = this.dialTouched;
+    host.sizingOpen = sizingOpen;
+    host.bannerShown = this.bannerShown;
+    host.decommissionsAfterMidnight = this.decommissionsAfterMidnight;
+    const v = cueViewOf(this.view, f, this.occurrences, this.clock, host, this.view);
     const out = direct(this.director, v);
     this.director = out.state;
-    for (const id of out.fired) this.cue(id);
+    for (let i = 0; i < out.fired.length; i++) this.cue(out.fired[i]);
   }
 
-  /** Route a fired line to the bark queue or a chat. */
+  /**
+   * Send a fired line out as bus `cue` and route it: chat lines to their chat, barks to the bark
+   * queue. C6.fail.chat is the chat going silent, not a row: it is never posted.
+   */
   private cue(id: LineId): void {
     const chat = chatOf(id);
+    this.firedCues.push(id);
+    bus.emit('cue', { id, kind: chat ? 'chat' : 'bark', at: this.clock });
+    if (id === CHAT_SILENCE) return;
     if (chat) this.say(chat, id);
     else if (LINES[id].kind === 'bark') this.barks = enqueueBark(this.barks, id);
   }
@@ -916,7 +803,8 @@ export class HudScene extends Phaser.Scene {
   }
 
   private updateFiller(r: Run): void {
-    if (this.cardOpen) return;
+    // No filler while the job card is up, nor while the chat is silent (dark at midnight, until the rewind).
+    if (this.cardOpen || chatSilenced(this.director)) return;
     const state = errorState(errorShare(r.flow, r.demand));
     for (const chat of ['block', 'stream'] as const) {
       if (this.clock < this.fillerAt[chat]) continue;
@@ -942,8 +830,15 @@ export class HudScene extends Phaser.Scene {
     };
   }
 
+  /** Game-space point to page CSS pixels to a tenth, as the board's hook reports parts (pagePoint). */
+  private toPagePoint(x: number, y: number): PagePoint {
+    const p = pagePoint({ x, y }, this.game.canvas.getBoundingClientRect());
+    return { x: p.x, y: p.y };
+  }
+
   private snapshot(): HudTestState {
     const r = run();
+    const f = frame(r);
     const built = this.ready;
     const [okX, okY] = this.jobCardOk();
     const ok = this.toPage(okX, okY);
@@ -952,8 +847,9 @@ export class HudScene extends Phaser.Scene {
       ready: built,
       now: r.now,
       paused: r.paused,
-      clock: built ? this.clockText.text : r.clock(),
-      countdown: built ? this.countdown.text.replace('midnight in ', '') : countdownText(r.now),
+      // The clock, the countdown and the chips are drawn by ClockView and TitleView from the same frame.
+      clock: f.clock,
+      countdown: countdownText(f.now),
       jobCard: { open: this.cardOpen, x: ok.x, y: ok.y },
       dial: {
         visible: built && this.dial.visible,
@@ -980,10 +876,7 @@ export class HudScene extends Phaser.Scene {
         trust: r.session.trust,
         credits: r.session.board.credits,
       },
-      shown: {
-        trust: Number(built ? this.trustText.text : NaN),
-        credits: Number(built ? this.creditsText.text : NaN),
-      },
+      shown: { trust: shownTrust(f.trust), credits: shownCredits(f.credits) },
       surge: w
         ? {
             demand: w.surge.demand,
@@ -994,6 +887,7 @@ export class HudScene extends Phaser.Scene {
           }
         : null,
       dip: this.dip ? { ...this.dip } : null,
+      dipMark: this.dip ? this.toPagePoint(this.dipAt.x, this.dipAt.y) : null,
       banner: {
         open: this.bannerOpen,
         choice: r.session.banner?.choice ?? null,
@@ -1012,12 +906,16 @@ export class HudScene extends Phaser.Scene {
         spent: regroupSpent(this.regroup, this.clock),
         button: this.keyPoint(KEY.regroup),
       },
-      sizingPrompt: { open: built && this.sizingPanel.visible },
+      sizingPrompt: {
+        open: built && this.sizingPanel.visible,
+        ...this.toPagePoint(SIZING_AT.x, SIZING_AT.y),
+      },
       bark: {
         current: this.barks.current?.id ?? null,
         text: this.barks.current ? line(this.barks.current.id) : null,
         history: [...this.barks.history],
       },
+      cues: { fired: [...this.firedCues], silenced: chatSilenced(this.director) },
       chat: {
         block: this.chats.block.map((e) => `${e.who}: ${e.text}`),
         stream: this.chats.stream.map((e) => `${e.who}: ${e.text}`),
@@ -1044,11 +942,7 @@ export class HudScene extends Phaser.Scene {
       getBounds(): { x: number; y: number; width: number; height: number };
     };
     const pieces: [string, Home, Bounded][] = [
-      ['title', 'title', this.title],
       ['alert', 'alert', this.warning],
-      ['clock.text', 'clock', this.clockText],
-      ['clock.countdown', 'clock', this.countdown],
-      ['clock.panel', 'clock', this.clockPanel],
       ['scope', 'scope', this.chart.panel],
       ['dial', 'dialCard', this.dial.container],
       ['sizing', 'sizingPrompt', this.sizingPanel],
