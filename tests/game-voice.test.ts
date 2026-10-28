@@ -219,3 +219,47 @@ describe('the mixer asks only for listed ids', () => {
     expect(calls).toContain('play voice:ja:C1.triage.02');
   });
 });
+
+describe('playVoice: the story side of the voices (comms-6)', () => {
+  it('asks once for each spoken line, cuts the one before, and cuts the last on null', async () => {
+    // Imported together so the story layer and this listener share one bus.
+    const { bus } = await import('../src/game/bus');
+    const { playVoice, storyState } = await import('../src/story/state');
+    const seen: string[] = [];
+    const offs = [
+      bus.on('voice', ({ id }) => void seen.push(`voice ${id}`)),
+      bus.on('voiceStop', ({ id }) => void seen.push(`stop ${id}`)),
+    ];
+    try {
+      const voices = storyState.voices.length;
+      const stops = storyState.voiceStops.length;
+      playVoice('C0.tv.01');
+      playVoice('C0.tv.01');
+      playVoice('C0.tv.02');
+      // A stage direction asks for nothing, but still cuts the line before it.
+      playVoice('C8.book.open');
+      playVoice('C8.rei.end');
+      playVoice(null);
+      playVoice(null);
+      expect(seen).toEqual([
+        'voice C0.tv.01',
+        'stop C0.tv.01',
+        'voice C0.tv.02',
+        'stop C0.tv.02',
+        'voice C8.rei.end',
+        'stop C8.rei.end',
+      ]);
+      expect(storyState.voices.slice(voices)).toEqual(['C0.tv.01', 'C0.tv.02', 'C8.rei.end']);
+      expect(storyState.voiceStops.slice(stops)).toEqual(['C0.tv.01', 'C0.tv.02', 'C8.rei.end']);
+    } finally {
+      for (const off of offs) off();
+    }
+  });
+
+  it('is the only export src/story/state.ts gained', async () => {
+    const mod = await import('../src/story/state');
+    expect(Object.keys(mod).sort()).toEqual(
+      ['playSfx', 'playVoice', 'setLiveView', 'stopSfx', 'storyEnd', 'storyState'].sort(),
+    );
+  });
+});

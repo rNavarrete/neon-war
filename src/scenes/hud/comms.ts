@@ -206,6 +206,16 @@ export function extendForVoice(s: CommsState, id: LineId, clock: number, seconds
   return { ...s, current: { ...c, until, voiced: true } };
 }
 
+/**
+ * The line a change cut short (a WARNING pre-empting a HINT ends it at once), so its voice is cut
+ * too; null when the line showing kept its time. Pure.
+ */
+export function cutShort(prev: CommsState, next: CommsState): LineId | null {
+  const a = prev.current;
+  const b = next.current;
+  return a && b && a.id === b.id && b.until < a.until ? a.id : null;
+}
+
 /** The last `n` shown lines, newest last, the current one included. */
 export function logLines(history: readonly LineId[], current: CurrentLine | null, n = 3): LineId[] {
   const all = current && history[history.length - 1] !== current.id ? [...history, current.id] : [...history];

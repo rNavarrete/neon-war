@@ -16,6 +16,7 @@ import type { Bus } from '../../game/bus';
 import type { Frame } from '../../game/frame';
 import { TEXT_CPS, settings } from '../../game/settings';
 import { LINES, type LineId } from '../../strings';
+import { testHookEnabled } from '../../testHook';
 import { COMMS_AVATARS, avatarSource, preloadAvatars, roundAvatar } from '../avatars';
 import { fileTexture } from '../plates';
 import { type Rect, pagePoint, pageRect } from '../live/layout';
@@ -44,6 +45,7 @@ import {
   commsLayout,
   crewLight,
   crewTint,
+  cutShort,
   enqueueComms,
   extendForVoice,
   irisFor,
@@ -158,6 +160,13 @@ declare module '../live/views/comms' {
     glow: CommsGlowState;
     /** The crew's light-up: 0 dark, 1 lit, eased over 400 ms once run().rescued. */
     crew: { light: number };
+  }
+}
+
+declare global {
+  interface Window {
+    /** Test-only stand-in for the mixer's voiceStart (installed only with `?test`). */
+    __neonComms?: { voiceStart(id: string, seconds: number): void };
   }
 }
 
@@ -404,6 +413,7 @@ export class CommsView implements LiveView {
       () => scene.input?.off('pointerdown', onDown),
       provideCommsHook(scene, () => this.snapshot()),
     );
+    if (testHookEnabled(window.location.search)) this.installTestHandle(host.bus);
     this.drawLine(null);
     this.setPresent(false);
     this.showHouse(0);
@@ -414,9 +424,15 @@ export class CommsView implements LiveView {
     return this.root;
   }
 
-  /** A bark the cue table fired; it shows when the band's rules let it. */
+  /**
+   * A bark the cue table fired; it shows when the band's rules let it. A WARNING that cuts the
+   * current HINT short cuts its voice too (bus voiceStop): a line never waits for its voice.
+   */
   enqueue(id: LineId): void {
-    this.state = enqueueComms(this.state, id, this.clock);
+    const prev = this.state;
+    this.state = enqueueComms(prev, id, this.clock);
+    const cut = cutShort(prev, this.state);
+    if (cut) this.emit('voiceStop', cut);
   }
 
   /** A new run: forget every line (the HUD scene calls it when the run is replaced). */
@@ -597,6 +613,20 @@ export class CommsView implements LiveView {
     if (this.replayed.length > REPLAYED_MAX) this.replayed.shift();
   }
 
+  /**
+   * `window.__neonComms` under `?test` only: stands in for the mixer's voiceStart, which headless
+   * browsers never reach (no voice files, audio locked), so a spec can see the band hold a voiced
+   * line. Nothing at runtime reads it.
+   */
+  private installTestHandle(bus: Bus): void {
+    window.__neonComms = {
+      voiceStart: (id, seconds) => bus.emit('voiceStart', { id: id as LineId, seconds }),
+    };
+    this.off.push(() => {
+      delete window.__neonComms;
+    });
+  }
+
   /** hud.bark: the same ids and text BarkView's queue reported. */
   barkSnapshot(): BarkSnapshot {
     const c = this.state.current;
@@ -634,14 +664,19 @@ export class CommsView implements LiveView {
 
   // ---- drawing ----
 
-  private emit(kind: 'lineEnd' | 'voice', id: LineId): void {
+  private emit(kind: 'lineEnd' | 'voice' | 'voiceStop', id: LineId): void {
     this.emitted.push(`${kind}:${id}`);
     if (this.emitted.length > EMITTED_MAX) this.emitted.shift();
     if (kind === 'lineEnd') this.bus?.emit('lineEnd', { id });
     else if (kind === 'voice') this.bus?.emit('voice', { id });
+    else this.bus?.emit('voiceStop', { id });
   }
 
-  /** A line starts: tell chat and the cam, and give TRIAGE her blip. */
+  /**
+   * A line starts: tell chat and the cam, and give TRIAGE her blip. Bus `line` is also the line's
+   * one voice request: the mixer asks for the clip on it (docs/AUDIO.md), so the band sends no
+   * separate `voice` for it (that would ask twice); `voice` is the replay glyph's.
+   */
   private startLine(id: LineId, since: number): void {
     const l = LINES[id];
     this.emitted.push(`line:${id}`);

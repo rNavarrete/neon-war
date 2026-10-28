@@ -8,7 +8,7 @@ import { TEXT_CPS, settings } from '../game/settings';
 import { LINES, type LineId } from '../strings';
 import { LABELS } from './labels';
 import { scriptFaces, typedChars } from './scripts';
-import { type PagePoint, type ViewSnapshot, storyState } from './state';
+import { type PagePoint, type ViewSnapshot, playVoice, storyState } from './state';
 
 export const W = 1920;
 export const H = 1080;
@@ -161,6 +161,8 @@ export class VnView {
       b.on('pointerdown', () => opts.onSkip());
       this.skipButton = b;
     }
+    // A scene that ends (or is skipped) never leaves its last voice talking.
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => playVoice(null));
     this.hideBox();
   }
 
@@ -171,6 +173,8 @@ export class VnView {
     const name = narration ? null : speakerName(speaker);
     this.lineId = id;
     this.speaking = name;
+    // The line's voice; asking for it cuts the one before (comms-6).
+    playVoice(id);
     this.box.setVisible(true);
     this.plate.setVisible(name !== null);
     this.plateText.setVisible(name !== null).setText(name ?? '');
@@ -225,6 +229,7 @@ export class VnView {
   }
 
   hideBox(): void {
+    playVoice(null);
     this.box.setVisible(false);
     this.plate.setVisible(false);
     this.plateText.setVisible(false);

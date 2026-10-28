@@ -8,6 +8,7 @@ import { provideTestState } from '../testHook';
 import type { DebriefResults } from './debrief';
 import type { RewindKind } from './rewind';
 import { seenScenes } from './seen';
+import { isVoiced } from '../game/voice';
 
 export type DebriefStep = 'grades' | 'terms' | 'interview' | 'book' | 'title';
 
@@ -45,6 +46,10 @@ export interface StoryTestState {
   clicks: number;
   /** Effects the story asked for, in order. */
   sfx: string[];
+  /** Lines whose voice the story asked the mixer for (playVoice), in the order shown. */
+  voices: LineId[];
+  /** Voices cut short by a click past the line, the box closing or the scene ending, in order. */
+  voiceStops: LineId[];
   /** The last rewind: its kind and the clock time it went back to. */
   rewind: { kind: RewindKind; target: number } | null;
   /** Scripts that have finished, in order (this page load). */
@@ -87,6 +92,8 @@ export const storyState: Omit<StoryTestState, 'runNow' | 'runHeld' | 'seen'> = {
   skip: { visible: false, x: 0, y: 0 },
   clicks: 0,
   sfx: [],
+  voices: [],
+  voiceStops: [],
   rewind: null,
   finished: [],
   debrief: null,
@@ -128,4 +135,28 @@ export function playSfx(key: string, loop = false): void {
 
 export function stopSfx(key: string): void {
   bus.emit('sfxStop', { key });
+}
+
+/** The scene line whose voice was asked for last and has not been cut. */
+let voicing: LineId | null = null;
+
+/**
+ * The story's one way to the voices (comms-6): ask the mixer for line `id`'s clip, after cutting
+ * the one asked for before (a click past a line never waits for its voice). `null` only cuts it:
+ * the text box closed or the scene ended. A line nobody says aloud (a stage direction) asks for
+ * nothing. The mixer decides what plays (src/game/mixer.ts).
+ */
+export function playVoice(id: LineId | null): void {
+  if (voicing !== null && voicing !== id) {
+    storyState.voiceStops.push(voicing);
+    bus.emit('voiceStop', { id: voicing });
+  }
+  if (id === null || !isVoiced(id)) {
+    voicing = null;
+    return;
+  }
+  if (voicing === id) return;
+  voicing = id;
+  storyState.voices.push(id);
+  bus.emit('voice', { id });
 }

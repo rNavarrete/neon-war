@@ -461,3 +461,146 @@ test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both
   expect(s.shell!.settings.volume).toBe(0.7);
   expect(errors).toEqual([]);
 });
+
+type VoiceHook = { recentVoice: string[]; missing: string[]; playing: string | null; started: string[] };
+type StoryHook = {
+  scriptId: string | null;
+  lineId: string | null;
+  typingDone: boolean;
+  active: boolean;
+  clicks: number;
+  click: { x: number; y: number } | null;
+  voices: string[];
+  voiceStops: string[];
+  finished: string[];
+};
+const voiceOf = (page: Page): Promise<VoiceHook> =>
+  page.evaluate(() => (window.__neonTest!.state as unknown as { shell: { voice: VoiceHook } }).shell.voice);
+const storyOf = (page: Page): Promise<StoryHook | null> =>
+  page.evaluate(
+    () => (window.__neonTest?.state as unknown as { story?: StoryHook } | undefined)?.story ?? null,
+  );
+
+// comms-6, scenes: every line the cold open shows in the text box asks for its voice once, through
+// playVoice, in the order shown; a click past a line cuts its voice (story.voiceStops), and the
+// scene ending cuts the last. With no voice files nothing plays (shell.voice.playing stays null)
+// and nothing is fetched. About 7 s.
+test('comms-6: scene lines ask for their voice in order; a click past a line cuts it', async ({ page }) => {
+  test.setTimeout(40_000);
+  const errors: string[] = [];
+  const fetched: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  page.on('request', (req) => {
+    if (req.url().includes('/audio/voice/')) fetched.push(req.url());
+  });
+  await page.addInitScript(() => {
+    window.localStorage.setItem('neon-war.settings', JSON.stringify({ textSpeed: 'fast' }));
+  });
+  await page.goto('/?test&scene=story');
+  await expect.poll(async () => (await storyOf(page))?.scriptId ?? null, { timeout: 15_000 }).toBe('C0');
+
+  const shown: string[] = [];
+  for (let guard = 0; guard < 20; guard++) {
+    const s = (await storyOf(page))!;
+    if (!s.active || s.scriptId !== 'C0') break;
+    if (s.lineId && shown.at(-1) !== s.lineId) {
+      shown.push(s.lineId);
+      // The line asked for its voice as it showed, and the one before it was cut.
+      expect(s.voices.at(-1), s.lineId).toBe(s.lineId);
+      expect((await voiceOf(page)).recentVoice.at(-1), s.lineId).toBe(s.lineId);
+      if (shown.length > 1) expect(s.voiceStops.at(-1)).toBe(shown.at(-2));
+    }
+    await expect.poll(async () => (await storyOf(page))!.typingDone, { timeout: 5_000 }).toBe(true);
+    const before = (await storyOf(page))!;
+    await page.mouse.click(before.click!.x, before.click!.y);
+    await expect
+      .poll(
+        async () => {
+          const n = (await storyOf(page))!;
+          return n.clicks > before.clicks && (n.lineId !== before.lineId || !n.active);
+        },
+        { timeout: 5_000 },
+      )
+      .toBe(true);
+  }
+  await expect.poll(async () => (await storyOf(page))!.finished, { timeout: 10_000 }).toContain('C0');
+
+  const s = (await storyOf(page))!;
+  expect(shown.length).toBeGreaterThanOrEqual(5);
+  expect(shown[0]).toBe('C0.tv.01');
+  expect(s.voices).toEqual(shown);
+  // Every line was cut on its way out: the clicks past each, then the scene ending after the last.
+  expect(s.voiceStops).toEqual(shown);
+  const v = await voiceOf(page);
+  expect(v.recentVoice).toEqual(shown);
+  for (const id of shown) expect(v.missing).toContain(id);
+  expect(v.playing).toBeNull();
+  expect(v.started).toEqual([]);
+  expect(fetched).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// comms-6, band: every bark the band shows asks the mixer for its voice exactly once (bus `line`
+// is the request), in the order shown; a voiceStart for the current line marks it voiced and holds
+// it until at least seconds + 0.6 after it started. `window.__neonComms.voiceStart` stands in for
+// the mixer, which never starts a clip headless. About 8 s.
+test('comms-6: each band line asks for its voice once, in order; voiceStart holds the line', async ({
+  page,
+}) => {
+  test.setTimeout(40_000);
+  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
+  // In the page: the first time C1.triage.02 is current, report a 3 s clip for it, then record what
+  // the band reports for that line.
+  await page.evaluate(() => {
+    const w = window as unknown as { __voiced: unknown[]; __sent: boolean };
+    w.__voiced = [];
+    w.__sent = false;
+    setInterval(() => {
+      const c = (window.__neonTest!.state as unknown as { hud?: { comms?: CommsTestState } }).hud?.comms;
+      const line = c?.line;
+      if (!line || line.id !== 'C1.triage.02') return;
+      if (!w.__sent) {
+        w.__sent = true;
+        window.__neonComms!.voiceStart('C1.triage.02', 3);
+        return;
+      }
+      w.__voiced.push({ voiced: line.voiced, since: line.since, until: line.until });
+    }, 20);
+  });
+  await dismissJobCard(page);
+  type Voiced = { voiced: boolean; since: number; until: number };
+  const readVoiced = (): Promise<Voiced[]> =>
+    page.evaluate(() => (window as unknown as { __voiced: Voiced[] }).__voiced);
+  await expect
+    .poll(async () => (await readVoiced()).filter((x) => x.voiced).length, {
+      timeout: 15_000,
+      intervals: [50],
+    })
+    .toBeGreaterThan(0);
+  for (const r of (await readVoiced()).filter((x) => x.voiced)) {
+    expect(r.until - r.since).toBeGreaterThanOrEqual(3 + 0.6 - 1e-6);
+  }
+
+  // Let a few more lines through, then compare the band's history with the mixer's requests.
+  await expect
+    .poll(async () => (await comms(page)).history.length, { timeout: 15_000, intervals: [50] })
+    .toBeGreaterThanOrEqual(3);
+  const { c, v } = await page.evaluate(() => {
+    const s = window.__neonTest!.state as unknown as {
+      hud: { comms: CommsTestState };
+      shell: { voice: VoiceHook };
+    };
+    return { c: s.hud.comms, v: s.shell.voice };
+  });
+  expect(c.log.replayed).toEqual([]);
+  const n = Math.min(c.history.length, v.recentVoice.length);
+  expect(v.recentVoice.slice(-n)).toEqual(c.history.slice(-n));
+  for (const id of c.history)
+    expect(
+      v.recentVoice.filter((x) => x === id),
+      id,
+    ).toHaveLength(1);
+  // The band sends no `voice` of its own for a line (only the replay glyph does).
+  expect(c.emitted.filter((e) => e.startsWith('voice:'))).toEqual([]);
+  expect(errors).toEqual([]);
+});

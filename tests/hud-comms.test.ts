@@ -40,6 +40,7 @@ import {
   bandAlpha,
   clickLog,
   commsLayout,
+  cutShort,
   dwellFor,
   enqueueComms,
   extendForVoice,
@@ -590,5 +591,18 @@ describe('comms-9: plate, round avatars and HOUSE chips through the art manifest
       const later = avatarSource(key, picked(r));
       expect(later, key).toMatchObject({ fallback: false, file: `art/${key}.webp` });
     }
+  });
+});
+
+describe('comms-6: a WARNING cutting a HINT short cuts its voice', () => {
+  it('names the HINT a WARNING ended, and nothing for a change that kept its time', () => {
+    const s = say(NO_COMMS, 'C3.triage.02', 0);
+    expect(cutShort(s, enqueueComms(s, 'C3.triage.04', 2))).toBe('C3.triage.02');
+    // Too early to pre-empt: the WARNING waits, nothing is cut.
+    expect(cutShort(s, enqueueComms(s, 'C3.triage.04', 1))).toBeNull();
+    // A voice lengthening the line, another line starting, or nothing showing cut nothing.
+    expect(cutShort(s, extendForVoice(s, 'C3.triage.02', 0.1, 6))).toBeNull();
+    expect(cutShort(s, say(NO_COMMS, 'C1.triage.01', 5))).toBeNull();
+    expect(cutShort(NO_COMMS, s)).toBeNull();
   });
 });
