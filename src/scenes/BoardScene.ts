@@ -10,6 +10,9 @@ import type { BoardTestState } from './board/hook';
 import {
   type Box,
   BOARD_AREA,
+  RACK_ROWS,
+  SERVER_GRID,
+  padBox,
   CHANNEL,
   INBOUND_LANES,
   LB_SLOT,
@@ -48,14 +51,34 @@ import {
   trayCards,
 } from './board/tray';
 import {
+  type BarColour,
   LabelCache,
   type MutablePartLook,
+  type PartTrouble,
   artFor,
   emptyLook,
+  flickerLit,
   loadLabel,
   partLook,
   partLookInto,
+  partTags,
+  skipTagUntil,
+  tagChip,
+  tagChipKey,
 } from './board/view';
+import { dashedOutline } from './live/view';
+import { TumblePool, type WaitState, crewChip, emptyWait, padPulseAlpha, waitInto } from './board/waits';
+import {
+  type ChannelState,
+  bankMarkPoints,
+  channelInto,
+  emptyChannel,
+  fillInboundRates,
+  lanePps,
+  levelY,
+} from './board/channel';
+import { LABELS } from './hud/labels';
+import { settings } from '../game/settings';
 import { SCENES } from './keys';
 
 // Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
@@ -103,7 +126,39 @@ interface PartView {
   readout: LabelCache;
   /** Frame the part was last seen on the board, to sweep views of removed parts. */
   seen: number;
+  /** The load bar (board-5), redrawn only when its fill or colour changes; null for the gateway. */
+  bar: Phaser.GameObjects.Graphics | null;
+  barKey: number;
+  /** The tag chip (DIES IN n s, UNFED) on the part, re-set only when tagChipKey changes. */
+  chip: Phaser.GameObjects.Text;
+  chipKey: number;
+  /** The warning triangle at the part's top corner. */
+  warn: Phaser.GameObjects.Graphics;
+  /** Lit this frame (false only on the dark half of a power flicker's 6 Hz blink). */
+  lit: boolean;
 }
+
+/** A server pad and what the board draws on it: the dashed grey outline and the sticky SKIPPED tag. */
+interface PadView {
+  slot: string;
+  pad: Phaser.GameObjects.Image;
+  dash: Phaser.GameObjects.Graphics;
+  chip: Phaser.GameObjects.Text;
+  /** Board-clock second the SKIPPED tag shows until (skipTagUntil); -Infinity before any skip. */
+  skipUntil: number;
+  /** The balancer skips the box on this pad this frame (the sim's flow.skipped). */
+  skipped: boolean;
+}
+
+const BAR_COLOURS: Readonly<Record<BarColour, number>> = {
+  cyan: 0x2de2e6,
+  amber: 0xffb02e,
+  red: 0xff4d5e,
+  grey: 0x6b7385,
+};
+const BAR_INDEX: Readonly<Record<BarColour, number>> = { cyan: 1, amber: 2, red: 3, grey: 4 };
+/** Alpha of a part on the dark half of a flicker blink. */
+const FLICKER_DIM = 0.35;
 
 interface WireGeom {
   key: string;
@@ -159,7 +214,27 @@ export class BoardScene extends Phaser.Scene {
   private snap = new BoardSnapshot();
   private pads = new Map<string, Phaser.GameObjects.Image>();
   /** The server pads in a plain list, so the per-frame loop needs no Map iterator. */
-  private padList: { slot: string; pad: Phaser.GameObjects.Image }[] = [];
+  private padList: PadView[] = [];
+  /** What tells dark from dead this frame: the Frame's lists and the sim's overload seconds. */
+  private readonly trouble: { -readonly [K in keyof PartTrouble]: PartTrouble[K] } = {
+    dead: [],
+    dark: [],
+    dips: [],
+    overload: {},
+  };
+  /** The board clock in seconds (the scene's own time): sticky tags and blinks run on it. */
+  private clock = 0;
+  /** settings().reduceFlicker as read this frame. */
+  private reduceFlicker = false;
+  /** The board's waits this frame (board-6), refilled in place. */
+  private wait: WaitState = emptyWait();
+  /** Empty pads pulsing this frame (the waits), by slot. */
+  private pulsingPads: boolean[] = [];
+  private portG!: Phaser.GameObjects.Graphics;
+  private crewText!: Phaser.GameObjects.Text;
+  private crewShown = '';
+  private tumbles = new TumblePool();
+  private tumbleSprites: Phaser.GameObjects.Image[] = [];
   /** Each wire's drawn state (live, skipped, selected) last time the traces were drawn. */
   private wireState: number[] = [];
   private wiresDirty = true;
@@ -173,11 +248,26 @@ export class BoardScene extends Phaser.Scene {
   private lastParts: readonly unknown[] | null = null;
   private pool = new PacketPool();
   private packetSprites: Phaser.GameObjects.Image[] = [];
-  private inboundG!: Phaser.GameObjects.Graphics;
+  /** The channel this frame (board-4), refilled in place, and what its graphics last drew. */
+  private chan: ChannelState = emptyChannel();
+  private fillG!: Phaser.GameObjects.Graphics;
+  private roomG!: Phaser.GameObjects.Graphics;
+  private roomText!: Phaser.GameObjects.Text;
+  private forecastG!: Phaser.GameObjects.Graphics;
+  private drawnLevel = NaN;
+  private drawnRetry = NaN;
+  private drawnRoom = NaN;
+  private drawnForecast: number | null | undefined = undefined;
+  /** The four corners of a channel band, reused for every fill. */
+  private readonly band = [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+  ];
   private packetRates: Record<string, number> = {};
   private hotParts = new Set<string>();
   private readonly at = { x: 0, y: 0 };
-  private chevronShift = 0;
   private skipTags: Phaser.GameObjects.Text[] = [];
   private cards: TrayCard[] = [];
   private inventory!: InventoryView;
@@ -207,6 +297,9 @@ export class BoardScene extends Phaser.Scene {
     v.img.destroy();
     v.shadow.destroy();
     v.label.destroy();
+    v.bar?.destroy();
+    v.chip.destroy();
+    v.warn.destroy();
     this.views.delete(id);
   };
 
@@ -233,8 +326,18 @@ export class BoardScene extends Phaser.Scene {
     this.lastWires = null;
     this.lastParts = null;
     this.pool = new PacketPool();
+    this.wait = emptyWait();
+    this.pulsingPads = [];
+    this.crewShown = '';
+    this.tumbles = new TumblePool();
+    this.tumbleSprites = [];
     this.packetSprites = [];
     this.skipTags = [];
+    this.chan = emptyChannel();
+    this.drawnLevel = NaN;
+    this.drawnRetry = NaN;
+    this.drawnRoom = NaN;
+    this.drawnForecast = undefined;
     this.inventory = new InventoryView(this);
     this.countedParts = null;
     this.countedCredits = NaN;
@@ -251,7 +354,7 @@ export class BoardScene extends Phaser.Scene {
       const pad = this.add.image(p.x, p.y, 'slot-empty');
       pad.setScale((PAD_SIZE.w * slotScale(id)) / pad.width).setAlpha(0.8);
       this.pads.set(id, pad);
-      this.padList.push({ slot: id, pad });
+      this.padList.push(this.makePad(id, pad));
     }
     this.lbPad = this.add.image(LB_SLOT.x, LB_SLOT.y + 10, 'slot-locked');
     this.lbPad.setScale(PAD_SIZE.w / this.lbPad.width);
@@ -263,6 +366,8 @@ export class BoardScene extends Phaser.Scene {
     this.previewG.setDepth(4);
 
     this.drawTray();
+
+    this.drawWaits();
 
     this.ghost = this.add.image(0, 0, 'server').setVisible(false).setAlpha(0.75).setDepth(30);
     this.cutBtn = this.makeButton('icon-cut', 0xff4d5e);
@@ -358,7 +463,129 @@ export class BoardScene extends Phaser.Scene {
         .lineBetween(mouth.x, mouth.top, port.x, port.top)
         .lineBetween(mouth.x, mouth.bottom, port.x, port.bottom);
     }
-    this.inboundG = this.add.graphics().setDepth(1);
+    this.drawBank();
+  }
+
+  /**
+   * The channel's instruments (board-4): the amber fill and its red retry band, the cyan ROOM tick
+   * at the wired boxes' req/s, the dashed forecast level, and the five bank marks at the mouth on
+   * the shared 0..400 scale. The marks are drawn once; the rest redraw only when their level moves.
+   */
+  private drawBank(): void {
+    const { mouth } = CHANNEL;
+    this.fillG = this.add.graphics().setDepth(0.5);
+    this.forecastG = this.add.graphics().setDepth(0.6);
+    this.roomG = this.add.graphics().setDepth(0.7);
+    const ticks = this.add.graphics().setDepth(0.8);
+    ticks.lineStyle(2, AMBER, 0.8);
+    for (const m of bankMarkPoints()) {
+      ticks.lineBetween(mouth.x, m.y, mouth.x + 4, m.y);
+      this.add
+        .text(m.x, m.y, m.label, {
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          fontStyle: 'bold',
+          color: '#ffb02e',
+          stroke: '#05070f',
+          strokeThickness: 3,
+        })
+        .setOrigin(0, 0.5)
+        .setDepth(0.8);
+    }
+    this.roomText = this.add
+      .text(0, 0, LABELS.gauge.room, {
+        fontFamily: 'monospace',
+        fontSize: '12px',
+        fontStyle: 'bold',
+        color: '#2de2e6',
+        stroke: '#05070f',
+        strokeThickness: 3,
+      })
+      .setOrigin(1, 1)
+      .setDepth(0.8)
+      .setVisible(false);
+  }
+
+  /** Bring the channel's drawing in line with this frame's state; steady frames draw nothing. */
+  private drawChannel(c: ChannelState): void {
+    const { mouth, port } = CHANNEL;
+    const level = Math.round(c.level * 1000) / 1000;
+    const retry = Math.round(c.retryShare * 1000) / 1000;
+    if (level !== this.drawnLevel || retry !== this.drawnRetry) {
+      this.drawnLevel = level;
+      this.drawnRetry = retry;
+      const g = this.fillG;
+      g.clear();
+      if (level > 0) {
+        // The amber fill from the floor to the level, then the red retry band on its top.
+        const split = level * (1 - retry);
+        this.fillBand(g, 0, split, AMBER, 0.32);
+        if (retry > 0) this.fillBand(g, split, level, RED, 0.55);
+        g.lineStyle(2, AMBER, 0.9).lineBetween(
+          mouth.x,
+          levelY(level, mouth.x),
+          port.x,
+          levelY(level, port.x),
+        );
+      }
+    }
+    const room = Math.round(c.capacityLevel * 1000) / 1000;
+    if (room !== this.drawnRoom) {
+      this.drawnRoom = room;
+      const g = this.roomG;
+      g.clear();
+      if (room > 0) {
+        const y0 = levelY(room, mouth.x);
+        const y1 = levelY(room, port.x);
+        g.lineStyle(6, CYAN, 0.25).lineBetween(mouth.x, y0, port.x, y1);
+        g.lineStyle(2, CYAN, 1).lineBetween(mouth.x, y0, port.x, y1);
+        this.roomText.setPosition(port.x - 4, y1 - 2).setVisible(true);
+      } else {
+        this.roomText.setVisible(false);
+      }
+    }
+    if (c.forecast !== this.drawnForecast) {
+      this.drawnForecast = c.forecast;
+      const g = this.forecastG;
+      g.clear();
+      if (c.forecast !== null) {
+        g.lineStyle(2, AMBER, 1);
+        // Dashes along the level from the mouth to the port.
+        const steps = 10;
+        for (let i = 0; i < steps; i += 2) {
+          const xa = mouth.x + ((port.x - mouth.x) * i) / steps;
+          const xb = mouth.x + ((port.x - mouth.x) * (i + 1)) / steps;
+          g.lineBetween(xa, levelY(c.forecast, xa), xb, levelY(c.forecast, xb));
+        }
+      }
+    }
+    // The forecast pulses at 1 Hz; steady under reduce flicker.
+    if (c.forecast !== null) {
+      this.forecastG.setAlpha(
+        settings().reduceFlicker ? 0.9 : 0.55 + 0.45 * Math.abs(Math.sin(Math.PI * (this.time.now / 1000))),
+      );
+    }
+  }
+
+  /** Fill the channel between two levels (0..1) with one colour. */
+  private fillBand(
+    g: Phaser.GameObjects.Graphics,
+    from: number,
+    to: number,
+    colour: number,
+    alpha: number,
+  ): void {
+    const { mouth, port } = CHANNEL;
+    const q = this.band;
+    q[0].x = mouth.x;
+    q[0].y = levelY(to, mouth.x);
+    q[1].x = port.x;
+    q[1].y = levelY(to, port.x);
+    q[2].x = port.x;
+    q[2].y = levelY(from, port.x);
+    q[3].x = mouth.x;
+    q[3].y = levelY(from, mouth.x);
+    g.fillStyle(colour, alpha).fillPoints(asVectors(q), true);
   }
 
   /** Draw the table once, in the feed's own coordinates, and keep it as a texture: one image a frame. */
@@ -439,20 +666,51 @@ export class BoardScene extends Phaser.Scene {
     // Parts. `unlocked` is already true once a balancer is racked.
     this.lbPad.setTexture(unlocked ? 'slot-empty' : 'slot-locked');
     const placingServer = d?.kind === 'card' && d.id === 'server';
+    const t = this.time.now / 1000;
+    this.clock = t;
+    const reduce = settings().reduceFlicker;
+    this.reduceFlicker = reduce;
+    const trouble = this.trouble;
+    trouble.dead = f.dead;
+    trouble.dark = f.dark;
+    trouble.dips = f.dips;
+    trouble.overload = this.snap.overload;
+    const wait = waitInto(this.wait, f, t, reduce);
+    const waiting = wait.port !== null;
     for (let i = 0; i < this.padList.length; i++) {
-      const { slot, pad } = this.padList[i];
-      const target = placingServer && partInSlot(parts, slot) === null;
-      pad.setAlpha(target ? 1 : 0.8);
+      const pv = this.padList[i];
+      const pad = pv.pad;
+      const onPad = partInSlot(parts, pv.slot);
+      const target = placingServer && onPad === null;
+      // While the board waits for a build, the empty pads pulse: room for a box here.
+      const pulsing = waiting && onPad === null && !target;
+      this.pulsingPads[i] = pulsing;
+      pad.setAlpha(target ? 1 : pulsing ? padPulseAlpha(t, reduce) : 0.8);
       if (target) pad.setTint(0x9ffcff);
+      else if (pulsing) pad.setTint(0x7fe9ff);
       else pad.clearTint();
+      // The balancer skips the box on this pad: grey dashed pad, SKIPPED sticky for 1 s after.
+      pv.skipped = onPad !== null && this.isSkipped(flow.skipped, onPad.id);
+      pv.skipUntil = onPad === null ? -Infinity : skipTagUntil(pv.skipUntil, pv.skipped, t);
+      const shown = t < pv.skipUntil;
+      pv.dash.setVisible(shown);
+      pv.chip.setVisible(shown);
     }
-    const pulse = 0.55 + 0.25 * Math.sin(this.time.now / 120);
+    const pulse = reduce ? 0.55 : 0.55 + 0.25 * Math.sin(this.time.now / 120);
     this.hotParts.clear();
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       const v = this.viewFor(part);
       if (!v) continue;
-      const look = partLookInto(v.look, part, flow.load[part.id] ?? 0, f.offline, f.offlineUntil, f.now);
+      const look = partLookInto(
+        v.look,
+        part,
+        flow.load[part.id] ?? 0,
+        f.offline,
+        f.offlineUntil,
+        f.now,
+        trouble,
+      );
       // Traffic is being dropped here: the packets heading in turn red.
       if (look.dark || (look.share !== null && look.share > 1)) this.hotParts.add(part.id);
       v.seen = count;
@@ -463,8 +721,11 @@ export class BoardScene extends Phaser.Scene {
       }
       if (look.dark) v.img.setTint(DARK_TINT);
       else v.img.clearTint();
-      v.img.setAlpha(look.status === 'booting' || look.status === 'rebooting' ? pulse + 0.2 : 1);
+      v.lit = flickerLit(f.flickering.includes(part.id), t, reduce);
+      const base = look.status === 'booting' || look.status === 'rebooting' ? pulse + 0.2 : 1;
+      v.img.setAlpha(v.lit ? base : FLICKER_DIM);
       if (v.readout.update(look)) v.label.setText(v.readout.text).setColor(v.readout.colour);
+      this.drawPartState(part, v);
     }
     this.views.forEach(this.sweepView);
 
@@ -477,11 +738,145 @@ export class BoardScene extends Phaser.Scene {
 
     this.drawWires(flow.wires, flow.skipped);
     this.drawPreview(parts);
-    this.drawInbound(f.demand, dt);
+    this.drawChannel(channelInto(this.chan, f));
     this.stepPackets(dt, flow.wires, f.demand);
+    this.drawWait(wait, f.paused ? 0 : Math.min(seconds, 0.25));
     this.placeButtons(parts);
 
     if (this.refusalText.visible && this.time.now > this.refusalUntil) this.refusalText.setVisible(false);
+  }
+
+  /** The part's load bar, tag chip and warning triangle, re-set only when what they show changes. */
+  private drawPartState(part: Part, v: PartView): void {
+    const look = v.look;
+    const bar = v.bar;
+    if (bar) {
+      const key = BAR_INDEX[look.barColour] * 1000 + Math.round(look.bar * 100);
+      if (key !== v.barKey) {
+        v.barKey = key;
+        const c = partCentre(part);
+        if (c) {
+          const size = partSize(part);
+          const w = size.w * 0.8;
+          const h = 6 * slotScale(part.slot);
+          const x = c.x - w / 2;
+          const y = c.y + size.h / 2 + 3;
+          bar.clear();
+          bar.fillStyle(0x05070f, 0.85).fillRect(x - 2, y - 2, w + 4, h + 4);
+          bar.fillStyle(0x1b2233, 1).fillRect(x, y, w, h);
+          if (look.bar > 0) bar.fillStyle(BAR_COLOURS[look.barColour], 1).fillRect(x, y, w * look.bar, h);
+        }
+      }
+    }
+    const chipKey = tagChipKey(look);
+    if (chipKey !== v.chipKey) {
+      v.chipKey = chipKey;
+      const text = tagChip(look);
+      if (text === null) {
+        v.chip.setVisible(false);
+      } else {
+        v.chip
+          .setText(text)
+          .setBackgroundColor(look.diesIn !== null ? '#c8283a' : '#3b4150')
+          .setColor(look.diesIn !== null ? '#ffffff' : '#c5cad6')
+          .setVisible(true);
+      }
+    }
+    v.warn.setVisible(look.warning && v.lit);
+  }
+
+  /** The waits' port blink, the crew chip and the pool of tumbling cubes, made once. */
+  private drawWaits(): void {
+    this.portG = this.add.graphics().setDepth(6).setVisible(false);
+    this.portG.fillStyle(AMBER, 0.25).fillCircle(0, 0, 20);
+    this.portG.lineStyle(3, AMBER, 1).strokeCircle(0, 0, 13);
+    this.portG.fillStyle(AMBER, 1).fillCircle(0, 0, 6);
+    this.crewText = this.add
+      .text(LB_SLOT.x, LB_SLOT.y + 66, '', {
+        fontFamily: 'monospace',
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: '#2de2e6',
+        backgroundColor: '#05070fdd',
+        padding: { x: 8, y: 3 },
+      })
+      .setOrigin(0.5)
+      .setDepth(6)
+      .setVisible(false);
+    for (let i = 0; i < this.tumbles.items.length; i++) {
+      this.tumbleSprites.push(this.add.image(0, 0, 'packet').setDepth(2.5).setTint(GREY).setVisible(false));
+    }
+  }
+
+  /**
+   * The waits (board-6): the out-port that needs a wire blinks (lit steady under reduce flicker),
+   * the cubes with nowhere to go tumble off it, and in the crew wait a chip says what the boxes
+   * behind the balancer cover of the 120 they must. `dt` is real seconds (0 while held by a card).
+   */
+  private drawWait(w: WaitState, dt: number): void {
+    const port = w.port;
+    if (port) this.portG.setPosition(port.x, port.y);
+    this.portG.setVisible(w.portLit);
+    if (w.crew) {
+      const text = crewChip(w.behind, w.need);
+      if (text !== this.crewShown) {
+        this.crewShown = text;
+        this.crewText.setText(text);
+      }
+    }
+    this.crewText.setVisible(w.crew);
+    // Cubes reach the waiting port at the channel's rate; with nowhere to go they tumble off.
+    this.tumbles.step(dt, port ? Math.min(12, this.chan.lanePps) : 0, port);
+    const items = this.tumbles.items;
+    for (let i = 0; i < items.length; i++) {
+      const s = this.tumbleSprites[i];
+      const p = items[i];
+      if (!p.active) {
+        s.setVisible(false);
+        continue;
+      }
+      const angle = this.tumbles.at(p, this.at);
+      s.setPosition(this.at.x, this.at.y)
+        .setRotation(angle)
+        .setScale(0.7)
+        .setAlpha(1 - p.age / 0.9)
+        .setVisible(true);
+    }
+  }
+
+  /** Whether the balancer skipped a wire into `id` this frame (plain loops: no closure, no string built). */
+  private isSkipped(skipped: readonly string[], id: string): boolean {
+    if (skipped.length === 0) return false;
+    const list = this.wireList;
+    for (let i = 0; i < list.length; i++) if (list[i].to === id && skipped.includes(list[i].key)) return true;
+    return false;
+  }
+
+  /** A server pad's view: its image, the dashed grey outline and the SKIPPED tag, both hidden. */
+  private makePad(slot: string, pad: Phaser.GameObjects.Image): PadView {
+    const b = padBox(slot)!;
+    const s = slotScale(slot);
+    const dash = this.add.graphics().setDepth(1.4).setVisible(false);
+    dash.lineStyle(2, GREY, 0.95);
+    dash.beginPath();
+    for (const seg of dashedOutline({ x: b.x - b.w / 2, y: b.y - b.h / 2, w: b.w, h: b.h }, 8, 6)) {
+      dash.moveTo(seg.x1, seg.y1);
+      dash.lineTo(seg.x2, seg.y2);
+    }
+    dash.strokePath();
+    const chip = this.add
+      .text(b.x, b.y + b.h / 2, LABELS.partTags.skipped, {
+        fontFamily: 'monospace',
+        fontSize: `${Math.round(14 * s)}px`,
+        fontStyle: 'bold',
+        color: '#c5cad6',
+        backgroundColor: '#3b4150',
+        padding: { x: 6, y: 2 },
+      })
+      .setOrigin(0.5)
+      .setDepth(6)
+      .setVisible(false);
+    return { slot, pad, dash, chip, skipUntil: -Infinity, skipped: false };
   }
 
   /** The part's sprites, made the first time it is seen (a part never moves once placed). */
@@ -508,6 +903,32 @@ export class BoardScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 1)
       .setDepth(5);
+    // The load bar under the part (parts with a limit), the tag chip near its top, the triangle.
+    const bar = part.kind === 'gateway' ? null : this.add.graphics().setDepth(5);
+    const chip = this.add
+      .text(c.x, c.y - size.h / 2 + 16 * s, '', {
+        fontFamily: 'monospace',
+        fontSize: `${Math.round(15 * s)}px`,
+        fontStyle: 'bold',
+        color: '#ffffff',
+        backgroundColor: '#3b4150',
+        padding: { x: 6, y: 2 },
+      })
+      .setOrigin(0.5)
+      .setDepth(6)
+      .setVisible(false);
+    const warn = this.add.graphics().setDepth(6).setVisible(false);
+    const tx = c.x + size.w / 2 - 4;
+    const ty = c.y - size.h / 2 + 2;
+    const r = 13 * s;
+    warn
+      .fillStyle(0x05070f, 0.9)
+      .fillTriangle(tx, ty - r - 3, tx - r - 3, ty + r * 0.8 + 2, tx + r + 3, ty + r * 0.8 + 2);
+    warn.fillStyle(RED, 1).fillTriangle(tx, ty - r, tx - r, ty + r * 0.8, tx + r, ty + r * 0.8);
+    warn
+      .fillStyle(0xffffff, 1)
+      .fillRect(tx - 1.5, ty - r * 0.45, 3, r * 0.7)
+      .fillRect(tx - 1.5, ty + r * 0.4, 3, 3);
     const v: PartView = {
       img,
       shadow,
@@ -516,6 +937,12 @@ export class BoardScene extends Phaser.Scene {
       look: emptyLook(),
       readout: new LabelCache(),
       seen: 0,
+      bar,
+      barKey: -1,
+      chip,
+      chipKey: -1,
+      warn,
+      lit: true,
     };
     this.views.set(part.id, v);
     return v;
@@ -640,25 +1067,13 @@ export class BoardScene extends Phaser.Scene {
     return t;
   }
 
-  /** The channel's chevrons, drifting toward the gateway faster as demand climbs. */
-  private drawInbound(demand: number, dt: number): void {
-    const g = this.inboundG;
-    g.clear();
-    const lane = INBOUND_LANES[1];
-    const x0 = CHANNEL.mouth.x + 12;
-    const x1 = CHANNEL.port.x - 24;
-    const y = lane[0].y;
-    const speed = 30 + Math.min(demand, 300) * 0.6;
-    this.chevronShift = (this.chevronShift + dt * speed) % 34;
-    g.lineStyle(4, AMBER, 0.55);
-    for (let x = x0 + this.chevronShift; x < x1; x += 34) {
-      g.lineBetween(x, y - 10, x + 10, y).lineBetween(x + 10, y, x, y + 10);
-    }
-  }
-
   private stepPackets(dt: number, rates: Readonly<Record<string, number>>, demand: number): void {
     // Every wire on the board, plus the inbound lanes sharing the block's demand, refilled in place.
-    const all = fillPacketRates(this.packetRates, rates, demand, INBOUND_KEYS);
+    const all = fillInboundRates(
+      fillPacketRates(this.packetRates, rates, demand, INBOUND_KEYS),
+      demand,
+      INBOUND_KEYS,
+    );
     this.pool.step(dt, all, this.travelOf);
     const items = this.pool.items;
     while (this.packetSprites.length < items.length) {
@@ -693,6 +1108,17 @@ export class BoardScene extends Phaser.Scene {
     } else {
       this.binBtn.setVisible(false);
     }
+  }
+
+  /** Packets on their way into `id` right now (the test hook only). */
+  private packetsInto(id: string): number {
+    let n = 0;
+    for (const p of this.pool.items) {
+      if (!p.active) continue;
+      const w = this.wireByKey.get(p.wire);
+      if (w && w.to === id) n++;
+    }
+    return n;
   }
 
   private showRefusal(reason: string): void {
@@ -878,7 +1304,9 @@ export class BoardScene extends Phaser.Scene {
       parts: board.parts.flatMap((part) => {
         const c = partCentre(part);
         if (!c) return [];
-        const look = partLook(part, f.flow.load[part.id] ?? 0, offline, f.offlineUntil, f.now);
+        const look = partLook(part, f.flow.load[part.id] ?? 0, offline, f.offlineUntil, f.now, this.trouble);
+        const pad = part.slot ? this.padList.find((p) => p.slot === part.slot) : undefined;
+        const view = this.views.get(part.id);
         return [
           {
             id: part.id,
@@ -895,9 +1323,63 @@ export class BoardScene extends Phaser.Scene {
             art: look.art,
             dark: look.dark,
             label: loadLabel(look),
+            diesIn: look.diesIn === null ? null : round(look.diesIn),
+            darkLeft: look.darkLeft === null ? null : round(look.darkLeft),
+            unfed: look.unfed,
+            warning: look.warning,
+            bar: round(look.bar),
+            barColour: look.barColour,
+            flickerLit: view?.lit ?? true,
+            scale: slotScale(part.slot),
+            tags: partTags(look, pad !== undefined && this.clock < pad.skipUntil),
+            packetsIn: this.packetsInto(part.id),
           },
         ];
       }),
+      pads: [
+        {
+          slot: LB_SLOT_ID,
+          ...page(LB_SLOT.x, LB_SLOT.y),
+          w: round((PAD_SIZE.w * rect.width) / GAME_WIDTH),
+          h: round((PAD_SIZE.h * rect.height) / GAME_HEIGHT),
+          row: null,
+          scale: 1,
+          part: board.parts.find((p) => p.kind === 'balancer')?.id ?? null,
+          locked: !this.balancerUnlocked,
+          state: !this.balancerUnlocked
+            ? ('locked' as const)
+            : board.parts.some((p) => p.kind === 'balancer')
+              ? ('taken' as const)
+              : ('empty' as const),
+          skipped: false,
+          skipTagUntil: null,
+          dashed: false,
+          pulsing: false,
+        },
+        ...this.padList.map((pv) => {
+          const b = padBox(pv.slot)!;
+          const on = board.parts.find((p) => p.slot === pv.slot);
+          const g = SERVER_GRID[pv.slot];
+          const pr = pageBox(b);
+          return {
+            slot: pv.slot,
+            ...page(b.x, b.y),
+            w: pr.w,
+            h: pr.h,
+            row: g.row,
+            scale: RACK_ROWS[g.row].scale,
+            part: on?.id ?? null,
+            locked: false,
+            state: !on ? ('empty' as const) : f.dead.includes(on.id) ? ('dead' as const) : ('taken' as const),
+            skipped: pv.skipped,
+            skipTagUntil: Number.isFinite(pv.skipUntil) ? round(pv.skipUntil) : null,
+            dashed: this.clock < pv.skipUntil,
+            pulsing: this.pulsingPads[this.padList.indexOf(pv)] === true,
+          };
+        }),
+      ],
+      clock: round(this.clock),
+      reduceFlicker: this.reduceFlicker,
       wires: this.wireList.map((w) => ({
         key: w.key,
         from: w.from,
@@ -907,8 +1389,36 @@ export class BoardScene extends Phaser.Scene {
         skipped: f.flow.skipped.includes(w.key),
       })),
       offline,
+      channel: {
+        demand: round(this.chan.demand),
+        max: this.chan.max,
+        level: round(this.chan.level),
+        capacityLevel: round(this.chan.capacityLevel),
+        wired: round(f.wiredCapacity),
+        forecast: this.chan.forecast === null ? null : round(this.chan.forecast),
+        whatIf: null,
+        retryShare: round(this.chan.retryShare),
+        marks: bankMarkPoints().map((m) => ({ label: m.label, value: m.value, ...page(m.x, m.y) })),
+        lanePps: round(this.chan.lanePps),
+        lanes: INBOUND_KEYS.map((_, i) => round(lanePps(this.chan.demand, i, INBOUND_KEYS.length))),
+        chevrons: 0,
+        roomY: page(CHANNEL.mouth.x, levelY(this.chan.capacityLevel, CHANNEL.mouth.x)).y,
+        levelY: page(CHANNEL.mouth.x, levelY(this.chan.level, CHANNEL.mouth.x)).y,
+      },
       skipped: [...f.flow.skipped],
-      packets: { pool: this.pool.size, active: this.pool.active },
+      packets: { pool: this.pool.size, active: this.pool.active, tumbled: this.tumbles.active },
+      waiting: {
+        first: this.wait.first,
+        crew: this.wait.crew,
+        behind: round(this.wait.behind),
+        need: this.wait.need,
+        port: this.wait.port ? page(this.wait.port.x, this.wait.port.y) : null,
+        portLit: this.wait.portLit,
+        blinking: this.wait.blinking,
+        tumbled: this.tumbles.active,
+        pulsing: this.padList.filter((_, i) => this.pulsingPads[i] === true).map((pv) => pv.slot),
+        chip: this.crewText.visible ? this.crewText.text : null,
+      },
       rewinds: f.rewinds.map((w) => ({ at: round(w.at), to: w.to })),
       selectedPart: this.selectedPart,
       selectedWire: this.selectedWire,

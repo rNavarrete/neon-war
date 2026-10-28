@@ -5,7 +5,7 @@ import type { PartKind } from '../../sim/board';
 import type { Rect } from '../live/layout';
 import type { Point } from './layout';
 import type { InventoryCounts } from './tray';
-import type { PartStatus } from './view';
+import type { BarColour, PartStatus, PartTag } from './view';
 
 export interface BoardTestState {
   /** The feed zone the board draws in (BOARD_AREA), in page CSS pixels. */
@@ -44,13 +44,77 @@ export interface BoardTestState {
     art: string;
     dark: boolean;
     label: string;
+    /** Seconds until an overloaded server cooks; 0 once dead; null when it is not overloaded (board-5). */
+    diesIn: number | null;
+    /** Seconds until a part dark in a power dip comes back on, or null. */
+    darkLeft: number | null;
+    /** An online server nothing reaches (no load). */
+    unfed: boolean;
+    /** The warning triangle is up: a server over 100% or dark; the database only over 200 (D2). */
+    warning: boolean;
+    /** The load bar's fill, 0..1, and its colour. */
+    bar: number;
+    barColour: BarColour;
+    /** Lit this frame: false only on the dark half of a power flicker's blink; always true under reduce flicker. */
+    flickerLit: boolean;
+    /** The row's draw scale (1 off the rack). */
+    scale: number;
+    /** The tags the part wears (the lead's enum), first is the one shown. */
+    tags: PartTag[];
+    /** Packets on their way into the part right now. */
+    packetsIn: number;
   })[];
+  /**
+   * Every pad (board-5): the balancer's and the six server pads, with their drawn box (page CSS
+   * pixels), rack row and scale, the part on it, whether the balancer skips that part now
+   * (`skipped`, the sim's flow.skipped), the board-clock second the SKIPPED tag shows until
+   * (`skipTagUntil`, sticky 1 s after the skip clears; null before any skip) and whether the pad is
+   * drawn grey and dashed with the tag on it now (`dashed`).
+   */
+  pads: (Point & {
+    slot: string;
+    w: number;
+    h: number;
+    row: number | null;
+    scale: number;
+    part: string | null;
+    locked: boolean;
+    state: 'empty' | 'taken' | 'dead' | 'locked';
+    skipped: boolean;
+    skipTagUntil: number | null;
+    dashed: boolean;
+    pulsing: boolean;
+  })[];
+  /** The board clock in seconds (the scene's own time): what skipTagUntil and the blinks count on. */
+  clock: number;
+  /** settings().reduceFlicker as the board read it this frame: nothing blinks while it is true. */
+  reduceFlicker: boolean;
   wires: (Point & { key: string; from: string; to: string; rate: number; skipped: boolean })[];
   offline: string[];
   /** Wire keys the load balancer skipped, each drawn with a grey "skipped" tag. */
   skipped: string[];
-  /** Packet sprites in the pool, and how many are on a wire right now. */
-  packets: { pool: number; active: number };
+  /** Packet sprites in the pool, how many are on a wire right now, and the cubes tumbling off a waiting port. */
+  packets: { pool: number; active: number; tumbled: number };
+  /**
+   * The board's waits (board-6): `first` while C1 holds the clock for the first build, `crew` while
+   * the clock waits after the rescue for the boxes behind the balancer to cover `need` (120; they
+   * cover `behind` now). The board shows why: the out-port that needs a wire (`port`, page CSS
+   * pixels) blinks (`blinking`; `portLit` this frame, always lit under reduce flicker), cubes tumble
+   * off it (`tumbled` now), the empty pads pulse (`pulsing`, by slot) and in the crew wait a chip by
+   * the balancer reads behind/need (`chip`).
+   */
+  waiting: {
+    first: boolean;
+    crew: boolean;
+    behind: number;
+    need: number;
+    port: Point | null;
+    portLit: boolean;
+    blinking: boolean;
+    tumbled: number;
+    pulsing: string[];
+    chip: string | null;
+  };
   /** Each rewind so far: the sim second it happened and the challenge start it went back to. */
   rewinds: { at: number; to: number }[];
   selectedPart: string | null;
@@ -61,6 +125,33 @@ export interface BoardTestState {
   refusal: string | null;
   /** What the pointer is dragging: a tray card id, 'wire', or null. */
   dragging: string | null;
+  /**
+   * The channel at the feed's left edge (board-4), on the shared 0..400 scale: `level` is
+   * min(1, demand / max), `capacityLevel` the wired boxes' req/s / max (the ROOM tick; never the
+   * racked total), `forecast` the coming surge's level while its warning is up (else null),
+   * `retryShare` the red band's share of the fill, `marks` the five bank labels at the mouth in page
+   * CSS pixels (bottom to top), `lanePps` the cubes a second streaming in (all lanes) and `lanes`
+   * each lane's share. `whatIf` is the drag ghost's level (board-8; null until then). `chevrons` is
+   * how many chevrons are drawn: none.
+   */
+  channel: {
+    demand: number;
+    max: number;
+    level: number;
+    capacityLevel: number;
+    /** The wired boxes' req/s the ROOM tick stands for (Frame.wiredCapacity). */
+    wired: number;
+    forecast: number | null;
+    whatIf: number | null;
+    retryShare: number;
+    marks: (Point & { label: string; value: number })[];
+    lanePps: number;
+    lanes: number[];
+    chevrons: number;
+    /** Page y of the ROOM tick and of the fill's level at the mouth. */
+    roomY: number;
+    levelY: number;
+  };
   /** Board frames synced so far. */
   frame: number;
   /**

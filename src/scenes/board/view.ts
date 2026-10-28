@@ -1,14 +1,37 @@
-// How a part looks this frame: its status (online, booting, rebooting, offline), its load as a
-// share of capacity, which art to draw and the readout under it. Pure, from sim state.
+// How a part looks this frame: its status (online, booting, rebooting, dark in a dip, dead, or
+// offline when nothing says why), its load as a share of capacity, which art to draw, the readout
+// under it, and (board-5) its load bar, its DIES IN and DARK countdowns, whether it is UNFED and
+// whether it wears the warning triangle. Pure, from sim state; time comes in as `now`.
 
 import { type Part, capacityOf } from '../../sim/board';
-import { BROWNOUT_RULES } from '../../sim/brownout';
+import { BROWNOUT, BROWNOUT_RULES } from '../../sim/brownout';
+import type { PowerDip } from '../../sim/failures';
+import { LABELS, diesIn as diesInLabel } from '../hud/labels';
 
-export type PartStatus = 'online' | 'booting' | 'rebooting' | 'offline';
+export type PartStatus = 'online' | 'booting' | 'rebooting' | 'offline' | 'dark' | 'dead';
+
+/** The tags a part wears on the feed (the lead's enum, contract 'board.parts[].tags'). */
+export type PartTag = 'UNFED' | 'BOOTING' | 'SKIPPED' | 'DARK' | 'DIES IN';
+
+/** The load bar's colour: cyan with room, amber near the limit, red over it, grey when it serves nothing. */
+export type BarColour = 'cyan' | 'amber' | 'red' | 'grey';
+
+/**
+ * What tells a dark part from a dead one, and how long an overloaded server has left: the Frame's
+ * dead and dark lists and its dips, and the sim's overload seconds. Without it a part that is
+ * offline for no boot reads 'offline', as it did before board-5.
+ */
+export interface PartTrouble {
+  readonly dead: readonly string[];
+  readonly dark: readonly string[];
+  readonly dips: readonly PowerDip[];
+  /** Seconds each server has been over 100% in a row (play.heat.overload). */
+  readonly overload: Readonly<Record<string, number>>;
+}
 
 export interface PartLook {
   readonly status: PartStatus;
-  /** Seconds until a booting or rebooting part is back; 0 otherwise. */
+  /** Seconds until a booting or rebooting part is back, or a dark one comes back on; 0 otherwise. */
   readonly left: number;
   /** Req/s arriving at the part. */
   readonly load: number;
@@ -20,6 +43,17 @@ export interface PartLook {
   readonly art: string;
   /** True when the art should be darkened (the part is offline). */
   readonly dark: boolean;
+  /** Seconds until an overloaded server cooks (8 less its seconds over 100%); 0 once dead; else null. */
+  readonly diesIn: number | null;
+  /** Seconds until a part dark in a power dip comes back on; null when it is not dark. */
+  readonly darkLeft: number | null;
+  /** An online server nothing reaches: no load at all. */
+  readonly unfed: boolean;
+  /** Wears the warning triangle: a server over 100% or dark in a dip; the database only over 200 (D2). */
+  readonly warning: boolean;
+  /** The load bar, 0..1: load / capacity while online, boot progress while booting, else 0. */
+  readonly bar: number;
+  readonly barColour: BarColour;
 }
 
 /** Load share at or past which a part shows hot. */
@@ -30,7 +64,21 @@ export type MutablePartLook = { -readonly [K in keyof PartLook]: PartLook[K] };
 
 /** A blank look to refill with partLookInto. */
 export function emptyLook(): MutablePartLook {
-  return { status: 'online', left: 0, load: 0, capacity: null, share: null, art: '', dark: false };
+  return {
+    status: 'online',
+    left: 0,
+    load: 0,
+    capacity: null,
+    share: null,
+    art: '',
+    dark: false,
+    diesIn: null,
+    darkLeft: null,
+    unfed: false,
+    warning: false,
+    bar: 0,
+    barColour: 'grey',
+  };
 }
 
 export function partLook(
@@ -39,8 +87,9 @@ export function partLook(
   offline: readonly string[],
   offlineUntil: Readonly<Record<string, number>>,
   now: number,
+  trouble?: PartTrouble,
 ): PartLook {
-  return partLookInto(emptyLook(), part, load, offline, offlineUntil, now);
+  return partLookInto(emptyLook(), part, load, offline, offlineUntil, now, trouble);
 }
 
 /** partLook written into `out` and returned, so the board reuses one object per part every frame. */
@@ -51,6 +100,7 @@ export function partLookInto(
   offline: readonly string[],
   offlineUntil: Readonly<Record<string, number>>,
   now: number,
+  trouble?: PartTrouble,
 ): PartLook {
   const cap = capacityOf(part, BROWNOUT_RULES);
   const capacity = Number.isFinite(cap) ? cap : null;
@@ -63,21 +113,110 @@ export function partLookInto(
     if (until !== undefined && until > now) {
       status = part.boost !== undefined ? 'rebooting' : 'booting';
       left = until - now;
+    } else if (trouble && trouble.dead.includes(part.id)) {
+      status = 'dead';
+    } else if (trouble && trouble.dark.includes(part.id)) {
+      status = 'dark';
+      left = darkSecondsLeft(trouble.dips, part.id, now);
     } else {
       status = 'offline';
     }
   }
   const hot = !isOff && share !== null && share > HOT_SHARE;
-  // Booting and rebooting servers keep their art, darkened; a server dark for any other reason
-  // (dead, or in a power dip once ENG-503 lands) shows the dead server.
+  // Booting, rebooting and dark servers keep their art, darkened (unlit until the dark art lands,
+  // board-12); a dead server, or one offline for no reason the board knows, shows the dead server.
   out.status = status;
   out.left = left;
   out.load = load;
   out.capacity = capacity;
   out.share = share;
-  out.art = status === 'offline' && part.kind === 'server' ? 'server-dead' : artFor(part, hot);
+  out.art =
+    (status === 'offline' || status === 'dead') && part.kind === 'server' ? 'server-dead' : artFor(part, hot);
   out.dark = isOff;
+  const over = trouble?.overload[part.id];
+  out.diesIn =
+    status === 'dead'
+      ? 0
+      : status === 'online' && over !== undefined
+        ? Math.max(0, BROWNOUT.overheat.overloadSeconds - over)
+        : null;
+  out.darkLeft = status === 'dark' ? left : null;
+  out.unfed = part.kind === 'server' && status === 'online' && !(load > 0);
+  out.warning =
+    (part.kind === 'server' && (status === 'dark' || hot)) ||
+    (part.kind === 'database' && load > BROWNOUT.database.capacity);
+  if (status === 'booting' || status === 'rebooting') {
+    const total = status === 'booting' ? BROWNOUT.server.bootSeconds : BROWNOUT.overclock.rebootSeconds;
+    out.bar = Math.max(0, Math.min(1, 1 - left / total));
+    out.barColour = 'cyan';
+  } else if (status === 'online' && share !== null) {
+    out.bar = Math.max(0, Math.min(1, share));
+    out.barColour = share < 0.8 ? 'cyan' : share <= HOT_SHARE ? 'amber' : 'red';
+  } else {
+    out.bar = 0;
+    out.barColour = 'grey';
+  }
   return out;
+}
+
+/** Seconds until the dip that has `id` dark ends, from the dips; 0 when none does. */
+function darkSecondsLeft(dips: readonly PowerDip[], id: string, now: number): number {
+  for (let i = 0; i < dips.length; i++) {
+    const d = dips[i];
+    if (d.part === id && d.darkAt <= now && now < d.endsAt) return d.endsAt - now;
+  }
+  return 0;
+}
+
+/**
+ * The tags a part wears this frame, in the order the chip shows them (the first is drawn): DIES IN,
+ * DARK, SKIPPED (scene-side, sticky 1 s: `skipped`), UNFED, BOOTING.
+ */
+export function partTags(look: PartLook, skipped: boolean): PartTag[] {
+  const tags: PartTag[] = [];
+  if (look.diesIn !== null && look.status === 'online') tags.push('DIES IN');
+  if (look.status === 'dark') tags.push('DARK');
+  if (skipped) tags.push('SKIPPED');
+  if (look.unfed) tags.push('UNFED');
+  if (look.status === 'booting' || look.status === 'rebooting') tags.push('BOOTING');
+  return tags;
+}
+
+/**
+ * The chip drawn on a part: DIES IN with its seconds, or UNFED; null otherwise. The readout above
+ * the part already counts BOOTING and DARK down, and SKIPPED sits on the pad.
+ */
+export function tagChip(look: PartLook): string | null {
+  if (look.diesIn !== null && look.status === 'online') return diesInLabel(look.diesIn);
+  if (look.unfed) return LABELS.partTags.unfed;
+  return null;
+}
+
+/** A number that changes exactly when tagChip's text would: the chip's kind and its whole seconds. */
+export function tagChipKey(look: PartLook): number {
+  if (look.diesIn !== null && look.status === 'online') return 1000 + Math.max(0, Math.ceil(look.diesIn));
+  if (look.unfed) return 1;
+  return 0;
+}
+
+/** How long the SKIPPED tag stays on a pad after the skip clears, in seconds. */
+export const SKIP_TAG_HOLD = 1;
+
+/**
+ * The SKIPPED tag's sticky end on a pad: while the balancer skips the box on it the end keeps
+ * moving to now + SKIP_TAG_HOLD; once the skip clears it stays where it was, so the tag lingers at
+ * least SKIP_TAG_HOLD seconds. View-only (rule_changes): the sim's skip is not sticky.
+ */
+export function skipTagUntil(prevUntil: number, skippedNow: boolean, now: number): number {
+  return skippedNow ? now + SKIP_TAG_HOLD : prevUntil;
+}
+
+/** The power-flicker blink: 6 Hz, lit on even half-periods; always lit under reduce flicker. */
+export const FLICKER_HZ = 6;
+
+export function flickerLit(flickering: boolean, t: number, reduceFlicker: boolean): boolean {
+  if (!flickering || reduceFlicker) return true;
+  return Math.floor(t * FLICKER_HZ * 2) % 2 === 0;
 }
 
 /** Texture key for a part: the overclocked server when boosted, the hot art when over capacity. */
@@ -97,6 +236,8 @@ export function artFor(part: Pick<Part, 'kind' | 'boost'>, hot: boolean): string
 export function loadLabel(look: PartLook): string {
   if (look.status === 'booting') return `BOOTING ${look.left.toFixed(1)}s`;
   if (look.status === 'rebooting') return `REBOOTING ${look.left.toFixed(1)}s`;
+  if (look.status === 'dark') return `${LABELS.partTags.dark} ${Math.max(0, Math.ceil(look.left))} s`;
+  if (look.status === 'dead') return 'DEAD';
   if (look.status === 'offline') return 'OFFLINE';
   const load = Math.round(look.load);
   if (look.capacity === null || look.share === null) return `${load} req/s`;
