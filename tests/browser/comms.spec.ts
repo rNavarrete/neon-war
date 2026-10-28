@@ -362,3 +362,351 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
   await shot(page, 'live-m3-comms');
   expect(errors).toEqual([]);
 });
+
+// ---- comms-5/6/7/8: voices and the leader line ----
+
+type HookState = Record<string, unknown> & {
+  scene: string | null;
+  ready: boolean;
+  shell?: { buttons: Record<string, { x: number; y: number }>; settings: { volume: number } };
+  settingsScreen?: {
+    open: boolean;
+    voices: string;
+    voiceVolume: number;
+    labels: { voices: string; voiceVolume: string } | null;
+  };
+};
+const hook = (page: Page): Promise<HookState> =>
+  page.evaluate(() => window.__neonTest!.state as unknown as HookState);
+
+/** Click a shell button by id once the hook lists it. */
+async function press(page: Page, id: string): Promise<void> {
+  await expect
+    .poll(async () => (await hook(page)).shell?.buttons[id] ?? null, { timeout: 10_000 })
+    .not.toBeNull();
+  const { x, y } = (await hook(page)).shell!.buttons[id];
+  await page.mouse.click(x, y);
+}
+
+async function waitScene(page: Page, scene: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const s = await page.evaluate(() => window.__neonTest?.state);
+        return s && s.ready ? s.scene : null;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(scene);
+}
+
+// comms-7 (and comms-5's settings): the Voices and Voice volume rows sit beside the old rows, two
+// presses of Voices turn them off, one press of − takes the voice volume to 90%, the old rows still
+// work, and both survive a reload. About 6 s.
+test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both survive a reload', async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.goto('/?test');
+  await waitScene(page, 'title');
+  await press(page, 'settings');
+  await waitScene(page, 'settings');
+
+  let s = await hook(page);
+  expect(Object.keys(s.shell!.buttons)).toEqual(
+    expect.arrayContaining([
+      'volumeDown',
+      'volumeUp',
+      'textSpeed',
+      'reduceFlicker',
+      'fullscreen',
+      'voices',
+      'voiceDown',
+      'voiceUp',
+      'back',
+    ]),
+  );
+  expect(s.settingsScreen).toEqual({
+    open: true,
+    voices: 'ja',
+    voiceVolume: 1,
+    labels: { voices: 'JA', voiceVolume: '100%' },
+  });
+
+  await press(page, 'voices');
+  await expect.poll(async () => (await hook(page)).settingsScreen!.voices).toBe('en');
+  await press(page, 'voices');
+  await expect.poll(async () => (await hook(page)).settingsScreen!.voices).toBe('off');
+  await press(page, 'voiceDown');
+  await expect.poll(async () => (await hook(page)).settingsScreen!.voiceVolume).toBe(0.9);
+  // The old rows keep working beside the new ones.
+  await press(page, 'volumeDown');
+  await expect.poll(async () => (await hook(page)).shell!.settings.volume).toBe(0.7);
+  s = await hook(page);
+  expect(s.settingsScreen!.labels).toEqual({ voices: 'OFF', voiceVolume: '90%' });
+  const stored = await page.evaluate(() =>
+    JSON.parse(window.localStorage.getItem('neon-war.settings') ?? '{}'),
+  );
+  expect(stored).toMatchObject({ voices: 'off', voiceVolume: 0.9, volume: 0.7 });
+  await shot(page, 'comms-settings-voices');
+
+  await press(page, 'back');
+  await waitScene(page, 'title');
+  await page.reload();
+  await waitScene(page, 'title');
+  s = await hook(page);
+  expect(s.settingsScreen).toMatchObject({ open: false, voices: 'off', voiceVolume: 0.9 });
+  expect(s.shell!.settings.volume).toBe(0.7);
+  expect(errors).toEqual([]);
+});
+
+type VoiceHook = { recentVoice: string[]; missing: string[]; playing: string | null; started: string[] };
+type StoryHook = {
+  scriptId: string | null;
+  lineId: string | null;
+  typingDone: boolean;
+  active: boolean;
+  clicks: number;
+  click: { x: number; y: number } | null;
+  voices: string[];
+  voiceStops: string[];
+  finished: string[];
+};
+const voiceOf = (page: Page): Promise<VoiceHook> =>
+  page.evaluate(() => (window.__neonTest!.state as unknown as { shell: { voice: VoiceHook } }).shell.voice);
+const storyOf = (page: Page): Promise<StoryHook | null> =>
+  page.evaluate(
+    () => (window.__neonTest?.state as unknown as { story?: StoryHook } | undefined)?.story ?? null,
+  );
+
+// comms-6, scenes: every line the cold open shows in the text box asks for its voice once, through
+// playVoice, in the order shown; a click past a line cuts its voice (story.voiceStops), and the
+// scene ending cuts the last. With no voice files nothing plays (shell.voice.playing stays null)
+// and nothing is fetched. About 7 s.
+test('comms-6: scene lines ask for their voice in order; a click past a line cuts it', async ({ page }) => {
+  test.setTimeout(40_000);
+  const errors: string[] = [];
+  const fetched: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  page.on('request', (req) => {
+    if (req.url().includes('/audio/voice/')) fetched.push(req.url());
+  });
+  await page.addInitScript(() => {
+    window.localStorage.setItem('neon-war.settings', JSON.stringify({ textSpeed: 'fast' }));
+  });
+  await page.goto('/?test&scene=story');
+  await expect.poll(async () => (await storyOf(page))?.scriptId ?? null, { timeout: 15_000 }).toBe('C0');
+
+  const shown: string[] = [];
+  for (let guard = 0; guard < 20; guard++) {
+    const s = (await storyOf(page))!;
+    if (!s.active || s.scriptId !== 'C0') break;
+    if (s.lineId && shown.at(-1) !== s.lineId) {
+      shown.push(s.lineId);
+      // The line asked for its voice as it showed, and the one before it was cut.
+      expect(s.voices.at(-1), s.lineId).toBe(s.lineId);
+      expect((await voiceOf(page)).recentVoice.at(-1), s.lineId).toBe(s.lineId);
+      if (shown.length > 1) expect(s.voiceStops.at(-1)).toBe(shown.at(-2));
+    }
+    await expect.poll(async () => (await storyOf(page))!.typingDone, { timeout: 5_000 }).toBe(true);
+    const before = (await storyOf(page))!;
+    await page.mouse.click(before.click!.x, before.click!.y);
+    await expect
+      .poll(
+        async () => {
+          const n = (await storyOf(page))!;
+          return n.clicks > before.clicks && (n.lineId !== before.lineId || !n.active);
+        },
+        { timeout: 5_000 },
+      )
+      .toBe(true);
+  }
+  await expect.poll(async () => (await storyOf(page))!.finished, { timeout: 10_000 }).toContain('C0');
+
+  const s = (await storyOf(page))!;
+  expect(shown.length).toBeGreaterThanOrEqual(5);
+  expect(shown[0]).toBe('C0.tv.01');
+  expect(s.voices).toEqual(shown);
+  // Every line was cut on its way out: the clicks past each, then the scene ending after the last.
+  expect(s.voiceStops).toEqual(shown);
+  const v = await voiceOf(page);
+  expect(v.recentVoice).toEqual(shown);
+  for (const id of shown) expect(v.missing).toContain(id);
+  expect(v.playing).toBeNull();
+  expect(v.started).toEqual([]);
+  expect(fetched).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// comms-6, band: every bark the band shows asks the mixer for its voice exactly once (bus `line`
+// is the request), in the order shown; a voiceStart for the current line marks it voiced and holds
+// it until at least seconds + 0.6 after it started. `window.__neonComms.voiceStart` stands in for
+// the mixer, which never starts a clip headless. About 8 s.
+test('comms-6: each band line asks for its voice once, in order; voiceStart holds the line', async ({
+  page,
+}) => {
+  test.setTimeout(40_000);
+  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
+  // In the page: the first time C1.triage.02 is current, report a 3 s clip for it, then record what
+  // the band reports for that line.
+  await page.evaluate(() => {
+    const w = window as unknown as { __voiced: unknown[]; __sent: boolean };
+    w.__voiced = [];
+    w.__sent = false;
+    setInterval(() => {
+      const c = (window.__neonTest!.state as unknown as { hud?: { comms?: CommsTestState } }).hud?.comms;
+      const line = c?.line;
+      if (!line || line.id !== 'C1.triage.02') return;
+      if (!w.__sent) {
+        w.__sent = true;
+        window.__neonComms!.voiceStart('C1.triage.02', 3);
+        return;
+      }
+      w.__voiced.push({ voiced: line.voiced, since: line.since, until: line.until });
+    }, 20);
+  });
+  await dismissJobCard(page);
+  type Voiced = { voiced: boolean; since: number; until: number };
+  const readVoiced = (): Promise<Voiced[]> =>
+    page.evaluate(() => (window as unknown as { __voiced: Voiced[] }).__voiced);
+  await expect
+    .poll(async () => (await readVoiced()).filter((x) => x.voiced).length, {
+      timeout: 15_000,
+      intervals: [50],
+    })
+    .toBeGreaterThan(0);
+  for (const r of (await readVoiced()).filter((x) => x.voiced)) {
+    expect(r.until - r.since).toBeGreaterThanOrEqual(3 + 0.6 - 1e-6);
+  }
+
+  // Let a few more lines through, then compare the band's history with the mixer's requests.
+  await expect
+    .poll(async () => (await comms(page)).history.length, { timeout: 15_000, intervals: [50] })
+    .toBeGreaterThanOrEqual(3);
+  const { c, v } = await page.evaluate(() => {
+    const s = window.__neonTest!.state as unknown as {
+      hud: { comms: CommsTestState };
+      shell: { voice: VoiceHook };
+    };
+    return { c: s.hud.comms, v: s.shell.voice };
+  });
+  expect(c.log.replayed).toEqual([]);
+  const n = Math.min(c.history.length, v.recentVoice.length);
+  expect(v.recentVoice.slice(-n)).toEqual(c.history.slice(-n));
+  for (const id of c.history)
+    expect(
+      v.recentVoice.filter((x) => x === id),
+      id,
+    ).toHaveLength(1);
+  // The band sends no `voice` of its own for a line (only the replay glyph does).
+  expect(c.emitted.filter((e) => e.startsWith('voice:'))).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// comms-8: the leader line. Through C1 to C3 at speed 20 with the autopilot, a sampler in the page
+// records hud.comms.line and hud.comms.leader every 20 ms (a line lasts a fraction of a second at
+// this speed). A second box racked in C3 fires C3.triage.02, whose leader names that box and ends
+// within 2 page px of its anchor (board.parts[] reports partAnchor). A line with no LEADER_FOR entry
+// (C1.triage.02) reports null; a zone line reports null while its zone is unregistered and ends
+// within 8 page px of the registered point once a lane registers it. About 16 s.
+interface LeaderSample {
+  id: string;
+  leader: { subject: string; target: string; from: Pt; corner: Pt; to: Pt } | null;
+  located: Record<string, Pt | null>;
+}
+type Pt = { x: number; y: number };
+
+test('comms-8: the leader points at the idle box for C3.triage.02; null without an entry or a registered zone', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
+  await page.evaluate(() => {
+    const w = window as unknown as { __leader: unknown[] };
+    w.__leader = [];
+    setInterval(() => {
+      const c = (window.__neonTest!.state as unknown as { hud?: { comms?: CommsTestState } }).hud?.comms as
+        (CommsTestState & { leader: unknown; located: unknown }) | undefined;
+      if (!c?.line) return;
+      w.__leader.push({ id: c.line.id, leader: c.leader, located: c.located });
+    }, 20);
+  });
+  const samples = (): Promise<LeaderSample[]> =>
+    page.evaluate(() => (window as unknown as { __leader: LeaderSample[] }).__leader);
+
+  await dismissJobCard(page);
+  await reach(page, 'c3', { timeout: 30_000 });
+  await expect
+    .poll(async () => (await comms(page)).history, { timeout: 10_000, intervals: [50] })
+    .toContain('C3.triage.01');
+  // Rack a second box in a free pad: TRIAGE asks why it does nothing.
+  const pad = await page.evaluate(
+    () =>
+      (
+        window.__neonTest!.state as unknown as {
+          board: { slots: { id: string; part: string | null; locked: boolean }[] };
+        }
+      ).board.slots.find((s) => s.part === null && !s.locked)!.id,
+  );
+  const idle = await page.evaluate((slot) => window.__neonShell!.place(slot), pad);
+  expect(idle).not.toBeNull();
+  await expect
+    .poll(async () => (await samples()).some((s) => s.id === 'C3.triage.02' && s.leader !== null), {
+      timeout: 15_000,
+      intervals: [50],
+    })
+    .toBe(true);
+
+  const all = await samples();
+  const parts = await page.evaluate(
+    () =>
+      (window.__neonTest!.state as unknown as { board: { parts: { id: string; x: number; y: number }[] } })
+        .board.parts,
+  );
+  const part = parts.find((p) => p.id === idle)!;
+  const near = (a: Pt, b: Pt, px: number): boolean => Math.abs(a.x - b.x) <= px && Math.abs(a.y - b.y) <= px;
+  const triage02 = all.filter((s) => s.id === 'C3.triage.02' && s.leader);
+  expect(triage02.length).toBeGreaterThan(0);
+  for (const s of triage02) {
+    expect(s.leader!.subject).toBe('part:idle');
+    expect(s.leader!.target).toBe(idle);
+    expect(near(s.leader!.to, part, 2), JSON.stringify([s.leader!.to, part])).toBe(true);
+    // Right angles only.
+    const [a, b, c] = [s.leader!.from, s.leader!.corner, s.leader!.to];
+    expect(Math.abs(a.x - b.x) < 0.5 || Math.abs(a.y - b.y) < 0.5).toBe(true);
+    expect(Math.abs(b.x - c.x) < 0.5 || Math.abs(b.y - c.y) < 0.5).toBe(true);
+  }
+
+  // No LEADER_FOR entry: null.
+  const plain = all.filter((s) => s.id === 'C1.triage.02');
+  expect(plain.length).toBeGreaterThan(0);
+  expect(plain.every((s) => s.leader === null)).toBe(true);
+  // Zone lines: null while nobody registered the zone, at the registered point once someone has.
+  const zoneNames: Record<string, string[]> = {
+    'C1.triage.01': ['dialCard', 'dial'],
+    'C3.triage.01': ['inventory', 'inventory:server'],
+  };
+  for (const [id, names] of Object.entries(zoneNames)) {
+    const seen = all.filter((s) => s.id === id);
+    expect(seen.length, id).toBeGreaterThan(0);
+    for (const s of seen) {
+      const registered = names.filter((n) => s.located[n]);
+      if (registered.length === 0) expect(s.leader, id).toBeNull();
+      else if (s.leader) expect(near(s.leader.to, s.located[s.leader.target]!, 8), id).toBe(true);
+    }
+  }
+
+  // The leader is one more object for the band, inside its declared budget.
+  const perf = await page.evaluate(
+    () =>
+      (
+        window.__neonTest!.state as unknown as {
+          perf?: { zones: Record<string, { budget: { objects: number }; actual: { objects: number } }> };
+        }
+      ).perf?.zones.comms ?? null,
+  );
+  if (perf) expect(perf.actual.objects).toBeLessThanOrEqual(perf.budget.objects);
+  expect(errors).toEqual([]);
+});

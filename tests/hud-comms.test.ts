@@ -40,6 +40,7 @@ import {
   bandAlpha,
   clickLog,
   commsLayout,
+  cutShort,
   dwellFor,
   enqueueComms,
   extendForVoice,
@@ -56,9 +57,21 @@ import {
 } from '../src/scenes/hud/comms';
 import { BOTTOM } from '../src/scenes/hud/layout';
 import { fileTexture } from '../src/scenes/plates';
-import { LESSON_IDS } from '../src/scenes/hud/lineMeta';
+import { LEADER_FOR, LESSON_IDS } from '../src/scenes/hud/lineMeta';
 import { ZONES } from '../src/scenes/live/layout';
 import { LINES, type LineId } from '../src/strings';
+import { Run } from '../src/game/run';
+import { partAnchor } from '../src/scenes/board/layout';
+import {
+  type LeaderFrame,
+  leaderPath,
+  leaderSubject,
+  locateNames,
+  partForRole,
+  resolveLeader,
+} from '../src/scenes/hud/comms';
+import { locate, register, registeredNames } from '../src/scenes/hud/locate';
+import { SERVER_SLOTS } from '../src/sim/tick';
 
 // comms-1: the comms band's pure model (src/scenes/hud/comms.ts).
 
@@ -589,6 +602,166 @@ describe('comms-9: plate, round avatars and HOUSE chips through the art manifest
       expect(now.file, key).toBe(r.fallback.kind === 'reuse' ? r.fallback.file : null);
       const later = avatarSource(key, picked(r));
       expect(later, key).toMatchObject({ fallback: false, file: `art/${key}.webp` });
+    }
+  });
+});
+
+describe('comms-6: a WARNING cutting a HINT short cuts its voice', () => {
+  it('names the HINT a WARNING ended, and nothing for a change that kept its time', () => {
+    const s = say(NO_COMMS, 'C3.triage.02', 0);
+    expect(cutShort(s, enqueueComms(s, 'C3.triage.04', 2))).toBe('C3.triage.02');
+    // Too early to pre-empt: the WARNING waits, nothing is cut.
+    expect(cutShort(s, enqueueComms(s, 'C3.triage.04', 1))).toBeNull();
+    // A voice lengthening the line, another line starting, or nothing showing cut nothing.
+    expect(cutShort(s, extendForVoice(s, 'C3.triage.02', 0.1, 6))).toBeNull();
+    expect(cutShort(s, say(NO_COMMS, 'C1.triage.01', 5))).toBeNull();
+    expect(cutShort(NO_COMMS, s)).toBeNull();
+  });
+});
+
+describe('comms-8: the leader line', () => {
+  /** A real board with `n` servers racked; s1 wired and serving `load`, the rest as given. */
+  function board(n: number, opts: Partial<Omit<LeaderFrame, 'parts'>> = {}): LeaderFrame {
+    const r = new Run();
+    for (const slot of SERVER_SLOTS.slice(0, n)) expect(r.placeServer(slot).ok).toBe(true);
+    const parts = r.session.board.parts;
+    const first = parts.find((p) => p.kind === 'server')!;
+    return {
+      parts,
+      offline: [],
+      dead: [],
+      dark: [],
+      overheating: [],
+      flow: { load: { gateway: 30, [first.id]: 30, database: 30 } },
+      ...opts,
+    };
+  }
+  const servers = (f: LeaderFrame) => f.parts.filter((p) => p.kind === 'server').map((p) => p.id);
+
+  it('points C3.triage.02 at the idle box, exactly at its partAnchor', () => {
+    expect(leaderSubject('C3.triage.02')).toBe('part:idle');
+    // The second box just racked and still booting: the one doing nothing.
+    const f = board(2);
+    const [busy, fresh] = servers(f);
+    const booting = { ...f, offline: [fresh] };
+    const t = resolveLeader('C3.triage.02', booting, undefined, () => null)!;
+    expect(t.target).toBe(fresh);
+    expect(t.to).toEqual(partAnchor(booting, fresh));
+    expect(t.target).not.toBe(busy);
+    // Once on and still unfed, the same box.
+    expect(resolveLeader('C3.triage.02', f)!.target).toBe(fresh);
+  });
+
+  it('picks an idle box that is on over one still booting, and never a dead or dark one', () => {
+    const f = board(3);
+    const [, b, c] = servers(f);
+    expect(partForRole('idle', { ...f, offline: [c] })).toBe(b);
+    expect(partForRole('idle', { ...f, offline: [b, c] })).toBe(c);
+    expect(partForRole('idle', { ...f, dead: [b, c] })).toBeNull();
+    expect(partForRole('idle', { ...f, dark: [c], offline: [c] })).toBe(b);
+  });
+
+  it('resolves the other roles from the frame, or null when no part plays them', () => {
+    const f = board(2);
+    const [a, b] = servers(f);
+    expect(partForRole('hot', f)).toBeNull();
+    expect(partForRole('hot', { ...f, overheating: [b] })).toBe(b);
+    expect(partForRole('dark', { ...f, dark: [a] })).toBe(a);
+    expect(partForRole('overclocked', f)).toBeNull();
+    const kitted = { ...f, parts: f.parts.map((p) => (p.id === b ? { ...p, boost: 2 } : p)) };
+    expect(partForRole('overclocked', kitted)).toBe(b);
+    expect(partForRole('balancer', f)).toBeNull();
+    expect(partForRole('gateway', f)).toBe('gateway');
+    expect(partForRole('database', f)).toBe('database');
+    expect(resolveLeader('C3.lux.01', f)!.to).toEqual(partAnchor(f, 'gateway'));
+    expect(resolveLeader('C3.triage.04', f)).toBeNull();
+  });
+
+  it('reports null for a line without a LEADER_FOR entry', () => {
+    expect(LEADER_FOR['C1.triage.02']).toBeUndefined();
+    expect(leaderSubject('C1.triage.02')).toBeNull();
+    const everywhere = () => ({ x: 1, y: 1 });
+    expect(resolveLeader('C1.triage.02', board(2), everywhere, everywhere)).toBeNull();
+    for (const id of Object.keys(LINES) as LineId[]) {
+      if (LEADER_FOR[id] === undefined)
+        expect(resolveLeader(id, board(1), everywhere, everywhere), id).toBeNull();
+    }
+  });
+
+  it('finds a zone through locate.ts: null until a lane registers it, its centre once one has', () => {
+    expect(leaderSubject('C1.triage.06')).toBe('zone:gauge');
+    const f = board(1);
+    expect(registeredNames()).not.toContain('gauge');
+    expect(resolveLeader('C1.triage.06', f)).toBeNull();
+    const centre = { x: 236, y: 795 };
+    const off = register('gauge', () => centre);
+    try {
+      const t = resolveLeader('C1.triage.06', f)!;
+      expect(t).toEqual({ subject: 'zone:gauge', target: 'gauge', to: centre });
+    } finally {
+      off();
+    }
+    expect(locate('gauge')).toBeNull();
+    expect(resolveLeader('C1.triage.06', f)).toBeNull();
+  });
+
+  it('tries each zone’s lane name too, and survives a locator that throws or reads off screen', () => {
+    expect(locateNames('zone:dialCard')).toEqual(['dialCard', 'dial']);
+    expect(locateNames('zone:title')).toEqual(['title', 'credits']);
+    expect(locateNames('key:two')).toEqual(['key:two']);
+    expect(locateNames('zone:alert')).toEqual(['alert']);
+    const f = board(1);
+    const offDial = register('dial', () => ({ x: 1775, y: 245 }));
+    const offAlert = register('alert', () => {
+      throw new Error('mid-shutdown');
+    });
+    const offKey = register('key:two', () => null);
+    try {
+      expect(resolveLeader('C1.triage.01', f)).toEqual({
+        subject: 'zone:dialCard',
+        target: 'dial',
+        to: { x: 1775, y: 245 },
+      });
+      expect(resolveLeader('C4.triage.01', f)).toBeNull();
+      expect(resolveLeader('C4.lux.01', f)).toBeNull();
+      // A newer registration replaces an older one; the older one's off leaves it alone.
+      const again = register('dial', () => ({ x: 10, y: 20 }));
+      offDial();
+      expect(locate('dial')).toEqual({ x: 10, y: 20 });
+      again();
+    } finally {
+      offDial();
+      offAlert();
+      offKey();
+    }
+    expect(registeredNames()).toEqual([]);
+  });
+
+  it('draws a right-angled path from the band edge nearest the target', () => {
+    const band = ZONES.comms;
+    // Above the band (the feed): straight up from the top edge, then across.
+    const up = leaderPath(band, { x: 700, y: 300 });
+    expect(up).toEqual([
+      { x: 700, y: band.y },
+      { x: 700, y: 300 },
+      { x: 700, y: 300 },
+    ]);
+    // Left of the band and above it (the map): up from the band's left end, then left.
+    const left = leaderPath(band, { x: 200, y: 400 });
+    expect(left[0]).toEqual({ x: band.x + 12, y: band.y });
+    expect(left[1]).toEqual({ x: band.x + 12, y: 400 });
+    expect(left[2]).toEqual({ x: 200, y: 400 });
+    // Below it (the inventory, the keys): down from the bottom edge.
+    expect(leaderPath(band, { x: 900, y: 900 })[0]).toEqual({ x: 900, y: band.y + band.h });
+    // Level with it (the gauge): straight across from its side.
+    expect(leaderPath(band, { x: 236, y: 700 })).toEqual([
+      { x: band.x, y: 700 },
+      { x: band.x, y: 700 },
+      { x: 236, y: 700 },
+    ]);
+    for (const p of [up, left]) {
+      expect(p[0].x === p[1].x || p[0].y === p[1].y).toBe(true);
+      expect(p[1].x === p[2].x || p[1].y === p[2].y).toBe(true);
     }
   });
 });

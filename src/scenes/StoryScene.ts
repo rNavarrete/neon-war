@@ -14,7 +14,7 @@ import type { DebriefResults } from '../story/debrief';
 import { LABELS } from '../story/labels';
 import { SCRIPTS, type SceneScript, type ScriptStep, chatText, isChat, stepsFor } from '../story/scripts';
 import { markSeen, wasSeen } from '../story/seen';
-import { playSfx, setLiveView, stopSfx, storyEnd, storyState } from '../story/state';
+import { playSfx, playVoice, setLiveView, stopSfx, storyEnd, storyState } from '../story/state';
 import type { RewindKind } from '../story/rewind';
 import { FrameClock, H, VnView, W, cover, fileKey, preloadView } from '../story/view';
 import { testHookEnabled } from '../testHook';
@@ -196,6 +196,8 @@ export class StoryScene extends Phaser.Scene {
   private finish(): void {
     if (this.done || !this.story) return;
     this.done = true;
+    // Skip or the last click: the line's voice stops with the scene.
+    playVoice(null);
     storyEnd.at = performance.now();
     markSeen(this.script.id);
     storyState.finished = [...storyState.finished, this.script.id];

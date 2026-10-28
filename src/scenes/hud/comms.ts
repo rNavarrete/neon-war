@@ -17,12 +17,15 @@
 
 import { type ArtRequest, artRequest, isPicked, requestFile } from '../../game/artManifest';
 import { speakerName } from '../../game/portraits';
+import type { Part } from '../../sim/board';
 import { LINES, type LineId } from '../../strings';
 import { typedChars } from '../../story/scripts';
+import { partAnchor } from '../board/layout';
 import { fileTexture } from '../plates';
 import { BARK_HISTORY, BARK_SECONDS } from './barks';
 import { CUES } from './cues';
-import { type LineTag, isLesson, tagOf } from './lineMeta';
+import { LEADER_FOR, type LineTag, type Subject, isLesson, tagOf } from './lineMeta';
+import { type LocatedPoint, locate } from './locate';
 
 export { BARK_SECONDS };
 
@@ -204,6 +207,16 @@ export function extendForVoice(s: CommsState, id: LineId, clock: number, seconds
   const until = Math.max(c.until, clock + seconds + VOICE_TAIL);
   if (until === c.until && c.voiced) return s;
   return { ...s, current: { ...c, until, voiced: true } };
+}
+
+/**
+ * The line a change cut short (a WARNING pre-empting a HINT ends it at once), so its voice is cut
+ * too; null when the line showing kept its time. Pure.
+ */
+export function cutShort(prev: CommsState, next: CommsState): LineId | null {
+  const a = prev.current;
+  const b = next.current;
+  return a && b && a.id === b.id && b.until < a.until ? a.id : null;
 }
 
 /** The last `n` shown lines, newest last, the current one included. */
@@ -513,4 +526,124 @@ export function chipArt(
     if (exists(texture)) return { key, use: 'picked', texture };
   }
   return { key, use: 'code', texture: null };
+}
+
+// ---- the leader line (comms-8) ----
+
+/** What the leader reads off the Frame to find the part a line is about. */
+export interface LeaderFrame {
+  readonly parts: readonly Pick<Part, 'id' | 'kind' | 'slot' | 'boost'>[];
+  readonly offline: readonly string[];
+  readonly dead: readonly string[];
+  readonly dark: readonly string[];
+  readonly overheating: readonly string[];
+  readonly flow: { readonly load: Readonly<Record<string, number>> };
+}
+
+/**
+ * The part a `part:` subject means on this frame: a fixed id (gateway, database), or the part
+ * playing a role now. The idle box is the newest server taking nothing that is neither dead nor
+ * dark, one already on before one still booting (C3.triage.02 fires as the second box boots);
+ * the hot box the first overheating; the dark box the first dark in a dip; the overclocked box the
+ * first with the kit; the balancer the first racked. Null when no part plays it. Pure.
+ */
+export function partForRole(role: string, f: LeaderFrame): string | null {
+  switch (role) {
+    case 'gateway':
+    case 'database':
+      return f.parts.some((p) => p.id === role) ? role : null;
+    case 'idle': {
+      let booting: string | null = null;
+      for (let i = f.parts.length - 1; i >= 0; i--) {
+        const p = f.parts[i];
+        if (p.kind !== 'server' || f.dead.includes(p.id) || f.dark.includes(p.id)) continue;
+        if ((f.flow.load[p.id] ?? 0) > 0) continue;
+        if (!f.offline.includes(p.id)) return p.id;
+        booting ??= p.id;
+      }
+      return booting;
+    }
+    case 'hot':
+      return f.overheating[0] ?? null;
+    case 'dark':
+      return f.dark[0] ?? null;
+    case 'overclocked':
+      return f.parts.find((p) => p.kind === 'server' && (p.boost ?? 1) > 1)?.id ?? null;
+    case 'balancer':
+      return f.parts.find((p) => p.kind === 'balancer')?.id ?? null;
+    default:
+      return null;
+  }
+}
+
+/** What a line points at (lineMeta's LEADER_FOR), or null for a line that points at nothing. */
+export function leaderSubject(id: LineId): Subject {
+  return LEADER_FOR[id] ?? null;
+}
+
+/**
+ * The locate names a zone or key subject may be registered under, in the order tried: its own
+ * name first, then the name the owning lane registers it by ('dial' for the dial card, 'credits'
+ * for the title's credits chip, 'inventory:server' for the inventory row). Pure.
+ */
+export function locateNames(subject: Exclude<Subject, null>): readonly string[] {
+  if (subject.startsWith('key:')) return [subject];
+  const name = subject.slice(subject.indexOf(':') + 1);
+  return LOCATE_ALIASES[name] ?? [name];
+}
+
+const LOCATE_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  dialCard: ['dialCard', 'dial'],
+  title: ['title', 'credits'],
+  inventory: ['inventory', 'inventory:server'],
+};
+
+/** Where a line's leader goes: its subject, the part id or locate name it found, and the point (game px). */
+export interface LeaderTarget {
+  readonly subject: Exclude<Subject, null>;
+  readonly target: string;
+  readonly to: LocatedPoint;
+}
+
+/**
+ * Resolve a line's leader on this frame: a part subject through `anchor` (the board's partAnchor),
+ * a zone or key subject through `find` (locate.ts). Null for a line without a LEADER_FOR entry, a
+ * role no part plays now, or a name nobody has registered. Pure given its two lookups.
+ */
+export function resolveLeader(
+  id: LineId,
+  f: LeaderFrame,
+  anchor: (partId: string) => LocatedPoint | null = (partId) => partAnchor(f, partId),
+  find: (name: string) => LocatedPoint | null = locate,
+): LeaderTarget | null {
+  const subject = leaderSubject(id);
+  if (subject === null) return null;
+  if (subject.startsWith('part:')) {
+    const target = partForRole(subject.slice(5), f);
+    const to = target === null ? null : anchor(target);
+    return target !== null && to ? { subject, target, to } : null;
+  }
+  for (const name of locateNames(subject)) {
+    const to = find(name);
+    if (to) return { subject, target: name, to };
+  }
+  return null;
+}
+
+/**
+ * The leader's path from the band to `to`, in right angles: it leaves the band's top edge (its
+ * bottom edge for a target below it, its side for a target level with it) straight toward the
+ * target, then turns once. Three points: start, corner, end (the corner may equal the end). Pure.
+ */
+export function leaderPath(band: CommsRect, to: LocatedPoint): [LocatedPoint, LocatedPoint, LocatedPoint] {
+  const inset = 12;
+  const top = band.y;
+  const bottom = band.y + band.h;
+  if (to.y >= top && to.y <= bottom) {
+    const from = { x: to.x < band.x ? band.x : band.x + band.w, y: to.y };
+    return [from, from, { x: to.x, y: to.y }];
+  }
+  const x = Math.min(band.x + band.w - inset, Math.max(band.x + inset, to.x));
+  const from = { x, y: to.y < top ? top : bottom };
+  return [from, { x, y: to.y }, { x: to.x, y: to.y }];
 }
