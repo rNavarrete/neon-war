@@ -3,6 +3,7 @@
 
 import type { PartKind } from '../../sim/board';
 import type { Rect } from '../live/layout';
+import type { GlowState } from '../motion';
 import type { PadState, Point } from './layout';
 import type { InventoryCounts } from './tray';
 import type { BarColour, PartStatus, PartTag } from './view';
@@ -334,6 +335,11 @@ export interface BoardTestState {
   snapshotChanges: number;
   /** The Frame the board drew last is frame()'s current one: the board and the HUD share one read. */
   snapshotCurrent: boolean;
+  /**
+   * art3d-6's glow probe: the live Glow filters (at most 3, red, only on parts over capacity), the
+   * live GradientMap filters (at most 1, for 1.5 s at the rescue) and the parts glowing, hottest first.
+   */
+  glow: GlowState;
 }
 
 declare module '../../testHook' {
