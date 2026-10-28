@@ -334,6 +334,8 @@ interface AnimRecord {
   sfx: string[];
   skipEdges: number;
   floats: string[];
+  /** board-12: each distinct part id, kind, status and drawn texture seen, as 'id|kind|status|texture'. */
+  looks: string[];
 }
 
 /**
@@ -348,10 +350,12 @@ async function recordAnims(page: Page): Promise<void> {
       animLog: { name: string }[];
       parts: {
         id: string;
+        kind: string;
         status: string;
         label: string;
         darkLeft: number | null;
         tags: string[];
+        texture: string | null;
       }[];
       particles: { pool: number; peak: number };
       skipped: string[];
@@ -367,6 +371,7 @@ async function recordAnims(page: Page): Promise<void> {
       sfx: [],
       skipEdges: 0,
       floats: [],
+      looks: [],
     } as {
       seen: Record<string, { first: number; last: number }>;
       dead: Record<string, number>;
@@ -377,6 +382,7 @@ async function recordAnims(page: Page): Promise<void> {
       sfx: string[];
       skipEdges: number;
       floats: string[];
+      looks: string[];
     };
     (window as unknown as { __boardAnims: typeof rec }).__boardAnims = rec;
     let lastSkipped: string[] = [];
@@ -400,6 +406,8 @@ async function recordAnims(page: Page): Promise<void> {
         for (const l of b.animLog) rec.seen[l.name] ??= { first: t, last: t };
         for (const p of b.parts) {
           if (p.status === 'dead' && rec.dead[p.id] === undefined) rec.dead[p.id] = t;
+          const lk = `${p.id}|${p.kind}|${p.status}|${p.texture}`;
+          if (!rec.looks.includes(lk) && rec.looks.length < 400) rec.looks.push(lk);
           if (p.status === 'dark' && rec.dark.length < 400)
             rec.dark.push({ label: p.label, darkLeft: p.darkLeft, tags: p.tags, status: p.status, id: p.id });
         }
@@ -719,6 +727,29 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   expect(logged.length).toBeGreaterThan(0);
   for (const e of b.animLog) expect(e.calm, `${e.name} played calm`).toBe(true);
   expectWithinDurations(b);
+
+  // board-12 under reduce flicker: the overclocked box dark in the dip drew the unlit kit-fitted
+  // server (dark, never the dead art); a booting box held boot frame A and the pinging balancer
+  // held its lit frame B: neither alternated.
+  const looks = rec.looks.map((l) => {
+    const [id, kind, status, texture] = l.split('|');
+    return { id, kind, status, texture };
+  });
+  const s1Dark = looks.filter((l) => l.id === s1 && l.status === 'dark');
+  expect(s1Dark.length, 'the kit box seen dark').toBeGreaterThan(0);
+  for (const l of s1Dark) expect(l.texture).toBe('art:board/server-overclocked-dark');
+  for (const l of looks.filter((x) => x.kind === 'server' && x.status === 'dark'))
+    expect(l.texture).not.toMatch(/dead/);
+  const boots = looks.filter((l) => l.kind === 'server' && l.status === 'booting').map((l) => l.texture);
+  expect(boots.length, 'a box seen booting').toBeGreaterThan(0);
+  expect(new Set(boots), 'boot frames hold still under reduce flicker').toEqual(
+    new Set(['art:board/server-booting-a']),
+  );
+  const lbTextures = looks.filter((l) => l.kind === 'balancer').map((l) => l.texture);
+  expect(lbTextures, 'the balancer pinged its lit frame').toContain('art:board/balancer-ping-b');
+  expect(lbTextures, 'ping frames hold still under reduce flicker').not.toContain(
+    'art:board/balancer-ping-a',
+  );
 
   // board-10: the board's own sounds. The boots chimed, the hot box crackled no more than once
   // per half second, the skip blipped once per new skip; only the three keys, each one that exists.
@@ -1154,4 +1185,92 @@ test('C6 (board-8): the ghost and the what-if tick stay away while the sizing pr
   await page.screenshot({ path: 'test-results/screens/live-m3-board.png' });
   await page.mouse.move(card.x, card.y, { steps: 2 });
   await page.mouse.up();
+});
+
+// ---- M4: board-12, the picked art through the art manifest -----------------------------------
+
+/** The board's art keys (src/scenes/board/art.ts BOARD_ART_KEYS), each a picked file under public/art. */
+const BOARD_ART = [
+  'board/table-plate',
+  'board/channel-plate',
+  'board/server-dark',
+  'board/server-overclocked-dark',
+  'board/server-booting-a',
+  'board/server-booting-b',
+  'board/balancer-ping-a',
+  'board/balancer-ping-b',
+  'hud/live/card-frame-idle',
+  'hud/live/card-frame-ready',
+  'hud/live/card-frame-locked',
+  'hud/live/count-badge',
+  'hud/icons/ping',
+  'hud/icons/skipped',
+];
+
+test('board-12: the painted table, channel, cards and marks draw from public/art with no network fetch', async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  const requests: string[] = [];
+  page.on('request', (r) => requests.push(r.url()));
+  const { errors } = await liveOpen(page);
+  type ArtHook = { art: { fallback: string[]; loaded: string[]; missing: string[] } };
+  const artHook = () => page.evaluate(() => (window.__neonTest!.state as unknown as ArtHook).art);
+
+  let b = await board(page);
+  // Every board key draws its picked file: none falls back, none draws Phaser's missing texture.
+  expect([...b.art.picked].sort()).toEqual([...BOARD_ART].sort());
+  const art = await artHook();
+  for (const k of BOARD_ART) {
+    expect(art.fallback, k).not.toContain(k);
+    expect(art.loaded, k).toContain(k);
+  }
+  expect(art.missing).toEqual([]);
+
+  // The table is the painted plate, never drawn above its file's size, inside the feed and centred
+  // under the table's trapezoid; the channel plate sits on the mouth inside the feed.
+  expect(b.art.table).toBe('plate');
+  expect(b.art.tableScale).toBeLessThanOrEqual(1);
+  expectInside(b.art.tableRect, b.area, 'the table plate');
+  expectInside(b.art.channelPlate!, b.area, 'the channel plate');
+  // The gateway and the database stand over the plate, not beside it.
+  const t = b.art.tableRect;
+  for (const kind of ['gateway', 'database'] as const) {
+    const p = b.parts.find((x) => x.kind === kind)!;
+    expect(p.x, kind).toBeGreaterThan(t.x);
+    expect(p.x, kind).toBeLessThan(t.x + t.w);
+  }
+
+  // The cards wear the picked frames: the server ready (it can be bought), the gift locked.
+  expect(b.inventory.frames.server).toBe('hud/live/card-frame-ready');
+  expect(b.inventory.frames.balancer).toBe('hud/live/card-frame-locked');
+
+  // Through C3 (a box boots, the table under it) to the rescue (the balancer pings the boxes).
+  await liveReach(page, 'c3');
+  await shot(page, 'm4-board-feed');
+  await liveReach(page, 'rescue');
+  const lbTextures = new Set<string>();
+  let marks = 0;
+  const until = Date.now() + 6_000;
+  while (Date.now() < until) {
+    b = await board(page);
+    const lb = b.parts.find((p) => p.kind === 'balancer');
+    if (lb?.texture) lbTextures.add(lb.texture);
+    marks = Math.max(marks, b.art.pingMarks);
+    if (lbTextures.size >= 2 && marks > 0) break;
+    await page.waitForTimeout(50);
+  }
+  // Full flicker: the lamp frames alternate while it pings, and the ping mark rides the box checked.
+  expect([...lbTextures].sort()).toEqual(['art:board/balancer-ping-a', 'art:board/balancer-ping-b']);
+  expect(marks, 'a ping mark over a checked box').toBeGreaterThan(0);
+  expect(b.inventory.frames.balancer).not.toBe('hud/live/card-frame-locked');
+  await shot(page, 'm4-board-rescue');
+
+  // No network fetch: every request went to the game's own server, and each board key loaded from
+  // public/art at its key's path.
+  const origin = new URL(page.url()).origin;
+  for (const u of requests)
+    expect(u.startsWith(origin) || u.startsWith('data:') || u.startsWith('blob:'), u).toBe(true);
+  for (const k of BOARD_ART) expect(requests, k).toContain(`${origin}/art/${k}.webp`);
+  expect(errors).toEqual([]);
 });

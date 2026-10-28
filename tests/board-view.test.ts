@@ -21,6 +21,7 @@ import {
   skipTagUntil,
   tagChip,
 } from '../src/scenes/board/view';
+import { PART_ART, type PartArtOptions } from '../src/scenes/board/art';
 
 const server: Part = { id: 'server-p1', kind: 'server', slot: 's1' };
 const boosted: Part = { ...server, boost: 2 };
@@ -430,5 +431,99 @@ describe('part states (board-5)', () => {
       expect(flickerLit(true, t, true)).toBe(true);
       expect(flickerLit(false, t, false)).toBe(true);
     }
+  });
+});
+
+describe('part state art (board-12)', () => {
+  const now = 100;
+  const dip = { id: 'surge', part: server.id, warnAt: now - 7, darkAt: now - 5, endsAt: now + 15 };
+  const trouble: PartTrouble = { dead: [], dark: [server.id], dips: [dip], overload: {} };
+  const all = new Set<string>(Object.values(PART_ART));
+  const opts = (o: Partial<PartArtOptions> = {}): PartArtOptions => ({
+    t: 0,
+    calm: false,
+    pinging: false,
+    picked: all,
+    ...o,
+  });
+  const balancer: Part = { id: 'lb-1', kind: 'balancer', slot: 'lb' };
+
+  it('partLook with no new arguments returns exactly what it returned before board-12', () => {
+    // The look's cases, with and without trouble: the art keys are today's, and with art options
+    // whose picked set is empty nothing changes either.
+    const cases: [Part, number, string[], Record<string, number>, number, PartTrouble | undefined][] = [
+      [server, 30, [], {}, 10, undefined],
+      [boosted, 150, [], {}, 10, undefined],
+      [server, 30, [server.id], { [server.id]: 13 }, 10.5, undefined],
+      [boosted, 30, [server.id], { [server.id]: 13 }, 11, undefined],
+      [server, 30, [server.id], {}, 10, undefined],
+      [server, 40, [server.id], {}, now, trouble],
+      [boosted, 0, [server.id], {}, now, trouble],
+      [balancer, 60, [], {}, 10, undefined],
+    ];
+    const legacy = [
+      'server',
+      'server-overclocked-hot',
+      'server',
+      'server-overclocked',
+      'server-dead',
+      'server',
+      'server-overclocked',
+      'balancer',
+    ];
+    for (const [i, [part, load, offline, until, t, tr]] of cases.entries()) {
+      const before = partLook(part, load, offline, until, t, tr);
+      expect(before.art).toBe(legacy[i]);
+      const none = partLook(part, load, offline, until, t, tr, opts({ picked: new Set(), pinging: true }));
+      expect({ ...none }).toEqual({ ...before });
+    }
+  });
+
+  it('a dipped server uses the unlit art when it is picked, the tinted fallback otherwise', () => {
+    const look = partLook(server, 40, [server.id], {}, now, trouble, opts());
+    expect(look.status).toBe('dark');
+    expect(look.art).toBe('board/server-dark');
+    // Not picked: today's art, which the board darkens in code (look.dark).
+    const fallback = partLook(server, 40, [server.id], {}, now, trouble, opts({ picked: new Set() }));
+    expect(fallback.art).toBe('server');
+    expect(fallback.dark).toBe(true);
+  });
+
+  it('the overclocked server in the surge dip reads dark, not dead: the unlit kit-fitted art', () => {
+    const look = partLook(boosted, 0, [server.id], {}, now, trouble, opts());
+    expect(look.status).toBe('dark');
+    expect(look.art).toBe('board/server-overclocked-dark');
+    expect(look.art).not.toMatch(/dead/);
+    expect(loadLabel(look)).toBe('DARK 15 s');
+    // Rebooting after the kit is the same unlit box; a dead one keeps the dead art.
+    expect(partLook(boosted, 0, [server.id], { [server.id]: now + 2 }, now, undefined, opts()).art).toBe(
+      'board/server-overclocked-dark',
+    );
+    const dead: PartTrouble = { ...trouble, dead: [server.id], dark: [] };
+    expect(partLook(boosted, 0, [server.id], {}, now, dead, opts()).art).toBe('server-dead');
+  });
+
+  it('booting and ping frames alternate in full and never under reduce flicker', () => {
+    const until = { [server.id]: now + 2 };
+    const bootAt = (t: number, calm: boolean) =>
+      partLook(server, 0, [server.id], until, now, undefined, opts({ t, calm })).art;
+    const pingAt = (t: number, calm: boolean) =>
+      partLook(balancer, 60, [], {}, now, undefined, opts({ t, calm, pinging: true })).art;
+    const full = new Set<string>();
+    const calmBoot = new Set<string>();
+    const fullPing = new Set<string>();
+    const calmPing = new Set<string>();
+    for (let t = 0; t < 4; t += 1 / 60) {
+      full.add(bootAt(t, false));
+      calmBoot.add(bootAt(t, true));
+      fullPing.add(pingAt(t, false));
+      calmPing.add(pingAt(t, true));
+    }
+    expect([...full].sort()).toEqual(['board/server-booting-a', 'board/server-booting-b']);
+    expect([...calmBoot]).toEqual(['board/server-booting-a']);
+    expect([...fullPing].sort()).toEqual(['board/balancer-ping-a', 'board/balancer-ping-b']);
+    expect([...calmPing]).toEqual(['board/balancer-ping-b']);
+    // A balancer with no box to ping keeps its own art.
+    expect(partLook(balancer, 60, [], {}, now, undefined, opts()).art).toBe('balancer');
   });
 });

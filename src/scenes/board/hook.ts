@@ -25,8 +25,28 @@ export interface BoardTestState {
    * (0 for a drawer mini) and `price` its cost in credits (0 for the crew's gift, null for a mini).
    */
   tray: (Point & { id: string; label: string; locked: boolean; count: number; price: number | null })[];
-  /** The inventory zone (TRAY_AREA) in page CSS pixels, and the three cards' counts. */
-  inventory: { area: Rect; counts: InventoryCounts };
+  /**
+   * The inventory zone (TRAY_AREA) in page CSS pixels, the three cards' counts, and (board-12) the
+   * frame each main card wears: a picked frame's art key (hud/live/card-frame-idle, -ready,
+   * -locked) or 'part-card' while the frames are not picked.
+   */
+  inventory: { area: Rect; counts: InventoryCounts; frames: Record<string, string> };
+  /**
+   * board-12: the picked art the board draws. `picked` lists the board's art keys whose picked file
+   * is loaded (the rest keep today's code drawing); `table` is 'plate' (the painted table plate)
+   * or 'bake' (the code slab), drawn at `tableRect` (page CSS pixels) and `tableScale` (never above
+   * 1); `channelPlate` the channel plate's rect or null; `pingMarks` how many ping marks show now;
+   * `stamps` the server pads wearing the SKIPPED stamp now.
+   */
+  art: {
+    picked: string[];
+    table: 'plate' | 'bake';
+    tableRect: Rect;
+    tableScale: number;
+    channelPlate: Rect | null;
+    pingMarks: number;
+    stamps: string[];
+  };
   parts: (Point & {
     id: string;
     kind: PartKind;
@@ -41,7 +61,14 @@ export interface BoardTestState {
     load: number;
     capacity: number | null;
     share: number | null;
+    /** The art partLook picks with no board-12 options (today's key, e.g. 'server', 'server-dead'). */
     art: string;
+    /**
+     * board-12: the texture on the part's sprite now: a picked state art's texture
+     * ('art:board/server-dark', 'art:board/server-overclocked-dark', the boot and ping frames) or
+     * today's key. Null before the part's sprite is made.
+     */
+    texture: string | null;
     dark: boolean;
     label: string;
     /** Seconds until an overloaded server cooks; 0 once dead; null when it is not overloaded (board-5). */

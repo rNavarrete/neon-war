@@ -66,7 +66,7 @@ import { BROWNOUT, BROWNOUT_RULES } from '../sim/brownout';
 import { type GhostInfo, ghostInfo, ghostOpen } from './board/ghost';
 import { PlateCache, REPLACE_LABEL } from './board/plate';
 import { BoardSnapshot } from './board/snapshot';
-import { InventoryView } from './board/InventoryView';
+import { type InventoryArt, InventoryView } from './board/InventoryView';
 import {
   type InventoryCounts,
   LOCKED_KINDS,
@@ -133,6 +133,22 @@ import type { PartStatus } from './board/view';
 import { isSfxKey } from '../game/audio';
 import { BoardSfx } from './board/sfx';
 import { addLabel } from './board/bake';
+import { artRequest } from '../game/artManifest';
+import { preloadArt, resolveArt } from './plates';
+import {
+  BOARD_ART_KEYS,
+  CARD_FRAME,
+  CHANNEL_PLATE_KEY,
+  COUNT_BADGE_KEY,
+  PING_ICON_KEY,
+  type PlatePlace,
+  SKIPPED_ICON_KEY,
+  TABLE_PLATE_KEY,
+  badgeScale,
+  channelPlatePlace,
+  markScale,
+  tablePlatePlace,
+} from './board/art';
 
 // Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
 export const GAME_WIDTH = 1920;
@@ -211,6 +227,8 @@ interface PadView {
   slot: string;
   pad: Phaser.GameObjects.Image;
   dash: Phaser.GameObjects.Graphics;
+  /** board-12: the picked SKIPPED stamp on the pad, shown with the tag; null when not picked. */
+  stamp: Phaser.GameObjects.Image | null;
   /** The SKIPPED tag, baked once (board-11: fixed words are images, not live texts). */
   chip: Phaser.GameObjects.Image;
   /** Board-clock second the SKIPPED tag shows until (skipTagUntil); -Infinity before any skip. */
@@ -314,6 +332,25 @@ export class BoardScene extends Phaser.Scene {
   private clock = 0;
   /** settings().reduceFlicker as read this frame. */
   private reduceFlicker = false;
+  /** board-12: the board's art keys whose picked file is loaded, and each one's texture key. */
+  private picked = new Set<string>();
+  private artTex = new Map<string, string>();
+  /** What picks a part's state art this frame (partLookInto's `art`), refilled in place. */
+  private readonly artOpts: { t: number; calm: boolean; pinging: boolean; picked: ReadonlySet<string> } = {
+    t: 0,
+    calm: false,
+    pinging: false,
+    picked: new Set<string>(),
+  };
+  /** board-12: what the table is (the painted plate or the code bake) and where it is drawn. */
+  private table: { art: 'plate' | 'bake'; place: PlatePlace } = {
+    art: 'bake',
+    place: { x: 0, y: 0, w: 0, h: 0, scale: 1 },
+  };
+  /** board-12: where the channel plate is drawn, or null while it is not picked. */
+  private channelPlate: PlatePlace | null = null;
+  /** board-12: the ping marks over the boxes the balancer checks, one per server pad, made once. */
+  private pingIcons: Phaser.GameObjects.Image[] = [];
   /** The board's waits this frame (board-6), refilled in place. */
   private wait: WaitState = emptyWait();
   /** Empty pads pulsing this frame (the waits), by slot. */
@@ -508,11 +545,15 @@ export class BoardScene extends Phaser.Scene {
 
   preload(): void {
     for (const [key, file] of Object.entries(ART)) this.load.image(key, file);
+    // board-12: the picked Live-screen art, through the art manifest (src/scenes/plates.ts).
+    preloadArt(this, BOARD_ART_KEYS);
     for (const kind of LOCKED_KINDS) this.load.image(`part-${kind}`, `art/parts/${kind}/scrap.webp`);
   }
 
   create(): void {
     this.ready = false;
+    // board-12: which picked art is in, before anything that draws it (the inventory, the backdrop).
+    this.resolveBoardArt();
     this.views = new Map();
     this.snap.reset();
     this.pads = new Map();
@@ -545,7 +586,7 @@ export class BoardScene extends Phaser.Scene {
     this.drawnRetry = NaN;
     this.drawnRoom = NaN;
     this.drawnForecast = undefined;
-    this.inventory = new InventoryView(this);
+    this.inventory = new InventoryView(this, this.inventoryArt());
     this.countedParts = null;
     this.countedCredits = NaN;
     this.drag = null;
@@ -615,6 +656,7 @@ export class BoardScene extends Phaser.Scene {
     }
 
     this.makeAnimObjects();
+    this.makePingIcons();
 
     this.ghost = this.add.image(0, 0, 'server').setVisible(false).setAlpha(0.75).setDepth(30);
     this.ghostOutline = this.add.graphics().setDepth(29);
@@ -739,10 +781,34 @@ export class BoardScene extends Phaser.Scene {
     this.add.rectangle(feed.x, feed.y, feed.w, feed.h, 0x05070f, SKY_DIM).setOrigin(0);
 
     const { left, top: areaTop } = BOARD_AREA;
-    const slab = 'board-table';
-    if (!this.textures.exists(slab)) this.bakeTable(slab);
-    this.add.image(left, areaTop, slab).setOrigin(0);
+    const plate = this.artTex.get(TABLE_PLATE_KEY);
+    const plateCut = artRequest(TABLE_PLATE_KEY)?.cut;
+    if (plate !== undefined && plateCut) {
+      // board-12: the painted plate, never larger than its file (tablePlatePlace), centred under
+      // the rack with its foot on the feed's floor. The pads stay drawn in code on top of it.
+      const p = tablePlatePlace(plateCut);
+      this.add.image(p.x, p.y, plate).setOrigin(0).setScale(p.scale);
+      this.table = { art: 'plate', place: p };
+    } else {
+      const slab = 'board-table';
+      if (!this.textures.exists(slab)) this.bakeTable(slab);
+      this.add.image(left, areaTop, slab).setOrigin(0);
+      this.table = {
+        art: 'bake',
+        place: { x: left, y: areaTop, w: BOARD_AREA.right - left, h: BOARD_AREA.bottom - areaTop, scale: 1 },
+      };
+    }
     this.bakePacket();
+
+    // board-12: the channel plate under the channel's walls and instruments, when it is picked.
+    const trough = this.artTex.get(CHANNEL_PLATE_KEY);
+    const troughCut = artRequest(CHANNEL_PLATE_KEY)?.cut;
+    this.channelPlate = null;
+    if (trough !== undefined && troughCut) {
+      const p = channelPlatePlace(troughCut);
+      this.add.image(p.x, p.y, trough).setOrigin(0).setScale(p.scale);
+      this.channelPlate = p;
+    }
 
     // The channel the block's traffic arrives along: a mouth on the feed's left edge narrowing to
     // the gateway's port, with amber banks.
@@ -754,7 +820,8 @@ export class BoardScene extends Phaser.Scene {
       { x: port.x, y: port.bottom },
       { x: mouth.x, y: mouth.bottom },
     ] as Phaser.Math.Vector2[];
-    lane.fillStyle(0x03050b, 0.92).fillPoints(walls, true);
+    // Over the channel plate the walls' fill is thinner, so the plate shows through it.
+    lane.fillStyle(0x03050b, this.channelPlate ? 0.45 : 0.92).fillPoints(walls, true);
     for (const [width, alpha] of [
       [10, 0.08],
       [3, 0.6],
@@ -885,6 +952,52 @@ export class BoardScene extends Phaser.Scene {
     q[3].x = mouth.x;
     q[3].y = levelY(from, mouth.x);
     g.fillStyle(colour, alpha).fillPoints(asVectors(q), true);
+  }
+
+  /**
+   * board-12: which of the board's art keys draw their picked file. A key counts only when
+   * resolveArt names its picked file (not a fallback) and that texture loaded; any other key keeps
+   * today's code drawing, so nothing is drawn from a stand-in.
+   */
+  private resolveBoardArt(): void {
+    this.picked = new Set();
+    this.artTex = new Map();
+    for (const key of BOARD_ART_KEYS) {
+      const r = resolveArt(key);
+      if (r.fallback || !this.textures.exists(r.texture)) continue;
+      this.picked.add(key);
+      this.artTex.set(key, r.texture);
+    }
+    this.artOpts.picked = this.picked;
+  }
+
+  /** The texture an art key draws: a picked key's file, else the key itself (the board's own textures). */
+  private textureOf(art: string): string {
+    return this.artTex.get(art) ?? art;
+  }
+
+  /** The inventory's picked frames and count badge, or null for each that is not picked. */
+  private inventoryArt(): InventoryArt {
+    const keys = Object.values(CARD_FRAME);
+    const frames = keys.every((k) => this.artTex.has(k))
+      ? Object.fromEntries(keys.map((k) => [k, this.artTex.get(k)!]))
+      : null;
+    const badgeTex = this.artTex.get(COUNT_BADGE_KEY);
+    const badgeCut = artRequest(COUNT_BADGE_KEY)?.cut;
+    const badge =
+      badgeTex !== undefined && badgeCut ? { texture: badgeTex, scale: badgeScale(badgeCut) } : null;
+    return { frames, badge };
+  }
+
+  /** The ping marks, one per server pad, 44 px and never above the file's size; hidden until a ping. */
+  private makePingIcons(): void {
+    this.pingIcons = [];
+    const tex = this.artTex.get(PING_ICON_KEY);
+    const cut = artRequest(PING_ICON_KEY)?.cut;
+    if (tex === undefined || !cut) return;
+    const scale = markScale(cut, 44);
+    for (let i = 0; i < this.padList.length; i++)
+      this.pingIcons.push(this.add.image(0, 0, tex).setScale(scale).setDepth(6.5).setVisible(false));
   }
 
   /** Draw the table once, in the feed's own coordinates, and keep it as a texture: one image a frame. */
@@ -1018,10 +1131,15 @@ export class BoardScene extends Phaser.Scene {
       const shown = t < pv.skipUntil;
       pv.dash.setVisible(shown);
       pv.chip.setVisible(shown);
+      pv.stamp?.setVisible(shown);
     }
     if (cardInHand !== null) this.lbPad.setTint(LEGALITY_TINT[this.lbLegality]);
     else this.lbPad.clearTint();
     const pulse = reduce ? 0.55 : 0.55 + 0.25 * Math.sin(this.time.now / 120);
+    const artOpts = this.artOpts;
+    artOpts.t = t;
+    artOpts.calm = reduce;
+    artOpts.pinging = this.balancerFeeds(f);
     this.hotParts.clear();
     this.slowParts.clear();
     for (let i = 0; i < parts.length; i++) {
@@ -1036,6 +1154,7 @@ export class BoardScene extends Phaser.Scene {
         f.offlineUntil,
         f.now,
         trouble,
+        artOpts,
       );
       // Traffic is being dropped here: the packets heading in turn red.
       if (look.dark || (look.share !== null && look.share > 1)) this.hotParts.add(part.id);
@@ -1044,14 +1163,16 @@ export class BoardScene extends Phaser.Scene {
       v.seen = count;
       if (v.art !== look.art) {
         v.art = look.art;
-        v.img.setTexture(look.art);
+        v.img.setTexture(this.textureOf(look.art));
         v.baseScale = this.artScale(part, v.img);
         v.img.setScale(v.baseScale);
       }
-      if (look.dark) v.img.setTint(DARK_TINT);
+      // board-12: picked state art is already unlit or lamp-lit; only today's art is darkened in code.
+      const painted = this.artTex.has(look.art);
+      if (look.dark && !painted) v.img.setTint(DARK_TINT);
       else v.img.clearTint();
       v.lit = flickerLit(f.flickering.includes(part.id), t, reduce);
-      const base = look.status === 'booting' || look.status === 'rebooting' ? pulse + 0.2 : 1;
+      const base = !painted && (look.status === 'booting' || look.status === 'rebooting') ? pulse + 0.2 : 1;
       v.img.setAlpha(v.lit ? base : FLICKER_DIM);
       if (v.readout.update(look)) v.label.setText(v.readout.text).setColor(v.readout.colour);
       this.drawPartState(part, v);
@@ -1216,7 +1337,18 @@ export class BoardScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(6)
       .setVisible(false);
-    return { slot, pad, dash, chip, skipUntil: -Infinity, skipped: false };
+    // board-12: the picked SKIPPED stamp on the pad's middle, 64 px at the mid row.
+    const stampTex = this.artTex.get(SKIPPED_ICON_KEY);
+    const stampCut = artRequest(SKIPPED_ICON_KEY)?.cut;
+    const stamp =
+      stampTex !== undefined && stampCut
+        ? this.add
+            .image(b.x, b.y, stampTex)
+            .setScale(markScale(stampCut, 64 * s))
+            .setDepth(5.9)
+            .setVisible(false)
+        : null;
+    return { slot, pad, dash, stamp, chip, skipUntil: -Infinity, skipped: false };
   }
 
   /** The part's sprites, made the first time it is seen (a part never moves once placed). */
@@ -2315,7 +2447,7 @@ export class BoardScene extends Phaser.Scene {
       const v = this.views.get(a.id);
       if (!v) return;
       this.liftImg
-        .setTexture(v.art)
+        .setTexture(this.textureOf(v.art))
         .setPosition(v.baseX, v.baseY)
         .setScale(v.baseScale)
         .setAlpha(1)
@@ -2437,12 +2569,14 @@ export class BoardScene extends Phaser.Scene {
     }
     if (!any) {
       if (this.animDrawn) g.clear();
+      if (this.animDrawn) this.hidePingIcons(0);
       this.animDrawn = false;
       if (this.cutGeoms.size > 0) this.cutGeoms.clear();
       return;
     }
     g.clear();
     this.animDrawn = true;
+    let pinged = false;
     for (let i = 0; i < live.length; i++) {
       const e = live[i];
       const t = now - e.start;
@@ -2469,15 +2603,33 @@ export class BoardScene extends Phaser.Scene {
         }
       } else if (e.kind === 'ping') {
         pingFrame(t, calm, this.pf);
+        let icons = 0;
         for (let j = 0; j < this.wireList.length; j++) {
           const w = this.wireList[j];
           const from = partById(f.parts, w.from);
           if (from === null || from.kind !== 'balancer') continue;
           pointAlong(w.path, w.length, this.pf.along, this.at);
           g.lineStyle(2, CYAN, this.pf.alpha).strokeCircle(this.at.x, this.at.y, this.pf.radius);
+          // board-12: the ping mark at the top-right corner of the box being checked (its readout sits above it).
+          const to = this.views.get(w.to);
+          if (to && icons < this.pingIcons.length && partById(f.parts, w.to)?.kind === 'server') {
+            this.pingIcons[icons++]
+              .setPosition(to.baseX + to.img.displayWidth / 2 + 6, to.baseY - to.img.displayHeight / 2 + 14)
+              .setAlpha(this.pf.alpha)
+              .setVisible(true);
+          }
         }
+        this.hidePingIcons(icons);
+        pinged = true;
       }
     }
+    if (!pinged) this.hidePingIcons(0);
+  }
+
+  /** Hide the ping marks from index `from` on (no-op for those already hidden). */
+  private hidePingIcons(from: number): void {
+    for (let i = from; i < this.pingIcons.length; i++)
+      if (this.pingIcons[i].visible) this.pingIcons[i].setVisible(false);
   }
 
   /** Stroke the first `share` of a trace (glow, groove, core) at `alpha`, segment by segment (no allocation). */
@@ -2668,7 +2820,22 @@ export class BoardScene extends Phaser.Scene {
         count: this.inventory.countOf(c.id),
         price: c.price,
       })),
-      inventory: { area: pageRect(ZONES.inventory, rect), counts: { ...this.counts } },
+      inventory: {
+        area: pageRect(ZONES.inventory, rect),
+        counts: { ...this.counts },
+        frames: Object.fromEntries(
+          this.cards.filter((c) => c.main).map((c) => [c.id, this.inventory.frameOf(c.id)]),
+        ),
+      },
+      art: {
+        picked: [...this.picked],
+        table: this.table.art,
+        tableRect: pageRect(this.table.place, rect),
+        tableScale: round(this.table.place.scale),
+        channelPlate: this.channelPlate ? pageRect(this.channelPlate, rect) : null,
+        pingMarks: this.pingIcons.filter((i) => i.visible).length,
+        stamps: this.padList.filter((p) => p.stamp?.visible === true).map((p) => p.slot),
+      },
       parts: board.parts.flatMap((part) => {
         const c = partCentre(part);
         if (!c) return [];
@@ -2689,6 +2856,7 @@ export class BoardScene extends Phaser.Scene {
             capacity: look.capacity,
             share: look.share === null ? null : round(look.share),
             art: look.art,
+            texture: view?.img.texture.key ?? null,
             dark: look.dark,
             label: loadLabel(look),
             diesIn: look.diesIn === null ? null : round(look.diesIn),
