@@ -178,7 +178,7 @@ describe('tray', () => {
     expect(byId.overclock.locked).toBe(false);
     expect(byId.balancer.locked).toBe(true);
     expect(trayCards(true).find((c) => c.id === 'balancer')!.locked).toBe(false);
-    expect(lockedReason('balancer')).toMatch(/load balancer/);
+    expect(lockedReason('balancer')).toMatch(/the crew hasn't given you one of those/);
   });
 
   it('shows every other catalog part locked', () => {

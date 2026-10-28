@@ -297,9 +297,9 @@ header has no lines yet. UI micro-copy (labels, key caps) is not a line and stay
 | C3.alert.title | ui | Alert | the C3 forecast headline, after the number | EVERYONE FILMING |
 | C3.alert.down | ui | Alert | a failure freezes the board, before the rewind | BLOCK DOWN |
 | C4.alert.title | ui | Alert | the C4 forecast and the surge, after the number | NEIGHBOURS REROUTED HERE |
-| C4.alert.refresh | ui | Alert | sub-line once retries push the surge up | They're hitting refresh: every call that fails comes straight back. |
+| C4.alert.refresh | ui | Alert | sub-line once retries push the surge up | Everyone's hitting refresh: each failed call comes straight back. |
 | C6.alert.title | ui | Alert | the C6 forecast headline, after the number | MIDNIGHT |
-| C6.alert.dip | ui | Alert | C6 forecast sub-line until the sizing is SET | Everyone calls and streams at once, and one rack loses power just before midnight. |
+| C6.alert.dip | ui | Alert | C6 forecast sub-line until the sizing is SET | Everyone calls and streams at once. One box loses power just before midnight. |
 | C6.alert.held | ui | Alert | midnight, the block held | HELD |
 | C6.alert.dark | ui | Alert | midnight, the block went dark | BLOCK DARK |
 | C7.alert.title | ui | Alert | the after-midnight forecast headline, after the number | FIREWORKS |
@@ -359,7 +359,7 @@ forecast or flicker line. Wording is a draft until the owner approves it (decisi
 | fill.block.surge.01 | block | block | the surge lands | kenji: the whole street is online now |
 | fill.block.surge.02 | block | block | the surge lands | old man noodles: so many people on the wifi tonight |
 | fill.stream.surge.01 | stream | stream | the surge lands | here it comes |
-| fill.stream.surge.02 | stream | stream | the surge lands | chat is flooding in |
+| fill.stream.surge.02 | stream | stream | the surge lands | the neighbours are all piling in |
 | fill.stream.rescue.01 | stream | stream | the crew arrive | WHO ARE THESE PEOPLE |
 | fill.stream.rescue.02 | stream | stream | the crew arrive | she has backup?? |
 | fill.block.held.01 | block | block | midnight held | kenji: HAPPY NEW YEAR LUX |
@@ -381,7 +381,7 @@ until the owner approves it (decision D8).
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C4.chat.dark | chat | block: kenji | the surge's power dip takes the big box dark | lights just blinked and the net went with them |
-| C5.chat.lb | chat | stream: viewer | 3 s after the board returns from the rescue | who are these people in her goggles?? |
+| C5.chat.lb | chat | stream: viewer | 3 s after the board returns from the rescue | what did they just plug in for her?? |
 | C6.chat.dark | chat | block: young father | 23:59:50, the dip takes a box dark | lights blinked. please. ten more seconds |
 | C7.chat.01 | chat | block: mrs okafor | 5 s after midnight held | Happy New Year Lux. Now get some sleep x |
 | fill.block.dark.01 | block | block | filler while a box is dark | kenji: everything just went out again |

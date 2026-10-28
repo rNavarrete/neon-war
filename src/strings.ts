@@ -435,13 +435,13 @@ export const LINES = {
   'C4.alert.refresh': {
     kind: 'ui',
     speaker: 'Alert',
-    text: "They're hitting refresh: every call that fails comes straight back.",
+    text: "Everyone's hitting refresh: each failed call comes straight back.",
   },
   'C6.alert.title': { kind: 'ui', speaker: 'Alert', text: 'MIDNIGHT' },
   'C6.alert.dip': {
     kind: 'ui',
     speaker: 'Alert',
-    text: 'Everyone calls and streams at once, and one rack loses power just before midnight.',
+    text: 'Everyone calls and streams at once. One box loses power just before midnight.',
   },
   'C6.alert.held': { kind: 'ui', speaker: 'Alert', text: 'HELD' },
   'C6.alert.dark': { kind: 'ui', speaker: 'Alert', text: 'BLOCK DARK' },
@@ -527,7 +527,7 @@ export const LINES = {
     text: 'old man noodles: so many people on the wifi tonight',
   },
   'fill.stream.surge.01': { kind: 'stream', speaker: 'stream', text: 'here it comes' },
-  'fill.stream.surge.02': { kind: 'stream', speaker: 'stream', text: 'chat is flooding in' },
+  'fill.stream.surge.02': { kind: 'stream', speaker: 'stream', text: 'the neighbours are all piling in' },
   'fill.stream.rescue.01': { kind: 'stream', speaker: 'stream', text: 'WHO ARE THESE PEOPLE' },
   'fill.stream.rescue.02': { kind: 'stream', speaker: 'stream', text: 'she has backup??' },
   'fill.block.held.01': { kind: 'block', speaker: 'block', text: 'kenji: HAPPY NEW YEAR LUX' },
@@ -545,7 +545,7 @@ export const LINES = {
     speaker: 'block: kenji',
     text: 'lights just blinked and the net went with them',
   },
-  'C5.chat.lb': { kind: 'chat', speaker: 'stream: viewer', text: 'who are these people in her goggles??' },
+  'C5.chat.lb': { kind: 'chat', speaker: 'stream: viewer', text: 'what did they just plug in for her??' },
   'C6.chat.dark': {
     kind: 'chat',
     speaker: 'block: young father',

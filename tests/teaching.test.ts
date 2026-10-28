@@ -1,5 +1,6 @@
 import labelsSource from '../src/scenes/hud/labels.ts?raw';
-import { LOCKED_KINDS } from '../src/scenes/board/tray';
+import { placeBalancer } from '../src/scenes/board/crew';
+import { LOCKED_KINDS, lockedReason, trayCards } from '../src/scenes/board/tray';
 import { CUES } from '../src/scenes/hud/cues';
 import {
   LABELS,
@@ -276,6 +277,53 @@ describe('no term before the debrief', () => {
       expect(metaOf(id)?.tag, id).toBe('HOUSE');
     }
     for (const id of IDS.filter((i) => i.startsWith('fill.'))) expect(LINES[id].text, id).not.toMatch(/\d/);
+  });
+});
+
+// ---- learning-3: the wording pass over every lane's anchor and labels.ts ----
+
+describe('the wording pass (learning-3)', () => {
+  it('prints the crew word on the tray card and in the refusals, never the debrief name', () => {
+    const balancer = trayCards(false).find((c) => c.id === 'balancer');
+    expect(balancer?.name).toBe('SPLITTER');
+    expect(balancer?.name).toBe(LABELS.plates.names.balancer);
+    expect(lockedReason('balancer')).toBe(LABELS.inventory.splitterLocked);
+    const before = { rescued: false, session: { board: { parts: [] } } } as unknown as Run;
+    const after = { rescued: true, session: { board: { parts: [] } } } as unknown as Run;
+    const reason = (r: Run): string => {
+      const res = placeBalancer(r);
+      return res.ok ? '' : res.reason;
+    };
+    expect(reason(before)).toBe(LABELS.inventory.splitterLocked);
+    expect(reason(after)).toBe('the splitter is already racked');
+    const shown = [
+      ...trayCards(true).map((c) => c.name ?? ''),
+      lockedReason('balancer'),
+      reason(before),
+      reason(after),
+    ];
+    for (const t of shown) expect(termsIn(t), t).toEqual([]);
+  });
+
+  it('uses one verb for a dark box the splitter passes: skips, as Rei and the SKIPPED tag say', () => {
+    expect(LINES['C5.rei.03'].text).toContain('skips');
+    expect(LABELS.plates.splitter).toContain('skips a dark one');
+    expect(LABELS.plates.state.skipped).toBe('the splitter skips it');
+  });
+
+  it('keeps the reworded lines short and in the words the rest of the night uses', () => {
+    // The refresh sub-line names who, as TRIAGE does in C4.triage.03.
+    expect(LINES['C4.alert.refresh'].text).toMatch(/^Everyone's hitting refresh/);
+    expect(LINES['C4.triage.03'].text).toContain('hitting refresh');
+    // The midnight outage is one box, the word the plates and the crew use, not a rack.
+    expect(LINES['C6.alert.dip'].text).toContain('One box loses power');
+    expect(LINES['C6.alert.dip'].text.length).toBeLessThan(80);
+    // The surge reaction is the neighbours coming in, not viewers flooding the stream (D8: RAID).
+    expect(LINES['fill.stream.surge.02'].text).toContain('neighbours');
+    expect(LINES['fill.stream.surge.02'].text).not.toMatch(/chat|viewer/);
+    // The stream notices the crew's gift instead of repeating fill.stream.rescue.01.
+    expect(LINES['C5.chat.lb'].text).not.toMatch(/who are these people/i);
+    expect(termsIn(LINES['C5.chat.lb'].text)).toEqual([]);
   });
 });
 
