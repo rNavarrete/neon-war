@@ -1,12 +1,14 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { LuxCamTestState } from '../../src/scenes/hud/luxcam';
 import type { Rect } from '../../src/scenes/live/layout';
-import { openBoard, reach, shot, snap } from './live/reach';
+import { LINES, type LineId } from '../../src/strings';
+import { dismissJobCard, openBoard, reach, setDial, shot, snap } from './live/reach';
 
 // Lux's cam (luxcam-2, luxcam-3), asserted on window.__neonTest.state.hud.luxCam: it draws inside
 // ZONES.cam with the face and the backdrop only inside the 388x230 lens, its art is the texture on
 // the front face, REC blinks on the HUD clock (steady with reduce flicker) and the talk bars follow
-// Lux's lines. Short on purpose: speed 20 with the autopilot, two page loads.
+// Lux's lines. Short on purpose: speed 20 with the autopilot for the first two, and a third page at
+// speed 4 without it, where touching the dial makes Lux answer (C1.lux.01) on the band.
 
 async function cam(page: Page): Promise<LuxCamTestState> {
   const c = await page.evaluate(() => window.__neonTest?.state?.hud?.luxCam ?? null);
@@ -86,5 +88,37 @@ test('the cam with reduce flicker: REC never goes off and motion is reduced', as
     await page.waitForTimeout(15);
   }
   expect((await snap(page)).hud?.ready).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+/** Whether a bark id is one of Lux's lines (its speaker in docs/SCRIPT.md). */
+const isLux = (id: LineId | null): boolean => id !== null && LINES[id].speaker === 'Lux';
+
+test('the talk bars: speaking is true exactly while Lux’s line is on the band', async ({ page }) => {
+  test.setTimeout(60_000);
+  const { errors } = await openBoard(page, { speed: 4, autopilot: false });
+  await dismissJobCard(page);
+  // Touching the dial makes Lux answer (C1.lux.01) once the band is free.
+  await setDial(page, 30);
+  const seen = { lux: 0, other: 0, quiet: 0 };
+  const deadline = Date.now() + 40_000;
+  let luxDone = false;
+  while (!luxDone && Date.now() < deadline) {
+    const { bark, luxCam } = await page.evaluate(() => {
+      const h = window.__neonTest!.state.hud!;
+      return { bark: h.bark.current, luxCam: h.luxCam! };
+    });
+    // One hook read: the band and the cam agree on every sample.
+    expect(luxCam.speaking, `bark.current=${bark}`).toBe(isLux(bark));
+    if (isLux(bark)) seen.lux++;
+    else if (bark) seen.other++;
+    else seen.quiet++;
+    // Done once Lux has spoken and her line has left the band.
+    if (seen.lux > 0 && !isLux(bark)) luxDone = true;
+    await page.waitForTimeout(25);
+  }
+  expect(seen.lux, 'C1.lux.01 was seen on the band').toBeGreaterThan(0);
+  expect(luxDone, 'Lux’s line left the band').toBe(true);
+  expect((await cam(page)).speaking).toBe(false);
   expect(errors).toEqual([]);
 });

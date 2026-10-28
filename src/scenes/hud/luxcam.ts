@@ -50,8 +50,11 @@ export const CAM_FOCUS_FROM = 0.5;
 export const CAM_CALM_DROP = 1.5;
 /** An action on the board keeps her focused this long. */
 export const CAM_ACTION_FOCUS = 2.5;
-/** Leaning (a drag or Regroup) stays at least this long once entered. */
-export const CAM_LEAN_DWELL = 0.8;
+/**
+ * Leaning (a drag or Regroup) lets go this long after the drag ends (bus drag {kind: null}) or
+ * Regroup stops. It replaces luxcam-1's 0.8 s dwell from entry, so a drop always reads the same.
+ */
+export const CAM_LEAN_RELEASE = 0.5;
 /** Tense leaves only once no tense reason has held for this long and load is under HEADROOM_EXIT. */
 export const CAM_TENSE_EXIT = 2;
 /** Error share from which she panics (held CAM_ENTRY_HOLD). */
@@ -238,6 +241,8 @@ export interface CamState {
   readonly tenseQuietSince: number | null;
   /** No reason to focus or lean, since. */
   readonly focusOffSince: number | null;
+  /** No reason to lean (no drag, no Regroup), since. */
+  readonly leanOffSince: number | null;
   // Last seen facts, for the beats' edges.
   readonly rewinds: number;
   readonly rescued: boolean;
@@ -263,6 +268,7 @@ export function initialCam(clock = 0, rewinds = 0): CamState {
     hotSince: null,
     tenseQuietSince: clock,
     focusOffSince: clock,
+    leanOffSince: clock,
     rewinds,
     rescued: false,
     binned: false,
@@ -307,6 +313,7 @@ export function camStep(s: CamState, v: CamView): CamState {
   const leanRaw = v.dragging || v.timeScale < 1;
   const focusRaw = leanRaw || acting || v.luxSpeaking || loadMidSince !== null;
   const focusOffSince = sinceOf(s.focusOffSince, !focusRaw, c);
+  const leanOffSince = sinceOf(s.leanOffSince, !leanRaw, c);
 
   // Beats.
   let beat = s.beat;
@@ -337,7 +344,9 @@ export function camStep(s: CamState, v: CamView): CamState {
   const wasStressed = STRESS(s.mood);
   const tense = tenseIn || (wasStressed && !held(tenseQuietSince, c, CAM_TENSE_EXIT));
   const leanIn = leanRaw;
-  const leanStay = s.mood === 'leaning' && c - s.since < CAM_LEAN_DWELL - EPS;
+  // Once leaning she lets go CAM_LEAN_RELEASE after the drag ends (a short drag still gets the 0.5 s
+  // CAM_MIN_GAP); an action on the board (the drop that ended it) turns her focused at once instead.
+  const leanStay = s.mood === 'leaning' && !acting && !held(leanOffSince, c, CAM_LEAN_RELEASE);
   const focusIn = acting || v.luxSpeaking || held(loadMidSince, c, CAM_ENTRY_HOLD);
   let ladder: CamMood;
   if (panic) ladder = 'panicking';
@@ -385,6 +394,7 @@ export function camStep(s: CamState, v: CamView): CamState {
     hotSince === s.hotSince &&
     tenseQuietSince === s.tenseQuietSince &&
     focusOffSince === s.focusOffSince &&
+    leanOffSince === s.leanOffSince &&
     v.rewinds === s.rewinds &&
     v.rescued === s.rescued &&
     v.bannerBinned === s.binned &&
@@ -408,6 +418,7 @@ export function camStep(s: CamState, v: CamView): CamState {
     hotSince,
     tenseQuietSince,
     focusOffSince,
+    leanOffSince,
     rewinds: v.rewinds,
     rescued: v.rescued,
     binned: v.bannerBinned,

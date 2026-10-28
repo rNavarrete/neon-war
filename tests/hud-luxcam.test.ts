@@ -8,8 +8,10 @@ import { updateSettings } from '../src/game/settings';
 import { CAM_WORDS, LuxCamView } from '../src/scenes/hud/LuxCamView';
 import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 import {
+  CAM_ACTION_FOCUS,
   CAM_BACKDROP_KEY,
   CAM_FADE,
+  CAM_LEAN_RELEASE,
   CAM_LENS,
   REC_PERIOD,
   type LuxCamTestState,
@@ -798,5 +800,190 @@ describe('LuxCamView', () => {
     } finally {
       updateSettings({ reduceFlicker: false });
     }
+  });
+});
+
+// ---- luxcam-3: the talk bars, the drag, the action, the shock and the goggles ----
+
+describe('camStep: drag, action and talk (luxcam-3)', () => {
+  it('a card drag leans within 0.1 s and lets go 0.5 s after the drag ends', () => {
+    expect(CAM_LEAN_RELEASE).toBe(0.5);
+    for (const held of [0.2, 0.6, 2]) {
+      const seen: CamMood[] = [];
+      let s = run(settled(), 10, 10.1, () => ({ dragging: true }), seen);
+      expect(seen[0], `drag ${held} s: the first frame`).toBe('leaning');
+      s = run(s, 10.1, 10 + held, () => ({ dragging: true }));
+      expect(s.mood).toBe('leaning');
+      const end = 10 + held;
+      s = run(s, end, end + CAM_LEAN_RELEASE - 0.02, () => ({}));
+      expect(s.mood, `drag ${held} s: still leaning just before the release`).toBe('leaning');
+      s = run(s, end + CAM_LEAN_RELEASE - 0.02, end + CAM_LEAN_RELEASE + 0.02, () => ({}));
+      expect(s.mood, `drag ${held} s: let go 0.5 s after the end`).not.toBe('leaning');
+      expect(s.since).toBeGreaterThanOrEqual(end + CAM_LEAN_RELEASE - 1e-9);
+      // The first frame without the drag is one frame after `end`; she lets go 0.5 s after it.
+      expect(s.since).toBeLessThanOrEqual(end + CAM_LEAN_RELEASE + 2 * DT);
+    }
+  });
+
+  it('within 2.5 s of an action she is focused, unless a danger state applies', () => {
+    expect(CAM_ACTION_FOCUS).toBe(2.5);
+    // From calm: focused on the next frame and through the whole 2.5 s.
+    const seen: CamMood[] = [];
+    run(settled(), 10, 12.49, () => ({ actionAt: 10 }), seen);
+    expect(new Set(seen)).toEqual(new Set(['focused']));
+    // The drop that ends a drag: focused at once, no lean release.
+    let s = run(settled(), 10, 11, () => ({ dragging: true }));
+    expect(s.mood).toBe('leaning');
+    const after: CamMood[] = [];
+    run(s, 11, 13.49, () => ({ actionAt: 11 }), after);
+    expect(after[0]).toBe('focused');
+    expect(new Set(after)).toEqual(new Set(['focused']));
+    // Right after another change (CAM_MIN_GAP: a 50 ms drag ending in a drop) she still turns
+    // focused well inside the 2.5 s, and stays focused to its end.
+    s = run(settled(), 10, 10.05, () => ({ dragging: true }));
+    expect(s.mood).toBe('leaning');
+    const late: CamMood[] = [];
+    run(s, 10.05, 12.5, () => ({ actionAt: 10.05 }), late);
+    expect(late.indexOf('focused')).toBeGreaterThanOrEqual(0);
+    expect(late.indexOf('focused') * DT).toBeLessThanOrEqual(0.5);
+    expect(late.slice(late.indexOf('focused')).every((m) => m === 'focused')).toBe(true);
+    // Danger wins: errors held into panic, load over the amber line into tense.
+    const panic = run(settled(), 10, 12, () => ({ actionAt: 10.5, errorShare: 0.8 }));
+    expect(panic.mood).toBe('panicking');
+    const tense = run(settled(), 10, 12, () => ({ actionAt: 10.5, demand: 90 }));
+    expect(tense.mood).toBe('tense');
+  });
+
+  it('a died or dip occurrence shocks her into panic for 2 s; the goggles go up at 537 and stay', () => {
+    const r = new Run();
+    r.now = BROWNOUT.challenges.c1;
+    const f = readFrame(r);
+    const out = emptyCamView();
+    fillCamView(out, f, [{ kind: 'died', id: 'server-1', at: f.now }], NO_CAM_EXTRAS, 20);
+    expect(out.shockAt).toBe(20);
+    fillCamView(out, f, [{ kind: 'dip', id: 'server-1', at: f.now }], NO_CAM_EXTRAS, 21);
+    expect(out.shockAt).toBe(21);
+    fillCamView(out, f, [{ kind: 'wired', id: 'a>b', at: f.now }], { ...NO_CAM_EXTRAS, shockAt: 21 }, 22);
+    expect(out.shockAt).toBe(21);
+    const s = run(settled(), 10, 10.05, () => ({ shockAt: 10.02 }));
+    expect(s.mood).toBe('panicking');
+    const g = run(settled(), 10, 10.1, () => ({ now: CAM_GOGGLES_AT, errorShare: 1, rewinds: 1 }));
+    expect(g.mood).toBe('gogglesUp');
+    expect(run(g, 10.1, 15, () => ({ now: CAM_GOGGLES_AT + 5, failure: true })).mood).toBe('gogglesUp');
+  });
+});
+
+describe('LuxCamView: the bus facts (luxcam-3)', () => {
+  /** A view on a stub, with its own bus, stepped on a quiet frame. */
+  function bused() {
+    const { scene, made } = camStub();
+    const bus = new Bus();
+    const v = new LuxCamView();
+    v.create(scene as never, camHost(scene, bus));
+    let clock = 0;
+    const quiet = frameAt(100, { demand: 30, wiredCapacity: 100, errorShare: 0 });
+    const step = (seconds: number, f: Frame = quiet): void => {
+      const end = clock + seconds;
+      while (clock < end - 1e-9) {
+        clock += 0.016;
+        v.update(f, { now: clock, dt: 0.016 }, []);
+      }
+    };
+    const bars = made.filter((m) => m.kind === 'Rectangle').slice(1);
+    return { v, bus, step, bars, now: () => clock };
+  }
+
+  it('speaking is true while Lux’s line is on the band and false otherwise; the bars bounce', () => {
+    const { v, bus, step, bars } = bused();
+    expect(bars).toHaveLength(3);
+    step(1);
+    expect(camHook().speaking).toBe(false);
+    bus.emit('line', { id: 'C1.lux.01', speaker: 'Lux', tag: 'LUX', since: 1 });
+    expect(camHook().speaking).toBe(true);
+    step(0.5);
+    expect(camHook().speaking).toBe(true);
+    expect(v.mood).toBe('focused');
+    expect(bars.some((b) => b.scaleY > 0.3)).toBe(true);
+    expect(bars.every((b) => b.alpha === 1)).toBe(true);
+    // Another line's end leaves her talking; hers ends it.
+    bus.emit('lineEnd', { id: 'C1.triage.02' });
+    expect(camHook().speaking).toBe(true);
+    bus.emit('lineEnd', { id: 'C1.lux.01' });
+    expect(camHook().speaking).toBe(false);
+    step(0.1);
+    expect(bars.every((b) => b.scaleY === 0.25 && b.alpha < 1)).toBe(true);
+    // A crew line is not hers; a new line pre-empting hers ends her talking too.
+    bus.emit('line', { id: 'C1.triage.02', speaker: 'TRIAGE (eager)', tag: 'CREW', since: 2 });
+    expect(camHook().speaking).toBe(false);
+    bus.emit('line', { id: 'C2.lux.ignore', speaker: 'Lux', tag: 'LUX', since: 3 });
+    expect(camHook().speaking).toBe(true);
+    bus.emit('line', { id: 'C1.triage.02', speaker: 'TRIAGE (eager)', tag: 'CREW', since: 4 });
+    expect(camHook().speaking).toBe(false);
+    v.shutdown();
+    // Unsubscribed on shutdown.
+    bus.emit('line', { id: 'C1.lux.01', speaker: 'Lux', tag: 'LUX', since: 5 });
+  });
+
+  it('drag {kind: card} leans within 0.1 s; drag {kind: null} lets go 0.5 s later', () => {
+    const { v, bus, step, now } = bused();
+    step(3);
+    expect(v.mood).toBe('calm');
+    bus.emit('drag', { kind: 'card', card: 'server', over: null });
+    expect(camHook().dragging).toBe(true);
+    step(0.1);
+    expect(v.mood).toBe('leaning');
+    step(1);
+    bus.emit('drag', { kind: 'card', card: 'server', over: 'pad' });
+    step(0.5);
+    expect(v.mood).toBe('leaning');
+    bus.emit('drag', { kind: null, card: null, over: null });
+    const ended = now();
+    expect(camHook().dragging).toBe(false);
+    step(0.45);
+    expect(v.mood).toBe('leaning');
+    step(0.1);
+    expect(v.mood).not.toBe('leaning');
+    expect(camHook().since - ended).toBeGreaterThanOrEqual(0.5 - 0.016);
+    expect(camHook().since - ended).toBeLessThanOrEqual(0.5 + 0.032);
+    v.shutdown();
+  });
+
+  it('an action focuses her for 2.5 s on the HUD clock; a died occurrence shocks her', () => {
+    const { v, bus, step } = bused();
+    step(3);
+    expect(v.mood).toBe('calm');
+    bus.emit('action', { type: 'place', id: 'server-1' });
+    const moods = new Set<CamMood>();
+    for (let i = 0; i < 150; i++) {
+      step(0.016);
+      moods.add(v.mood);
+    }
+    expect(moods).toEqual(new Set(['focused']));
+    v.shutdown();
+
+    const b = bused();
+    b.step(3);
+    const f = frameAt(100, { demand: 30, wiredCapacity: 100 });
+    b.v.update(f, { now: 3.1, dt: 0.016 }, [{ kind: 'died', id: 'server-1', at: 100 }]);
+    expect(b.v.mood).toBe('panicking');
+    expect(camHook().frame).toBe('red');
+    b.v.shutdown();
+  });
+
+  it('shows the goggles-up pose from 537 s, cropped to its top', () => {
+    const { v, step } = bused();
+    step(1);
+    step(0.5, frameAt(CAM_GOGGLES_AT, { demand: 30, wiredCapacity: 100 }));
+    const h = camHook();
+    expect(h.mood).toBe('gogglesUp');
+    expect(h.art).toBe('portrait:lux/poses/goggles-up');
+    const lens = camLayout(ZONES.cam).lens;
+    const page = pageRect(lens, { left: 10, top: 20, width: 960, height: 540 });
+    // The pose's head sits near the lens's top edge (8 px down, breathing 2 px), cropped below.
+    expect(h.face.y).toBeGreaterThanOrEqual(page.y);
+    expect(h.face.y).toBeLessThanOrEqual(page.y + 6);
+    expect(h.face.y + h.face.h).toBeCloseTo(page.y + page.h, 0);
+    expect(inside(h.face, h.lens)).toBe(true);
+    v.shutdown();
   });
 });

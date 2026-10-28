@@ -1,8 +1,13 @@
 // Lux's cam (ZONES.cam) as a Live screen view: LUX_CAM and a REC dot over a 388x230 lens, the dark
 // bedroom behind her (it slides a little with the pointer), her face for the mood camStep picks
 // (crossfading 220 ms on a change, breathing, a short shake entering panic), scanlines, a slow roll
-// band and a vignette over the lens, and an amber frame that turns red while she panics. It is a
-// second encoding of the room-left bar: no number and no mood word is ever drawn.
+// band and a vignette over the lens, and an amber frame that turns red while she panics. Three talk
+// bars bounce while her line is on the band (bus line.speaker, until its lineEnd). It is a second
+// encoding of the room-left bar: no number and no mood word is ever drawn.
+//
+// The bus facts camStep reads come in on the host's bus: `line` / `lineEnd` (is Lux talking),
+// `drag` (a card or wire in hand: she leans in) and `action` (she focuses for 2.5 s). A died or dip
+// occurrence shocks her (fillCamView), and from 537 s the goggles go up and stay up.
 //
 // The face and the backdrop are cropped to the lens (lensCrop), so nothing of them shows outside
 // it. The mood is camStep's (src/scenes/hud/luxcam.ts, the only mood selector), stepped once a frame
@@ -15,7 +20,9 @@
 import type Phaser from 'phaser';
 import type { Frame } from '../../game/frame';
 import type { Occurrence } from '../../game/occurrences';
+import { speakerName } from '../../game/portraits';
 import { settings } from '../../game/settings';
+import type { LineId } from '../../strings';
 import { type Point, type Rect, pageRect } from '../live/layout';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import { preloadArt, resolveArt } from '../plates';
@@ -111,15 +118,17 @@ export class LuxCamView implements LiveView {
   /** The cam's state, the view it steps on (refilled every frame) and the bus facts. */
   private state: CamState = initialCam();
   private readonly view: MutableCamView = emptyCamView();
-  protected readonly extras: { -readonly [K in keyof CamExtras]: CamExtras[K] } = {
+  private readonly extras: { -readonly [K in keyof CamExtras]: CamExtras[K] } = {
     dragging: false,
     luxSpeaking: false,
     actionAt: null,
     shockAt: null,
   };
   private history: CamHistoryEntry[] = [];
+  /** The id of Lux's line on the band, until its lineEnd. */
+  private speakingId: LineId | null = null;
   /** HUD clock of the last update, the crossfade's start (or null) and the panic's start (or null). */
-  protected clock = 0;
+  private clock = 0;
   private fadeAt: number | null = null;
   private panicAt: number | null = null;
   private lastNow = -Infinity;
@@ -217,6 +226,34 @@ export class LuxCamView implements LiveView {
     this.reduced = settings().reduceFlicker;
     this.layoutAll(0);
     this.off.push(provideHudSection('luxCam', () => this.snapshot()));
+
+    // The bus facts camStep reads (luxcam-3): Lux's band line, the board's drag, every action.
+    const ex = this.extras;
+    ex.dragging = false;
+    ex.luxSpeaking = false;
+    ex.actionAt = null;
+    ex.shockAt = null;
+    this.speakingId = null;
+    const bus = host.bus;
+    this.off.push(
+      bus.on('line', (l) => {
+        // One line is on the band at a time: a new line that is not hers ends her talking.
+        const hers = speakerName(l.speaker) === 'Lux';
+        this.speakingId = hers ? l.id : null;
+        ex.luxSpeaking = hers;
+      }),
+      bus.on('lineEnd', (l) => {
+        if (l.id !== this.speakingId) return;
+        this.speakingId = null;
+        ex.luxSpeaking = false;
+      }),
+      bus.on('drag', (d) => {
+        ex.dragging = d.kind !== null;
+      }),
+      bus.on('action', () => {
+        ex.actionAt = this.clock;
+      }),
+    );
   }
 
   private makeFace(scene: Phaser.Scene, texture: string): Face {
@@ -396,7 +433,7 @@ export class LuxCamView implements LiveView {
   }
 
   /** The talk bars: low and dim while she is quiet, bouncing while her line is on. */
-  protected updateBars(c: number): void {
+  private updateBars(c: number): void {
     const speaking = this.extras.luxSpeaking;
     for (let i = 0; i < this.bars.length; i++) {
       const bar = this.bars[i];
