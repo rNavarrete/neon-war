@@ -171,7 +171,7 @@ export function bakePanel(
           const t = get(key);
           const part = partFrame(st);
           if (!t.has(part)) t.add(part, 0, st.src.x, st.src.y, st.src.w, st.src.h);
-          // Turned about the box's centre; the boxes turned (the corners) are square.
+          // Placed by the box's centre; a stamp's rotation (0 for every kit piece today) turns it there.
           dt.stamp(key, part, st.x + st.w / 2, st.y + st.h / 2, {
             originX: 0.5,
             originY: 0.5,

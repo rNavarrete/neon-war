@@ -8,7 +8,8 @@
 // alert-plate, k 0.5 in the request) draw their corners and ornaments at k and stretch only their
 // plain rails along the long axis; an ornament on an edge (the frame's lamps, the alert plate's
 // notch and tape) is kept whole at k with a rail either side, so nothing painted gets smeared.
-// corner-marks is one bracket (top-left); the other three corners are the same stamp turned.
+// corner-marks is a 96x96 set of all four brackets, one per 48x48 quadrant: each panel corner draws
+// its own quadrant, unturned, at 48 px or smaller.
 //
 // Pure: no Phaser. tests/hud-kit.test.ts checks the geometry against the art manifest's cut sizes.
 
@@ -39,7 +40,8 @@ export const KIT_KEYS: readonly KitKey[] = Object.values(KIT);
 /** The size of each picked file, in its own pixels (the manifest's cut; tests check they agree). */
 export const KIT_FILE: Readonly<Record<KitKey, { readonly w: number; readonly h: number }>> = {
   'hud/live/panel-frame': { w: 192, h: 192 },
-  'hud/live/corner-marks': { w: 59, h: 59 },
+  // All four brackets, one per 48x48 quadrant (top-left, top-right, bottom-left, bottom-right).
+  'hud/live/corner-marks': { w: 96, h: 96 },
   'hud/live/label-tab': { w: 380, h: 72 },
   'hud/live/tag-chip': { w: 216, h: 72 },
   'hud/live/divider': { w: 8, h: 160 },
@@ -166,26 +168,32 @@ export function frameStamps(w: number, h: number): Stamp[] {
 
 // ---- the bracket corners ----
 
-/** The bracket corners' drawn size on a panel (the file is 59 px; the request's display is 48). */
+/** The bracket corners' drawn size on a panel (each bracket is a 48 px quadrant of the 96 px set). */
 export const CORNER_SIZE = 30;
 
-/** The four bracket corners of a w x h panel, `size` px, the one top-left bracket turned for each. */
+/** One bracket's quadrant of the corner-marks set, in its file's pixels. */
+export const CORNER_QUADRANT = 48;
+
+/**
+ * The four bracket corners of a w x h panel, `size` px (at most the 48 px quadrant): each corner
+ * draws its own quadrant of the set, unturned, in the order top-left, top-right, bottom-right,
+ * bottom-left.
+ */
 export function cornerStamps(w: number, h: number, size: number = CORNER_SIZE): Stamp[] {
   const key = KIT.corner;
-  const f = KIT_FILE[key];
-  const s = Math.min(size, f.w, f.h);
-  const src = { x: 0, y: 0, w: f.w, h: f.h };
-  const at = (x: number, y: number, turns: number): Stamp => ({
+  const q = CORNER_QUADRANT;
+  const s = Math.min(size, q);
+  const at = (qx: number, qy: number, x: number, y: number): Stamp => ({
     key,
-    src,
+    src: { x: qx * q, y: qy * q, w: q, h: q },
     x,
     y,
     w: s,
     h: s,
-    rotation: (turns * Math.PI) / 2,
+    rotation: 0,
     stretch: false,
   });
-  return [at(0, 0, 0), at(w - s, 0, 1), at(w - s, h - s, 2), at(0, h - s, 3)];
+  return [at(0, 0, 0, 0), at(1, 0, w - s, 0), at(1, 1, w - s, h - s), at(0, 1, 0, h - s)];
 }
 
 // ---- single pieces ----

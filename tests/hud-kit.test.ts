@@ -101,18 +101,31 @@ describe('frameStamps: the panel frame nine-sliced at k 0.5', () => {
   });
 });
 
-describe('cornerStamps: one bracket, turned for each corner', () => {
-  it('puts the 59 px bracket at each corner, turned a quarter more each time, never above its size', () => {
+describe('cornerStamps: the four-bracket set, one quadrant per corner', () => {
+  it('puts each 48 px quadrant of the 96 px set at its own corner, unturned, never above its size', () => {
     const st = cornerStamps(408, 170);
-    expect(st.map((s) => s.rotation)).toEqual([0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2]);
+    expect(st.map((s) => s.rotation)).toEqual([0, 0, 0, 0]);
     expect(st.map((s) => [s.x, s.y])).toEqual([
       [0, 0],
       [408 - CORNER_SIZE, 0],
       [408 - CORNER_SIZE, 170 - CORNER_SIZE],
       [0, 170 - CORNER_SIZE],
     ]);
-    for (const s of st) expect(s.src).toEqual({ x: 0, y: 0, w: 59, h: 59 });
+    // Top-left, top-right, bottom-right, bottom-left quadrants of the file, in that order.
+    expect(st.map((s) => s.src)).toEqual([
+      { x: 0, y: 0, w: 48, h: 48 },
+      { x: 48, y: 0, w: 48, h: 48 },
+      { x: 48, y: 48, w: 48, h: 48 },
+      { x: 0, y: 48, w: 48, h: 48 },
+    ]);
+    // Each quadrant lies inside the file.
+    const f = KIT_FILE[KIT.corner];
+    for (const s of st) expect(s.src.x + s.src.w <= f.w && s.src.y + s.src.h <= f.h).toBe(true);
+    for (const s of st) expect([s.w, s.h]).toEqual([CORNER_SIZE, CORNER_SIZE]);
+    expect(maxScale(st)).toBeLessThanOrEqual(1);
+    // Asked for more than the quadrant: drawn at its own 48 px, never up.
     expect(maxScale(cornerStamps(100, 100, 200))).toBe(1);
+    expect(cornerStamps(100, 100, 200)[2]).toMatchObject({ x: 52, y: 52, w: 48, h: 48 });
   });
 });
 
