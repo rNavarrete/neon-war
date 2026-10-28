@@ -12,6 +12,7 @@ Notes:
 - `parts/` is the component catalog for the whole game: each part in four tiers (scrap, street, pro, solace). Brownout uses only the server, gateway, database and load balancer.
 - The overclock kit, job card and estimate dial were added later the same day (round 4, picks overclock-kit-b, job-card-a, estimate-dial-b). `board/overclock-kit` is the kit on its own for its tray card; `server-overclocked` is a server with the kit fitted, and `server-overclocked-hot` is the same server cooking in the surge. The job card and dial frames are empty: their text and numbers are drawn in code.
 - Sizes are the cut size in pixels. Scale sprites down rather than up where you can.
+- `src/game/artManifest.ts` lists every file here that the game loads, with its cut size, the size it is drawn at and where it shows. `tests/art-manifest.test.ts` re-measures each file and fails when the game loads a file the manifest lacks. The art the Live screen still needs is in `docs/ART-REQUESTS.md`.
 
 | Folder | Files (size) | From |
 | --- | --- | --- |
@@ -54,3 +55,15 @@ Notes:
 | `art/parts/search-index/` | scrap (276x343), street (291x413), pro (370x544), solace (437x756) | comp-search-index |
 | `art/parts/server/` | scrap (257x411), street (301x475), pro (326x636), solace (398x789) | comp-server |
 | `art/parts/worker/` | scrap (267x348), street (306x426), pro (373x573), solace (451x708) | comp-worker |
+
+## How a picked file lands
+
+The Live screen's new art is requested in `docs/ART-REQUESTS.md`. Until a piece is picked, the game draws its fallback, so nothing waits on a pick.
+
+1. The owner's pipeline draws the sheet on magenta, chroma-keys it, cuts each piece at the cut size in its request row and saves it as WebP with transparency at the key's path: `hud/city-grid` goes to `public/art/hud/city-grid.webp`.
+2. In the same PR, the owner sets that request's `cut` in `src/game/artManifest.ts` from `null` to the file's real size, and adds the file to the table above.
+3. That is the whole change. `tests/art-manifest.test.ts` fails if a request's file is on disk while its `cut` is still `null`, or if the size is wrong.
+
+How the code picks it up: views ask `src/scenes/plates.ts` for a key. `preloadArt(scene, keys)` queues the picked file once `cut` is set, or the file the fallback reuses before that. `resolveArt(key)` and `ensureArt(scene, key)` return the texture, tint and alpha to draw, and `fallback: true` while a stand-in draws. A stand-in is a picked file reused with a tint, or a plate baked once in code at the key's display size and labelled with the key. Under `?test`, the `art` hook section lists the keys still on a fallback (`art.fallback`), the picked keys loaded (`art.loaded`), the plates baked so far (`art.baked`) and any object drawing Phaser's missing texture (`art.missing`).
+
+Workers never add, edit or resize files here. The views adopt `resolveArt` in their own tickets (board-12, comms-9, chat-6, luxcam-5), and art3d-5 checks each batch against the manifest once the owner's drop PRs have merged.
