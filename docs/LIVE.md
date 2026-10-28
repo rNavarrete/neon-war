@@ -70,8 +70,8 @@ cover another lane's zone. The banner, job card and dip fallback keep the centre
 
 A lane draws its zone as a `LiveView` (`src/scenes/live/view.ts`): `zone`, a declared
 `budget: {objects, texts}`, optional `preload(scene)`, `create(scene, host)`, `update(frame, clock,
-occurrences)` and `shutdown()`. The host (`LiveHost`) is the HUD scene, the bus, the zone's rect and
-a live `flags` getter. `update` runs every frame and must not allocate: it reads the shared `Frame`,
+occurrences)` and `shutdown()`. The host (`LiveHost`) is the HUD scene, the bus, the zone's rect, a
+live `flags` getter and `pressSet()`. `update` runs every frame and must not allocate: it reads the shared `Frame`,
 the HUD clock `{now, dt}` (real seconds times the test speed, stopped while the board is held) and
 this frame's occurrences, and moves only what changed.
 
@@ -90,6 +90,16 @@ each fired id goes out on the bus as `cue {id, kind: 'bark' | 'chat', at}` (`at`
 Bark ids go to the comms band's queue and chat ids to the chat; `C6.fail.chat` is the chat going
 silent, never a row, and no filler is posted while `chatSilenced` holds (until the rewind).
 `hud.cues {fired, silenced}` mirrors it for tests.
+
+### LiveHost.pressSet
+
+`pressSet()` is the one action a view may ask of the host: press the dial card's SET, exactly as the
+card's own button does. The host forwards it to `DialView.pressSet()`, which records the dial's
+value (the C1 estimate or the C6 sizing) and returns `true`, or does nothing and returns `false`
+while the dial is locked or no dial question is open. DeckView calls it for key 3 (`3 SET`, the
+key or the keyboard), so the deck never holds the dial or knows what SET records. It is optional
+on the interface: a host built in a unit test may leave it out, and a view reads it as
+`host.pressSet?.() ?? false`.
 
 ### Flags
 
@@ -114,10 +124,32 @@ went dark at midnight) and `fall`. Identical frames give none. The HUD emits eac
 
 `src/game/bus.ts` carries the lane boundaries as typed events: `drag` (board), `line` / `lineEnd`
 and `chatLine` (comms, chat), `alert` / `alertEnd` (gauges), `occurrence` (tech), `voice` /
-`voiceStart` / `voiceStop` / `voiceEnd` (the mixer), `cue {id, kind, at}` (the host loop, below),
-`audience {watching}` (chat: the viewer count
-the title draws as WATCHING) and `perfSample`. Every event before them is unchanged. Lanes declare
-no events of their own by module augmentation: a new event is a line in `GameEvents`.
+`voiceStart` / `voiceStop` / `voiceEnd` (the mixer), `cue {id, kind, at}` (the host loop, above),
+`audience {watching}` (chat) and `perfSample`. Every event before them is unchanged. Lanes declare
+no events of their own by module augmentation: a new event is a line in `GameEvents`
+(`tests/bus.test.ts` checks it).
+
+| Event | Emitted by | Payload | Heard by |
+| --- | --- | --- | --- |
+| `drag` | BoardScene, on drag start, each hover change and drag end | `{kind, card, over, state?, legal?}` | comms (no hover while dragging), luxcam |
+| `line` | CommsView, when a band line starts | `{id, speaker, tag, lesson, since}` | chat (quiet), luxcam (speaking), the mixer |
+| `audience` | ChatFeedView, on every change of `viewersOf` | `{watching}` | TitleView (WATCHING) |
+
+- **`drag.state` and `drag.legal`.** `state` is the board's `PadState` for the pad or part under the
+  card in hand (`legal`, `taken`, `dead`, `poor`, `wrong`; the bus spells it `DragState` so it
+  imports nothing from a scene), null over nothing, on a wire drag and when the drag ends. `legal`
+  is `state === 'legal'`, null where `state` is null. `dragVerdict(state)` builds both. They are
+  optional until the board's emit sends them, and a listener reads a missing one as null.
+- **`line.lesson`.** True when the line is one of lineMeta's lesson lines (`isLesson(id)`, the
+  lines that teach), false otherwise. The chat engine keys its 2 s quiet on it: after a lesson line
+  starts, no reaction posts for 2 s, so the lesson is read alone; other band lines do not quiet it.
+  `since` is the HUD clock the line started at, and `tag` its band tag (HINT, WARNING, CREW, LUX,
+  HOUSE).
+- **`audience`.** How many are watching Lux's stream, 0 to 4, from the chat lane's `viewersOf`:
+  2 until the first serve, 3 from then, 1 after 5 s of heavy errors, 3 on recovery, 4 on a held
+  midnight, 0 when dark. The chat view emits it only when the number changes, and the first
+  emission comes with the first change, so TitleView shows WATCHING with no number until then.
+  Nothing reads the count back from the hook: `hud.audience.watching` is a mirror for tests.
 
 ### Hook sections
 
@@ -135,6 +167,27 @@ key a view file adds laid over them (`hudSection` in `src/scenes/hud/hook.ts`). 
 or `src/testHook.ts`: it declares the key on `HudTestState` by module augmentation, calls
 `provideHudSection` in `create` and the remover it returns in `shutdown`. `provideHudPart` in
 `src/scenes/hud/panel.ts` is the same call under the gauges views' older name.
+
+The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard`, `dial`,
+`chart`, `surge`, `dip`, `dipMark`, `banner`, `sizingPrompt`, `bark`, `cues`, `bounds`...):
+
+| Section | Provided by | What it mirrors |
+| --- | --- | --- |
+| `hud.title` | TitleView | `{live, watching, right, clockRight, avatar, scenePaused}`: the LIVE dot (`held` while a story scene or the pause menu pauses the HUD), WATCHING, the round avatar's baked texture, the right edges |
+| `hud.audience` | the chat view (`live/views/chat.ts`) | `{watching}`: the last bus `audience`, null before the first |
+| `hud.chat` | ChatFeedView | the merged feed, the drawn rows, the filter and header, the quiet window, `block` and `stream` kept |
+| `hud.comms` | CommsView (`live/views/comms.ts`) | the band line, the five slots, `queue`, `history`, `dropped`, the reread log, the TRIAGE mood |
+| `hud.bark` | the host, from CommsView | `{current, text, history}`, the band's shown lines (the older name) |
+| `hud.luxCam` | LuxCamView | the mood, the art, `history` of moods, REC, the frame, `speaking`, `motion` |
+| `hud.alert` | AlertView | the alert up now and its kind, line, tag and text |
+| `hud.gauge`, `hud.chart` | GaugeView, ChartView | the COMING /s gauge; the scope's series and marks over the host's `chart` |
+| `hud.map` | MapView | the city map's dots, raid outlines and midnight |
+| `hud.deck`, `hud.headroom`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, the room-left bar, Regroup and the laundry cut |
+| `hud.dialCard` | DialView | `{dimmed, label}`: the dial card's look |
+
+Outside `hud`: `shell.voice` (the mixer: `recentVoice`, `missing`, `playing`, `started`, `groups`), `avatars.baked`
+(every round avatar baked, as `avatar:<key>@<size>`), `art` (the art manifest's resolutions),
+`board`, `story`, `live` and `perf`.
 
 ## Perf budget
 
@@ -298,6 +351,18 @@ On a board that is already open, the `reach` call alone takes about 15 s to `sur
 to `midnight`. Those are the bounds the spec checks against 25 s and 50 s. The two reach tests cost
 about 21 s (surge) and 46 s (midnight), boot included. With the skeleton test, the whole
 `live-skeleton.spec.ts` file runs in about 72 s.
+
+Since then (tech M3 follow-ups, measured 28 Oct 2026):
+
+- `live-skeleton.spec.ts`'s power-dip mark test runs at speed 7, not 20: about 45 s, **26 s more**.
+  The dip's warning is up for 2 sim seconds, and a frame steps min(frame, 0.25 s) times the speed;
+  the Live screen draws at about 9 fps headless (`perf.fps`, about 110 ms a frame), so at speed 20
+  a frame can step 2.2 s and jump the whole warning. At speed 7 a step is 1.75 s at most, so a
+  frame always lands in it (`tests/live-dip-watch.test.ts`). A spec that must see a 2 s window
+  runs at speed 7 or less; one that reads histories can stay at 20.
+- `hud.spec.ts` gains the title's pause-menu test, about **7 s**. The HELD check under the C5
+  scene and the C4.lux.cut check after it add nothing measurable.
+- With the restaged-HUD test (about 40 s), the file now runs in about 155 s.
 
 ### The e2e seconds budget
 
