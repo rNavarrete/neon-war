@@ -1,3 +1,4 @@
+import { twelveHour } from '../src/scenes/hud/format';
 import { Bus } from '../src/game/bus';
 import { readFrame } from '../src/game/frame';
 import { Run } from '../src/game/run';
@@ -236,7 +237,8 @@ describe('TitleView and ClockView', () => {
     clock.update(readFrame(r));
     expect(texts.some((t) => t.text === 'WATCHING')).toBe(true);
     expect(texts.some((t) => t.text === 'waiting for your build')).toBe(true);
-    expect(texts.some((t) => t.text === r.clock())).toBe(true);
+    // The title shows the run's clock in 12-hour time (11:51:45 PM).
+    expect(texts.some((t) => t.text === twelveHour(r.clock()))).toBe(true);
     expect(texts.some((t) => t.text === 'midnight in 8:15')).toBe(true);
 
     const hud = getTestState().hud as unknown as { title: { live: string; watching: number | null } };
