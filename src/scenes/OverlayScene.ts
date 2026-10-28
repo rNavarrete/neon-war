@@ -5,6 +5,7 @@ import { frame } from '../game/frame';
 import { type SoundPort, VOICE_CUT_FADE_MS, type VoiceTestState, bundledLiveSfx, mixer } from '../game/mixer';
 import { run } from '../game/run';
 import { onSettingsChange, settings } from '../game/settings';
+import { type VoiceHookFields, voiceHookFields } from '../game/voice';
 import { provideTestState, testHookEnabled } from '../testHook';
 import { SCENES } from './keys';
 import { openPause } from './PauseScene';
@@ -20,11 +21,25 @@ export interface ShellTestState {
   lastSfx: string | null;
   /** The last 20 effect keys asked for, oldest first. */
   recentSfx: string[];
-  /** The mixer's voice channel (src/game/mixer.ts): ids asked for, ids the manifest lacks, the duck. */
-  voice: VoiceTestState;
+  /**
+   * The mixer's voice channel (src/game/mixer.ts): ids asked for, ids the manifest lacks, the duck;
+   * plus voice.ts's hook fields: the voices setting (lang), the voice volume, the last id asked for
+   * and whether music or sfx are ducked. `requested` is the mixer's own record ('lang:id' in the
+   * language the setting gave each request when it was made).
+   */
+  voice: VoiceTestState & Pick<VoiceHookFields, 'lang' | 'volume' | 'lastVoice' | 'ducked'>;
   /** True while the board music loop is playing (or queued to start once audio unlocks). */
   musicPlaying: boolean;
-  settings: { volume: number; textSpeed: string; reduceFlicker: boolean; fullscreen: boolean };
+  settings: {
+    volume: number;
+    textSpeed: string;
+    reduceFlicker: boolean;
+    fullscreen: boolean;
+    /** The voices setting: 'ja', 'en' or 'off'. */
+    voices: string;
+    /** The voice volume, 0 to 1. */
+    voiceVolume: number;
+  };
   /** True while the pause menu is open. */
   paused: boolean;
   /** The sim clock, run().now. */
@@ -241,16 +256,20 @@ export class OverlayScene extends Phaser.Scene {
     const s = settings();
     const rect = this.game.canvas?.getBoundingClientRect();
     const title = this.scene.get(SCENES.title) as { creditsOpen?: boolean } | null;
+    const v = mixer.snapshot();
+    // voice.ts's fields join the mixer's; the mixer's requested (made at request time) is kept.
     return {
       lastSfx: audio.lastSfx,
       recentSfx: [...audio.recentSfx],
-      voice: mixer.snapshot(),
+      voice: { ...v, ...voiceHookFields(v, s), requested: v.requested },
       musicPlaying: this.musicOn && this.music !== null,
       settings: {
         volume: s.volume,
         textSpeed: s.textSpeed,
         reduceFlicker: s.reduceFlicker,
         fullscreen: this.scale.isFullscreen,
+        voices: s.voices,
+        voiceVolume: s.voiceVolume,
       },
       paused: this.scene.isActive(SCENES.pause) || this.scene.isPaused(SCENES.pause),
       simNow: run().now,
