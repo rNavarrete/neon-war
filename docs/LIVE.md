@@ -184,6 +184,8 @@ The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard
 | `hud.map` | MapView | the city map's dots, raid outlines and midnight |
 | `hud.deck`, `hud.headroom`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, the room-left bar, Regroup and the laundry cut |
 | `hud.dialCard` | DialView | `{dimmed, label}`: the dial card's look |
+| `hud.chatArt`, `hud.chatTrace` | ChatFeedView | which chat art loaded or fell back; the trace of rows posted, with their cause |
+| `hud.measure`, `hud.taught` | `src/scenes/hud/taught.ts` | the SET estimate and when it was taken; the trace of moments the night taught, for the debrief's grey lines |
 
 Outside `hud`: `shell.voice` (the mixer: `recentVoice`, `missing`, `playing`, `started`, `groups`), `avatars.baked`
 (every round avatar baked, as `avatar:<key>@<size>`), `art` (the art manifest's resolutions),
