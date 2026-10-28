@@ -56,14 +56,36 @@ Notes:
 | `art/parts/server/` | scrap (257x411), street (301x475), pro (326x636), solace (398x789) | comp-server |
 | `art/parts/worker/` | scrap (267x348), street (306x426), pro (373x573), solace (451x708) | comp-worker |
 
+## Live screen (M4 picks, 28 Oct 2026)
+
+Rolando picked these 47 pieces from the Live screen's batches 1 to 4 (`docs/ART-REQUESTS.md`). Each was downscaled to fit its cut, never upscaled; the sizes below are the files' real sizes, as `PICKED_CUTS` in `src/game/artManifest.ts` holds them. Batch 5 is not picked yet, so its keys still draw their fallbacks.
+
+Notes:
+
+- Some pieces came out smaller than the cut asked for: `board/server-overclocked-dark`, `hud/comms-plate`, `hud/live/corner-marks`, the three `hud/live/card-frame-*` and `hud/live/topbar-strip`. The card frames are nine-sliced at k 0.5, so their corners still fit the 120x140 card.
+- `hud/live/corner-marks` is one bracket, not four: a panel draws it four times, rotated or flipped.
+- `hud/live/topbar-strip` is 1536x33, short of the 1920x100 bar. It is drawn 1:1 (its request's display is the file size) and the rest of the bar is filled in code, so it is never stretched.
+- `hud/comms-plate` (1450x144) and `board/table-plate` (1228x416) are smaller than the band and the feed they were cut for. `tests/art-manifest.test.ts` lists them by name until their views draw them at their file size.
+- The cam busts `chars/lux/cam/*` are 924x548 with transparent sides.
+
+| Folder | Files (size) | From |
+| --- | --- | --- |
+| `art/board/` | table-plate (1228x416), server-dark (425x638), server-booting-a (427x638), server-booting-b (420x638), server-overclocked-dark (405x626), balancer-ping-a (480x337), balancer-ping-b (480x336), channel-plate (300x356) | batch 1: table plate, sheet A, sheet B, channel plate |
+| `art/hud/` | city-grid (816x620), comms-plate (1450x144), chat-plate-wide (770x485), cam-backdrop (824x504) | batch 1 city-grid; batch 2 comms-plate, chat-plate-wide; batch 3 backdrop |
+| `art/hud/icons/` | door (128x120), tv (128x120), system (64x64), play (128x123), ping (128x123), skipped (128x124) | batch 2 icons |
+| `art/hud/live/` | avatar-luxnet (243x256), panel-frame (192x192), label-tab (380x72), tag-chip (216x72), rec-badge (121x48), live-pill (189x56), corner-marks (59x59), divider (8x160), keycap-idle (160x128), keycap-ready (160x128), keycap-pressed (160x128), card-frame-idle (192x171), card-frame-ready (200x171), card-frame-locked (188x219), count-badge (49x56), topbar-strip (1536x33), alert-plate (1040x168), alert-endcap (135x168) | batch 2 round avatars; batch 4 panel kit, keycaps and cards, topbar-strip, alert-plate |
+| `art/chars/comms/` | triage (244x256), rei (240x256), mika (236x256), ozzie (221x256) | batch 2 round avatars |
+| `art/chars/avatars/` | stream-1 (244x256), stream-2 (243x256), stream-3 (244x256), stream-4 (243x256), unnamed-neighbour (243x256) | batch 2 stream avatars |
+| `art/chars/lux/cam/` | lean-in (924x548), relieved (924x548) | batch 3 lean-in, relieved |
+
 ## How a picked file lands
 
 The Live screen's new art is requested in `docs/ART-REQUESTS.md`. Until a piece is picked, the game draws its fallback, so nothing waits on a pick.
 
 1. The owner's pipeline draws the sheet on magenta, chroma-keys it, cuts each piece at the cut size in its request row and saves it as WebP with transparency at the key's path: `hud/city-grid` goes to `public/art/hud/city-grid.webp`.
-2. In the same PR, the owner sets that request's `cut` in `src/game/artManifest.ts` from `null` to the file's real size, and adds the file to the table above.
-3. That is the whole change. `tests/art-manifest.test.ts` fails if a request's file is on disk while its `cut` is still `null`, or if the size is wrong.
+2. In the same PR, the owner adds the key to `PICKED_CUTS` in `src/game/artManifest.ts` with the file's real size (so that request's `cut` is no longer `null`), and adds the file to the tables above.
+3. That is the whole change. `tests/art-manifest.test.ts` fails if a request's file is on disk while its `cut` is still `null`, if the size is wrong, or if the file is smaller than the size it is drawn at (a nine-slice only needs its corners at k to fit).
 
 How the code picks it up: views ask `src/scenes/plates.ts` for a key. `preloadArt(scene, keys)` queues the picked file once `cut` is set, or the file the fallback reuses before that. `resolveArt(key)` and `ensureArt(scene, key)` return the texture, tint and alpha to draw, and `fallback: true` while a stand-in draws. A stand-in is a picked file reused with a tint, or a plate baked once in code at the key's display size and labelled with the key. Under `?test`, the `art` hook section lists the keys still on a fallback (`art.fallback`), the picked keys loaded (`art.loaded`), the plates baked so far (`art.baked`) and any object drawing Phaser's missing texture (`art.missing`).
 
-Workers never add, edit or resize files here. The views adopt `resolveArt` in their own tickets (board-12, comms-9, chat-6, luxcam-5), and art3d-5 checks each batch against the manifest once the owner's drop PRs have merged.
+Workers never add, edit or resize files here. The views adopt `resolveArt` in their own tickets (board-12, comms-9, chat-6, luxcam-5), and art3d-5 checked batches 1 to 4 against the manifest once they landed (28 Oct 2026).

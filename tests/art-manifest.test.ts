@@ -1,3 +1,4 @@
+import artDoc from '../docs/ART.md?raw';
 import requestsDoc from '../docs/ART-REQUESTS.md?raw';
 import script from '../docs/SCRIPT.md?raw';
 import {
@@ -191,6 +192,18 @@ const PROMISED = [
   'hud/live/keycap-pressed',
 ];
 
+/**
+ * Picked requests whose file came out smaller than the size their view draws them at, and why each
+ * is still here (art3d-5). Each needs its view to draw it at its file size, or nine-slice it; then
+ * its line is removed. A new pick drawn above its size fails the test below until it is listed.
+ */
+const DRAWN_ABOVE_CUT: Readonly<Record<string, string>> = {
+  'board/table-plate':
+    '1228x416 against a 1441x390 feed: no view draws it yet; the board lane must draw it at most 1228 wide',
+  'hud/comms-plate':
+    '1450x144 against the 1455x150 band: CommsView draws the picked plate at the band size (a 1.04x upscale)',
+};
+
 describe('the art manifest: requests', () => {
   it('carries every promised request', () => {
     const keys = new Set(ART_REQUESTS.map((r) => r.key));
@@ -248,6 +261,37 @@ describe('the art manifest: requests', () => {
     }
   });
 
+  it('marks the 47 pieces of batches 1 to 4 picked and leaves batch 5 on its fallbacks', () => {
+    const picked = ART_REQUESTS.filter(isPicked);
+    expect(picked).toHaveLength(47);
+    for (const r of ART_REQUESTS) expect(isPicked(r), r.key).toBe(r.batch !== 5);
+  });
+
+  it('draws no picked request above its file size; the drawn-short ones are listed by name', () => {
+    // A plain image is drawn at its display size, so the file must cover it in both dimensions. A
+    // nine-slice is drawn at corner scale k: its corners are at most half the file each way, so the
+    // file at scale k must fit inside the display, and k must not exceed 1.
+    const violators: string[] = [];
+    for (const r of ART_REQUESTS) {
+      if (!isPicked(r)) continue;
+      const cut = r.cut!;
+      const k = r.nineSlice?.k;
+      if (k !== undefined) expect(k, r.key).toBeLessThanOrEqual(1);
+      const over =
+        k === undefined
+          ? r.display.w > cut.w || r.display.h > cut.h
+          : cut.w * k > r.display.w || cut.h * k > r.display.h;
+      if (over) violators.push(r.key);
+    }
+    expect(violators).toEqual(Object.keys(DRAWN_ABOVE_CUT));
+  });
+
+  it('draws the top bar strip at its own 1536x33, not stretched over the 1920x100 bar', () => {
+    const r = ART_REQUESTS.find((q) => q.key === 'hud/live/topbar-strip')!;
+    expect(r.cut).toEqual({ w: 1536, h: 33 });
+    expect(r.display).toEqual(r.cut);
+  });
+
   it('never names a debrief term in a key, since a stand-in prints its key on screen', () => {
     const terms = script
       .split('\n')
@@ -301,6 +345,23 @@ describe('docs/ART-REQUESTS.md', () => {
       expect(row, r.key).toContain(r.states);
       expect(row, r.key).toContain(r.prompt);
       expect(row, r.key).toContain(fallbackText(r));
+    }
+  });
+});
+
+// --- docs/ART.md ---------------------------------------------------------------------------------
+
+describe('docs/ART.md', () => {
+  it("lists every picked request of the Live screen in its folder's row, with its real size", () => {
+    const start = artDoc.indexOf('## Live screen (M4 picks, 28 Oct 2026)');
+    expect(start).toBeGreaterThan(0);
+    const section = artDoc.slice(start, artDoc.indexOf('\n## ', start + 1));
+    for (const r of ART_REQUESTS.filter(isPicked)) {
+      const folder = r.key.slice(0, r.key.lastIndexOf('/'));
+      const name = r.key.slice(r.key.lastIndexOf('/') + 1);
+      const row = section.split('\n').find((l) => l.startsWith(`| \`art/${folder}/\` |`));
+      expect(row, r.key).toBeDefined();
+      expect(row, r.key).toContain(`${name} (${sizeText(r.cut!)})`);
     }
   });
 });
