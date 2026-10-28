@@ -65,6 +65,15 @@ export interface BoardTestState {
     packetsIn: number;
     /** The REPLACE button under this part while it is a selected dead box (board-8), else null. */
     replaceButton: Point | null;
+    /** board-9: the motion.ts spec playing on the sprite ('placeDrop', 'dieCollapse', 'dipBlackout', 'crewTint') or 'idle'. */
+    motion: string;
+    /**
+     * The pose the sprite rests in for its state (the hook rule: the target, never an in-between
+     * value): y offset px from its place, scale and alpha factors. A dead box rests sunk and dim.
+     */
+    pose: { dy: number; scale: number; alpha: number };
+    /** The pose the sprite was drawn in this frame: equal to `pose` once its animation has ended. */
+    drawn: { dy: number; scale: number; alpha: number };
   })[];
   /**
    * Every pad (board-5): the balancer's and the six server pads, with their drawn box (page CSS
@@ -94,7 +103,18 @@ export interface BoardTestState {
   /** settings().reduceFlicker as the board read it this frame: nothing blinks while it is true. */
   reduceFlicker: boolean;
   /** Every wire at its midpoint; `speed` is how fast its packets move (0.5 into a part over 100%, board-7). */
-  wires: (Point & { key: string; from: string; to: string; rate: number; skipped: boolean; speed: number })[];
+  wires: (Point & {
+    key: string;
+    from: string;
+    to: string;
+    rate: number;
+    skipped: boolean;
+    speed: number;
+    /** board-11: the pointer is over this wire now (its plate shows). */
+    hovered: boolean;
+    /** board-11: the board clock (seconds) the wire was first drawn on; a rewind that lays it again counts anew. */
+    bornAt: number;
+  })[];
   offline: string[];
   /** Wire keys the load balancer skipped, each drawn with a grey "skipped" tag. */
   skipped: string[];
@@ -178,6 +198,9 @@ export interface BoardTestState {
    */
   ghost: {
     card: string;
+    /** board-11: where the dragged card is drawn, in page CSS pixels (snapped onto the target when legal). */
+    x: number;
+    y: number;
     over: string;
     legal: boolean;
     state: PadState;
@@ -204,6 +227,8 @@ export interface BoardTestState {
   };
   /** The keys the board listens to: Escape, Delete, Backspace (never 1, 2 or 3). */
   keys: string[];
+  /** board-11: the last key the board consumed ('Escape', 'Delete' or 'Backspace'), or null. */
+  lastKey: string | null;
   /** The part a dragged wire's target ring is drawn on, or null. */
   wireTarget: string | null;
   /**
@@ -233,6 +258,39 @@ export interface BoardTestState {
     roomY: number;
     levelY: number;
   };
+  /**
+   * board-10: the sounds the board asked for itself, oldest first (the last 48): 'server-online'
+   * when a boot or reboot completes, 'packet-drop' while a hot or dark part drops (at most one per
+   * 0.5 s), 'health-skip' per new skip; `at` is the board clock in seconds. Only keys that exist
+   * (isSfxKey). `counts` totals every one asked for since the scene started, by key.
+   */
+  sfx: { log: { key: string; at: number }[]; counts: Record<string, number> };
+  /**
+   * board-9: the animations in flight now, by name ('death:<id>', 'flash', 'place:<id>', 'boot:<id>',
+   * 'overclock:<id>', 'dip:<id>', 'haze:<id>', 'wire:<key>', 'cut:<key>', 'sparks',
+   * 'decommission:<id>', 'float:<id>', 'cable', 'fireworks', 'lightsdown', 'ping'). Never 'flash' or
+   * 'sparks' under reduce flicker.
+   */
+  anims: string[];
+  /**
+   * The last 128 animations started, oldest first, on the animation clock (board seconds: frozen
+   * while paused, slowed by Regroup): `end` null while it plays; `ms` its stated duration in the
+   * variant that played (Infinity for a loop, reported as null); `calm` the reduce-flicker variant.
+   */
+  animLog: {
+    name: string;
+    kind: string;
+    start: number;
+    end: number | null;
+    ms: number | null;
+    calm: boolean;
+  }[];
+  /** The animation clock now, seconds. */
+  animClock: number;
+  /** Refund floats on screen now, e.g. '+40'. */
+  floats: string[];
+  /** The particle pool (smoke, sparks, fireworks, embers): its fixed size, live now, the most live at once. */
+  particles: { pool: number; active: number; peak: number; dropped: number };
   /** Board frames synced so far. */
   frame: number;
   /**

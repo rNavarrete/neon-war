@@ -3,7 +3,7 @@ import type { BoardTestState } from '../../src/scenes/board/hook';
 import type { LiveTestState } from '../../src/scenes/live/hook';
 import type { Rect } from '../../src/scenes/live/layout';
 import { inboundLaneRates } from '../../src/scenes/board/channel';
-import { openBoard as liveOpen, reach as liveReach } from './live/reach';
+import { openBoard as liveOpen, reach as liveReach, shot } from './live/reach';
 
 // The board on the Live screen (board lane, M1): the feed's tilted table, its parts and slots inside
 // the feed zone, the skyline above it and no goggles overlay. Positions come from the test hook in
@@ -68,8 +68,19 @@ async function placeServer(page: Page, slotId: string): Promise<string> {
   const b = await board(page);
   const card = b.tray.find((t) => t.id === 'server')!;
   const slot = b.slots.find((s) => s.id === slotId)!;
-  await drag(page, card, slot);
-  await expect.poll(async () => (await board(page)).parts.find((p) => p.slot === slotId)?.id).toBeDefined();
+  // At speed 20 a beat's banner can open over the slot in the instant of the drop and take it: one
+  // more drag if the slot is still empty (a filled slot is never dragged onto again).
+  const placed = async () => (await board(page)).parts.find((p) => p.slot === slotId)?.id;
+  for (let i = 0; i < 2; i++) {
+    await drag(page, card, slot);
+    const ok = await expect
+      .poll(placed, { timeout: 3_000 })
+      .toBeDefined()
+      .then(() => true)
+      .catch(() => false);
+    if (ok) break;
+  }
+  await expect.poll(placed).toBeDefined();
   return (await board(page)).parts.find((p) => p.slot === slotId)!.id;
 }
 
@@ -309,18 +320,132 @@ async function watch(
   }
 }
 
+// ---- board-9: a recorder of what the board animates ------------------------------------------
+
+/** What the in-page recorder saw: each animation name's first and last page time (ms), when each part first read dead, and more. */
+interface AnimRecord {
+  seen: Record<string, { first: number; last: number }>;
+  dead: Record<string, number>;
+  dark: { label: string; darkLeft: number | null; tags: string[]; status: string; id: string }[];
+  pools: number[];
+  peak: number;
+  frames: number;
+  /** board-10: every effect key the shell heard asked for (shell.recentSfx), new skips seen, refund floats seen. */
+  sfx: string[];
+  skipEdges: number;
+  floats: string[];
+}
+
+/**
+ * Read the board's hook once every animation frame in the page (after the game's own update, so
+ * every drawn frame is seen once) and keep what it animated. At speed 20 a state can last a single
+ * frame, so polling from the test would miss it; this never does.
+ */
+async function recordAnims(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    type B = {
+      anims: string[];
+      animLog: { name: string }[];
+      parts: {
+        id: string;
+        status: string;
+        label: string;
+        darkLeft: number | null;
+        tags: string[];
+      }[];
+      particles: { pool: number; peak: number };
+      skipped: string[];
+      floats: string[];
+    };
+    const rec = {
+      seen: {},
+      dead: {},
+      dark: [],
+      pools: [],
+      peak: 0,
+      frames: 0,
+      sfx: [],
+      skipEdges: 0,
+      floats: [],
+    } as {
+      seen: Record<string, { first: number; last: number }>;
+      dead: Record<string, number>;
+      dark: { label: string; darkLeft: number | null; tags: string[]; status: string; id: string }[];
+      pools: number[];
+      peak: number;
+      frames: number;
+      sfx: string[];
+      skipEdges: number;
+      floats: string[];
+    };
+    (window as unknown as { __boardAnims: typeof rec }).__boardAnims = rec;
+    let lastSkipped: string[] = [];
+    const tick = () => {
+      const st = window.__neonTest?.state as unknown as
+        { board?: B; shell?: { recentSfx: string[] } } | undefined;
+      const b = st?.board;
+      for (const k of st?.shell?.recentSfx ?? []) if (!rec.sfx.includes(k)) rec.sfx.push(k);
+      if (b) {
+        for (const k of b.skipped) if (!lastSkipped.includes(k)) rec.skipEdges++;
+        lastSkipped = b.skipped;
+        for (const f of b.floats) if (!rec.floats.includes(f)) rec.floats.push(f);
+        const t = performance.now();
+        rec.frames++;
+        for (const n of b.anims) {
+          const e = rec.seen[n] ?? (rec.seen[n] = { first: t, last: t });
+          e.last = t;
+        }
+        // A one-shot shorter than a slow frame (a 500 ms ring on a busy software-WebGL box) may start
+        // and end between two reads: the log still has it.
+        for (const l of b.animLog) rec.seen[l.name] ??= { first: t, last: t };
+        for (const p of b.parts) {
+          if (p.status === 'dead' && rec.dead[p.id] === undefined) rec.dead[p.id] = t;
+          if (p.status === 'dark' && rec.dark.length < 400)
+            rec.dark.push({ label: p.label, darkLeft: p.darkLeft, tags: p.tags, status: p.status, id: p.id });
+        }
+        if (!rec.pools.includes(b.particles.pool)) rec.pools.push(b.particles.pool);
+        rec.peak = Math.max(rec.peak, b.particles.peak);
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+async function animRecord(page: Page): Promise<AnimRecord> {
+  return page.evaluate(() => (window as unknown as { __boardAnims: AnimRecord }).__boardAnims);
+}
+
+/**
+ * Every animation the board logged that has ended finished within its stated duration (plus one
+ * frame: the animation clock steps at most 0.25 s a frame).
+ */
+function expectWithinDurations(b: BoardTestState): void {
+  for (const e of b.animLog) {
+    if (e.end === null || e.ms === null) continue;
+    expect(e.end - e.start, `${e.name} took ${e.end - e.start} s for ${e.ms} ms`).toBeLessThanOrEqual(
+      e.ms / 1000 + 0.26,
+    );
+  }
+}
+
 test('C3 (board-5, board-6): an idle second box reads UNFED with no packets; the hot one counts DIES IN to 0', async ({
   page,
 }) => {
   test.setTimeout(120_000);
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
   await openBoard(page, '&speed=20');
+  await recordAnims(page);
   const s1 = await placeServer(page, 's1');
   await wire(page, 'gateway', s1);
   await wire(page, s1, 'database');
 
   // A second box racked before the climb: nothing can feed it (the gateway feeds one part only).
+  // It goes on s4, beside the C2 banner: the banner (still open, unanswered) covers s2 and takes
+  // the drop.
   await watch(page, 'board.now >= 150', (b) => b.now >= 150);
-  const s2 = await placeServer(page, 's2');
+  const s2 = await placeServer(page, 's4');
   const idle = await watch(page, 'the second box online in C3', (b) => {
     const p = b.parts.find((x) => x.id === s2);
     return b.now >= 180 && p?.status === 'online';
@@ -382,6 +507,50 @@ test('C3 (board-5, board-6): an idle second box reads UNFED with no packets; the
   const dead = end.parts.find((x) => x.id === s1)!;
   expect(dead.diesIn).toBe(0);
   expect(dead.label).toBe('DEAD');
+
+  // board-9: every event on the way had its animation. The box dropped onto its pad, its wires drew
+  // on, its boot finished with a ring, the heat haze hung over it while it ran over 100%, and it
+  // died: listed within a second, with the white flash (full variant, reduce flicker is off).
+  let rec = await animRecord(page);
+  for (const name of [
+    `place:${s1}`,
+    `wire:gateway>${s1}`,
+    `wire:${s1}>database`,
+    `boot:${s1}`,
+    `haze:${s1}`,
+    `death:${s1}`,
+    'flash',
+  ]) {
+    expect(rec.seen[name], `the board animated ${name}`).toBeDefined();
+  }
+  const diedAt = rec.dead[s1];
+  expect(diedAt, 'the recorder saw the box dead').toBeDefined();
+  expect(rec.seen[`death:${s1}`].first - diedAt, 'death:<id> listed within 1 s').toBeLessThanOrEqual(1000);
+  // The death fails the board before the crew: TRIAGE's replay covers it at once and the board
+  // stands still under it. Clicked through, the rewind puts the board back and clears the
+  // animations with it; every sprite stands where its state puts it.
+  const rewound = Date.now() + 30_000;
+  for (;;) {
+    const x = await board(page);
+    if (x.rewinds.length > 0 && !x.paused) break;
+    if (Date.now() > rewound) throw new Error(`the rewind never came back to the board (paused ${x.paused})`);
+    await clickStoryOn(page);
+    await page.waitForTimeout(60);
+  }
+  const back = Date.now();
+  await expect.poll(async () => (await board(page)).anims, { timeout: 2_000 }).not.toContain(`death:${s1}`);
+  expect(Date.now() - back, 'cleared within 2 s of the board coming back').toBeLessThanOrEqual(2_000);
+  await expect
+    .poll(async () => (await board(page)).parts.every((p) => p.motion === 'idle'), { timeout: 3_000 })
+    .toBe(true);
+  const after = await board(page);
+  for (const p of after.parts) expect(p.drawn, `${p.id} at rest`).toEqual(p.pose);
+  expectWithinDurations(after);
+  // The particles are one pool made once (no growth); nothing went wrong in the page.
+  rec = await animRecord(page);
+  expect(rec.pools).toEqual([96]);
+  expect(rec.peak).toBeLessThanOrEqual(96);
+  expect(pageErrors).toEqual([]);
 });
 
 test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a second; reduce flicker blinks nothing', async ({
@@ -396,6 +565,7 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
     );
   });
   await openBoard(page, '&speed=20');
+  await recordAnims(page);
   // GAME.md's best play before the crew: one box wired, the kit on it.
   const s1 = await placeServer(page, 's1');
   await wire(page, 'gateway', s1);
@@ -441,6 +611,9 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
       await page.waitForTimeout(15);
     }
   }
+  // The dip can last a single frame at speed 20 before the crew comes; the in-page recorder reads
+  // every frame, so add what it saw (each read is checked the same way below).
+  for (const d of (await animRecord(page)).dark) darkSeen.push(d);
   expect(darkSeen.length, 'a server seen dark in the dip').toBeGreaterThan(0);
   for (const d of darkSeen) {
     expect(d.label).toMatch(/^DARK \d+ s$/);
@@ -521,18 +694,103 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   // Reduce flicker: nothing blinked on any read.
   expect(reduceOk).toBe(true);
   expect(flickerOk).toBe(true);
+
+  // board-9 under reduce flicker: every animation played its calm variant and nothing flashed or
+  // threw sparks; the dip took the box dark, the crew's cable lowered the balancer onto its pad,
+  // and the cut trace faded.
+  const rec = await animRecord(page);
+  const names = Object.keys(rec.seen);
+  expect(
+    names.filter((n) => n === 'flash' || n === 'sparks'),
+    'no flash, no sparks',
+  ).toEqual([]);
+  expect(rec.seen[`dip:${s1}`], 'the dip').toBeDefined();
+  expect(rec.seen['cable'], 'the cable').toBeDefined();
+  expect(rec.seen[`cut:${lbWire.key}`], 'the cut').toBeDefined();
+  expect(rec.seen[`overclock:${s1}`], 'the kit flew on').toBeDefined();
+  b = await board(page);
+  expect(b.anims).not.toContain('cable');
+  const lbNow = b.parts.find((p) => p.kind === 'balancer')!;
+  const lbSlot = b.slots.find((x) => x.id === 'lb')!;
+  expect(lbNow.drawn, 'the balancer landed on its pad').toEqual({ dy: 0, scale: 1, alpha: 1 });
+  expect(Math.abs(lbNow.x - lbSlot.x)).toBeLessThanOrEqual(1);
+  expect(lbNow.motion).toBe('idle');
+  const logged = b.animLog.filter((e) => e.name !== 'ping');
+  expect(logged.length).toBeGreaterThan(0);
+  for (const e of b.animLog) expect(e.calm, `${e.name} played calm`).toBe(true);
+  expectWithinDurations(b);
+
+  // board-10: the board's own sounds. The boots chimed, the hot box crackled no more than once
+  // per half second, the skip blipped once per new skip; only the three keys, each one that exists.
+  // The sounds the board always made (placing, wiring, cutting, the heat, the dip) still play.
+  expectBoardSounds(b, rec);
+  expect(b.sfx.counts['server-online'], 'a boot chimed').toBeGreaterThan(0);
+  expect(b.sfx.counts['packet-drop'], 'the surge crackled').toBeGreaterThan(0);
+  expect(b.sfx.counts['health-skip'], 'the skip blipped').toBeGreaterThan(0);
+  for (const k of ['place-part', 'wire-connect', 'wire-cut', 'credits', 'server-hot', 'power-dip']) {
+    expect(rec.sfx, `the shell still hears ${k}`).toContain(k);
+  }
 });
+
+/** The Live effects the audio lane added (LIVE_SFX_KEYS in src/game/mixer.ts) that the board asks for. */
+const BOARD_SFX_KEYS = ['server-online', 'packet-drop', 'health-skip'];
+
+/** Each board sound only for a key that exists, the crackle at most once per 0.5 s, a blip at most once per new skip. */
+function expectBoardSounds(b: BoardTestState, rec: AnimRecord): void {
+  for (const e of b.sfx.log) expect(BOARD_SFX_KEYS, e.key).toContain(e.key);
+  for (const k of Object.keys(b.sfx.counts)) expect(BOARD_SFX_KEYS).toContain(k);
+  const drops = b.sfx.log.filter((e) => e.key === 'packet-drop').map((e) => e.at);
+  for (let i = 1; i < drops.length; i++) {
+    expect(drops[i] - drops[i - 1], 'packet-drop at most once per 0.5 s').toBeGreaterThanOrEqual(0.5 - 0.001);
+  }
+  expect(b.sfx.counts['health-skip'] ?? 0, 'one blip per new skip at most').toBeLessThanOrEqual(
+    rec.skipEdges,
+  );
+  // What the board asked for reached the shell.
+  for (const k of Object.keys(b.sfx.counts)) expect(rec.sfx, `the shell heard ${k}`).toContain(k);
+}
 
 const b0 = (b: BoardTestState, id: string) => b.tray.find((t) => t.id === id)!;
 
-// ---- M3: packets v2 (board-7) -----------------------------------------------------------------
+// ---- M3: the night at speed 20 (board-7, board-9, board-10, board-11) -------------------------
 
-test('the surge (board-7): packets crawl into the hot box, red retries are born at the dropping part and come back to the mouth, the pool stays bounded', async ({
+/** The board's text budget on the Live screen (docs/LIVE.md, "feed and inventory (BoardScene)"). */
+const BOARD_TEXTS = 28;
+
+type PerfBits = { textsBy: { board: number }; samples: number; pools: Record<string, number> };
+const perfBits = (page: Page) =>
+  page.evaluate(() => (window.__neonTest!.state as unknown as { perf: PerfBits }).perf);
+
+// One page load at speed 20 with autopilot, through reach(): C1, the district surge (board-7's
+// packets, the kit, the haze, the crackle), the rescue (the cable, the pings), a SKIPPED pad, and
+// midnight held (fireworks, the pads' flash, the refund floats of the boxes let go after it). The
+// four board screenshots are taken on the way. board-7's surge test runs inside it, unchanged, so
+// the night is loaded once.
+test('the night at speed 20 (board-7, board-9 to board-11): C1, the surge, a skip and midnight held, four screenshots', async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  // docs/LIVE.md: the board lane's line is 150 s for board-live.spec.ts; this test alone is held to it.
+  test.setTimeout(150_000);
+  const { errors } = await liveOpen(page);
+  await recordAnims(page);
+
+  // ---- C1: the hook is one plain snapshot (it went through structuredClone to get here) --------
+  await liveReach(page, 'c1');
+  const c1 = await sections(page);
+  expect(c1.board.area).toEqual(c1.live.zones.feed);
+  expect(JSON.parse(JSON.stringify(c1.board.parts))).toEqual(c1.board.parts);
+  expect(c1.board.lastKey).toBeNull();
+  for (const w of c1.board.wires) {
+    expect(w.hovered).toBe(false);
+    expect(w.bornAt).toBeGreaterThanOrEqual(0);
+    expect(w.bornAt).toBeLessThanOrEqual(c1.board.clock);
+  }
+  expect(c1.board.reduceFlicker).toBe(false);
+  await shot(page, 'board-c1');
+
+  // ---- the district surge -------------------------------------------------------------------
   // Best play to the district surge at speed 20: one box, overclocked, on the gateway.
-  await reachSurge(page);
+  await liveReach(page, 'surge');
   type Seen = { b: BoardTestState };
   let slow: Seen | null = null;
   let red: Seen | null = null;
@@ -553,6 +811,9 @@ test('the surge (board-7): packets crawl into the hot box, red retries are born 
     await clickStoryOn(page);
     await page.waitForTimeout(25);
   }
+  // The shot after the sampling: board-7's ten seconds start the moment the surge is reached.
+  await shot(page, 'board-surge');
+  const atSurge = await perfBits(page);
 
   // Half speed on every wire into an overloaded box, full speed elsewhere.
   expect(slow, 'a box over 100% with a wire into it').not.toBeNull();
@@ -593,13 +854,72 @@ test('the surge (board-7): packets crawl into the hot box, red retries are born 
   // Bounded: over the ten seconds the pool never passed the flow's need, and stays modest.
   expect(maxPool).toBeLessThan(600);
   expect(firstPool).toBeGreaterThan(0);
-});
 
-/** Open with autopilot at speed 20 and run to the district surge (tests/browser/live/reach.ts). */
-async function reachSurge(page: Page): Promise<void> {
-  await liveOpen(page);
-  await liveReach(page, 'surge');
-}
+  // board-9 on the way: the box dropped onto its pad, its wires drew on, the kit flew onto it, it
+  // rebooted with a ring, and the haze hung over it while the surge ran it over 100%.
+  let rec = await animRecord(page);
+  const box = s.parts.find((p) => p.kind === 'server')!.id;
+  for (const name of [
+    `place:${box}`,
+    `wire:gateway>${box}`,
+    `overclock:${box}`,
+    `boot:${box}`,
+    `haze:${box}`,
+  ]) {
+    expect(rec.seen[name], `the board animated ${name}`).toBeDefined();
+  }
+
+  // ---- the rescue: the crew's cable lowers the balancer; its checks ping down the wires ------
+  await liveReach(page, 'rescue');
+  await expect
+    .poll(async () => (await animRecord(page)).seen['ping'] !== undefined, { timeout: 5_000 })
+    .toBe(true);
+  rec = await animRecord(page);
+  expect(rec.seen['cable'], 'the cable').toBeDefined();
+
+  // ---- a skip: the balancer passes over a box it cannot reach (booting or dark) --------------
+  const skipped = await watch(page, 'a SKIPPED pad', (x) => x.pads.some((p) => p.dashed), undefined, 40_000);
+  await shot(page, 'board-skipped');
+  expect(skipped.pads.find((p) => p.dashed)!.part).not.toBeNull();
+
+  // ---- midnight held: fireworks over the feed and the held pads flash (reduce flicker is off) --
+  await liveReach(page, 'midnight');
+  await expect
+    .poll(async () => (await animRecord(page)).seen['fireworks'] !== undefined, { timeout: 5_000 })
+    .toBe(true);
+  await shot(page, 'board-midnight');
+  rec = await animRecord(page);
+  expect(rec.seen['flash'], 'the held pads flash').toBeDefined();
+  // After midnight best play lets the extra boxes go: each lifts away with its refund rising.
+  await expect.poll(async () => (await animRecord(page)).floats, { timeout: 10_000 }).toContain('+40');
+  rec = await animRecord(page);
+  expect(Object.keys(rec.seen).some((n) => n.startsWith('decommission:'))).toBe(true);
+  expect(Object.keys(rec.seen).some((n) => n.startsWith('float:'))).toBe(true);
+
+  // Every animation that ended did so within its stated duration; none of the sprites still
+  // animating is left off its pose once it ends; the particle pool never grew.
+  const end = await board(page);
+  expectWithinDurations(end);
+  for (const p of end.parts) if (p.motion === 'idle') expect(p.drawn, `${p.id} at rest`).toEqual(p.pose);
+  expect(rec.pools).toEqual([96]);
+  expect(rec.peak).toBeLessThanOrEqual(96);
+  const atMidnight = await perfBits(page);
+  expect(atMidnight.pools.boardParticles).toBe(96);
+
+  // board-10: the board's own sounds on a whole night: chimes, crackles, blips, at their rate.
+  expectBoardSounds(end, rec);
+  expect(end.sfx.counts['server-online']).toBeGreaterThan(0);
+  expect(end.sfx.counts['packet-drop']).toBeGreaterThan(0);
+
+  // The board's live texts within its share of the Live screen's 110 (docs/LIVE.md).
+  test.info().annotations.push({
+    type: 'board texts',
+    description: `surge ${atSurge.textsBy.board}, midnight ${atMidnight.textsBy.board}`,
+  });
+  expect(atSurge.textsBy.board).toBeLessThanOrEqual(BOARD_TEXTS);
+  expect(atMidnight.textsBy.board).toBeLessThanOrEqual(BOARD_TEXTS);
+  expect(errors).toEqual([]);
+});
 
 /** If a story scene holds the board, click it on (Skip when shown). */
 async function clickStoryOn(page: Page): Promise<void> {
