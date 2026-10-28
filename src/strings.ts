@@ -429,6 +429,23 @@ export const LINES = {
   // its anchor, and nowhere else, as one edit here and one row in the script's matching section.
   // anchor: board
   // anchor: gauges
+  'C3.alert.title': { kind: 'ui', speaker: 'Alert', text: 'EVERYONE FILMING' },
+  'C3.alert.down': { kind: 'ui', speaker: 'Alert', text: 'BLOCK DOWN' },
+  'C4.alert.title': { kind: 'ui', speaker: 'Alert', text: 'NEIGHBOURS REROUTED HERE' },
+  'C4.alert.refresh': {
+    kind: 'ui',
+    speaker: 'Alert',
+    text: "They're hitting refresh: every call that fails comes straight back.",
+  },
+  'C6.alert.title': { kind: 'ui', speaker: 'Alert', text: 'MIDNIGHT' },
+  'C6.alert.dip': {
+    kind: 'ui',
+    speaker: 'Alert',
+    text: 'Everyone calls and streams at once, and one rack loses power just before midnight.',
+  },
+  'C6.alert.held': { kind: 'ui', speaker: 'Alert', text: 'HELD' },
+  'C6.alert.dark': { kind: 'ui', speaker: 'Alert', text: 'BLOCK DARK' },
+  'C7.alert.title': { kind: 'ui', speaker: 'Alert', text: 'FIREWORKS' },
   // anchor: comms
   // anchor: chat
   // anchor: luxcam

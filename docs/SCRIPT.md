@@ -294,6 +294,18 @@ header has no lines yet. UI micro-copy (labels, key caps) is not a line and stay
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
+| C3.alert.title | ui | Alert | the C3 forecast headline, after the number | EVERYONE FILMING |
+| C3.alert.down | ui | Alert | a failure freezes the board, before the rewind | BLOCK DOWN |
+| C4.alert.title | ui | Alert | the C4 forecast and the surge, after the number | NEIGHBOURS REROUTED HERE |
+| C4.alert.refresh | ui | Alert | sub-line once retries push the surge up | They're hitting refresh: every call that fails comes straight back. |
+| C6.alert.title | ui | Alert | the C6 forecast headline, after the number | MIDNIGHT |
+| C6.alert.dip | ui | Alert | C6 forecast sub-line until the sizing is SET | Everyone calls and streams at once, and one rack loses power just before midnight. |
+| C6.alert.held | ui | Alert | midnight, the block held | HELD |
+| C6.alert.dark | ui | Alert | midnight, the block went dark | BLOCK DARK |
+| C7.alert.title | ui | Alert | the after-midnight forecast headline, after the number | FIREWORKS |
+
+The alert band prints the number first and these words after it; the sub-line is the challenge's
+forecast or flicker line. Wording is a draft until the owner approves it (decision D8).
 
 ### Comms lane <!-- anchor: comms -->
 
