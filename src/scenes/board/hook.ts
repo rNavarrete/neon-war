@@ -103,7 +103,18 @@ export interface BoardTestState {
   /** settings().reduceFlicker as the board read it this frame: nothing blinks while it is true. */
   reduceFlicker: boolean;
   /** Every wire at its midpoint; `speed` is how fast its packets move (0.5 into a part over 100%, board-7). */
-  wires: (Point & { key: string; from: string; to: string; rate: number; skipped: boolean; speed: number })[];
+  wires: (Point & {
+    key: string;
+    from: string;
+    to: string;
+    rate: number;
+    skipped: boolean;
+    speed: number;
+    /** board-11: the pointer is over this wire now (its plate shows). */
+    hovered: boolean;
+    /** board-11: the board clock (seconds) the wire was first drawn on; a rewind that lays it again counts anew. */
+    bornAt: number;
+  })[];
   offline: string[];
   /** Wire keys the load balancer skipped, each drawn with a grey "skipped" tag. */
   skipped: string[];
@@ -187,6 +198,9 @@ export interface BoardTestState {
    */
   ghost: {
     card: string;
+    /** board-11: where the dragged card is drawn, in page CSS pixels (snapped onto the target when legal). */
+    x: number;
+    y: number;
     over: string;
     legal: boolean;
     state: PadState;
@@ -213,6 +227,8 @@ export interface BoardTestState {
   };
   /** The keys the board listens to: Escape, Delete, Backspace (never 1, 2 or 3). */
   keys: string[];
+  /** board-11: the last key the board consumed ('Escape', 'Delete' or 'Backspace'), or null. */
+  lastKey: string | null;
   /** The part a dragged wire's target ring is drawn on, or null. */
   wireTarget: string | null;
   /**

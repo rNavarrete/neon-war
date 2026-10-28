@@ -131,6 +131,7 @@ import {
 import type { PartStatus } from './board/view';
 import { isSfxKey } from '../game/audio';
 import { BoardSfx } from './board/sfx';
+import { addLabel } from './board/bake';
 
 // Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
 export const GAME_WIDTH = 1920;
@@ -183,7 +184,7 @@ interface PartView {
   bar: Phaser.GameObjects.Graphics | null;
   barKey: number;
   /** The tag chip (DIES IN n s, UNFED) on the part, re-set only when tagChipKey changes. */
-  chip: Phaser.GameObjects.Text;
+  chip: Phaser.GameObjects.Text | null;
   chipKey: number;
   /** The warning triangle at the part's top corner. */
   warn: Phaser.GameObjects.Graphics;
@@ -209,7 +210,8 @@ interface PadView {
   slot: string;
   pad: Phaser.GameObjects.Image;
   dash: Phaser.GameObjects.Graphics;
-  chip: Phaser.GameObjects.Text;
+  /** The SKIPPED tag, baked once (board-11: fixed words are images, not live texts). */
+  chip: Phaser.GameObjects.Image;
   /** Board-clock second the SKIPPED tag shows until (skipTagUntil); -Infinity before any skip. */
   skipUntil: number;
   /** The balancer skips the box on this pad this frame (the sim's flow.skipped). */
@@ -360,7 +362,7 @@ export class BoardScene extends Phaser.Scene {
   private chan: ChannelState = emptyChannel();
   private fillG!: Phaser.GameObjects.Graphics;
   private roomG!: Phaser.GameObjects.Graphics;
-  private roomText!: Phaser.GameObjects.Text;
+  private roomText!: Phaser.GameObjects.Image;
   private forecastG!: Phaser.GameObjects.Graphics;
   private drawnLevel = NaN;
   private drawnRetry = NaN;
@@ -376,7 +378,7 @@ export class BoardScene extends Phaser.Scene {
   private packetRates: Record<string, number> = {};
   private hotParts = new Set<string>();
   private readonly at = { x: 0, y: 0 };
-  private skipTags: Phaser.GameObjects.Text[] = [];
+  private skipTags: Phaser.GameObjects.Image[] = [];
   private cards: TrayCard[] = [];
   private inventory!: InventoryView;
   private counts: InventoryCounts = { server: 0, overclock: 0, balancer: 0 };
@@ -476,6 +478,9 @@ export class BoardScene extends Phaser.Scene {
   private readonly cf = { lower: 0, dy: -CABLE_DROP_PX, sway: 0, landed: false };
   private readonly pf = { along: 0, alpha: 0, radius: 0 };
   private offAction: (() => void) | null = null;
+  /** board-11: the board clock each wire was first laid on, and the last key the board consumed. */
+  private wireBorn = new Map<string, number>();
+  private lastKey: string | null = null;
   /** board-10: the board's own sounds (boot chime, drop crackle, skip blip), only for keys that exist. */
   private sounds = new BoardSfx(isSfxKey);
   /** Created once with the scene: the pool calls it per wire per frame without a new closure. */
@@ -487,7 +492,7 @@ export class BoardScene extends Phaser.Scene {
     v.shadow.destroy();
     v.label.destroy();
     v.bar?.destroy();
-    v.chip.destroy();
+    v.chip?.destroy();
     v.warn.destroy();
     v.haze?.destroy();
     this.views.delete(id);
@@ -576,6 +581,8 @@ export class BoardScene extends Phaser.Scene {
     this.deathOf = null;
     this.fireworksAt = -1;
     this.sounds = new BoardSfx(isSfxKey);
+    this.wireBorn = new Map();
+    this.lastKey = null;
 
     this.drawBackdrop();
 
@@ -763,27 +770,25 @@ export class BoardScene extends Phaser.Scene {
     ticks.lineStyle(2, AMBER, 0.8);
     for (const m of bankMarkPoints()) {
       ticks.lineBetween(mouth.x, m.y, mouth.x + 4, m.y);
-      this.add
-        .text(m.x, m.y, m.label, {
-          fontFamily: 'monospace',
-          fontSize: '12px',
-          fontStyle: 'bold',
-          color: '#ffb02e',
-          stroke: '#05070f',
-          strokeThickness: 3,
-        })
-        .setOrigin(0, 0.5)
-        .setDepth(0.8);
-    }
-    this.roomText = this.add
-      .text(0, 0, LABELS.gauge.room, {
+      addLabel(this, m.x, m.y, `bank:${m.label}`, m.label, {
         fontFamily: 'monospace',
         fontSize: '12px',
         fontStyle: 'bold',
-        color: '#2de2e6',
+        color: '#ffb02e',
         stroke: '#05070f',
         strokeThickness: 3,
       })
+        .setOrigin(0, 0.5)
+        .setDepth(0.8);
+    }
+    this.roomText = addLabel(this, 0, 0, 'room', LABELS.gauge.room, {
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      fontStyle: 'bold',
+      color: '#2de2e6',
+      stroke: '#05070f',
+      strokeThickness: 3,
+    })
       .setOrigin(1, 1)
       .setDepth(0.8)
       .setVisible(false);
@@ -925,14 +930,12 @@ export class BoardScene extends Phaser.Scene {
     const bg = this.add
       .rectangle(0, 0, REPLACE_SIZE.w, REPLACE_SIZE.h, 0x05070f, 0.94)
       .setStrokeStyle(3, CYAN);
-    const label = this.add
-      .text(0, 0, REPLACE_LABEL, {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        fontStyle: 'bold',
-        color: '#2de2e6',
-      })
-      .setOrigin(0.5);
+    const label = addLabel(this, 0, 0, 'replace', REPLACE_LABEL, {
+      fontFamily: 'monospace',
+      fontSize: '18px',
+      fontStyle: 'bold',
+      color: '#2de2e6',
+    }).setOrigin(0.5);
     return this.add.container(0, 0, [bg, label]).setDepth(35).setVisible(false);
   }
 
@@ -1094,8 +1097,10 @@ export class BoardScene extends Phaser.Scene {
       v.chipKey = chipKey;
       const text = tagChip(look);
       if (text === null) {
-        v.chip.setVisible(false);
+        v.chip?.setVisible(false);
       } else {
+        // Made the first time the part wears a tag (board-11: a part that never does costs no text).
+        v.chip ??= this.makeChip(part);
         v.chip
           .setText(text)
           .setBackgroundColor(look.diesIn !== null ? '#c8283a' : '#3b4150')
@@ -1185,15 +1190,15 @@ export class BoardScene extends Phaser.Scene {
       dash.lineTo(seg.x2, seg.y2);
     }
     dash.strokePath();
-    const chip = this.add
-      .text(b.x, b.y + b.h / 2, LABELS.partTags.skipped, {
-        fontFamily: 'monospace',
-        fontSize: `${Math.round(14 * s)}px`,
-        fontStyle: 'bold',
-        color: '#c5cad6',
-        backgroundColor: '#3b4150',
-        padding: { x: 6, y: 2 },
-      })
+    const size = Math.round(14 * s);
+    const chip = addLabel(this, b.x, b.y + b.h / 2, `skipped:${size}`, LABELS.partTags.skipped, {
+      fontFamily: 'monospace',
+      fontSize: `${size}px`,
+      fontStyle: 'bold',
+      color: '#c5cad6',
+      backgroundColor: '#3b4150',
+      padding: { x: 6, y: 2 },
+    })
       .setOrigin(0.5)
       .setDepth(6)
       .setVisible(false);
@@ -1226,18 +1231,7 @@ export class BoardScene extends Phaser.Scene {
       .setDepth(5);
     // The load bar under the part (parts with a limit), the tag chip near its top, the triangle.
     const bar = part.kind === 'gateway' ? null : this.add.graphics().setDepth(5);
-    const chip = this.add
-      .text(c.x, c.y - size.h / 2 + 16 * s, '', {
-        fontFamily: 'monospace',
-        fontSize: `${Math.round(15 * s)}px`,
-        fontStyle: 'bold',
-        color: '#ffffff',
-        backgroundColor: '#3b4150',
-        padding: { x: 6, y: 2 },
-      })
-      .setOrigin(0.5)
-      .setDepth(6)
-      .setVisible(false);
+    const chip = null;
     const warn = this.add.graphics().setDepth(6).setVisible(false);
     const tx = c.x + size.w / 2 - 4;
     const ty = c.y - size.h / 2 + 2;
@@ -1278,6 +1272,24 @@ export class BoardScene extends Phaser.Scene {
     return v;
   }
 
+  /** A part's tag chip (DIES IN n s, UNFED), at its top. */
+  private makeChip(part: Part): Phaser.GameObjects.Text {
+    const c = partCentre(part) ?? { x: 0, y: 0 };
+    const size = partSize(part);
+    const s = slotScale(part.slot);
+    return this.add
+      .text(c.x, c.y - size.h / 2 + 16 * s, '', {
+        fontFamily: 'monospace',
+        fontSize: `${Math.round(15 * s)}px`,
+        fontStyle: 'bold',
+        color: '#ffffff',
+        backgroundColor: '#3b4150',
+        padding: { x: 6, y: 2 },
+      })
+      .setOrigin(0.5)
+      .setDepth(6);
+  }
+
   /** Scale that fits a part's art inside its box on the board (smaller on the rack's far row). */
   private artScale(part: Pick<Part, 'kind' | 'slot'>, img: Phaser.GameObjects.Image): number {
     const size = partSize(part);
@@ -1309,7 +1321,10 @@ export class BoardScene extends Phaser.Scene {
       };
       this.wireList.push(g);
       this.wireByKey.set(g.key, g);
+      if (!this.wireBorn.has(g.key)) this.wireBorn.set(g.key, this.clock);
     }
+    // A wire that is gone forgets when it was born, so laying it again counts anew.
+    for (const key of [...this.wireBorn.keys()]) if (!this.wireByKey.has(key)) this.wireBorn.delete(key);
     // Each part's return path, the way its retries go back to the mouth (board-7).
     this.backByKey = new Map();
     for (const part of f.parts) {
@@ -1427,17 +1442,16 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
-  private skipTag(i: number): Phaser.GameObjects.Text {
+  private skipTag(i: number): Phaser.GameObjects.Image {
     let t = this.skipTags[i];
     if (!t) {
-      t = this.add
-        .text(0, 0, 'skipped', {
-          fontFamily: 'monospace',
-          fontSize: '18px',
-          color: '#c5cad6',
-          backgroundColor: '#3b4150',
-          padding: { x: 8, y: 3 },
-        })
+      t = addLabel(this, 0, 0, 'wire-skipped', 'skipped', {
+        fontFamily: 'monospace',
+        fontSize: '18px',
+        color: '#c5cad6',
+        backgroundColor: '#3b4150',
+        padding: { x: 8, y: 3 },
+      })
         .setOrigin(0.5)
         .setDepth(6);
       this.skipTags[i] = t;
@@ -2067,13 +2081,17 @@ export class BoardScene extends Phaser.Scene {
       this.selectedWire = null;
       used = true;
     }
-    if (used) event.stopPropagation();
+    if (used) {
+      this.lastKey = 'Escape';
+      event.stopPropagation();
+    }
   }
 
   /** Delete or Backspace (board-8): cuts the selected wire. A selected part is not removed by key. */
-  private onDelete(): void {
+  private onDelete(event?: KeyboardEvent): void {
     const w = this.selectedWire ? this.wireByKey.get(this.selectedWire) : undefined;
     if (!w) return;
+    this.lastKey = event?.key === 'Backspace' ? 'Backspace' : 'Delete';
     run().cut(w.from, w.to);
     this.selectedWire = null;
   }
@@ -2154,6 +2172,8 @@ export class BoardScene extends Phaser.Scene {
     this.liftPlayer.stop();
     this.cutGeoms.clear();
     this.views.forEach(stopPlayer);
+    // Scene-side timers go with the rewind too: no SKIPPED tag stays stuck on a pad from before it.
+    for (let i = 0; i < this.padList.length; i++) this.padList[i].skipUntil = -Infinity;
   }
 
   /**
@@ -2725,6 +2745,8 @@ export class BoardScene extends Phaser.Scene {
         rate: round(f.flow.wires[w.key] ?? 0),
         skipped: f.flow.skipped.includes(w.key),
         speed: this.stepOpts.speedOf(w.key),
+        hovered: this.hover.wire === w.key,
+        bornAt: round(this.wireBorn.get(w.key) ?? 0),
       })),
       offline,
       channel: {
@@ -2814,6 +2836,7 @@ export class BoardScene extends Phaser.Scene {
             tick: this.ghostInfo.tick,
             plateShown: this.ghostText.visible,
             snapped: this.ghostShownFor !== null,
+            ...page(this.ghost.x, this.ghost.y),
           }
         : null,
       hover: {
@@ -2824,6 +2847,7 @@ export class BoardScene extends Phaser.Scene {
         pinned: this.plate.visible && this.platePinned,
       },
       keys: [...BOARD_KEYS],
+      lastKey: this.lastKey,
       wireTarget: this.targetRing,
       sfx: {
         log: this.sounds.log.map((e) => ({ key: e.key, at: round(e.at) })),

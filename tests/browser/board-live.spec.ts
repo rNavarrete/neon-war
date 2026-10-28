@@ -3,7 +3,7 @@ import type { BoardTestState } from '../../src/scenes/board/hook';
 import type { LiveTestState } from '../../src/scenes/live/hook';
 import type { Rect } from '../../src/scenes/live/layout';
 import { inboundLaneRates } from '../../src/scenes/board/channel';
-import { openBoard as liveOpen, reach as liveReach } from './live/reach';
+import { openBoard as liveOpen, reach as liveReach, shot } from './live/reach';
 
 // The board on the Live screen (board lane, M1): the feed's tilted table, its parts and slots inside
 // the feed zone, the skyline above it and no goggles overlay. Positions come from the test hook in
@@ -68,8 +68,19 @@ async function placeServer(page: Page, slotId: string): Promise<string> {
   const b = await board(page);
   const card = b.tray.find((t) => t.id === 'server')!;
   const slot = b.slots.find((s) => s.id === slotId)!;
-  await drag(page, card, slot);
-  await expect.poll(async () => (await board(page)).parts.find((p) => p.slot === slotId)?.id).toBeDefined();
+  // At speed 20 a beat's banner can open over the slot in the instant of the drop and take it: one
+  // more drag if the slot is still empty (a filled slot is never dragged onto again).
+  const placed = async () => (await board(page)).parts.find((p) => p.slot === slotId)?.id;
+  for (let i = 0; i < 2; i++) {
+    await drag(page, card, slot);
+    const ok = await expect
+      .poll(placed, { timeout: 3_000 })
+      .toBeDefined()
+      .then(() => true)
+      .catch(() => false);
+    if (ok) break;
+  }
+  await expect.poll(placed).toBeDefined();
   return (await board(page)).parts.find((p) => p.slot === slotId)!.id;
 }
 
@@ -334,6 +345,7 @@ async function recordAnims(page: Page): Promise<void> {
   await page.evaluate(() => {
     type B = {
       anims: string[];
+      animLog: { name: string }[];
       parts: {
         id: string;
         status: string;
@@ -383,6 +395,9 @@ async function recordAnims(page: Page): Promise<void> {
           const e = rec.seen[n] ?? (rec.seen[n] = { first: t, last: t });
           e.last = t;
         }
+        // A one-shot shorter than a slow frame (a 500 ms ring on a busy software-WebGL box) may start
+        // and end between two reads: the log still has it.
+        for (const l of b.animLog) rec.seen[l.name] ??= { first: t, last: t };
         for (const p of b.parts) {
           if (p.status === 'dead' && rec.dead[p.id] === undefined) rec.dead[p.id] = t;
           if (p.status === 'dark' && rec.dark.length < 400)
@@ -737,14 +752,45 @@ function expectBoardSounds(b: BoardTestState, rec: AnimRecord): void {
 
 const b0 = (b: BoardTestState, id: string) => b.tray.find((t) => t.id === id)!;
 
-// ---- M3: packets v2 (board-7) -----------------------------------------------------------------
+// ---- M3: the night at speed 20 (board-7, board-9, board-10, board-11) -------------------------
 
-test('the surge (board-7): packets crawl into the hot box, red retries are born at the dropping part and come back to the mouth, the pool stays bounded', async ({
+/** The board's text budget on the Live screen (docs/LIVE.md, "feed and inventory (BoardScene)"). */
+const BOARD_TEXTS = 28;
+
+type PerfBits = { textsBy: { board: number }; samples: number; pools: Record<string, number> };
+const perfBits = (page: Page) =>
+  page.evaluate(() => (window.__neonTest!.state as unknown as { perf: PerfBits }).perf);
+
+// One page load at speed 20 with autopilot, through reach(): C1, the district surge (board-7's
+// packets, the kit, the haze, the crackle), the rescue (the cable, the pings), a SKIPPED pad, and
+// midnight held (fireworks, the pads' flash, the refund floats of the boxes let go after it). The
+// four board screenshots are taken on the way. board-7's surge test runs inside it, unchanged, so
+// the night is loaded once.
+test('the night at speed 20 (board-7, board-9 to board-11): C1, the surge, a skip and midnight held, four screenshots', async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  // docs/LIVE.md: the board lane's line is 150 s for board-live.spec.ts; this test alone is held to it.
+  test.setTimeout(150_000);
+  const { errors } = await liveOpen(page);
+  await recordAnims(page);
+
+  // ---- C1: the hook is one plain snapshot (it went through structuredClone to get here) --------
+  await liveReach(page, 'c1');
+  const c1 = await sections(page);
+  expect(c1.board.area).toEqual(c1.live.zones.feed);
+  expect(JSON.parse(JSON.stringify(c1.board.parts))).toEqual(c1.board.parts);
+  expect(c1.board.lastKey).toBeNull();
+  for (const w of c1.board.wires) {
+    expect(w.hovered).toBe(false);
+    expect(w.bornAt).toBeGreaterThanOrEqual(0);
+    expect(w.bornAt).toBeLessThanOrEqual(c1.board.clock);
+  }
+  expect(c1.board.reduceFlicker).toBe(false);
+  await shot(page, 'board-c1');
+
+  // ---- the district surge -------------------------------------------------------------------
   // Best play to the district surge at speed 20: one box, overclocked, on the gateway.
-  await reachSurge(page);
+  await liveReach(page, 'surge');
   type Seen = { b: BoardTestState };
   let slow: Seen | null = null;
   let red: Seen | null = null;
@@ -765,6 +811,9 @@ test('the surge (board-7): packets crawl into the hot box, red retries are born 
     await clickStoryOn(page);
     await page.waitForTimeout(25);
   }
+  // The shot after the sampling: board-7's ten seconds start the moment the surge is reached.
+  await shot(page, 'board-surge');
+  const atSurge = await perfBits(page);
 
   // Half speed on every wire into an overloaded box, full speed elsewhere.
   expect(slow, 'a box over 100% with a wire into it').not.toBeNull();
@@ -805,13 +854,72 @@ test('the surge (board-7): packets crawl into the hot box, red retries are born 
   // Bounded: over the ten seconds the pool never passed the flow's need, and stays modest.
   expect(maxPool).toBeLessThan(600);
   expect(firstPool).toBeGreaterThan(0);
-});
 
-/** Open with autopilot at speed 20 and run to the district surge (tests/browser/live/reach.ts). */
-async function reachSurge(page: Page): Promise<void> {
-  await liveOpen(page);
-  await liveReach(page, 'surge');
-}
+  // board-9 on the way: the box dropped onto its pad, its wires drew on, the kit flew onto it, it
+  // rebooted with a ring, and the haze hung over it while the surge ran it over 100%.
+  let rec = await animRecord(page);
+  const box = s.parts.find((p) => p.kind === 'server')!.id;
+  for (const name of [
+    `place:${box}`,
+    `wire:gateway>${box}`,
+    `overclock:${box}`,
+    `boot:${box}`,
+    `haze:${box}`,
+  ]) {
+    expect(rec.seen[name], `the board animated ${name}`).toBeDefined();
+  }
+
+  // ---- the rescue: the crew's cable lowers the balancer; its checks ping down the wires ------
+  await liveReach(page, 'rescue');
+  await expect
+    .poll(async () => (await animRecord(page)).seen['ping'] !== undefined, { timeout: 5_000 })
+    .toBe(true);
+  rec = await animRecord(page);
+  expect(rec.seen['cable'], 'the cable').toBeDefined();
+
+  // ---- a skip: the balancer passes over a box it cannot reach (booting or dark) --------------
+  const skipped = await watch(page, 'a SKIPPED pad', (x) => x.pads.some((p) => p.dashed), undefined, 40_000);
+  await shot(page, 'board-skipped');
+  expect(skipped.pads.find((p) => p.dashed)!.part).not.toBeNull();
+
+  // ---- midnight held: fireworks over the feed and the held pads flash (reduce flicker is off) --
+  await liveReach(page, 'midnight');
+  await expect
+    .poll(async () => (await animRecord(page)).seen['fireworks'] !== undefined, { timeout: 5_000 })
+    .toBe(true);
+  await shot(page, 'board-midnight');
+  rec = await animRecord(page);
+  expect(rec.seen['flash'], 'the held pads flash').toBeDefined();
+  // After midnight best play lets the extra boxes go: each lifts away with its refund rising.
+  await expect.poll(async () => (await animRecord(page)).floats, { timeout: 10_000 }).toContain('+40');
+  rec = await animRecord(page);
+  expect(Object.keys(rec.seen).some((n) => n.startsWith('decommission:'))).toBe(true);
+  expect(Object.keys(rec.seen).some((n) => n.startsWith('float:'))).toBe(true);
+
+  // Every animation that ended did so within its stated duration; none of the sprites still
+  // animating is left off its pose once it ends; the particle pool never grew.
+  const end = await board(page);
+  expectWithinDurations(end);
+  for (const p of end.parts) if (p.motion === 'idle') expect(p.drawn, `${p.id} at rest`).toEqual(p.pose);
+  expect(rec.pools).toEqual([96]);
+  expect(rec.peak).toBeLessThanOrEqual(96);
+  const atMidnight = await perfBits(page);
+  expect(atMidnight.pools.boardParticles).toBe(96);
+
+  // board-10: the board's own sounds on a whole night: chimes, crackles, blips, at their rate.
+  expectBoardSounds(end, rec);
+  expect(end.sfx.counts['server-online']).toBeGreaterThan(0);
+  expect(end.sfx.counts['packet-drop']).toBeGreaterThan(0);
+
+  // The board's live texts within its share of the Live screen's 110 (docs/LIVE.md).
+  test.info().annotations.push({
+    type: 'board texts',
+    description: `surge ${atSurge.textsBy.board}, midnight ${atMidnight.textsBy.board}`,
+  });
+  expect(atSurge.textsBy.board).toBeLessThanOrEqual(BOARD_TEXTS);
+  expect(atMidnight.textsBy.board).toBeLessThanOrEqual(BOARD_TEXTS);
+  expect(errors).toEqual([]);
+});
 
 /** If a story scene holds the board, click it on (Skip when shown). */
 async function clickStoryOn(page: Page): Promise<void> {
