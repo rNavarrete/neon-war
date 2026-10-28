@@ -17,6 +17,7 @@ import type { Frame } from '../../game/frame';
 import { TEXT_CPS, settings } from '../../game/settings';
 import { LINES, type LineId } from '../../strings';
 import { COMMS_AVATARS, avatarSource, preloadAvatars, roundAvatar } from '../avatars';
+import { fileTexture } from '../plates';
 import { type Rect, pagePoint, pageRect } from '../live/layout';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import { type CommsTestState, provideCommsHook } from '../live/views/comms';
@@ -25,7 +26,11 @@ import {
   type CommsLayout,
   type CommsSlot,
   type CommsState,
+  type ArtUse,
+  CHIP_SIZE,
+  type ChipArt,
   IDLE_MOOD,
+  type PlateArt,
   type Iris,
   LOG_CLOSED,
   LOG_ROWS,
@@ -34,6 +39,7 @@ import {
   OTHER_RING_ALPHA,
   type TriageMood,
   bandAlpha,
+  chipArt,
   clickLog,
   commsLayout,
   crewLight,
@@ -46,6 +52,8 @@ import {
   moodOf,
   nameOf,
   onRect,
+  plateArt,
+  plateFile,
   slotOf,
   SWAP_TICK_SECONDS,
   speakRing,
@@ -121,8 +129,28 @@ export interface CommsGlowState {
   others: number;
 }
 
+/** One face's art: the manifest key, where its picture came from and the texture drawn. */
+export interface CommsFaceArt {
+  slot: CommsSlot;
+  key: string;
+  use: ArtUse;
+  texture: string;
+}
+
+/** The band's art as drawn (comms-9). */
+export interface CommsArtState {
+  /** The plate: the picked comms-plate, the text-box plate it falls back to, or a code rectangle. */
+  plate: { use: ArtUse; texture: string | null };
+  /** TRIAGE, REI, MIKA and OZZIE's round avatars. */
+  faces: CommsFaceArt[];
+  /** The HOUSE chip: which one shows, where each comes from, and whether art or the code glyph draws. */
+  house: { shown: 'door' | 'tv'; chips: { key: string; use: ArtUse }[]; drawn: 'art' | 'glyph' };
+}
+
 declare module '../live/views/comms' {
   interface CommsTestState {
+    /** Where the plate, faces and HOUSE chips came from (comms-9). */
+    art: CommsArtState;
     /** TRIAGE's iris over slot 0 (comms-4). */
     iris: CommsIrisState;
     glow: CommsGlowState;
@@ -158,8 +186,12 @@ export class CommsView implements LiveView {
   private shownTyped = -1;
   private shownAlpha = -1;
   private shownPresent: boolean | null = null;
-  private houseTextures: [string, string] = ['', ''];
-  private houseArt: [boolean, boolean] = [false, false];
+  /** comms-9: where the plate, each face and each HOUSE chip came from (the manifest or a fallback). */
+  private plateUse: PlateArt | null = null;
+  private chips: ChipArt[] = [];
+  private faceArt: CommsFaceArt[] = [];
+  /** The HOUSE chip showing: 0 the door, 1 the TV. */
+  private houseShown: 0 | 1 = 0;
   private houseGlyph: Phaser.GameObjects.Graphics | null = null;
 
   /** comms-4: the slots' rims (sit back while a line shows), TRIAGE's iris, the glow and the tick. */
@@ -206,6 +238,9 @@ export class CommsView implements LiveView {
       COMMS_AVATARS.OZZIE,
       ...COMMS_AVATARS.HOUSE,
     ]);
+    // The picked plate, once the manifest carries its cut (its fallback is the HUD's text box).
+    const file = plateFile();
+    if (file && !scene.textures.exists(fileTexture(file))) scene.load.image(fileTexture(file), file);
   }
 
   create(scene: Phaser.Scene, host: LiveHost): void {
@@ -218,9 +253,22 @@ export class CommsView implements LiveView {
     const add = scene.add;
     const r = host.rect;
 
-    const plate = scene.textures.exists('hud:textbox')
-      ? panel(scene, 'hud:textbox', r.x, r.y, r.w, r.h, { k: 0.6 })
-      : add.rectangle(r.x, r.y, r.w, r.h, COLORS.ink, 0.9).setOrigin(0);
+    // comms-9: the plate, the faces and the HOUSE chips come through the art manifest, each with
+    // its fallback, so a pick dropped in later needs no change here.
+    const exists = (t: string): boolean => scene.textures.exists(t);
+    const pa = plateArt(exists);
+    this.plateUse = pa;
+    let plate: Phaser.GameObjects.Image | Phaser.GameObjects.NineSlice | Phaser.GameObjects.Rectangle;
+    if (pa.texture && !pa.nine) {
+      // The picked plate is cut at the band's own size: drawn 1:1, never upscaled.
+      plate = add.image(r.x, r.y, pa.texture).setOrigin(0).setDisplaySize(r.w, r.h);
+      plate.setTint(pa.tint).setAlpha(pa.alpha);
+    } else if (pa.texture) {
+      plate = panel(scene, pa.texture, r.x, r.y, r.w, r.h, { k: 0.6 });
+      plate.setTint(pa.tint).setAlpha(pa.alpha);
+    } else {
+      plate = add.rectangle(r.x, r.y, r.w, r.h, COLORS.ink, 0.9).setOrigin(0);
+    }
     const title = add.text(L.title.x, L.title.y, COMMS_TEXT.title, {
       fontFamily: FONT,
       fontSize: '13px',
@@ -246,12 +294,8 @@ export class CommsView implements LiveView {
       roundAvatar(avatarScene, COMMS_AVATARS.HOUSE[0], AVATAR_SIZE),
       roundAvatar(avatarScene, COMMS_AVATARS.HOUSE[1], AVATAR_SIZE),
     ];
-    this.houseTextures = [house[0].texture, house[1].texture];
-    // Until the door and TV chips are picked, HOUSE is a code glyph rather than a stand-in plate.
-    this.houseArt = [
-      avatarSource(COMMS_AVATARS.HOUSE[0]).file !== null,
-      avatarSource(COMMS_AVATARS.HOUSE[1]).file !== null,
-    ];
+    // Until the door and TV chips are picked, HOUSE is a code glyph rather than a blank stand-in disc.
+    this.chips = [chipArt(COMMS_AVATARS.HOUSE[0], exists), chipArt(COMMS_AVATARS.HOUSE[1], exists)];
     this.houseGlyph = add.graphics();
     this.faceTint = [];
     this.faceAlpha = [];
@@ -266,6 +310,14 @@ export class CommsView implements LiveView {
       this.faceAlpha.push(a.alpha);
       this.faceScale.push(img.scaleX);
       return img;
+    });
+    this.faceArt = L.slots.map((s, i) => {
+      const key = s.name === 'HOUSE' ? COMMS_AVATARS.HOUSE[0] : COMMS_AVATARS[s.name];
+      const src = avatarSource(key);
+      const a = s.name === 'HOUSE' ? house[0] : null;
+      const fallback = a ? a.fallback : src.fallback || !exists(src.texture);
+      const use: ArtUse = !fallback ? 'picked' : src.file !== null && exists(src.texture) ? 'reuse' : 'code';
+      return { slot: s.name, key, use, texture: this.faces[i].texture.key };
     });
 
     // TRIAGE's iris: code over her lens, built once and moved, scaled and squashed per frame.
@@ -646,8 +698,13 @@ export class CommsView implements LiveView {
     const face = this.faces[i];
     const g = this.houseGlyph!;
     g.clear();
-    if (this.houseArt[which]) {
-      face.setTexture(this.houseTextures[which]).setVisible(true);
+    this.houseShown = which;
+    const chip = this.chips[which];
+    if (chip?.texture) {
+      // The picked chip at its own 64 px, inside the slot's disc.
+      face.setTexture(chip.texture).setDisplaySize(CHIP_SIZE, CHIP_SIZE).setVisible(true);
+      face.setTint(0xffffff).setAlpha(1);
+      this.faceScale[i] = face.scaleX;
       return;
     }
     face.setVisible(false);
@@ -754,6 +811,15 @@ export class CommsView implements LiveView {
       iris: { ...this.irisNow(), mood: this.mood(), motion: this.reduced() ? 'reduced' : 'full' },
       glow: this.glowNow(),
       crew: { light: crewLight(this.crewSince, this.real) },
+      art: {
+        plate: { use: this.plateUse?.use ?? 'code', texture: this.plateUse?.texture ?? null },
+        faces: this.faceArt.filter((f) => f.slot !== 'HOUSE').map((f) => ({ ...f })),
+        house: {
+          shown: this.houseShown === 0 ? 'door' : 'tv',
+          chips: this.chips.map((c) => ({ key: c.key, use: c.use })),
+          drawn: this.faces[COMMS_SLOTS.indexOf('HOUSE')]?.visible ? 'art' : 'glyph',
+        },
+      },
       alpha: bandAlpha(this.state, this.clock),
       rect: pageRect(r, canvas),
       drawn: b ? pageRect({ x: b.x, y: b.y, w: b.width, h: b.height }, canvas) : pageRect(r, canvas),

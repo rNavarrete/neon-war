@@ -15,9 +15,11 @@
 // Pure: plain data in, new state out (the same object back when nothing changed), the HUD clock in
 // seconds passed in. No Phaser, no timers.
 
+import { type ArtRequest, artRequest, isPicked, requestFile } from '../../game/artManifest';
 import { speakerName } from '../../game/portraits';
 import { LINES, type LineId } from '../../strings';
 import { typedChars } from '../../story/scripts';
+import { fileTexture } from '../plates';
 import { BARK_HISTORY, BARK_SECONDS } from './barks';
 import { CUES } from './cues';
 import { type LineTag, isLesson, tagOf } from './lineMeta';
@@ -437,4 +439,78 @@ export function crewTint(k: number): { tint: number; alpha: number } {
     return Math.round(from + (0xff - from) * e) << shift;
   };
   return { tint: ch(16) | ch(8) | ch(0), alpha: DARK_ALPHA + (1 - DARK_ALPHA) * e };
+}
+
+// ---- art through the manifest (comms-9) ----
+
+/** The band plate's manifest key (docs/ART-REQUESTS.md, batch 2), cut at the band's 1455x150. */
+export const COMMS_PLATE = 'hud/comms-plate';
+/** The HUD's own text-box plate, nine-sliced: the plate's fallback when its reused file isn't loaded. */
+export const LEGACY_PLATE = 'hud:textbox';
+/** The HOUSE chips' display size (the manifest's 64x64, never upscaled). */
+export const CHIP_SIZE = 64;
+
+/** Where a piece of the band's art comes from: the picked file, a reused picked file, or code. */
+export type ArtUse = 'picked' | 'reuse' | 'code';
+
+export interface PlateArt {
+  readonly use: ArtUse;
+  /** The texture to draw, or null for the code plate. */
+  readonly texture: string | null;
+  /** Nine-sliced (a reused frame stretched to the band) or drawn as is (the picked plate, cut to size). */
+  readonly nine: boolean;
+  readonly tint: number;
+  readonly alpha: number;
+}
+
+/**
+ * The band plate: the picked comms-plate once the manifest carries its cut and its texture loaded;
+ * else its fallback, the text-box plate nine-sliced (the reused file, or the HUD's own copy of it);
+ * else a code rectangle. `exists` is the scene's texture check; `request` is the manifest's entry,
+ * passed in by tests to stand for a pick that has landed. Pure.
+ */
+export function plateArt(
+  exists: (texture: string) => boolean,
+  request: ArtRequest | undefined = artRequest(COMMS_PLATE),
+): PlateArt {
+  if (request && isPicked(request)) {
+    const texture = fileTexture(requestFile(request.key));
+    if (exists(texture)) return { use: 'picked', texture, nine: false, tint: 0xffffff, alpha: 1 };
+  }
+  const f = request?.fallback;
+  const tint = f?.kind === 'reuse' ? f.tint : 0xffffff;
+  const alpha = f?.alpha ?? 1;
+  if (f?.kind === 'reuse' && exists(fileTexture(f.file)))
+    return { use: 'reuse', texture: fileTexture(f.file), nine: true, tint, alpha };
+  if (exists(LEGACY_PLATE)) return { use: 'reuse', texture: LEGACY_PLATE, nine: true, tint, alpha };
+  return { use: 'code', texture: null, nine: false, tint, alpha };
+}
+
+/** The picked file a plate request loads from, or null while it is not picked. Pure. */
+export function plateFile(request: ArtRequest | undefined = artRequest(COMMS_PLATE)): string | null {
+  return request && isPicked(request) ? requestFile(request.key) : null;
+}
+
+export interface ChipArt {
+  readonly key: string;
+  readonly use: ArtUse;
+  /** The picked chip's texture, or null for the code glyph (a door or a TV). */
+  readonly texture: string | null;
+}
+
+/**
+ * A HOUSE chip (hud/icons/door or hud/icons/tv): its picked file once the manifest carries its cut
+ * and the texture loaded, else the code glyph. Its baked stand-in is a blank disc, so the glyph
+ * says more until the pick lands. Pure.
+ */
+export function chipArt(
+  key: string,
+  exists: (texture: string) => boolean,
+  request: ArtRequest | undefined = artRequest(key),
+): ChipArt {
+  if (request && isPicked(request)) {
+    const texture = fileTexture(requestFile(key));
+    if (exists(texture)) return { key, use: 'picked', texture };
+  }
+  return { key, use: 'code', texture: null };
 }

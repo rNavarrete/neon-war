@@ -1,5 +1,13 @@
+import { artRequest } from '../src/game/artManifest';
 import { TEXT_CPS } from '../src/game/settings';
+import { COMMS_AVATARS, avatarSource } from '../src/scenes/avatars';
 import {
+  CHIP_SIZE,
+  COMMS_PLATE,
+  LEGACY_PLATE,
+  chipArt,
+  plateArt,
+  plateFile,
   BARK_SECONDS,
   COMMS_QUEUE_MAX,
   CREW_LIGHT_SECONDS,
@@ -47,6 +55,7 @@ import {
   triageMood,
 } from '../src/scenes/hud/comms';
 import { BOTTOM } from '../src/scenes/hud/layout';
+import { fileTexture } from '../src/scenes/plates';
 import { LESSON_IDS } from '../src/scenes/hud/lineMeta';
 import { ZONES } from '../src/scenes/live/layout';
 import { LINES, type LineId } from '../src/strings';
@@ -497,6 +506,89 @@ describe('comms-4: iris, glow and crew light-up', () => {
       } else {
         expect(m, id).toBeNull();
       }
+    }
+  });
+});
+
+// comms-9: the band's art through the manifest, with its fallbacks.
+describe('comms-9: plate, round avatars and HOUSE chips through the art manifest', () => {
+  const plateReq = artRequest(COMMS_PLATE)!;
+  /** The manifest entry as it will read once the owner's pick lands (its cut size set). */
+  const picked = <T extends { target: { w: number; h: number } }>(r: T): T => ({ ...r, cut: r.target });
+  const all = (): boolean => true;
+  const none = (): boolean => false;
+
+  it('asks for the plate at the band size and never upscales it', () => {
+    expect(plateReq.lane).toBe('comms');
+    expect(plateReq.zone).toBe('comms');
+    expect(plateReq.display).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
+    expect(plateReq.target.w).toBeGreaterThanOrEqual(plateReq.display.w);
+    expect(plateReq.target.h).toBeGreaterThanOrEqual(plateReq.display.h);
+    for (const key of [COMMS_AVATARS.TRIAGE, COMMS_AVATARS.REI, COMMS_AVATARS.MIKA, COMMS_AVATARS.OZZIE]) {
+      const r = artRequest(key)!;
+      expect(r.lane, key).toBe('comms');
+      expect(r.target.w, key).toBeGreaterThanOrEqual(84);
+    }
+    for (const key of COMMS_AVATARS.HOUSE) {
+      const r = artRequest(key)!;
+      expect(r.display, key).toEqual({ w: CHIP_SIZE, h: CHIP_SIZE });
+      expect(r.target.w, key).toBeGreaterThanOrEqual(CHIP_SIZE);
+    }
+  });
+
+  it('uses the picked plate once it has landed and loaded, drawn as cut', () => {
+    const p = plateArt(all, picked(plateReq));
+    expect(p).toEqual({
+      use: 'picked',
+      texture: fileTexture('art/hud/comms-plate.webp'),
+      nine: false,
+      tint: 0xffffff,
+      alpha: 1,
+    });
+    expect(plateFile(picked(plateReq))).toBe('art/hud/comms-plate.webp');
+  });
+
+  it('falls back to the text-box plate, then to code, while the pick is missing', () => {
+    expect(plateFile()).toBeNull();
+    const reuse = plateReq.fallback.kind === 'reuse' ? plateReq.fallback : null;
+    expect(reuse?.file).toBe('art/hud/textbox.webp');
+    // Not picked: the reused file, nine-sliced, at the manifest's tint and alpha.
+    expect(plateArt(all)).toMatchObject({ use: 'reuse', texture: fileTexture(reuse!.file), nine: true });
+    expect(plateArt(all).alpha).toBe(reuse!.alpha);
+    // The reused file not loaded: the HUD's own text box.
+    expect(plateArt((t) => t === LEGACY_PLATE)).toMatchObject({
+      use: 'reuse',
+      texture: LEGACY_PLATE,
+      nine: true,
+    });
+    // Picked in the manifest but the file did not load: still the fallback, never a missing texture.
+    expect(plateArt((t) => t === LEGACY_PLATE, picked(plateReq)).texture).toBe(LEGACY_PLATE);
+    // Nothing loaded: the code plate.
+    expect(plateArt(none)).toMatchObject({ use: 'code', texture: null });
+    expect(plateArt(none, undefined).use).toBe('code');
+  });
+
+  it('draws a picked HOUSE chip and the code glyph until then', () => {
+    for (const key of COMMS_AVATARS.HOUSE) {
+      const r = artRequest(key)!;
+      expect(chipArt(key, all)).toEqual({ key, use: 'code', texture: null });
+      expect(chipArt(key, all, picked(r))).toEqual({
+        key,
+        use: 'picked',
+        texture: fileTexture(`art/${key}.webp`),
+      });
+      expect(chipArt(key, none, picked(r)).use).toBe('code');
+    }
+  });
+
+  it('resolves the four round avatars through the manifest: the pick when it lands, the reused face until', () => {
+    for (const key of [COMMS_AVATARS.TRIAGE, COMMS_AVATARS.REI, COMMS_AVATARS.MIKA, COMMS_AVATARS.OZZIE]) {
+      const r = artRequest(key)!;
+      const now = avatarSource(key);
+      expect(now.fallback, key).toBe(true);
+      expect(now.file, key).toBe(r.fallback.kind === 'reuse' ? r.fallback.file : null);
+      const later = avatarSource(key, picked(r));
+      expect(later, key).toMatchObject({ fallback: false, file: `art/${key}.webp` });
     }
   });
 });

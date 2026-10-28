@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { artRequest, isPicked } from '../../src/game/artManifest';
 import type { CommsTestState } from '../../src/scenes/live/views/comms';
 import { dismissJobCard, hud, openBoard, reach, setDial, shot } from './live/reach';
 
@@ -244,7 +245,7 @@ interface CommsSample {
   rescueDone: boolean;
 }
 
-test('comms-4: TRIAGE moods, steady glow and still iris under reduce flicker, crew lit after the rescue', async ({
+test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flicker, crew lit after the rescue, art through the manifest', async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -322,6 +323,42 @@ test('comms-4: TRIAGE moods, steady glow and still iris under reduce flicker, cr
     ['MIKA', true],
     ['OZZIE', true],
   ]);
+
+  // comms-9: the band's art comes through the manifest. Each piece uses its pick when the manifest
+  // has one and its fallback otherwise (today: the text-box plate, the reused board faces and the
+  // code HOUSE glyph), and nothing draws Phaser's missing texture.
+  const pickedKey = (key: string): boolean => {
+    const r = artRequest(key);
+    return !!r && isPicked(r);
+  };
+  expect(c.art.plate.use).toBe(pickedKey('hud/comms-plate') ? 'picked' : 'reuse');
+  expect(c.art.plate.texture).not.toBeNull();
+  expect(c.art.faces.map((f) => [f.slot, f.key])).toEqual([
+    ['TRIAGE', 'chars/comms/triage'],
+    ['REI', 'chars/comms/rei'],
+    ['MIKA', 'chars/comms/mika'],
+    ['OZZIE', 'chars/comms/ozzie'],
+  ]);
+  for (const f of c.art.faces) {
+    expect(f.use, f.key).toBe(pickedKey(f.key) ? 'picked' : 'reuse');
+    expect(f.texture, f.key).toBe(`avatar:${f.key}@84`);
+  }
+  expect(c.art.house.chips).toEqual(
+    ['hud/icons/door', 'hud/icons/tv'].map((key) => ({ key, use: pickedKey(key) ? 'picked' : 'code' })),
+  );
+  expect(c.art.house.drawn).toBe(
+    c.art.house.chips[c.art.house.shown === 'door' ? 0 : 1].use === 'picked' ? 'art' : 'glyph',
+  );
+  const art = await page.evaluate(
+    () => (window.__neonTest!.state as unknown as { art: { missing: string[] } }).art,
+  );
+  expect(art.missing).toEqual([]);
+  // The four round avatars, the HOUSE chip and the plate sit inside the band (screenshot below).
+  for (const s of c.slots) {
+    expect(insideRect({ x: s.x - s.r, y: s.y - s.r, w: 2 * s.r, h: 2 * s.r }, c.rect), s.name).toBe(true);
+  }
+  expect(insideRect(c.drawn, c.rect)).toBe(true);
+
   await shot(page, 'live-m3-comms');
   expect(errors).toEqual([]);
 });
