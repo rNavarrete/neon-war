@@ -18,6 +18,7 @@ import { TEXT_CPS, settings } from '../../game/settings';
 import { LINES, type LineId } from '../../strings';
 import { testHookEnabled } from '../../testHook';
 import { COMMS_AVATARS, avatarSource, preloadAvatars, roundAvatar } from '../avatars';
+import { FULL, faceCrop } from '../avatarCrop';
 import { fileTexture } from '../plates';
 import { type Rect, pagePoint, pageRect } from '../live/layout';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
@@ -111,6 +112,50 @@ export interface CommsLeaderState {
   to: { x: number; y: number };
 }
 
+/** A size in game px. */
+export interface ArtSize {
+  w: number;
+  h: number;
+}
+
+/**
+ * A w x h picture drawn inside `box`: scaled down to fit when it is larger, never up, and centred
+ * on whole pixels. A picture with no size (not loaded, or a stub) fills the box. Pure.
+ */
+export function fitCentred(w: number, h: number, box: Rect): Rect {
+  if (!(w > 0) || !(h > 0)) return { x: box.x, y: box.y, w: box.w, h: box.h };
+  const k = Math.min(1, box.w / w, box.h / h);
+  const dw = Math.round(w * k);
+  const dh = Math.round(h * k);
+  return { x: box.x + Math.round((box.w - dw) / 2), y: box.y + Math.round((box.h - dh) / 2), w: dw, h: dh };
+}
+
+/**
+ * Where TRIAGE's lens sits in her picked badge (chars/comms/triage.webp, 244x256), as fractions of
+ * the file: the centre of its cyan ring, measured off the pick. The iris is drawn over it.
+ */
+export const TRIAGE_LENS = { fx: 59 / 244, fy: 132.5 / 256 } as const;
+
+/**
+ * The lens's offset from the slot's centre, in game px, for a w x h badge round-cropped (as
+ * roundAvatar crops it, whole and centred) into a `size` px avatar. Zero for a picture with no size.
+ * Pure.
+ */
+export function lensOffset(
+  w: number,
+  h: number,
+  size: number,
+  lens = TRIAGE_LENS,
+): { dx: number; dy: number } {
+  if (!(w > 0) || !(h > 0)) return { dx: 0, dy: 0 };
+  const c = faceCrop(w, h, size, FULL);
+  const at = (v: number): number => Math.round(v * 10) / 10;
+  return {
+    dx: at((lens.fx * w - c.x - c.side / 2) * c.scale),
+    dy: at((lens.fy * h - c.y - c.side / 2) * c.scale),
+  };
+}
+
 /** HOUSE's chip: the door for Grandma, the TV for the TV downstairs. */
 const houseChip = (speaker: string): string =>
   speaker.startsWith('TV') ? COMMS_AVATARS.HOUSE[1] : COMMS_AVATARS.HOUSE[0];
@@ -165,12 +210,25 @@ export interface CommsFaceArt {
 
 /** The band's art as drawn (comms-9). */
 export interface CommsArtState {
-  /** The plate: the picked comms-plate, the text-box plate it falls back to, or a code rectangle. */
-  plate: { use: ArtUse; texture: string | null };
+  /**
+   * The plate: the picked comms-plate, the text-box plate it falls back to, or a code rectangle.
+   * `source` is the picked file's size (null for a nine-sliced fallback or the code plate) and
+   * `drawn` where it is drawn, in page CSS px; `size` its drawn size in game px.
+   */
+  plate: { use: ArtUse; texture: string | null; source: ArtSize | null; size: ArtSize; drawn: Rect };
   /** TRIAGE, REI, MIKA and OZZIE's round avatars. */
   faces: CommsFaceArt[];
   /** The HOUSE chip: which one shows, where each comes from, and whether art or the code glyph draws. */
-  house: { shown: 'door' | 'tv'; chips: { key: string; use: ArtUse }[]; drawn: 'art' | 'glyph' };
+  house: {
+    shown: 'door' | 'tv';
+    chips: { key: string; use: ArtUse }[];
+    drawn: 'art' | 'glyph';
+    /** The shown chip's file size and its drawn size in game px; null while the code glyph draws. */
+    source: ArtSize | null;
+    size: ArtSize | null;
+  };
+  /** Where TRIAGE's iris sits from her slot's centre, in game px: over the picked badge's lens, else 0. */
+  lens: { dx: number; dy: number };
 }
 
 declare module '../live/views/comms' {
@@ -224,6 +282,14 @@ export class CommsView implements LiveView {
   /** comms-9: where the plate, each face and each HOUSE chip came from (the manifest or a fallback). */
   private plateUse: PlateArt | null = null;
   private chips: ChipArt[] = [];
+  /** The picked plate's file size, and the rect it is drawn in (game px). */
+  private plateSource: ArtSize | null = null;
+  private plateRect: Rect | null = null;
+  /** Each HOUSE chip's file size, and the size it is drawn at (fitted in CHIP_SIZE, never upscaled). */
+  private chipSource: (ArtSize | null)[] = [];
+  private chipSize: (ArtSize | null)[] = [];
+  /** TRIAGE's iris offset from her slot's centre: over the picked badge's lens. */
+  private lens = { dx: 0, dy: 0 };
   private faceArt: CommsFaceArt[] = [];
   /** The HOUSE chip showing: 0 the door, 1 the TV. */
   private houseShown: 0 | 1 = 0;
@@ -306,9 +372,16 @@ export class CommsView implements LiveView {
     const pa = plateArt(exists);
     this.plateUse = pa;
     let plate: Phaser.GameObjects.Image | Phaser.GameObjects.NineSlice | Phaser.GameObjects.Rectangle;
+    this.plateSource = null;
+    this.plateRect = { x: r.x, y: r.y, w: r.w, h: r.h };
     if (pa.texture && !pa.nine) {
-      // The picked plate is cut at the band's own size: drawn 1:1, never upscaled.
-      plate = add.image(r.x, r.y, pa.texture).setOrigin(0).setDisplaySize(r.w, r.h);
+      // The picked plate came out a little under the band (1450x144 for 1455x150): drawn at its own
+      // size, centred on whole pixels, never stretched up to the band.
+      const src = this.frameSize(scene, pa.texture);
+      const at = fitCentred(src.w, src.h, r);
+      this.plateSource = src.w > 0 ? src : null;
+      this.plateRect = at;
+      plate = add.image(at.x, at.y, pa.texture).setOrigin(0).setDisplaySize(at.w, at.h);
       plate.setTint(pa.tint).setAlpha(pa.alpha);
     } else if (pa.texture) {
       plate = panel(scene, pa.texture, r.x, r.y, r.w, r.h, { k: 0.6 });
@@ -343,6 +416,14 @@ export class CommsView implements LiveView {
     ];
     // Until the door and TV chips are picked, HOUSE is a code glyph rather than a blank stand-in disc.
     this.chips = [chipArt(COMMS_AVATARS.HOUSE[0], exists), chipArt(COMMS_AVATARS.HOUSE[1], exists)];
+    // The picked chips are 128x120: fitted in the 64 px chip box at their own aspect, never upscaled.
+    const chipBox = { x: 0, y: 0, w: CHIP_SIZE, h: CHIP_SIZE };
+    this.chipSource = this.chips.map((c) => (c.texture ? this.frameSize(scene, c.texture) : null));
+    this.chipSize = this.chipSource.map((src) => {
+      if (!src) return null;
+      const f = fitCentred(src.w, src.h, chipBox);
+      return { w: f.w, h: f.h };
+    });
     this.houseGlyph = add.graphics();
     this.faceTint = [];
     this.faceAlpha = [];
@@ -366,6 +447,16 @@ export class CommsView implements LiveView {
       const use: ArtUse = !fallback ? 'picked' : src.file !== null && exists(src.texture) ? 'reuse' : 'code';
       return { slot: s.name, key, use, texture: this.faces[i].texture.key };
     });
+    // TRIAGE's picked badge paints her lens left of centre: the iris sits over it. Her fallback face
+    // keeps the iris on the slot's centre.
+    const triageArt = this.faceArt[COMMS_SLOTS.indexOf('TRIAGE')];
+    const triageSrc = avatarSource(COMMS_AVATARS.TRIAGE);
+    if (triageArt?.use === 'picked') {
+      const src = this.frameSize(scene, triageSrc.texture);
+      this.lens = lensOffset(src.w, src.h, AVATAR_SIZE);
+    } else {
+      this.lens = { dx: 0, dy: 0 };
+    }
 
     // TRIAGE's iris: code over her lens, built once and moved, scaled and squashed per frame.
     const t0 = L.slots[COMMS_SLOTS.indexOf('TRIAGE')];
@@ -626,11 +717,19 @@ export class CommsView implements LiveView {
   }
 
   private irisX(): number {
-    return this.L!.slots[0].x;
+    return this.L!.slots[0].x + this.lens.dx;
   }
 
   private irisY(): number {
-    return this.L!.slots[0].y;
+    return this.L!.slots[0].y + this.lens.dy;
+  }
+
+  /** A loaded texture's size in px, or 0 x 0 when the scene can't say (a node stub). */
+  private frameSize(scene: Phaser.Scene, texture: string): ArtSize {
+    const f = scene.textures.getFrame(texture);
+    const w = Number(f?.width);
+    const h = Number(f?.height);
+    return { w: w > 0 ? w : 0, h: h > 0 ? h : 0 };
   }
 
   /** The speaker's ring as the hook reports it. */
@@ -833,8 +932,9 @@ export class CommsView implements LiveView {
     this.houseShown = which;
     const chip = this.chips[which];
     if (chip?.texture) {
-      // The picked chip at its own 64 px, inside the slot's disc.
-      face.setTexture(chip.texture).setDisplaySize(CHIP_SIZE, CHIP_SIZE).setVisible(true);
+      // The picked chip fitted in its 64 px box at its own aspect, inside the slot's disc.
+      const size = this.chipSize[which] ?? { w: CHIP_SIZE, h: CHIP_SIZE };
+      face.setTexture(chip.texture).setDisplaySize(size.w, size.h).setVisible(true);
       face.setTint(0xffffff).setAlpha(1);
       this.faceScale[i] = face.scaleX;
       return;
@@ -891,6 +991,7 @@ export class CommsView implements LiveView {
     const cps = TEXT_CPS[settings().textSpeed];
     const scale = canvas.width / 1920;
     const speaking = c ? slotOf(LINES[c.id].speaker) : null;
+    const houseArt = this.faces[COMMS_SLOTS.indexOf('HOUSE')]?.visible === true;
     const present = this.shownPresent === true;
     const b = this.root?.getBounds();
     const typed = c ? typedOf(c, this.clock, cps) : 0;
@@ -950,13 +1051,22 @@ export class CommsView implements LiveView {
       glow: this.glowNow(),
       crew: { light: crewLight(this.crewSince, this.real) },
       art: {
-        plate: { use: this.plateUse?.use ?? 'code', texture: this.plateUse?.texture ?? null },
+        plate: {
+          use: this.plateUse?.use ?? 'code',
+          texture: this.plateUse?.texture ?? null,
+          source: this.plateSource ? { ...this.plateSource } : null,
+          size: { w: this.plateRect?.w ?? r.w, h: this.plateRect?.h ?? r.h },
+          drawn: pageRect(this.plateRect ?? r, canvas),
+        },
         faces: this.faceArt.filter((f) => f.slot !== 'HOUSE').map((f) => ({ ...f })),
         house: {
           shown: this.houseShown === 0 ? 'door' : 'tv',
           chips: this.chips.map((c) => ({ key: c.key, use: c.use })),
           drawn: this.faces[COMMS_SLOTS.indexOf('HOUSE')]?.visible ? 'art' : 'glyph',
+          source: houseArt ? (this.chipSource[this.houseShown] ?? null) : null,
+          size: houseArt ? (this.chipSize[this.houseShown] ?? null) : null,
         },
+        lens: { ...this.lens },
       },
       alpha: bandAlpha(this.state, this.clock),
       rect: pageRect(r, canvas),
