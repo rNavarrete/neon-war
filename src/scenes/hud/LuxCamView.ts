@@ -32,6 +32,8 @@ import {
   CAM_ART,
   CAM_BACKDROP_KEY,
   CAM_FACE_PARALLAX,
+  CAM_FRAME_KEY,
+  CAM_FRAME_RED,
   CAM_FIT,
   CAM_HISTORY,
   CAM_PARALLAX,
@@ -47,6 +49,7 @@ import {
   type MutableCamView,
   backdropScale,
   breathY,
+  camFramePlace,
   camLayout,
   camPortraits,
   camStep,
@@ -116,6 +119,8 @@ export class LuxCamView implements LiveView {
   private front: Face | null = null;
   private back: Face | null = null;
   private frameG: Phaser.GameObjects.Graphics | null = null;
+  /** The painted cam frame (hud/cam-frame) at its file size when loaded; frameG draws without it. */
+  private frameImg: Phaser.GameObjects.Image | null = null;
   private roll: Phaser.GameObjects.Rectangle | null = null;
   private recDot: Phaser.GameObjects.Arc | null = null;
   private badge: Phaser.GameObjects.Image | null = null;
@@ -145,7 +150,7 @@ export class LuxCamView implements LiveView {
   private dy = Number.NaN;
 
   preload(scene: Phaser.Scene): void {
-    preloadArt(scene as never, [CAM_BACKDROP_KEY, REC_BADGE_KEY]);
+    preloadArt(scene as never, [CAM_BACKDROP_KEY, REC_BADGE_KEY, CAM_FRAME_KEY]);
     for (const p of camPortraits()) if (!scene.textures.exists(p.key)) scene.load.image(p.key, p.file);
   }
 
@@ -196,7 +201,16 @@ export class LuxCamView implements LiveView {
     }
     this.roll = add.rectangle(lens.x, lens.y, lens.w, ROLL_HEIGHT, 0xffffff, 0.035).setOrigin(0);
 
-    this.frameG = add.graphics();
+    // The frame: the painted one at its own size, its opening centred on the lens; else code.
+    const frameArt = resolveArt(CAM_FRAME_KEY);
+    if (!frameArt.fallback && scene.textures.exists(frameArt.texture)) {
+      const at = camFramePlace(z, lens);
+      this.frameImg = add.image(at.x, at.y, frameArt.texture).setOrigin(0);
+      this.frameG = null;
+    } else {
+      this.frameImg = null;
+      this.frameG = add.graphics();
+    }
     this.frameRed = false;
     this.drawFrame(false);
 
@@ -229,7 +243,7 @@ export class LuxCamView implements LiveView {
 
     this.objects = [plate];
     if (this.backdrop) this.objects.push(this.backdrop);
-    this.objects.push(this.back.img, this.front.img, scan, this.roll, this.frameG, label);
+    this.objects.push(this.back.img, this.front.img, scan, this.roll, (this.frameImg ?? this.frameG)!, label);
     if (this.badge) this.objects.push(this.badge);
     this.objects.push(this.recDot, rec);
     this.objects.push(...this.bars);
@@ -414,6 +428,12 @@ export class LuxCamView implements LiveView {
   }
 
   private drawFrame(red: boolean): void {
+    if (this.frameImg) {
+      // The painted rim, recoloured by tint: untinted, or red while she panics.
+      if (red) this.frameImg.setTint(CAM_FRAME_RED);
+      else this.frameImg.clearTint();
+      return;
+    }
     const g = this.frameG;
     const L = this.layout;
     if (!g || !L) return;
@@ -488,6 +508,7 @@ export class LuxCamView implements LiveView {
       stressedFor: s.stressSince === null ? 0 : Math.max(0, this.clock - s.stressSince),
       rec: this.recShown,
       frame: this.frameRed ? 'red' : 'amber',
+      frameArt: this.frameImg ? CAM_FRAME_KEY : null,
       fading: this.fadeAt !== null,
       speaking: this.extras.luxSpeaking,
       dragging: this.extras.dragging,
@@ -509,6 +530,7 @@ export class LuxCamView implements LiveView {
     this.front = null;
     this.back = null;
     this.frameG = null;
+    this.frameImg = null;
     this.roll = null;
     this.recDot = null;
     this.badge = null;

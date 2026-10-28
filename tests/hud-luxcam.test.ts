@@ -10,6 +10,11 @@ import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 import {
   CAM_ACTION_FOCUS,
   CAM_BACKDROP_KEY,
+  CAM_FRAME_FILE,
+  CAM_FRAME_KEY,
+  CAM_FRAME_OPENING,
+  camFit,
+  camFramePlace,
   CAM_FADE,
   CAM_LEAN_RELEASE,
   CAM_LENS,
@@ -425,10 +430,13 @@ describe('the cam’s geometry', () => {
 });
 
 describe('the cam’s art', () => {
-  it('loads all nine moods through the portrait keys, the picked cam set for leaning and relieved', () => {
-    // luxcam-5: the cam set (D7) is picked, so the manifest says it landed and the cam draws it.
+  it('loads all nine moods through the portrait keys, the picked cam set for leaning, relieved and cheer', () => {
+    // luxcam-5: the cam set (D7) is picked, so the manifest says it landed and the cam draws it; the
+    // cheer (batch 5) landed with round 2.
     expect(camFileLanded('art/chars/lux/cam/lean-in.webp')).toBe(true);
     expect(camFileLanded('art/chars/lux/cam/relieved.webp')).toBe(true);
+    expect(camFileLanded('art/chars/lux/cam/cheer.webp')).toBe(true);
+    expect(camTextureOf('cheer')).toBe('portrait:lux/cam/cheer');
     expect(camFileLanded('art/chars/lux/faces-board/deadpan.webp')).toBe(true);
     expect(camTextureOf('leaning')).toBe('portrait:lux/cam/lean-in');
     expect(camTextureOf('relieved')).toBe('portrait:lux/cam/relieved');
@@ -440,6 +448,7 @@ describe('the cam’s art', () => {
     expect(files.filter((p) => p.file.includes('/cam/')).map((p) => p.key)).toEqual([
       'portrait:lux/cam/lean-in',
       'portrait:lux/cam/relieved',
+      'portrait:lux/cam/cheer',
     ]);
     expect(new Set(files.map((p) => p.key)).size).toBe(files.length);
   });
@@ -495,6 +504,9 @@ const SIZES: Record<string, { w: number; h: number }> = {
   'portrait:lux/cam/relieved': { w: 924, h: 548 },
   'art:hud/cam-backdrop': { w: 824, h: 504 },
   'art:hud/live/rec-badge': { w: 121, h: 48 },
+  // Batch 5: the cheer (same framing as the cam set) and the painted cam frame.
+  'portrait:lux/cam/cheer': { w: 924, h: 548 },
+  'art:hud/cam-frame': { w: 408, h: 243 },
 };
 
 function camStub(pointer = { x: 960, y: 540 }) {
@@ -649,10 +661,14 @@ describe('LuxCamView', () => {
     v.create(scene as never, camHost(scene));
     const lens = camLayout(ZONES.cam).lens;
     const canvas = { left: 10, top: 20, width: 960, height: 540 };
-    // The backdrop, two faces and (luxcam-5) the REC badge; only the first three are lens images.
-    const images = made.filter((m) => m.kind === 'Image' && m.texture !== 'art:hud/live/rec-badge');
+    // The backdrop, two faces, (luxcam-5) the REC badge and (batch 5) the painted cam frame; only
+    // the first three are lens images.
+    const images = made.filter(
+      (m) =>
+        m.kind === 'Image' && m.texture !== 'art:hud/live/rec-badge' && m.texture !== 'art:hud/cam-frame',
+    );
     expect(images).toHaveLength(3);
-    expect(made.filter((m) => m.kind === 'Image')).toHaveLength(4);
+    expect(made.filter((m) => m.kind === 'Image')).toHaveLength(5);
     let clock = 0;
     for (let i = 0; i < 1200; i++) {
       clock += 0.016;
@@ -997,6 +1013,50 @@ describe('LuxCamView: the bus facts (luxcam-3)', () => {
     expect(h.face.y).toBeLessThanOrEqual(page.y + 6);
     expect(h.face.y + h.face.h).toBeCloseTo(page.y + page.h, 0);
     expect(inside(h.face, h.lens)).toBe(true);
+    v.shutdown();
+  });
+});
+
+describe('batch 5 on the cam: the cheer and the painted frame', () => {
+  it('draws the cheer from its picked file, like the cam set: at most 1:1, head 140 to 160 px, print in the lens', () => {
+    const file = CAM_ART.cheer.file;
+    expect(file).toBe('art/chars/lux/cam/cheer.webp');
+    const fit = camFit(file);
+    expect(fit.scale).toBeLessThanOrEqual(1);
+    expect(CAM_ART.cheer.scale).toBe(fit.scale);
+    const head = (fit.chin - fit.headTop) * fit.scale;
+    expect(head).toBeGreaterThanOrEqual(140);
+    expect(head).toBeLessThanOrEqual(160);
+    // The print's bottom stays inside the 230 px lens with room for the breath and the parallax.
+    expect((fit.keep! - fit.top) * fit.scale).toBeLessThanOrEqual(CAM_LENS.h - 6);
+    // The same framing as lean-in: drawn at the same scale.
+    expect(fit.scale).toBe(camFit(CAM_ART.leaning.file).scale);
+  });
+
+  it('places the 408 x 243 frame 1:1 inside the zone, its opening over the lens', () => {
+    const zone = ZONES.cam;
+    const lens = camLayout(zone).lens;
+    const at = camFramePlace(zone, lens);
+    expect({ w: at.w, h: at.h }).toEqual(CAM_FRAME_FILE);
+    expect(inside(at, zone)).toBe(true);
+    expect(Number.isInteger(at.x) && Number.isInteger(at.y)).toBe(true);
+    // The opening's centre sits within a couple of pixels of the lens's centre.
+    const ox = at.x + CAM_FRAME_OPENING.x + CAM_FRAME_OPENING.w / 2;
+    const oy = at.y + CAM_FRAME_OPENING.y + CAM_FRAME_OPENING.h / 2;
+    expect(Math.abs(ox - (lens.x + lens.w / 2))).toBeLessThanOrEqual(2);
+    expect(Math.abs(oy - (lens.y + lens.h / 2))).toBeLessThanOrEqual(1);
+  });
+
+  it('draws the painted frame at its file size, and says so in the hook', () => {
+    const { scene, made } = camStub();
+    const v = new LuxCamView();
+    v.create(scene as never, camHost(scene));
+    const frame = made.filter((m) => m.kind === 'Image' && m.texture === 'art:hud/cam-frame');
+    expect(frame).toHaveLength(1);
+    // The stub keeps no position from add.image; camFramePlace's own test covers where it goes.
+    expect([frame[0].scaleX, frame[0].scaleY]).toEqual([1, 1]);
+    v.update(frameAt(1), { now: 0.016, dt: 0.016 }, []);
+    expect(camHook().frameArt).toBe(CAM_FRAME_KEY);
     v.shutdown();
   });
 });

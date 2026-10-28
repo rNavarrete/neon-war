@@ -47,6 +47,8 @@ test('the cam: inside its zone, the face and backdrop cropped to the lens, art o
   expect(c.lens.w).toBeCloseTo(388 * k, 0);
   expect(c.lens.h).toBeCloseTo(230 * (canvas.height / 1080), 0);
   expect(within(c.lens, zone)).toBe(true);
+  // Batch 5: the painted cam frame draws (1:1, tinted red in a panic), not the code rim.
+  expect(c.frameArt).toBe('hud/cam-frame');
 
   // Sample the cam for a while: the face and backdrop never leave the lens, art is the front face's
   // texture (a portrait key), and REC blinks (1.2 s on the HUD clock is 60 ms of real time at speed 20).
@@ -423,8 +425,26 @@ test.describe('luxcam-5 at 1920x1080', () => {
       if (c && !s.story?.active && s.scene === 'board') {
         if (c.mood === 'cheer' && !c.fading && !cheered) {
           cheered = true;
-          expect(c.art).toBe('portrait:lux/faces-board/triumphant');
+          // Batch 5: the picked cheer, not the triumphant board face it stood in with.
+          expect(c.art).toBe('portrait:lux/cam/cheer');
+          expect(within(c.face, c.lens)).toBe(true);
           await camShots(page, 'cheer');
+          // Batch 5 at the held midnight: the lit city painting fades in on the map, and the board's
+          // midnight plate over the day plate (each within a couple of seconds).
+          await expect
+            .poll(
+              () =>
+                page.evaluate(() => {
+                  const st = window.__neonTest!.state as unknown as {
+                    hud?: { map?: { lit: { alpha: number } | null } };
+                    board?: { art: { midnightPlate: { alpha: number } | null } };
+                  };
+                  return [st.hud?.map?.lit?.alpha ?? null, st.board?.art.midnightPlate?.alpha ?? null];
+                }),
+              { timeout: 3_000, intervals: [50] },
+            )
+            .toEqual([1, 1]);
+          await page.screenshot({ path: 'test-results/screens/batch5-midnight.png' });
         }
         if (c.mood === 'gogglesUp' && (!c.fading || now >= 537.8)) break;
       }

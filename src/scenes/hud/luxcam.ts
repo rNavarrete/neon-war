@@ -492,6 +492,8 @@ export interface CamFit {
 /** The picked cam set (D7), by its requests, so the files are named once (in the manifest). */
 const LEAN_IN = requestFile('chars/lux/cam/lean-in');
 const RELIEVED = requestFile('chars/lux/cam/relieved');
+/** Batch 5: the cheer, cut to the same 924 x 548 framing as lean-in and relieved. */
+const CHEER = requestFile('chars/lux/cam/cheer');
 
 /** The fit of every file the cam can draw (the moods' files and their fallbacks). */
 export const CAM_FITS: Readonly<Record<string, CamFit>> = Object.freeze({
@@ -505,6 +507,8 @@ export const CAM_FITS: Readonly<Record<string, CamFit>> = Object.freeze({
   'art/chars/lux/poses/goggles-up.webp': { scale: 1, headTop: 30, chin: 172, top: 52, keep: 274 },
   [LEAN_IN]: { scale: 0.5, headTop: 35, chin: 335, top: 48, keep: 492 },
   [RELIEVED]: { scale: 0.53, headTop: 0, chin: 268, top: 60, keep: 478 },
+  // Fists up and grinning: the hair spikes from row 8 are trimmed so the print (to 476) stays in.
+  [CHEER]: { scale: 0.5, headTop: 8, chin: 297, top: 32, keep: 476 },
 });
 
 const NO_FIT: CamFit = Object.freeze({ scale: 0.42, headTop: 0, chin: 0, top: 0, keep: null });
@@ -516,7 +520,10 @@ export function camFit(file: string): CamFit {
 
 const scaleOf = (file: string): number => camFit(file).scale;
 
-/** Every mood's art. leaning and relieved draw the picked cam set (D7), board faces as fallbacks. */
+/**
+ * Every mood's art. leaning, relieved and cheer draw the picked cam set (D7 and batch 5), board
+ * faces as fallbacks.
+ */
 export const CAM_ART: Readonly<Record<CamMood, CamArt>> = Object.freeze({
   calm: {
     file: 'art/chars/lux/faces-board/deadpan.webp',
@@ -555,9 +562,9 @@ export const CAM_ART: Readonly<Record<CamMood, CamArt>> = Object.freeze({
     breath: 4.5,
   },
   cheer: {
-    file: 'art/chars/lux/faces-board/triumphant.webp',
-    fallback: null,
-    scale: scaleOf('art/chars/lux/faces-board/triumphant.webp'),
+    file: CHEER,
+    fallback: 'art/chars/lux/faces-board/triumphant.webp',
+    scale: scaleOf(CHEER),
     breath: 1.8,
   },
   exhausted: {
@@ -627,6 +634,17 @@ export function fitScale(tw: number, th: number, box: { readonly w: number; read
 /** The backdrop the art pipeline will drop (docs/ART-REQUESTS.md); the dark bedroom until then. */
 export const CAM_BACKDROP_KEY = 'hud/cam-backdrop';
 
+/**
+ * The painted cam frame (batch 5, 408 x 243): drawn 1:1 over the lens, its opening (x 25 to 387,
+ * y 20 to 222 in the file) centred on the lens so its rim overlaps the picture's edge like a
+ * bezel. Tinted red while she panics; without it, the code rim and brackets draw.
+ */
+export const CAM_FRAME_KEY = 'hud/cam-frame';
+export const CAM_FRAME_FILE = { w: 408, h: 243 } as const;
+export const CAM_FRAME_OPENING = { x: 25, y: 20, w: 362, h: 202 } as const;
+/** The frame's red while she panics (multiplied over the painted rim). */
+export const CAM_FRAME_RED = 0xff5a5a;
+
 // ---- the cam's geometry (inside ZONES.cam; pure) ----
 
 /** The lens: the only place the face and the backdrop show. */
@@ -677,6 +695,20 @@ export function camLayout(zone: Rect): CamLayout {
     barHeight: 16,
     barWidth: 5,
   };
+}
+
+/**
+ * Where the painted cam frame draws, 1:1: its opening centred on the lens, kept inside the zone.
+ * Pure.
+ */
+export function camFramePlace(zone: Rect, lens: Rect): { x: number; y: number; w: number; h: number } {
+  const f = CAM_FRAME_FILE;
+  const o = CAM_FRAME_OPENING;
+  const cx = lens.x + lens.w / 2 - (o.x + o.w / 2);
+  const cy = lens.y + lens.h / 2 - (o.y + o.h / 2);
+  const x = Math.round(Math.min(zone.x + zone.w - f.w, Math.max(zone.x, cx)));
+  const y = Math.round(Math.min(zone.y + zone.h - f.h, Math.max(zone.y, cy)));
+  return { x, y, w: f.w, h: f.h };
 }
 
 /** A crop of a texture and the part of the screen it covers. Refilled in place by lensCrop. */
@@ -823,6 +855,8 @@ export interface LuxCamTestState {
   rec: boolean;
   /** The lens frame's colour: red while panicking. */
   frame: 'amber' | 'red';
+  /** The painted frame's art key (hud/cam-frame, drawn 1:1, tinted red while panicking), or null for the code rim. */
+  frameArt: string | null;
   /** A crossfade between two faces is running. */
   fading: boolean;
   /** Lux's line is on the band now (bus line.speaker, until its lineEnd). */
