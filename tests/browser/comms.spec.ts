@@ -1,6 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { CommsTestState } from '../../src/scenes/live/views/comms';
-import { dismissJobCard, hud, openBoard, setDial, shot } from './live/reach';
+import { dismissJobCard, hud, openBoard, reach, setDial, shot } from './live/reach';
 
 // The comms band (comms-2, comms-3): every bark shows in ZONES.comms with its speaker, tag and typed
 // line, the five slots sit inside the band, hud.bark keeps answering as before, and the band never
@@ -63,6 +63,11 @@ test('the band shows C1.triage.02 with its speaker and tag, five slots inside it
   expect(c.emitted.slice(0, 3)).toEqual(['line:C1.triage.01', 'lineEnd:C1.triage.01', 'line:C1.triage.02']);
   expect(c.triage).toEqual({ mood: 'wrong-and-proud' });
   expect(c.slots.find((s) => s.name === 'TRIAGE')!.speaking).toBe(true);
+  // comms-4: her iris wears the line's mood, and her ring pulses amber (reduce flicker is off).
+  expect(c.iris.mood).toBe('wrong-and-proud');
+  expect(c.iris.motion).toBe('full');
+  expect(c.glow).toMatchObject({ slot: 'TRIAGE', color: 'amber', motion: 'pulse', others: 0.25 });
+  expect(c.crew.light).toBe(0);
 
   // The typing finishes on its own; a click never needed.
   await expect
@@ -221,5 +226,102 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
     expect(c.log.pinned).toBe(false);
   });
 
+  expect(errors).toEqual([]);
+});
+
+// comms-4: through the night to the rescue at speed 20 with the autopilot and reduce flicker on.
+// A sampler in the page reads hud.comms every 100 ms (at speed 20 the current line moves between
+// Playwright reads): whenever TRIAGE speaks, hud.comms.triage.mood is her line's bracket, and it is
+// null for everyone else; under reduce flicker the ring is steady and the panicking iris is still.
+// The crew's slots are dark until the C5 rescue scene and lit after it.
+interface CommsSample {
+  speaker: string;
+  id: string;
+  triage: string | null;
+  iris: { mood: string; dx: number; dy: number; motion: string };
+  glow: { slot: string | null; color: string | null; motion: string };
+  crewPresent: boolean[];
+  rescueDone: boolean;
+}
+
+test('comms-4: TRIAGE moods, steady glow and still iris under reduce flicker, crew lit after the rescue', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'neon-war.settings',
+      JSON.stringify({ volume: 0, textSpeed: 'fast', reduceFlicker: true }),
+    );
+  });
+  const { errors } = await openBoard(page);
+  let c = await comms(page);
+  expect(c.slots.filter((s) => s.present).map((s) => s.name)).toEqual(['TRIAGE', 'HOUSE']);
+  expect(c.crew.light).toBe(0);
+  expect(c.iris.motion).toBe('reduced');
+  expect(c.glow.motion).toBe('steady');
+
+  await page.evaluate(() => {
+    const w = window as unknown as { __commsSamples: unknown[] };
+    w.__commsSamples = [];
+    setInterval(() => {
+      const s = window.__neonTest!.state as unknown as {
+        hud?: { comms?: CommsTestState };
+        story?: { finished: string[] };
+      };
+      const k = s.hud?.comms;
+      if (!k) return;
+      w.__commsSamples.push({
+        speaker: k.line?.speaker ?? '',
+        id: k.line?.id ?? '',
+        triage: k.triage?.mood ?? null,
+        iris: { mood: k.iris.mood, dx: k.iris.dx, dy: k.iris.dy, motion: k.iris.motion },
+        glow: { slot: k.glow.slot, color: k.glow.color, motion: k.glow.motion },
+        crewPresent: k.slots.filter((x) => ['REI', 'MIKA', 'OZZIE'].includes(x.name)).map((x) => x.present),
+        rescueDone: s.story?.finished.includes('C5') ?? false,
+      });
+    }, 100);
+  });
+
+  const r = await reach(page, 'rescue', { timeout: 60_000 });
+  expect(r.scenes).toContain('C5');
+  const samples = (await page.evaluate(
+    () => (window as unknown as { __commsSamples: unknown[] }).__commsSamples,
+  )) as CommsSample[];
+  const spoken = samples.filter((s) => s.id !== '');
+  const triage = spoken.filter((s) => s.speaker.startsWith('TRIAGE'));
+  const others = spoken.filter((s) => !s.speaker.startsWith('TRIAGE'));
+  expect(triage.length, 'samples with TRIAGE speaking').toBeGreaterThan(0);
+  expect(others.length, 'samples with someone else speaking').toBeGreaterThan(0);
+  for (const s of triage) {
+    const mood = /\(([^)]+)\)/.exec(s.speaker)![1];
+    expect(s.triage, s.id).toBe(mood);
+    expect(s.iris.mood, s.id).toBe(mood);
+  }
+  for (const s of others) expect(s.triage, s.id).toBeNull();
+  // Reduce flicker: every glow steady, every iris reduced, and a panicking iris never moves.
+  expect(samples.every((s) => s.glow.motion === 'steady' && s.iris.motion === 'reduced')).toBe(true);
+  const panicking = triage.filter((s) => s.triage === 'panicking');
+  expect(panicking.length, 'samples with a panicking TRIAGE line (the surge WARNINGs)').toBeGreaterThan(0);
+  for (const s of panicking) {
+    expect([s.iris.dx, s.iris.dy], s.id).toEqual([0, 0]);
+    expect(s.glow, s.id).toMatchObject({ slot: 'TRIAGE', color: 'red' });
+  }
+  // The crew stay dark until the rescue scene is through.
+  const before = samples.filter((s) => !s.rescueDone);
+  expect(before.length).toBeGreaterThan(0);
+  expect(before.every((s) => s.crewPresent.every((p) => !p))).toBe(true);
+
+  // After it, REI, MIKA and OZZIE are in, and their faces light over 400 ms.
+  await expect.poll(async () => (await comms(page)).crew.light, { timeout: 5_000, intervals: [50] }).toBe(1);
+  c = await comms(page);
+  expect(
+    c.slots.filter((s) => ['REI', 'MIKA', 'OZZIE'].includes(s.name)).map((s) => [s.name, s.present]),
+  ).toEqual([
+    ['REI', true],
+    ['MIKA', true],
+    ['OZZIE', true],
+  ]);
+  await shot(page, 'live-m3-comms');
   expect(errors).toEqual([]);
 });

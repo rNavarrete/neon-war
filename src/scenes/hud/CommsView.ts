@@ -23,23 +23,35 @@ import { type CommsTestState, provideCommsHook } from '../live/views/comms';
 import {
   COMMS_SLOTS,
   type CommsLayout,
+  type CommsSlot,
   type CommsState,
+  IDLE_MOOD,
+  type Iris,
   LOG_CLOSED,
   LOG_ROWS,
   type LogState,
   NO_COMMS,
+  OTHER_RING_ALPHA,
+  type TriageMood,
   bandAlpha,
   clickLog,
   commsLayout,
+  crewLight,
+  crewTint,
   enqueueComms,
   extendForVoice,
+  irisFor,
   logLines,
   logOpen,
+  moodOf,
   nameOf,
   onRect,
   slotOf,
+  SWAP_TICK_SECONDS,
+  speakRing,
   stepComms,
   stepLog,
+  swapTick,
   tag,
   triageMood,
   typedOf,
@@ -49,9 +61,10 @@ import { panel } from './panel';
 
 /** The slot avatars' diameter: the slot's circle, r 42. */
 const AVATAR_SIZE = 84;
-/** Crew slots before the rescue: dark silhouettes (lead conflict 'Crew slots before the rescue'). */
-const DARK_TINT = 0x55556a;
-const DARK_ALPHA = 0.3;
+/** The iris shapes are built at this radius and scaled to the mood's. */
+const IRIS_BASE_R = 10;
+/** The rims' alpha with nobody speaking. */
+const RIM_IDLE_ALPHA = 0.9;
 /** The nameplate a dark crew slot wears. */
 const DARK_NAME = '---';
 /** The band's own words: its title. Slot names are the crew's names; tags are lineMeta's. */
@@ -83,9 +96,44 @@ export interface BarkSnapshot {
   history: LineId[];
 }
 
+/** TRIAGE's iris as the hook mirrors it (comms-4): her mood, irisFor's numbers, and the gate. */
+export interface CommsIrisState {
+  /** The current TRIAGE line's mood, or her resting mood while someone else (or no one) speaks. */
+  mood: TriageMood;
+  dx: number;
+  dy: number;
+  r: number;
+  open: number;
+  /** 'reduced' under reduce flicker: no jitter, sway or blinks. */
+  motion: 'full' | 'reduced';
+}
+
+/** The speaker's ring (comms-4). */
+export interface CommsGlowState {
+  /** The slot whose ring glows, or null (nobody speaking, or Lux, who has no slot). */
+  slot: CommsSlot | null;
+  /** The ring's alpha now (speakRing), before the band's fade. */
+  alpha: number;
+  color: 'amber' | 'red' | null;
+  /** 'steady' under reduce flicker, else a 1.2 Hz 'pulse'. */
+  motion: 'pulse' | 'steady';
+  /** The other slots' rims while a line shows. */
+  others: number;
+}
+
+declare module '../live/views/comms' {
+  interface CommsTestState {
+    /** TRIAGE's iris over slot 0 (comms-4). */
+    iris: CommsIrisState;
+    glow: CommsGlowState;
+    /** The crew's light-up: 0 dark, 1 lit, eased over 400 ms once run().rescued. */
+    crew: { light: number };
+  }
+}
+
 export class CommsView implements LiveView {
   readonly zone = 'comms' as const;
-  readonly budget: LiveBudget = { objects: 24, texts: 13 };
+  readonly budget: LiveBudget = { objects: 28, texts: 13 };
 
   /** The band's model; replaced, never mutated. */
   state: CommsState = NO_COMMS;
@@ -114,6 +162,28 @@ export class CommsView implements LiveView {
   private houseArt: [boolean, boolean] = [false, false];
   private houseGlyph: Phaser.GameObjects.Graphics | null = null;
 
+  /** comms-4: the slots' rims (sit back while a line shows), TRIAGE's iris, the glow and the tick. */
+  private host: LiveHost | null = null;
+  private rims: Phaser.GameObjects.Graphics | null = null;
+  private irisRing: Phaser.GameObjects.Arc | null = null;
+  private irisPupil: Phaser.GameObjects.Arc | null = null;
+  /** Real seconds (the game loop's clock) the current line started, for its glow. */
+  private lineAt = 0;
+  /** The speaking slot (index) and when its face ticked; -1 for none. */
+  private speakingSlot = -1;
+  private tickAt = -Infinity;
+  private tickShown = false;
+  /** The faces' scale after setDisplaySize, so the tick multiplies it. */
+  private faceScale: number[] = [];
+  /** The faces' fallback tint and alpha from roundAvatar. */
+  private faceTint: number[] = [];
+  private faceAlpha: number[] = [];
+  /** Real seconds the crew came in (run().rescued), or null while they are out. */
+  private crewSince: number | null = null;
+  private shownLight = -1;
+  /** Real seconds now, read once per update from the game loop. */
+  private real = 0;
+
   /** The reread log (comms-3): hover or pin, its rows and the replay glyph. */
   private log: LogState = LOG_CLOSED;
   private logRows: Phaser.GameObjects.Text[] = [];
@@ -140,6 +210,7 @@ export class CommsView implements LiveView {
 
   create(scene: Phaser.Scene, host: LiveHost): void {
     this.scene = scene;
+    this.host = host;
     this.bus = host.bus;
     this.rect = host.rect;
     const L = commsLayout(host.rect);
@@ -157,12 +228,15 @@ export class CommsView implements LiveView {
     });
 
     const slots = add.graphics();
+    const rims = add.graphics();
     for (const s of L.slots) {
       slots.fillStyle(COLORS.ink, 0.85);
       slots.fillCircle(s.x, s.y, s.r);
-      slots.lineStyle(2, COLORS.unlit, 0.9);
-      slots.strokeCircle(s.x, s.y, s.r);
+      rims.lineStyle(2, COLORS.unlit, 1);
+      rims.strokeCircle(s.x, s.y, s.r);
     }
+    rims.setAlpha(RIM_IDLE_ALPHA);
+    this.rims = rims;
     slots.lineStyle(1, COLORS.cyan, 0.35);
     slots.lineBetween(L.divider.x, L.divider.top, L.divider.x, L.divider.bottom);
 
@@ -179,14 +253,26 @@ export class CommsView implements LiveView {
       avatarSource(COMMS_AVATARS.HOUSE[1]).file !== null,
     ];
     this.houseGlyph = add.graphics();
+    this.faceTint = [];
+    this.faceAlpha = [];
+    this.faceScale = [];
     this.faces = L.slots.map((s) => {
       const a = s.name === 'HOUSE' ? house[0] : roundAvatar(avatarScene, COMMS_AVATARS[s.name], AVATAR_SIZE);
       const img = add.image(s.x, s.y, a.texture);
       img.setDisplaySize(AVATAR_SIZE, AVATAR_SIZE);
       img.setTint(a.tint);
       img.setAlpha(a.alpha);
+      this.faceTint.push(a.tint);
+      this.faceAlpha.push(a.alpha);
+      this.faceScale.push(img.scaleX);
       return img;
     });
+
+    // TRIAGE's iris: code over her lens, built once and moved, scaled and squashed per frame.
+    const t0 = L.slots[COMMS_SLOTS.indexOf('TRIAGE')];
+    this.irisRing = add.circle(t0.x, t0.y, IRIS_BASE_R).setStrokeStyle(2, COLORS.cyan, 0.9);
+    this.irisRing.setFillStyle(COLORS.ink, 0.55);
+    this.irisPupil = add.circle(t0.x, t0.y, IRIS_BASE_R * 0.45, COLORS.cyan, 0.95);
     this.labels = L.slots.map((s) =>
       add
         .text(s.x, L.slotLabelY, s.name, { fontFamily: FONT, fontSize: '12px', color: COLORS.dim })
@@ -237,6 +323,9 @@ export class CommsView implements LiveView {
       title,
       slots,
       ...this.faces,
+      rims,
+      this.irisRing,
+      this.irisPupil,
       this.houseGlyph,
       ...this.labels,
       this.ring,
@@ -285,6 +374,7 @@ export class CommsView implements LiveView {
   update(frame: Frame, clock: LiveClock): void {
     this.clock = clock.now;
     if (!this.root) return;
+    this.real = this.scene!.game.loop.now / 1000;
     const cps = TEXT_CPS[settings().textSpeed];
     const prev = this.state;
     const next = stepComms(prev, clock.now, cps);
@@ -313,11 +403,93 @@ export class CommsView implements LiveView {
       this.tagText!.setAlpha(alpha);
       this.pill!.setAlpha(alpha);
       this.lineText!.setAlpha(alpha);
-      this.ring!.setAlpha(alpha);
     }
     if (frame.rescued !== this.shownPresent) this.setPresent(frame.rescued);
+    this.updateMotion(alpha);
     this.held = frame.paused;
     this.updateLog();
+  }
+
+  // ---- comms-4: glow, iris, tick, crew light-up ----
+
+  /** Reduce flicker (the setting): the hook's gate. Lite only changes the looks, never the hook. */
+  private reduced(): boolean {
+    return settings().reduceFlicker;
+  }
+
+  /** The calm variants draw under reduce flicker and under the lite flag. */
+  private steady(): boolean {
+    return this.reduced() || (this.host?.flags.lite ?? false);
+  }
+
+  /** TRIAGE's mood now: the current TRIAGE line's, or her resting one. */
+  private mood(): TriageMood {
+    const c = this.state.current;
+    return c ? moodOf(triageMood(c.id)) : IDLE_MOOD;
+  }
+
+  /** Per frame: the speaker's glow, the rims, the swap tick, the iris and the crew's light. Allocates nothing. */
+  private updateMotion(alpha: number): void {
+    const now = this.real;
+    const steady = this.steady();
+    const speaking = this.speakingSlot >= 0 && this.state.current !== null;
+    this.ring!.setAlpha(alpha * speakRing(now - this.lineAt, steady));
+    this.rims!.setAlpha(speaking ? OTHER_RING_ALPHA : RIM_IDLE_ALPHA);
+
+    const ticking = speaking && now - this.tickAt < SWAP_TICK_SECONDS;
+    if (ticking || this.tickShown) {
+      for (let i = 0; i < this.faces.length; i++) {
+        const k = i === this.speakingSlot && ticking ? swapTick(now - this.tickAt) : 1;
+        this.faces[i].setScale(this.faceScale[i] * k);
+      }
+      this.tickShown = ticking;
+    }
+
+    const iris = irisFor(this.mood(), now, steady);
+    this.irisRing!.setPosition(this.irisX() + iris.dx, this.irisY() + iris.dy);
+    this.irisRing!.setScale(iris.r / IRIS_BASE_R, (iris.r / IRIS_BASE_R) * iris.open);
+    this.irisPupil!.setPosition(this.irisX() + iris.dx, this.irisY() + iris.dy);
+    this.irisPupil!.setScale(iris.r / IRIS_BASE_R, (iris.r / IRIS_BASE_R) * iris.open);
+
+    const light = crewLight(this.crewSince, now);
+    if (light !== this.shownLight) {
+      this.shownLight = light;
+      const t = crewTint(light);
+      const L = this.L!;
+      for (let i = 0; i < L.slots.length; i++) {
+        const name = L.slots[i].name;
+        if (name === 'TRIAGE' || name === 'HOUSE') continue;
+        this.faces[i].setTint(light >= 1 ? this.faceTint[i] : t.tint);
+        this.faces[i].setAlpha(this.faceAlpha[i] * t.alpha);
+      }
+    }
+  }
+
+  private irisX(): number {
+    return this.L!.slots[0].x;
+  }
+
+  private irisY(): number {
+    return this.L!.slots[0].y;
+  }
+
+  /** The speaker's ring as the hook reports it. */
+  private glowNow(): CommsGlowState {
+    const c = this.state.current;
+    const slot = c && this.speakingSlot >= 0 ? COMMS_SLOTS[this.speakingSlot] : null;
+    const reduced = this.reduced();
+    return {
+      slot,
+      alpha: slot ? speakRing(this.real - this.lineAt, reduced) : 0,
+      color: slot && c ? (tag(c.id) === 'WARNING' ? 'red' : 'amber') : null,
+      motion: reduced ? 'steady' : 'pulse',
+      others: slot ? OTHER_RING_ALPHA : RIM_IDLE_ALPHA,
+    };
+  }
+
+  /** The iris the hook reports: irisFor at the gate the setting asks for (lite never changes it). */
+  private irisNow(): Iris {
+    return irisFor(this.mood(), this.real, this.reduced());
   }
 
   // ---- the reread log ----
@@ -390,6 +562,13 @@ export class CommsView implements LiveView {
     this.faces = [];
     this.labels = [];
     this.houseGlyph = null;
+    this.rims = null;
+    this.irisRing = null;
+    this.irisPupil = null;
+    this.speakingSlot = -1;
+    this.shownPresent = null;
+    this.crewSince = null;
+    this.host = null;
     this.logRows = [];
     this.replayGlyph = null;
     this.log = LOG_CLOSED;
@@ -426,6 +605,9 @@ export class CommsView implements LiveView {
     this.shownTyped = -1;
     this.ring!.clear();
     this.pill!.clear();
+    const was = this.speakingSlot;
+    this.speakingSlot = -1;
+    this.lineAt = this.real;
     if (!id) {
       this.nameText!.setText('');
       this.tagText!.setText('');
@@ -449,6 +631,8 @@ export class CommsView implements LiveView {
     if (slot) {
       const i = COMMS_SLOTS.indexOf(slot);
       const s = L.slots[i];
+      this.speakingSlot = i;
+      if (i !== was) this.tickAt = this.real;
       if (slot === 'HOUSE') this.showHouse(houseChip(l.speaker) === COMMS_AVATARS.HOUSE[1] ? 1 : 0);
       this.ring!.lineStyle(3, t === 'WARNING' ? COLORS.red : COLORS.hero, 1);
       this.ring!.strokeCircle(s.x, s.y, s.r);
@@ -481,16 +665,24 @@ export class CommsView implements LiveView {
     }
   }
 
-  /** Light the crew's slots (or darken them before the rescue). */
+  /**
+   * The crew are in (run().rescued) or out: their names show, and their faces light from the dark
+   * silhouette over 400 ms (updateMotion); out again (a rewind) they go dark at once.
+   */
   private setPresent(present: boolean): void {
+    const first = this.shownPresent === null;
     this.shownPresent = present;
+    this.crewSince = present ? (first ? -Infinity : this.real) : null;
+    this.shownLight = -1;
     const L = this.L!;
     for (let i = 0; i < L.slots.length; i++) {
       const name = L.slots[i].name;
       if (name === 'TRIAGE' || name === 'HOUSE') continue;
-      this.faces[i].setTint(present ? 0xffffff : DARK_TINT);
-      this.faces[i].setAlpha(present ? 1 : DARK_ALPHA);
       this.labels[i].setText(present ? name : DARK_NAME);
+      if (!present) {
+        const dark = crewTint(0);
+        this.faces[i].setTint(dark.tint).setAlpha(this.faceAlpha[i] * dark.alpha);
+      }
     }
   }
 
@@ -559,6 +751,9 @@ export class CommsView implements LiveView {
       },
       leader: null,
       triage: c && triageMood(c.id) ? { mood: triageMood(c.id)! } : null,
+      iris: { ...this.irisNow(), mood: this.mood(), motion: this.reduced() ? 'reduced' : 'full' },
+      glow: this.glowNow(),
+      crew: { light: crewLight(this.crewSince, this.real) },
       alpha: bandAlpha(this.state, this.clock),
       rect: pageRect(r, canvas),
       drawn: b ? pageRect({ x: b.x, y: b.y, w: b.width, h: b.height }, canvas) : pageRect(r, canvas),

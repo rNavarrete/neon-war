@@ -299,3 +299,142 @@ export function logOpen(s: LogState, now: number): boolean {
 export function onRect(r: CommsRect, x: number, y: number): boolean {
   return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 }
+
+// ---- TRIAGE's iris, the speaker's glow, the crew light-up (comms-4) ----
+
+/** TRIAGE's six moods as docs/SCRIPT.md writes them in her speaker brackets. */
+export const TRIAGE_MOODS = [
+  'eager',
+  'happy',
+  'thinking',
+  'sheepish',
+  'wrong-and-proud',
+  'panicking',
+] as const;
+export type TriageMood = (typeof TRIAGE_MOODS)[number];
+
+/** Her mood when she is not speaking (and for a bracket the table does not know). */
+export const IDLE_MOOD: TriageMood = 'eager';
+
+/** The panicking jitter's rate (Hz). */
+export const PANIC_JITTER_HZ = 12;
+
+/** The iris as drawn over TRIAGE's lens: an offset from the slot centre, a radius and the lid (1 open). */
+export interface Iris {
+  readonly dx: number;
+  readonly dy: number;
+  readonly r: number;
+  readonly open: number;
+}
+
+/** Each mood's one motion: a resting look, a radius, an optional sway and a blink period. */
+interface IrisSpec {
+  /** Resting offset from the lens centre (px). */
+  readonly x: number;
+  readonly y: number;
+  readonly r: number;
+  /** A sway around the resting look: amplitude (px) and rate (Hz) on each axis. */
+  readonly ax: number;
+  readonly ay: number;
+  readonly hz: number;
+  /** Seconds between blinks, or 0 for none. */
+  readonly blink: number;
+}
+
+const IRIS: Readonly<Record<TriageMood, IrisSpec>> = {
+  // Bright and forward, a small bob.
+  eager: { x: 0, y: 0, r: 10, ax: 0, ay: 2, hz: 0.8, blink: 3.7 },
+  // Wide and easy, a slow sway.
+  happy: { x: 0, y: -1, r: 11, ax: 2, ay: 0, hz: 0.5, blink: 4.3 },
+  // Up and to the side, drifting.
+  thinking: { x: -5, y: -5, r: 9, ax: 2, ay: 1, hz: 0.3, blink: 5.1 },
+  // Down and away, small.
+  sheepish: { x: 5, y: 6, r: 8, ax: 1, ay: 0, hz: 0.4, blink: 2.9 },
+  // Chin up, steady.
+  'wrong-and-proud': { x: 0, y: -4, r: 12, ax: 0, ay: 0, hz: 0, blink: 4.7 },
+  // Blown wide and shaking; she never blinks.
+  panicking: { x: 0, y: 0, r: 14, ax: 3, ay: 3, hz: PANIC_JITTER_HZ, blink: 0 },
+};
+
+/** A blink closes the lid for this long. */
+const BLINK_SECONDS = 0.12;
+/** The lid's opening at the bottom of a blink. */
+const BLINK_CLOSED = 0.1;
+
+/** The mood a bracket names, or IDLE_MOOD. */
+export function moodOf(mood: string | null): TriageMood {
+  return (TRIAGE_MOODS as readonly string[]).includes(mood ?? '') ? (mood as TriageMood) : IDLE_MOOD;
+}
+
+/**
+ * TRIAGE's iris at time `t` (seconds) in `mood`: one motion per mood (panicking jitters at 12 Hz).
+ * Under reduce flicker every sway, jitter and blink is off and the iris rests at the mood's look.
+ * The radius is the mood's alone, so it never changes with `t`. Pure.
+ */
+export function irisFor(mood: string, t: number, reduceFlicker: boolean): Iris {
+  const s = IRIS[moodOf(mood)];
+  if (reduceFlicker || s.hz === 0)
+    return { dx: s.x, dy: s.y, r: s.r, open: reduceFlicker || !s.blink ? 1 : blinkAt(s.blink, t) };
+  const w = 2 * Math.PI * s.hz * t;
+  // The panic jitter runs its axes out of step, so the iris shakes rather than circles.
+  const dx = s.x + s.ax * Math.sin(w);
+  const dy = s.y + s.ay * (moodOf(mood) === 'panicking' ? Math.sin(w * 1.37 + 1) : Math.cos(w));
+  return { dx, dy, r: s.r, open: s.blink ? blinkAt(s.blink, t) : 1 };
+}
+
+function blinkAt(period: number, t: number): number {
+  const p = ((t % period) + period) % period;
+  return p < BLINK_SECONDS ? BLINK_CLOSED : 1;
+}
+
+/** The speaker's ring glows at this rate (Hz). */
+export const RING_HZ = 1.2;
+/** The ring's alpha at the bottom and top of its glow, and held steady under reduce flicker. */
+export const RING_LOW = 0.45;
+export const RING_HIGH = 1;
+export const RING_STEADY = 0.9;
+/** Slots that are not speaking sit back while a line shows. */
+export const OTHER_RING_ALPHA = 0.25;
+
+/**
+ * The speaker's ring alpha `t` seconds into the line: a 1.2 Hz glow from RING_HIGH down to RING_LOW
+ * and back, or steady under reduce flicker (the calm variant). Pure; the band's local stand-in for
+ * motion.ts speakRing until art3d-3 lands.
+ */
+export function speakRing(t: number, reduceFlicker: boolean): number {
+  if (reduceFlicker) return RING_STEADY;
+  const c = 0.5 + 0.5 * Math.cos(2 * Math.PI * RING_HZ * Math.max(0, t));
+  return RING_LOW + (RING_HIGH - RING_LOW) * c;
+}
+
+/** A new speaker's face ticks up this much and back over SWAP_TICK_SECONDS. */
+export const SWAP_TICK_SECONDS = 0.18;
+export const SWAP_TICK_SCALE = 1.08;
+
+/** The speaking face's scale `t` seconds after the speaker changed: a 180 ms tick, then 1. Pure. */
+export function swapTick(t: number): number {
+  if (t < 0 || t >= SWAP_TICK_SECONDS) return 1;
+  return 1 + (SWAP_TICK_SCALE - 1) * Math.sin((Math.PI * t) / SWAP_TICK_SECONDS);
+}
+
+/** The crew's slots light over this long once they are in (run().rescued). */
+export const CREW_LIGHT_SECONDS = 0.4;
+/** Crew slots before the rescue: dark silhouettes (lead conflict 'Crew slots before the rescue'). */
+export const DARK_TINT = 0x55556a;
+export const DARK_ALPHA = 0.3;
+
+/** How lit the crew are: 0 dark, 1 lit; `since` is the HUD clock they came in, null while out. Pure. */
+export function crewLight(since: number | null, clock: number): number {
+  if (since === null) return 0;
+  return Math.max(0, Math.min(1, (clock - since) / CREW_LIGHT_SECONDS));
+}
+
+/** The crew face's tint and alpha at light `k` (0 dark, 1 lit): the silhouette eased to white. Pure. */
+export function crewTint(k: number): { tint: number; alpha: number } {
+  const e = Math.max(0, Math.min(1, k));
+  const ch = (shift: number): number => {
+    const from = (DARK_TINT >> shift) & 0xff;
+    return Math.round(from + (0xff - from) * e) << shift;
+  };
+  return { tint: ch(16) | ch(8) | ch(0), alpha: DARK_ALPHA + (1 - DARK_ALPHA) * e };
+}
