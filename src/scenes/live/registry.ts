@@ -4,6 +4,7 @@
 // no line here. The HUD scene creates every entry in this order (docs/LIVE.md).
 
 import { DeckView } from '../hud/DeckView';
+import { GaugeView } from '../hud/GaugeView';
 import { ClockView, TitleView } from '../hud/TitleView';
 import type { ZoneId } from './layout';
 import { type LiveView, PlaceholderView } from './view';
@@ -22,7 +23,7 @@ export const REGISTRY: readonly RegistryEntry[] = [
   { zone: 'clock', lane: 'gauges', make: () => new ClockView() },
   { zone: 'map', lane: 'gauges', make: () => new PlaceholderView('map') },
   { zone: 'cam', lane: 'luxcam', make: () => new PlaceholderView('cam') },
-  { zone: 'gauge', lane: 'gauges', make: () => new PlaceholderView('gauge') },
+  { zone: 'gauge', lane: 'gauges', make: () => new GaugeView() },
   { zone: 'scope', lane: 'gauges', make: () => new PlaceholderView('scope') },
   { zone: 'comms', lane: 'comms', make: () => new PlaceholderView('comms') },
   { zone: 'deck', lane: 'gauges', make: () => new DeckView() },
