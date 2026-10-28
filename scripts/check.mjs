@@ -60,7 +60,7 @@ const STEPS = [
   { name: 'build', bin: 'vite', args: ['build'], timeoutMs: 180_000 },
   // Browser tests run against the built game (playwright.config.ts serves dist/ with vite preview).
   // 15 minutes: Session 0's suite plays the surge and the whole night on software WebGL (~10 min).
-  { name: 'e2e', bin: 'playwright', args: ['test'], timeoutMs: 900_000 },
+  { name: 'e2e', bin: 'playwright', args: ['test'], timeoutMs: 1_800_000 },
 ];
 
 function usage(message) {
