@@ -91,6 +91,26 @@ export const LABELS = {
     overclock: `OVERCLOCK · makes one box answer ${BROWNOUT.overclock.factor} times as many · ${BROWNOUT.overclock.cost} cr · reboots ${BROWNOUT.overclock.rebootSeconds} s`,
     splitter: 'SPLITTER · shares the calls across every box wired behind it, and passes over a dark one',
     nothingFeeds: 'nothing feeds it',
+    /** Each part's name on the first line of its plate, by part kind (the balancer is the splitter). */
+    names: { gateway: 'GATEWAY', balancer: 'SPLITTER', server: 'SERVER', database: 'DATABASE' },
+    /** The plate's words for how a part is doing, beside the tags it wears. */
+    state: {
+      online: 'running',
+      over: 'more coming in than it answers',
+      unfed: 'nothing feeds it',
+      skipped: 'the splitter passes it over',
+      darkBack: 'power back in',
+      dead: 'drop a SERVER card on it or press REPLACE',
+      offline: 'off',
+    },
+    /** The button on a dead box's pinned plate. */
+    replace: 'REPLACE',
+  },
+  /** LIVE CHAT's header: its title and the tag a click on it toggles. */
+  chat: {
+    title: 'LIVE CHAT',
+    both: 'BLOCK + STREAM',
+    blockOnly: 'BLOCK ONLY',
   },
 } as const;
 
