@@ -12,9 +12,9 @@
 // its colour and alpha, so a click the moment it lights lands. Regroup's ready pulse is steady under
 // reduce flicker (and the ?test lite flag).
 //
-// Until the tech lane drops the HUD scene's own keys (HudScene.buildDeck), these keys sit above them
-// (GAUGES_DEPTH) and take every click there, and the digits are caught before the scene's handlers
-// hear them; hud.regroup, hud.laundry and hud.deck mirror this view. hud.headroom mirrors the bar.
+// These are the only keys on the deck (the HUD scene's own legacy keys are gone): this view takes
+// every click there and every digit 1, 2, 3; hud.regroup, hud.laundry and hud.deck mirror it, and the
+// HUD scene lists its hit areas as hud.bounds deck.1..3. hud.headroom mirrors the bar.
 //
 // Phaser is a type here only, so the registry and its node tests can import this file.
 
@@ -287,21 +287,8 @@ export class DeckView implements LiveView {
 
     this.off.push(provideHudPart(scene, 'headroom', () => this.headroomSnapshot()));
     this.off.push(provideHudPart(scene, 'deck', () => this.snapshot()));
-    this.off.push(
-      provideHudPart(scene, 'regroup', () => ({
-        visible: this.deck.regroup !== 'hidden',
-        active: this.deck.regroup === 'active',
-        spent: this.deck.regroup === 'spent',
-        button: this.keyPage('one'),
-      })),
-    );
-    this.off.push(
-      provideHudPart(scene, 'laundry', () => ({
-        available: this.deck.cut === 'ready',
-        cut: this.laundryCut,
-        button: this.keyPage('two'),
-      })),
-    );
+    this.off.push(provideHudPart(scene, 'regroup', () => this.regroupHook()));
+    this.off.push(provideHudPart(scene, 'laundry', () => this.laundryHook()));
   }
 
   update(frame: Frame, clock: LiveClock): void {
@@ -403,6 +390,31 @@ export class DeckView implements LiveView {
     const centre: Point = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
     const canvas = this.scene?.game?.canvas?.getBoundingClientRect();
     return canvas ? pagePoint(centre, canvas) : { x: centre.x, y: centre.y };
+  }
+
+  /** hud.regroup, built only when the hook is read. */
+  regroupHook(): { visible: boolean; active: boolean; spent: boolean; button: PagePoint } {
+    return {
+      visible: this.deck.regroup !== 'hidden',
+      active: this.deck.regroup === 'active',
+      spent: this.deck.regroup === 'spent',
+      button: this.keyPage('one'),
+    };
+  }
+
+  /** hud.laundry, built only when the hook is read. */
+  laundryHook(): { available: boolean; cut: boolean; button: PagePoint } {
+    return { available: this.deck.cut === 'ready', cut: this.laundryCut, button: this.keyPage('two') };
+  }
+
+  /** The keys' hit areas in KEY_NAMES order (hud.bounds deck.1..3); empty before create or without zones. */
+  keyHits(): Phaser.GameObjects.Zone[] {
+    const out: Phaser.GameObjects.Zone[] = [];
+    for (const name of KEY_NAMES) {
+      const z = this.keys[name]?.zone;
+      if (z) out.push(z);
+    }
+    return out;
   }
 
   /** hud.deck, built only when the hook is read. */
