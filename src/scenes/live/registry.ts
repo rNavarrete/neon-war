@@ -7,6 +7,7 @@ import { AlertView } from '../hud/AlertView';
 import { ChartView } from '../hud/ChartView';
 import { DeckView } from '../hud/DeckView';
 import { GaugeView } from '../hud/GaugeView';
+import { MapView } from '../hud/MapView';
 import { ClockView, TitleView } from '../hud/TitleView';
 import type { ZoneId } from './layout';
 import { type LiveView, PlaceholderView } from './view';
@@ -23,7 +24,7 @@ export const REGISTRY: readonly RegistryEntry[] = [
   { zone: 'title', lane: 'gauges', make: () => new TitleView() },
   { zone: 'alert', lane: 'gauges', make: () => new AlertView() },
   { zone: 'clock', lane: 'gauges', make: () => new ClockView() },
-  { zone: 'map', lane: 'gauges', make: () => new PlaceholderView('map') },
+  { zone: 'map', lane: 'gauges', make: () => new MapView() },
   { zone: 'cam', lane: 'luxcam', make: () => new PlaceholderView('cam') },
   { zone: 'gauge', lane: 'gauges', make: () => new GaugeView() },
   { zone: 'scope', lane: 'gauges', make: () => new ChartView() },
