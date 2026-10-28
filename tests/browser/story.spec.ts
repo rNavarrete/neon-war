@@ -93,7 +93,11 @@ test('the cold open waits for a click on every line, then hands over to the boar
 
   // The last click brings the goggles down and hands over to the board at 23:51:45. Even a
   // double-click there leaves the job card up to be read.
-  if (!s.typingDone) s = await clickStory(page);
+  // Wait for the short line to finish typing on its own: a click to finish it can land just after
+  // it finished and end the scene before the double-click.
+  await expect.poll(async () => (await story(page)).typingDone).toBe(true);
+  s = await story(page);
+  expect(s.lineId).toBe('C0.lux.02');
   await page.mouse.dblclick(s.click!.x, s.click!.y);
   await expect.poll(async () => (await state(page)).scene, { timeout: 15_000 }).toBe('board');
   s = await story(page);

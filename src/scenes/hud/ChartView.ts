@@ -102,6 +102,11 @@ export class ChartView implements LiveView {
     return this.frame;
   }
 
+  /** The painted frame, or null while the view is not built (before create, after shutdown). */
+  get builtPanel(): Phaser.GameObjects.NineSlice | null {
+    return this.frame;
+  }
+
   create(scene: Phaser.Scene, host: LiveHost): void {
     const r = host.rect;
     const L = scopeLayout(r);

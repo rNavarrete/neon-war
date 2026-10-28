@@ -919,7 +919,6 @@ export class HudScene extends Phaser.Scene {
     };
     const pieces: [string, Home, Bounded][] = [
       ['alert', 'alert', this.warning],
-      ['scope', 'scope', this.chart.panel],
       ['dial', 'dialCard', this.dial.container],
       ['sizing', 'sizingPrompt', this.sizingPanel],
       ['chat', 'chat', this.chatView.panel],
@@ -929,6 +928,9 @@ export class HudScene extends Phaser.Scene {
       ['jobCard', 'jobCard', this.cardArt],
       ['banner', 'banner', this.banner],
     ];
+    // Views can be shut down (quit to title) while the hook is still read.
+    const scope = this.chart.builtPanel;
+    if (scope) pieces.splice(1, 0, ['scope', 'scope', scope]);
     const band = this.comms?.container;
     if (band) pieces.push(['comms', 'comms', band]);
     return pieces.map(([id, home, o]) => {
