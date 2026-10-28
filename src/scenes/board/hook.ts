@@ -45,6 +45,14 @@ export interface BoardTestState {
     tableRect: Rect;
     tableScale: number;
     channelPlate: Rect | null;
+    /**
+     * Batch 5: the midnight plate (board/table-plate-midnight), drawn at its own size centred like
+     * the day plate, and how far it has cross-faded in (0 before midnight, 1 once in); null while
+     * it is not loaded.
+     */
+    midnightPlate: { rect: Rect; scale: number; alpha: number } | null;
+    /** The packets' texture ('art:board/packet-cube' once picked, else the code 'packet') and draw scale. */
+    packet: { texture: string; scale: number };
     pingMarks: number;
     stamps: string[];
   };

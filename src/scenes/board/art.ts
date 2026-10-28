@@ -15,6 +15,14 @@ import type { PartStatus } from './view';
 export const TABLE_PLATE_KEY = 'board/table-plate';
 /** The trough the block's traffic comes in along, at the feed's left edge. */
 export const CHANNEL_PLATE_KEY = 'board/channel-plate';
+/**
+ * The table after midnight (batch 5): the day plate's silkscreen dimmed and its rim cold, 1061 x
+ * 416 against the day plate's 1228 x 416. Drawn at its own size, centred like the day plate, and
+ * faded in over it once the clock strikes midnight.
+ */
+export const TABLE_MIDNIGHT_KEY = 'board/table-plate-midnight';
+/** The painted packet cube (batch 5): the feed's traffic, untinted, and red by tint where it drops. */
+export const PACKET_CUBE_KEY = 'board/packet-cube';
 
 /** The part-state art: unlit servers, the boot lamp frames and the balancer's ping lamp frames. */
 export const PART_ART = {
@@ -39,7 +47,9 @@ export const SKIPPED_ICON_KEY = 'hud/icons/skipped';
 /** Every key the board resolves through the art manifest, in the order it preloads them. */
 export const BOARD_ART_KEYS: readonly string[] = [
   TABLE_PLATE_KEY,
+  TABLE_MIDNIGHT_KEY,
   CHANNEL_PLATE_KEY,
+  PACKET_CUBE_KEY,
   ...Object.values(PART_ART),
   ...Object.values(CARD_FRAME),
   COUNT_BADGE_KEY,
@@ -186,6 +196,25 @@ export const CARD_FRAME_SLICE = 32;
  */
 export function badgeScale(cut: Size): number {
   const display = artRequest(COUNT_BADGE_KEY)?.display ?? { w: 40, h: 28 };
+  return Math.min(1, display.w / cut.w, display.h / cut.h);
+}
+
+/** How long the midnight plate takes to fade in over the day plate, in board seconds (instant when calm). */
+export const MIDNIGHT_PLATE_FADE = 2;
+
+/** The midnight plate's alpha `t` seconds after midnight struck: 0 before, 1 once faded in. Pure. */
+export function midnightPlateAlpha(t: number | null, calm: boolean): number {
+  if (t === null || t < 0) return 0;
+  if (calm) return 1;
+  return Math.min(1, t / MIDNIGHT_PLATE_FADE);
+}
+
+/**
+ * The packet cube's scale: inside its 24 x 18 display box and never above 1, keeping the file's
+ * shape (the 59 x 48 cube draws about 22 x 18).
+ */
+export function packetScale(cut: Size): number {
+  const display = artRequest(PACKET_CUBE_KEY)?.display ?? { w: 24, h: 18 };
   return Math.min(1, display.w / cut.w, display.h / cut.h);
 }
 

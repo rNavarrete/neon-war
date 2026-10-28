@@ -10,9 +10,12 @@ import {
   CARD_FRAME_SLICE,
   CHANNEL_PLATE_KEY,
   COUNT_BADGE_KEY,
+  MIDNIGHT_PLATE_FADE,
+  PACKET_CUBE_KEY,
   PART_ART,
   PING_ICON_KEY,
   SKIPPED_ICON_KEY,
+  TABLE_MIDNIGHT_KEY,
   TABLE_PLATE_KEY,
   TABLE_TRAPEZOID,
   badgeScale,
@@ -21,6 +24,8 @@ import {
   channelPlatePlace,
   isPartArtKey,
   markScale,
+  midnightPlateAlpha,
+  packetScale,
   pingLampKey,
   tablePlatePlace,
 } from '../src/scenes/board/art';
@@ -33,6 +38,8 @@ describe('board-12: the board resolves its art through the manifest', () => {
     expect([...BOARD_ART_KEYS].sort()).toEqual(
       [
         'board/table-plate',
+        'board/table-plate-midnight',
+        'board/packet-cube',
         'board/server-dark',
         'board/server-booting-a',
         'board/server-booting-b',
@@ -173,5 +180,56 @@ describe('board-12: which frame shows', () => {
     expect(pingLampKey(0.6, false)).toBe(PART_ART.pingA);
     expect(pingLampKey(1.1, false)).toBe(PART_ART.pingB);
     for (const t of [0.1, 0.6, 1.1, 7.7]) expect(pingLampKey(t, true)).toBe(PART_ART.pingB);
+  });
+});
+
+describe('batch 5 on the board: the midnight plate and the packet cube', () => {
+  it('draws the 1061 x 416 midnight plate at its own size, centred like the day plate, inside the day plate', () => {
+    const day = tablePlatePlace(cutOf(TABLE_PLATE_KEY));
+    const cut = cutOf(TABLE_MIDNIGHT_KEY);
+    expect(cut).toEqual({ w: 1061, h: 416 });
+    const p = tablePlatePlace(cut);
+    expect(p.scale).toBe(1);
+    expect([p.w, p.h]).toEqual([cut.w, cut.h]);
+    expect(p.w).toBeLessThan(day.w);
+    // Centred on the same line, its foot on the same floor.
+    expect(p.x + p.w / 2).toBeCloseTo(day.x + day.w / 2);
+    expect(p.y + p.h).toBeCloseTo(day.y + day.h);
+    expect(p.x).toBeGreaterThanOrEqual(BOARD_AREA.left);
+    expect(p.x + p.w).toBeLessThanOrEqual(BOARD_AREA.right);
+    // It lies inside the day plate, which stays under it (dimmed): the gateway and the database
+    // stand just past the narrower midnight plate's ends, so they are still on the day plate.
+    expect(p.x).toBeGreaterThan(day.x);
+    expect(p.x + p.w).toBeLessThan(day.x + day.w);
+    for (const c of [GATEWAY, DATABASE]) {
+      expect(c.x).toBeGreaterThan(day.x);
+      expect(c.x).toBeLessThan(day.x + day.w);
+    }
+  });
+
+  it('fades the midnight plate in over MIDNIGHT_PLATE_FADE, at once when calm, never before midnight', () => {
+    expect(midnightPlateAlpha(null, false)).toBe(0);
+    expect(midnightPlateAlpha(null, true)).toBe(0);
+    expect(midnightPlateAlpha(0, false)).toBe(0);
+    expect(midnightPlateAlpha(MIDNIGHT_PLATE_FADE / 2, false)).toBeCloseTo(0.5);
+    expect(midnightPlateAlpha(MIDNIGHT_PLATE_FADE * 3, false)).toBe(1);
+    expect(midnightPlateAlpha(0, true)).toBe(1);
+  });
+
+  it('draws the 59 x 48 packet cube inside its 24 x 18 box, never above its file size', () => {
+    const cut = cutOf(PACKET_CUBE_KEY);
+    expect(cut).toEqual({ w: 59, h: 48 });
+    const k = packetScale(cut);
+    expect(k).toBeLessThanOrEqual(1);
+    expect(cut.w * k).toBeLessThanOrEqual(24);
+    expect(cut.h * k).toBeCloseTo(18);
+    expect(packetScale({ w: 10, h: 8 })).toBe(1);
+  });
+
+  it('BoardScene draws the packets from the cube when it is picked, and the midnight plate over the day plate', () => {
+    expect(boardSource).toContain('this.artTex.get(PACKET_CUBE_KEY)');
+    expect(boardSource).toContain('this.artTex.get(TABLE_MIDNIGHT_KEY)');
+    expect(resolveArt(PACKET_CUBE_KEY).fallback).toBe(false);
+    expect(resolveArt(TABLE_MIDNIGHT_KEY).fallback).toBe(false);
   });
 });

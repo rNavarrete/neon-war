@@ -1192,7 +1192,9 @@ test('C6 (board-8): the ghost and the what-if tick stay away while the sizing pr
 /** The board's art keys (src/scenes/board/art.ts BOARD_ART_KEYS), each a picked file under public/art. */
 const BOARD_ART = [
   'board/table-plate',
+  'board/table-plate-midnight',
   'board/channel-plate',
+  'board/packet-cube',
   'board/server-dark',
   'board/server-overclocked-dark',
   'board/server-booting-a',
@@ -1233,6 +1235,18 @@ test('board-12: the painted table, channel, cards and marks draw from public/art
   expect(b.art.tableScale).toBeLessThanOrEqual(1);
   expectInside(b.art.tableRect, b.area, 'the table plate');
   expectInside(b.art.channelPlate!, b.area, 'the channel plate');
+  // Batch 5: the midnight plate waits, hidden, at its own size inside the day plate; the packets
+  // are the painted cube inside its 24 x 18 box, never above its file's size.
+  const mp = b.art.midnightPlate!;
+  expect(mp).not.toBeNull();
+  expect(mp.alpha).toBe(0);
+  expect(mp.scale).toBe(1);
+  expectInside(mp.rect, b.area, 'the midnight plate');
+  expect(mp.rect.x).toBeGreaterThan(b.art.tableRect.x);
+  expect(mp.rect.x + mp.rect.w).toBeLessThan(b.art.tableRect.x + b.art.tableRect.w);
+  expect(b.art.packet.texture).toBe('art:board/packet-cube');
+  expect(b.art.packet.scale).toBeLessThanOrEqual(1);
+  expect(59 * b.art.packet.scale).toBeLessThanOrEqual(24);
   // The gateway and the database stand over the plate, not beside it.
   const t = b.art.tableRect;
   for (const kind of ['gateway', 'database'] as const) {

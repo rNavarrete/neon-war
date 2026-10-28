@@ -139,6 +139,10 @@ import {
   BOARD_ART_KEYS,
   CARD_FRAME,
   CHANNEL_PLATE_KEY,
+  PACKET_CUBE_KEY,
+  TABLE_MIDNIGHT_KEY,
+  midnightPlateAlpha,
+  packetScale,
   COUNT_BADGE_KEY,
   PING_ICON_KEY,
   type PlatePlace,
@@ -296,6 +300,8 @@ const INBOUND_BY_KEY: ReadonlyMap<string, WireGeom> = new Map(INBOUND.map((w) =>
 /** The inbound lanes' packet keys, in lane order. */
 const INBOUND_KEYS: readonly string[] = INBOUND.map((w) => w.key);
 const RED = 0xff4d5e;
+/** The day plate's tint under the midnight plate, once it has faded in: the ends of the table go cold. */
+const MIDNIGHT_DAY_TINT = 0x4a5468;
 /** strokePoints reads only x and y, so a plain point list will do. */
 const asVectors = (path: Point[]) => path as unknown as Phaser.Math.Vector2[];
 /** How much the skyline above the table is dimmed, so the board reads first but the city still shows. */
@@ -349,6 +355,16 @@ export class BoardScene extends Phaser.Scene {
   };
   /** board-12: where the channel plate is drawn, or null while it is not picked. */
   private channelPlate: PlatePlace | null = null;
+  /** The day plate's image (null with the code slab), darkened under the midnight plate as it comes in. */
+  private dayPlate: Phaser.GameObjects.Image | null = null;
+  /** Batch 5: the midnight plate at its own size, centred like the day plate; null while not loaded. */
+  private midnightPlate: { img: Phaser.GameObjects.Image; place: PlatePlace } | null = null;
+  /** The anim clock midnight struck at (null before it, or after a rewind past it), and the alpha shown. */
+  private midnightStruck: number | null = null;
+  private midnightShown = 0;
+  /** The packets' texture: the painted cube (batch 5) at packetScaleNow, or the code 'packet' at 1. */
+  private packetTex = 'packet';
+  private packetScaleNow = 1;
   /** board-12: the ping marks over the boxes the balancer checks, one per server pad, made once. */
   private pingIcons: Phaser.GameObjects.Image[] = [];
   /** The board's waits this frame (board-6), refilled in place. */
@@ -790,7 +806,7 @@ export class BoardScene extends Phaser.Scene {
       // board-12: the painted plate, never larger than its file (tablePlatePlace), centred under
       // the rack with its foot on the feed's floor. The pads stay drawn in code on top of it.
       const p = tablePlatePlace(plateCut);
-      this.add.image(p.x, p.y, plate).setOrigin(0).setScale(p.scale);
+      this.dayPlate = this.add.image(p.x, p.y, plate).setOrigin(0).setScale(p.scale);
       this.table = { art: 'plate', place: p };
     } else {
       const slab = 'board-table';
@@ -800,8 +816,31 @@ export class BoardScene extends Phaser.Scene {
         art: 'bake',
         place: { x: left, y: areaTop, w: BOARD_AREA.right - left, h: BOARD_AREA.bottom - areaTop, scale: 1 },
       };
+      this.dayPlate = null;
     }
+    // Batch 5: the midnight plate over the day plate, at its own size and centred the same way
+    // (tablePlatePlace never draws it above its file), hidden until midnight fades it in.
+    const night = this.artTex.get(TABLE_MIDNIGHT_KEY);
+    const nightCut = artRequest(TABLE_MIDNIGHT_KEY)?.cut;
+    this.midnightPlate = null;
+    if (night !== undefined && nightCut && this.dayPlate) {
+      const p = tablePlatePlace(nightCut);
+      const img = this.add
+        .image(p.x, p.y, night)
+        .setOrigin(0)
+        .setScale(p.scale)
+        .setAlpha(0)
+        .setVisible(false);
+      this.midnightPlate = { img, place: p };
+    }
+    this.midnightStruck = null;
+    this.midnightShown = 0;
     this.bakePacket();
+    // Batch 5: the painted packet cube, inside its 24 x 18 box, never above its file's size.
+    const cube = this.artTex.get(PACKET_CUBE_KEY);
+    const cubeCut = artRequest(PACKET_CUBE_KEY)?.cut;
+    this.packetTex = cube !== undefined && cubeCut ? cube : 'packet';
+    this.packetScaleNow = cube !== undefined && cubeCut ? packetScale(cubeCut) : 1;
 
     // board-12: the channel plate under the channel's walls and instruments, when it is picked.
     const trough = this.artTex.get(CHANNEL_PLATE_KEY);
@@ -1632,7 +1671,7 @@ export class BoardScene extends Phaser.Scene {
     this.pool.step(dt, all, this.travelOf, this.stepOpts);
     const items = this.pool.items;
     while (this.packetSprites.length < items.length) {
-      this.packetSprites.push(this.add.image(0, 0, 'packet').setDepth(2));
+      this.packetSprites.push(this.add.image(0, 0, this.packetTex).setScale(this.packetScaleNow).setDepth(2));
     }
     for (let i = 0; i < this.packetSprites.length; i++) {
       const s = this.packetSprites[i];
@@ -1644,7 +1683,11 @@ export class BoardScene extends Phaser.Scene {
       }
       pointAlong(w.path, w.length, progress(p), this.at);
       s.setPosition(this.at.x, this.at.y).setVisible(true);
-      s.setTint(p.red || this.hotParts.has(w.to) ? RED : AMBER);
+      const red = p.red || this.hotParts.has(w.to);
+      if (this.packetTex === 'packet') s.setTint(red ? RED : AMBER);
+      // The painted cube is cyan as cut; where traffic drops it is filled red (a multiply would go black).
+      else if (red) s.setTintMode(Phaser.TintModes.FILL).setTint(RED);
+      else s.setTintMode(Phaser.TintModes.MULTIPLY).clearTint();
     }
   }
 
@@ -2714,6 +2757,23 @@ export class BoardScene extends Phaser.Scene {
     else if (dark) this.shade.setAlpha(lightsDown(Infinity)).setVisible(true);
     else if (this.shade.visible) this.shade.setVisible(false);
 
+    // Batch 5: the midnight plate fades in over the day plate once the clock strikes midnight (at
+    // once when calm), and the day plate darkens under it: the midnight plate is narrower, so the
+    // day plate stays as the table's ends (the gateway and the database stand just past its ends). A
+    // rewind past midnight brings the day plate back.
+    const mp = this.midnightPlate;
+    if (mp) {
+      if (f.midnight === null) this.midnightStruck = null;
+      else if (this.midnightStruck === null) this.midnightStruck = now;
+      const a = midnightPlateAlpha(this.midnightStruck === null ? null : now - this.midnightStruck, calm);
+      if (a !== this.midnightShown) {
+        this.midnightShown = a;
+        mp.img.setAlpha(a).setVisible(a > 0);
+        if (a > 0) this.dayPlate?.setTint(lerpColour(0xffffff, MIDNIGHT_DAY_TINT, a));
+        else this.dayPlate?.clearTint();
+      }
+    }
+
     // Midnight held: fireworks burst over the feed (embers rise off the pads when calm).
     const fw = book.playing('fireworks', null);
     if (fw) {
@@ -2837,6 +2897,14 @@ export class BoardScene extends Phaser.Scene {
         tableRect: pageRect(this.table.place, rect),
         tableScale: round(this.table.place.scale),
         channelPlate: this.channelPlate ? pageRect(this.channelPlate, rect) : null,
+        midnightPlate: this.midnightPlate
+          ? {
+              rect: pageRect(this.midnightPlate.place, rect),
+              scale: round(this.midnightPlate.place.scale),
+              alpha: round(this.midnightShown),
+            }
+          : null,
+        packet: { texture: this.packetTex, scale: round(this.packetScaleNow) },
         pingMarks: this.pingIcons.filter((i) => i.visible).length,
         stamps: this.padList.filter((p) => p.stamp?.visible === true).map((p) => p.slot),
       },
