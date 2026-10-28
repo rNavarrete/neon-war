@@ -74,7 +74,9 @@ test('1. demand against room is readable at 60, 200, 300, 455 and 515, nothing o
   page,
 }) => {
   test.setTimeout(LANE_SECONDS * 1000);
-  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
+  // Speed 10: midnight is 510 and the night hands over to the debrief soon after, so at speed 20
+  // (the HUD clock at true game time) a slow CI frame can step past 515's window before it is read.
+  const { errors } = await openBoard(page, { speed: 10, autopilot: true });
   const moments: [number, string][] = [
     [60, 'teaching-c1'],
     [200, 'teaching-c3'],
@@ -93,7 +95,7 @@ test('1. demand against room is readable at 60, 200, 300, 455 and 515, nothing o
   for (const [at, name] of moments) {
     await test.step(`now >= ${at}`, async () => {
       await until(page, `hud.now >= ${at}`, (s) => (s.hud?.now ?? 0) >= at && !s.story?.active, 40_000, saw);
-      // The board runs on at speed 20: read the first frame on which the four reads agree.
+      // The board runs on at speed 10: read the first frame on which the four reads agree.
       const s = await until(page, `the readout agreeing with hud.sim after now ${at}`, readable, 20_000);
       const h = s.hud!;
       expect(h.gauge!.readout.length, 'the gauge prints its number').toBeGreaterThan(0);
