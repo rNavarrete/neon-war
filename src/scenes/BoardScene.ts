@@ -484,6 +484,9 @@ export class BoardScene extends Phaser.Scene {
   private lastKey: string | null = null;
   /** board-10: the board's own sounds (boot chime, drop crackle, skip blip), only for keys that exist. */
   private sounds = new BoardSfx(isSfxKey);
+  /** Wires the balancer newly skipped, counted every frame (the hook's `sfx.skipEdges`). */
+  private skipEdges = 0;
+  private lastSkipped: readonly string[] = [];
   /** Created once with the scene: the pool calls it per wire per frame without a new closure. */
   private readonly travelOf = (wire: string): number => this.geomOf(wire)?.travel ?? 1;
   /** Bound once: drops the sprites of a part no longer on the board (Map.forEach, no iterator). */
@@ -1065,6 +1068,9 @@ export class BoardScene extends Phaser.Scene {
     // Animations freeze with the board, except on a failure: the death plays out before the rewind.
     this.stepAnims(f, occ, f.paused && f.failure === null ? 0 : Math.min(seconds, 0.25), reduce);
     this.drawWires(flow.wires, flow.skipped);
+    for (let i = 0; i < flow.skipped.length; i++)
+      if (!this.lastSkipped.includes(flow.skipped[i])) this.skipEdges++;
+    this.lastSkipped = flow.skipped;
     this.drawPreview(parts);
     this.drawChannel(channelInto(this.chan, f));
     this.stepPackets(dt, f);
@@ -2877,6 +2883,7 @@ export class BoardScene extends Phaser.Scene {
       sfx: {
         log: this.sounds.log.map((e) => ({ key: e.key, at: round(e.at) })),
         counts: { ...this.sounds.counts },
+        skipEdges: this.skipEdges,
       },
       anims: this.animBook.names(),
       animLog: this.animBook.log.map((e) => ({

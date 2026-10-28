@@ -743,8 +743,10 @@ function expectBoardSounds(b: BoardTestState, rec: AnimRecord): void {
   for (let i = 1; i < drops.length; i++) {
     expect(drops[i] - drops[i - 1], 'packet-drop at most once per 0.5 s').toBeGreaterThanOrEqual(0.5 - 0.001);
   }
+  // New skips are counted by the board every frame: a skip shorter than one read of the hook
+  // escapes the page's sampled count (rec.skipEdges), so the board's own count is the reference.
   expect(b.sfx.counts['health-skip'] ?? 0, 'one blip per new skip at most').toBeLessThanOrEqual(
-    rec.skipEdges,
+    b.sfx.skipEdges,
   );
   // What the board asked for reached the shell.
   for (const k of Object.keys(b.sfx.counts)) expect(rec.sfx, `the shell heard ${k}`).toContain(k);

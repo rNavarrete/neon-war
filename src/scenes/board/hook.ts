@@ -264,7 +264,12 @@ export interface BoardTestState {
    * 0.5 s), 'health-skip' per new skip; `at` is the board clock in seconds. Only keys that exist
    * (isSfxKey). `counts` totals every one asked for since the scene started, by key.
    */
-  sfx: { log: { key: string; at: number }[]; counts: Record<string, number> };
+  sfx: {
+    log: { key: string; at: number }[];
+    counts: Record<string, number>;
+    /** Wires the balancer newly skipped since the scene started, counted every frame. */
+    skipEdges: number;
+  };
   /**
    * board-9: the animations in flight now, by name ('death:<id>', 'flash', 'place:<id>', 'boot:<id>',
    * 'overclock:<id>', 'dip:<id>', 'haze:<id>', 'wire:<key>', 'cut:<key>', 'sparks',
