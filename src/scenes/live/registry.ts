@@ -3,6 +3,7 @@
 // shows a PlaceholderView. The feed and the inventory are the board's, drawn by BoardScene, and have
 // no line here. The HUD scene creates every entry in this order (docs/LIVE.md).
 
+import { ChartView } from '../hud/ChartView';
 import { DeckView } from '../hud/DeckView';
 import { GaugeView } from '../hud/GaugeView';
 import { ClockView, TitleView } from '../hud/TitleView';
@@ -24,7 +25,7 @@ export const REGISTRY: readonly RegistryEntry[] = [
   { zone: 'map', lane: 'gauges', make: () => new PlaceholderView('map') },
   { zone: 'cam', lane: 'luxcam', make: () => new PlaceholderView('cam') },
   { zone: 'gauge', lane: 'gauges', make: () => new GaugeView() },
-  { zone: 'scope', lane: 'gauges', make: () => new PlaceholderView('scope') },
+  { zone: 'scope', lane: 'gauges', make: () => new ChartView() },
   { zone: 'comms', lane: 'comms', make: () => new PlaceholderView('comms') },
   { zone: 'deck', lane: 'gauges', make: () => new DeckView() },
   { zone: 'chat', lane: 'chat', make: () => new PlaceholderView('chat') },
