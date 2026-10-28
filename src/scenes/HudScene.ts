@@ -6,8 +6,8 @@ import { type Occurrence, detectOccurrences } from '../game/occurrences';
 import { allPortraits } from '../game/portraits';
 import { type Run, run } from '../game/run';
 import { settings } from '../game/settings';
-import { capacityOf, errorShare } from '../sim/board';
-import { BROWNOUT, BROWNOUT_RULES } from '../sim/brownout';
+import { errorShare } from '../sim/board';
+import { BROWNOUT } from '../sim/brownout';
 import type { BannerChoice } from '../sim/economy';
 import { LINES, type LineId, line } from '../strings';
 import { provideTestState } from '../testHook';
@@ -26,7 +26,16 @@ import {
   pushChat,
   seededRandom,
 } from './hud/chat';
-import { type CueView, type DirectorState, NEW_DIRECTOR, direct } from './hud/cues';
+import {
+  CHAT_SILENCE,
+  type CueView,
+  type DirectorState,
+  NEW_DIRECTOR,
+  chatSilenced,
+  cueViewOf,
+  direct,
+  emptyCueView,
+} from './hud/cues';
 import { type DialMode, applyEstimate, applySizing, dialModeAt } from './hud/dial';
 import { countdownText, errorState } from './hud/format';
 import { type HudBounds, type HudTestState, type PagePoint, hudSection } from './hud/hook';
@@ -140,7 +149,6 @@ export class HudScene extends Phaser.Scene {
   private dialTouched = false;
   private bannerShown = false;
   private decommissionsAfterMidnight = 0;
-  private droppedInC6 = false;
   private lastSurgeAt = -1;
   /** Sim time the current surge warning first went on screen. */
   private surgeShownAt = -1;
@@ -154,25 +162,23 @@ export class HudScene extends Phaser.Scene {
     estimate: null,
     sizing: null,
   };
-  private readonly view: CueView = {
-    now: 0,
-    demand: 0,
-    capacity: 0,
-    dropped: 0,
-    servers: 0,
-    idleServer: false,
-    overloaded: false,
-    overclocked: false,
+  /** Every id the director fired this run, in order, as sent out on the bus as `cue` (for the hook). */
+  private firedCues: LineId[] = [];
+  /** What the cues read this frame (cueViewOf writes into it; it is also the last frame's view). */
+  private readonly view: CueView = emptyCueView();
+  /** What only the HUD knows, handed to cueViewOf; one object reused every update. */
+  private readonly cueHost: {
+    cardClosed: boolean;
+    dialTouched: boolean;
+    sizingOpen: boolean;
+    bannerShown: boolean;
+    decommissionsAfterMidnight: number;
+  } = {
     cardClosed: false,
     dialTouched: false,
-    estimate: null,
-    sizing: null,
     sizingOpen: false,
     bannerShown: false,
-    banner: null,
-    laundryCut: false,
     decommissionsAfterMidnight: 0,
-    droppedInC6: false,
   };
 
   // Views, built in create().
@@ -316,7 +322,7 @@ export class HudScene extends Phaser.Scene {
     this.setKey(KEY.set, asked && !this.dial.locked, 1);
     this.sizingPanel.setVisible(sizingOpen);
 
-    this.runDirector(r, sizingOpen);
+    this.runDirector(f, sizingOpen);
     this.updateBarks();
     this.updateFiller(r);
   }
@@ -371,7 +377,9 @@ export class HudScene extends Phaser.Scene {
     this.dialTouched = false;
     this.bannerShown = false;
     this.decommissionsAfterMidnight = 0;
-    this.droppedInC6 = false;
+    // A fresh run: nothing carries over from the last run's view (dropped in C6, the rescue clock).
+    Object.assign(this.view, emptyCueView());
+    this.firedCues = [];
     this.lastSurgeAt = -1;
     if (this.ready) {
       this.chatView.show([]);
@@ -745,52 +753,33 @@ export class HudScene extends Phaser.Scene {
 
   // ---- barks and chat ----
 
-  private runDirector(r: Run, sizingOpen: boolean): void {
-    const v = this.view;
-    v.now = r.now;
-    v.clock = this.clock;
-    v.demand = r.demand;
-    v.capacity = r.capacity;
-    v.dropped = r.flow.dropped > 1e-6 ? r.flow.dropped : 0;
-    let servers = 0;
-    let idle = false;
-    let overloaded = false;
-    let overclocked = false;
-    for (const p of r.session.board.parts) {
-      if (p.kind !== 'server') continue;
-      servers++;
-      if ((p.boost ?? 1) > 1) overclocked = true;
-      if ((r.session.offlineUntil[p.id] ?? 0) > r.now) continue;
-      const load = r.flow.load[p.id] ?? 0;
-      if (load <= 0) idle = true;
-      if (v.dropped > 0 && load >= capacityOf(p, BROWNOUT_RULES) - 1e-6) overloaded = true;
-    }
-    v.servers = servers;
-    v.idleServer = idle;
-    v.overloaded = overloaded;
-    v.overclocked = overclocked;
-    v.cardClosed = !this.cardOpen;
-    v.dialTouched = this.dialTouched;
-    v.estimate = r.notes.estimate;
-    v.sizing = r.notes.sizing;
-    v.sizingOpen = sizingOpen;
-    v.bannerShown = this.bannerShown;
-    v.banner = r.session.banner?.choice ?? null;
-    v.laundryCut = laundryCutAt(r) !== null;
-    if (v.dropped > 0 && r.now >= C.c6 - BROWNOUT.demand.forecastLeadSeconds && r.now <= MIDNIGHT + 1) {
-      this.droppedInC6 = true;
-    }
-    v.droppedInC6 = this.droppedInC6;
-    v.decommissionsAfterMidnight = this.decommissionsAfterMidnight;
-
+  /**
+   * One frame of the director: the CueView from this frame, its occurrences, the HUD clock and what
+   * only the HUD knows (cueViewOf), then direct(). Each fired id goes out on the bus as `cue` and is
+   * routed to the bark queue or a chat.
+   */
+  private runDirector(f: Frame, sizingOpen: boolean): void {
+    const host = this.cueHost;
+    host.cardClosed = !this.cardOpen;
+    host.dialTouched = this.dialTouched;
+    host.sizingOpen = sizingOpen;
+    host.bannerShown = this.bannerShown;
+    host.decommissionsAfterMidnight = this.decommissionsAfterMidnight;
+    const v = cueViewOf(this.view, f, this.occurrences, this.clock, host, this.view);
     const out = direct(this.director, v);
     this.director = out.state;
-    for (const id of out.fired) this.cue(id);
+    for (let i = 0; i < out.fired.length; i++) this.cue(out.fired[i]);
   }
 
-  /** Route a fired line to the bark queue or a chat. */
+  /**
+   * Send a fired line out as bus `cue` and route it: chat lines to their chat, barks to the bark
+   * queue. C6.fail.chat is the chat going silent, not a row: it is never posted.
+   */
   private cue(id: LineId): void {
     const chat = chatOf(id);
+    this.firedCues.push(id);
+    bus.emit('cue', { id, kind: chat ? 'chat' : 'bark', at: this.clock });
+    if (id === CHAT_SILENCE) return;
     if (chat) this.say(chat, id);
     else if (LINES[id].kind === 'bark') this.barks = enqueueBark(this.barks, id);
   }
@@ -814,7 +803,8 @@ export class HudScene extends Phaser.Scene {
   }
 
   private updateFiller(r: Run): void {
-    if (this.cardOpen) return;
+    // No filler while the job card is up, nor while the chat is silent (dark at midnight, until the rewind).
+    if (this.cardOpen || chatSilenced(this.director)) return;
     const state = errorState(errorShare(r.flow, r.demand));
     for (const chat of ['block', 'stream'] as const) {
       if (this.clock < this.fillerAt[chat]) continue;
@@ -925,6 +915,7 @@ export class HudScene extends Phaser.Scene {
         text: this.barks.current ? line(this.barks.current.id) : null,
         history: [...this.barks.history],
       },
+      cues: { fired: [...this.firedCues], silenced: chatSilenced(this.director) },
       chat: {
         block: this.chats.block.map((e) => `${e.who}: ${e.text}`),
         stream: this.chats.stream.map((e) => `${e.who}: ${e.text}`),

@@ -140,6 +140,9 @@ type Hud = {
   sizingPrompt: { open: boolean; x?: number; y?: number };
   bounds: Bounds[];
   title?: { right: number; clockRight: number | null };
+  cues: { fired: string[]; silenced: boolean };
+  bark: { history: string[] };
+  chat: { block: string[]; stream: string[] };
 };
 type StoryState = {
   active: boolean;
@@ -261,6 +264,22 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     await turnDialTo(page, 30);
     await expect.poll(async () => (await hudState(page)).notes.estimate).toBe(30);
     await expect.poll(async () => (await hudState(page)).dial.visible).toBe(false);
+  });
+
+  await test.step('C1: the host loop fires the trigger table through cueViewOf and sends each id as a cue', async () => {
+    await expect
+      .poll(async () => (await hudState(page)).bark.history, { timeout: 30_000 })
+      .toEqual(expect.arrayContaining(['C1.triage.01', 'C1.triage.02']));
+    const h = await hudState(page);
+    // C1.triage.01 fires the frame the job card closes; C1.triage.02 two HUD seconds later.
+    expect(h.cues.fired.indexOf('C1.triage.01')).toBeGreaterThanOrEqual(0);
+    expect(h.cues.fired.indexOf('C1.triage.02')).toBeGreaterThan(h.cues.fired.indexOf('C1.triage.01'));
+    // Every bark shown was fired once by the table, and no id fires twice in a run without a rewind.
+    for (const id of h.bark.history) expect(h.cues.fired, id).toContain(id);
+    expect(new Set(h.cues.fired).size).toBe(h.cues.fired.length);
+    expect(h.cues.silenced).toBe(false);
+    // The scripted chat lines that fired are posted as rows.
+    expect(h.cues.fired).toContain('C1.chat.01');
   });
 
   await test.step('C4: the surge warning fills the alert band', async () => {

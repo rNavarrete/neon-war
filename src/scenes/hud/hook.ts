@@ -62,6 +62,11 @@ export interface HudTestState {
   /** The C6 sizing prompt: whether it shows, and its centre (CARDS.sizingPrompt) in page CSS pixels. */
   sizingPrompt: { open: boolean; x: number; y: number };
   bark: { current: LineId | null; text: string | null; history: LineId[] };
+  /**
+   * The trigger table as the host loop ran it: every id fired this run, in order, each also sent on
+   * the bus as `cue`; and whether the chat is silent (dark at midnight, until the rewind).
+   */
+  cues: { fired: LineId[]; silenced: boolean };
   chat: { block: string[]; stream: string[] };
   timeScale: number;
   /**

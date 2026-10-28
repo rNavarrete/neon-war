@@ -15,6 +15,19 @@ describe('the bus catalogue', () => {
     expect(seen).toEqual([{ watching: 3 }]);
   });
 
+  it('carries cue {id, kind, at}: one event per fired line of the trigger table', () => {
+    const bus = new Bus();
+    const seen: GameEvents['cue'][] = [];
+    const off = bus.on('cue', (e) => seen.push(e));
+    bus.emit('cue', { id: 'C1.triage.01', kind: 'bark', at: 3.5 });
+    bus.emit('cue', { id: 'C1.chat.01', kind: 'chat', at: 4 });
+    off();
+    expect(seen.map((e) => [e.id, e.kind])).toEqual([
+      ['C1.triage.01', 'bark'],
+      ['C1.chat.01', 'chat'],
+    ]);
+  });
+
   it('has no lane file augmenting GameEvents: title.ts no longer declares audience', () => {
     expect(titleSource).not.toMatch(/declare module '..\/..\/game\/bus'/);
     expect(titleSource).not.toMatch(/audience: \{ watching: number \}/);

@@ -83,6 +83,13 @@ never interactive, two objects.
 
 `HudScene` hosts the registry: it makes every view in `init`, calls `preload`, `create` (first, so
 placeholders sit under the HUD's own objects), `update` each frame and `shutdown` with the scene.
+Each frame, after the views' `update`, the host loop runs the trigger table
+(`src/scenes/hud/cues.ts`): `cueViewOf` builds the cues' view from the frame, its occurrences, the
+HUD clock and what only the HUD knows (into one reused object), `direct()` fires what is due, and
+each fired id goes out on the bus as `cue {id, kind: 'bark' | 'chat', at}` (`at` is the HUD clock).
+Bark ids go to the comms band's queue and chat ids to the chat; `C6.fail.chat` is the chat going
+silent, never a row, and no filler is posted while `chatSilenced` holds (until the rewind).
+`hud.cues {fired, silenced}` mirrors it for tests.
 
 ### Flags
 
@@ -107,7 +114,8 @@ went dark at midnight) and `fall`. Identical frames give none. The HUD emits eac
 
 `src/game/bus.ts` carries the lane boundaries as typed events: `drag` (board), `line` / `lineEnd`
 and `chatLine` (comms, chat), `alert` / `alertEnd` (gauges), `occurrence` (tech), `voice` /
-`voiceStart` / `voiceStop` / `voiceEnd` (the mixer), `audience {watching}` (chat: the viewer count
+`voiceStart` / `voiceStop` / `voiceEnd` (the mixer), `cue {id, kind, at}` (the host loop, below),
+`audience {watching}` (chat: the viewer count
 the title draws as WATCHING) and `perfSample`. Every event before them is unchanged. Lanes declare
 no events of their own by module augmentation: a new event is a line in `GameEvents`.
 
