@@ -203,11 +203,19 @@ async function expectRestaged(page: Page, moment: string, read?: Hud): Promise<B
 }
 
 async function turnDialTo(page: Page, value: number): Promise<void> {
+  // At speed 20 a dial question is open for only a few real seconds (C1's until the C2 banner blocks
+  // the deck at 90, C6's sizing until midnight at 510), so after one click shows the step the rest
+  // go in one burst with a single read after it, rather than a hook read per click.
   let h = await hudState(page);
-  for (let guard = 0; h.dial.value !== value && guard < 200; guard++) {
+  for (let guard = 0; h.dial.value !== value && guard < 40; guard++) {
     const p = h.dial.value < value ? h.dial.plus : h.dial.minus;
+    const before = h.dial.value;
     await page.mouse.click(p.x, p.y);
     h = await hudState(page);
+    const step = Math.abs(h.dial.value - before);
+    const more = step > 0 ? Math.floor(Math.abs(value - h.dial.value) / step) : 0;
+    for (let i = 0; i < more; i++) await page.mouse.click(p.x, p.y);
+    if (more > 0) h = await hudState(page);
   }
   expect(h.dial.value).toBe(value);
   await page.mouse.click(h.dial.set.x, h.dial.set.y);
@@ -348,15 +356,19 @@ type DipRead = {
 test('the power-dip mark sits on its part: |hud.dipMark - board.parts[id]| <= 2 page px', async ({
   page,
 }) => {
-  test.setTimeout(90_000);
-  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
+  test.setTimeout(120_000);
+  // Speed 7, not 20 (tech follow-up 5): a frame steps min(frame, 0.25 s) x speed of sim time, and
+  // the warning is up for 2 sim seconds. At speed 20 a frame slower than 100 ms (headless Chromium
+  // under 10 fps) can jump the whole warning; at speed 7 a step is 1.75 s at most, so some frame
+  // always draws it (tests/live-dip-watch.test.ts).
+  const { errors } = await openBoard(page, { speed: 7, autopilot: true });
   await dismissJobCard(page);
   // No dip showing: no mark.
   const before = (await page.evaluate(() => window.__neonTest!.state.hud)) as unknown as DipRead;
   expect(before.dip).toBeNull();
   expect(before.dipMark).toBeNull();
   await expect
-    .poll(async () => (await hudState(page)).now, { timeout: 60_000, intervals: [100] })
+    .poll(async () => (await hudState(page)).now, { timeout: 90_000, intervals: [100] })
     .toBeGreaterThanOrEqual(290);
   // The warning is up for 2 sim seconds: watch for it from inside the page, every frame.
   const read = await page.evaluate(
