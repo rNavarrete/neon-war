@@ -32,7 +32,16 @@ import {
 import { COLORS, FONT, FONT_SANS } from './layout';
 import { provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
-import { GAUGES_DEPTH, panel } from './panel';
+import { KIT, alertEndcap } from './kit';
+import {
+  type BakedPanel,
+  GAUGES_DEPTH,
+  type PanelTestState,
+  bakePanel,
+  panelSnapshot,
+  releasePanel,
+} from './panel';
+import { preloadArt } from '../plates';
 
 /** One entry of hud.alert.history: a kind or number the band showed, and when (sim seconds). */
 export interface AlertHistoryEntry {
@@ -56,6 +65,8 @@ export interface AlertTestState extends AlertState {
   motion: { slide: boolean; stripes: boolean; flash: boolean };
   /** The last kinds and numbers shown, oldest first (capped). */
   history: AlertHistoryEntry[];
+  /** The baked plate: the alert plate and end cap drawn (m4 panel kit). */
+  panel?: PanelTestState | null;
 }
 
 declare module './hook' {
@@ -69,7 +80,6 @@ declare module './hook' {
 export const ALERT_HISTORY = 60;
 
 const ICON = { key: 'hud:icon-warning', file: 'art/hud/icons/warning.webp' } as const;
-const PLATE = { key: 'hud:warning-bar', file: 'art/hud/warning-bar.webp' } as const;
 /** The baked hazard stripe tile (one period wide, the band's height). */
 const STRIPES_KEY = 'alert:stripes';
 
@@ -94,6 +104,7 @@ export class AlertView implements LiveView {
   readonly budget: LiveBudget = { objects: 10, texts: 4 };
   readonly state: AlertState = emptyAlert();
   private root: Phaser.GameObjects.Container | null = null;
+  private plate: BakedPanel | null = null;
   private stripes: Phaser.GameObjects.TileSprite | null = null;
   private headline: Phaser.GameObjects.Text | null = null;
   private sub: Phaser.GameObjects.Text | null = null;
@@ -124,7 +135,7 @@ export class AlertView implements LiveView {
 
   preload(scene: Phaser.Scene): void {
     loadOnce(scene, ICON.key, ICON.file);
-    loadOnce(scene, PLATE.key, PLATE.file);
+    preloadArt(scene as never, [KIT.alertPlate, KIT.alertEndcap]);
   }
 
   create(scene: Phaser.Scene, host: LiveHost): void {
@@ -136,22 +147,26 @@ export class AlertView implements LiveView {
     const add = scene.add;
     bakeStripes(scene);
 
-    // A solid backing first, so the HUD's own band underneath never shows through the plate's art.
-    const back = add.graphics();
-    back.fillStyle(COLORS.ink, 1);
-    back.fillRect(L.plate.x, L.plate.y, L.plate.w, L.plate.h);
-    const plate = panel(scene, PLATE.key, L.plate.x, L.plate.y, L.plate.w, L.plate.h, {
-      k: 0.85,
-      slice: [90, 90, 40, 40],
-    });
-    back.lineStyle(2, COLORS.amber, 0.9);
-    back.strokeRect(L.plate.x + 1, L.plate.y + 1, L.plate.w - 2, L.plate.h - 2);
+    // The plate, baked once: a solid backing, the alert plate nine-sliced at k 0.5 (both painted ends
+    // whole, the plain middle stretched) and the hazard end cap at the right end. Without the art the
+    // backing and a 2 px amber rim draw instead.
+    const plate = bakePanel(
+      scene,
+      'alert',
+      L.plate,
+      { alert: { endcap: true } },
+      { fill: { color: COLORS.ink, alpha: 1 } },
+    );
+    this.plate = plate;
 
     const icon = add.image(L.icon.x, L.icon.y, ICON.key);
     icon.setScale(L.icon.size / Math.max(icon.width, icon.height, 1));
 
+    // The scrolling stripes fill the well up to the end cap; RAID sits over both.
     const w = L.well;
-    this.stripes = add.tileSprite(w.x + w.w / 2, w.y + w.h / 2, w.w, w.h - 4, STRIPES_KEY);
+    const cap = alertEndcap(L.plate);
+    const sw = Math.max(0, cap.x - w.x);
+    this.stripes = add.tileSprite(w.x + sw / 2, w.y + w.h / 2, sw, w.h - 4, STRIPES_KEY);
     this.stripes.setAlpha(0.55);
     this.tag = add
       .text(w.x + w.w / 2, w.y + w.h / 2, '', {
@@ -186,8 +201,7 @@ export class AlertView implements LiveView {
       .setOrigin(1, 0.5);
 
     this.root = add.container(0, 0, [
-      back,
-      plate,
+      plate.object,
       icon,
       this.stripes,
       this.tag,
@@ -318,6 +332,7 @@ export class AlertView implements LiveView {
       visible: this.visible,
       motion: { slide: m.slide, stripes: m.stripes, flash: m.flash },
       history: this.history.map((h) => ({ ...h })),
+      panel: panelSnapshot(this.plate),
     };
   }
 
@@ -326,6 +341,8 @@ export class AlertView implements LiveView {
     this.off = [];
     this.root?.destroy(true);
     this.root = null;
+    releasePanel(this.plate);
+    this.plate = null;
     this.stripes = null;
     this.headline = null;
     this.sub = null;

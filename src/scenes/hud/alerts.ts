@@ -313,7 +313,8 @@ export function alertLayout(z: Rect): AlertLayout {
   const well = { x: z.x + z.w - 120, y: z.y, w: 120, h: z.h };
   return {
     plate: z,
-    icon: { x: z.x + 40, y: z.y + z.h / 2, size: 40 },
+    // Right of the plate's painted hazard end (hud/live/alert-plate), left of the headline.
+    icon: { x: z.x + 64, y: z.y + z.h / 2, size: 26 },
     headline: { x: z.x + 80, y: z.y + 8, w: well.x - 16 - (z.x + 80) - 150 },
     sub: { x: z.x + 80, y: z.y + 48, w: well.x - 16 - (z.x + 80) },
     chip: { right: well.x - 14, y: z.y + 26 },
