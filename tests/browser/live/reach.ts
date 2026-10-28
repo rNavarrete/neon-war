@@ -78,6 +78,17 @@ export async function dismissJobCard(page: Page, timeout = 5_000): Promise<void>
     .toBe(false);
 }
 
+/**
+ * The whole hook state in one read (one structuredClone in the page), for specs that check sections
+ * `snap` does not carry (`board`, `shell`, `live`, `perf`). Every section is `unknown`: the spec
+ * narrows what it reads. Fails if the hook is not installed.
+ */
+export async function fullState(page: Page): Promise<Record<string, unknown>> {
+  const s = await page.evaluate(() => (window.__neonTest?.state ?? null) as Record<string, unknown> | null);
+  if (!s) throw new Error('window.__neonTest.state is missing: was the page opened with ?test?');
+  return s;
+}
+
 /** Turn the dial to `value` with its plus and minus buttons, then press SET. */
 export async function setDial(page: Page, value: number): Promise<void> {
   let h = await hud(page);

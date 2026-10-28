@@ -213,7 +213,7 @@ export class HudScene extends Phaser.Scene {
 
   create(): void {
     this.resetForRun(run());
-    // The Live screen's views go first, so their placeholders sit under everything drawn below.
+    // The Live screen's views go first (every registry zone has its real view; none is a placeholder).
     // Each object a view adds is remembered as its own, for the perf hook's per-zone counts.
     const onAdded = (o: object): void => {
       if (this.building) this.madeBy.set(o, this.building);
