@@ -1,12 +1,14 @@
 import { Bus } from '../src/game/bus';
 import { readFrame } from '../src/game/frame';
-import { Run } from '../src/game/run';
+import { Run, newRun, run } from '../src/game/run';
+import { dismissJobCard } from '../src/scenes/hud/jobCard';
 import { AlertView } from '../src/scenes/hud/AlertView';
 import { DeckView } from '../src/scenes/hud/DeckView';
 import { ZONES } from '../src/scenes/live/layout';
 import { surgeWarningAt } from '../src/scenes/hud/warnings';
 import { BROWNOUT } from '../src/sim/brownout';
 import hudSource from '../src/scenes/HudScene.ts?raw';
+import deckSource from '../src/scenes/hud/DeckView.ts?raw';
 
 // M2 follow-up (tech): the HUD scene's legacy alert band and deck keys are gone. AlertView is the
 // one band and plays the forecast's surge-warning itself; DeckView owns the keys and the digits, and
@@ -107,5 +109,42 @@ describe('DeckView feeds hud.laundry, hud.regroup and the deck bounds', () => {
     expect(view.keyHits()).toHaveLength(3);
     view.shutdown();
     expect(view.keyHits()).toEqual([]);
+  });
+});
+
+describe('the deck presses SET through the host', () => {
+  it('calls LiveHost.pressSet, and does nothing on a host without one', () => {
+    newRun(1);
+    dismissJobCard(run());
+    let sets = 0;
+    const view = new DeckView();
+    view.create(stubScene() as never, {
+      scene: null as never,
+      bus: new Bus(),
+      rect: ZONES.deck,
+      flags: { lite: true },
+      pressSet: () => (sets++, true),
+    });
+    view.update(readFrame(run()), { now: 1, dt: 0.016 });
+    view.press('three', 'click');
+    expect(sets).toBe(1);
+    expect(view.snapshot().presses.at(-1)).toMatchObject({ key: 'three', acted: true });
+    view.shutdown();
+
+    const bare = new DeckView();
+    bare.create(stubScene() as never, {
+      scene: null as never,
+      bus: new Bus(),
+      rect: ZONES.deck,
+      flags: { lite: true },
+    });
+    bare.update(readFrame(run()), { now: 1, dt: 0.016 });
+    bare.press('three', 'click');
+    expect(bare.snapshot().presses.at(-1)).toMatchObject({ key: 'three', acted: false });
+    bare.shutdown();
+  });
+
+  it('reaches no private dial on the scene', () => {
+    expect(deckSource).not.toMatch(/DialHolder|\.dial\?\./);
   });
 });

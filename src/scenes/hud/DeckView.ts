@@ -137,9 +137,6 @@ export const DECK_PRESSES = 20;
 /** The digit keys' key codes: 1, 2, 3 on the main row. */
 const KEY_CODES: Readonly<Record<KeyName, number>> = { one: 49, two: 50, three: 51 };
 
-/** The HUD scene's dial, as this view reaches it for SET (WIRING(tech): a host hook would replace it). */
-type DialHolder = { dial?: { pressSet(): boolean } };
-
 /** One drawn key. */
 interface KeyParts {
   /** The key's plate unlit and lit, each drawn once; the key shows one of them. */
@@ -335,7 +332,7 @@ export class DeckView implements LiveView {
       if (res.ok) this.bus?.emit('sfx', { key: 'wire-cut' });
       return res.ok;
     }
-    return (this.scene as unknown as DialHolder | null)?.dial?.pressSet() ?? false;
+    return this.host?.pressSet?.() ?? false;
   }
 
   /** Show a key lit or dim and set its words when its state changes; set its alpha when that changes. */

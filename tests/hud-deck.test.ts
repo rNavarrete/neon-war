@@ -230,7 +230,7 @@ describe('where the keys sit', () => {
 
 // ---- the view against a stub scene: a press by click or by digit goes through one handler ----
 
-function stubScene(dial: { pressSet(): boolean } | null) {
+function stubScene() {
   const chain = (extra: Record<string, unknown> = {}): unknown => {
     const o: unknown = new Proxy(extra, {
       get(target, prop) {
@@ -248,7 +248,7 @@ function stubScene(dial: { pressSet(): boolean } | null) {
     const proxy = chain(t);
     return proxy;
   };
-  return { add: { graphics: () => chain(), text }, dial: dial ?? undefined };
+  return { add: { graphics: () => chain(), text } };
 }
 
 describe('DeckView presses', () => {
@@ -256,13 +256,15 @@ describe('DeckView presses', () => {
     newRun(1);
     const r = run();
     let sets = 0;
-    const scene = stubScene({ pressSet: () => (sets++, true) });
+    const scene = stubScene();
     const view = new DeckView();
+    // SET goes through the host (LiveHost.pressSet), never through the scene's private dial.
     view.create(scene as never, {
       scene: null as never,
       bus: new Bus(),
       rect: ZONES.deck,
       flags: { lite: true },
+      pressSet: () => (sets++, true),
     });
 
     // The job card is up at the start: key 3 is ignored.
@@ -310,7 +312,7 @@ describe('DeckView presses', () => {
     const r = run();
     dismissJobCard(r);
     const view = new DeckView();
-    view.create(stubScene(null) as never, {
+    view.create(stubScene() as never, {
       scene: null as never,
       bus: new Bus(),
       rect: ZONES.deck,

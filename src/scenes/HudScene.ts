@@ -327,6 +327,7 @@ export class HudScene extends Phaser.Scene {
       get flags(): LiveFlags {
         return flags();
       },
+      pressSet: (): boolean => this.dial?.pressSet() ?? false,
     };
   }
 
