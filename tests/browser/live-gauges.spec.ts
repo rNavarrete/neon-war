@@ -439,10 +439,17 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(h.deck.pulse).toBeGreaterThanOrEqual(0.75);
     expect(h.deck.pulse).toBeLessThanOrEqual(1);
     await clickKey(page, 'one');
+    // Regroup lasts about half a wall second at speed 20, so assert on the very snapshot that first
+    // shows it active rather than reading the hook a second time.
     await expect
-      .poll(async () => (await lane(page)).deck.regroup, { timeout: 3_000, intervals: [10] })
+      .poll(
+        async () => {
+          h = await lane(page);
+          return h.deck.regroup;
+        },
+        { timeout: 3_000, intervals: [10] },
+      )
       .toBe('active');
-    h = await lane(page);
     expect(h.deck.presses.at(-1)).toMatchObject({ key: 'one', via: 'click', acted: true });
     expect(h.timeScale).toBe(0.25);
     expect(h.deck.ring).toBeGreaterThan(0);
