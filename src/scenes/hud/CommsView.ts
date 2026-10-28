@@ -49,6 +49,10 @@ import {
   enqueueComms,
   extendForVoice,
   irisFor,
+  type LeaderTarget,
+  leaderPath,
+  leaderSubject,
+  resolveLeader,
   logLines,
   logOpen,
   moodOf,
@@ -67,6 +71,7 @@ import {
   typedOf,
 } from './comms';
 import { COLORS, FONT, FONT_SANS } from './layout';
+import { type LocatedPoint, locate, registeredNames } from './locate';
 import { LABELS } from './labels';
 import { isLesson } from './lineMeta';
 import { panel } from './panel';
@@ -88,6 +93,23 @@ const REPLAYED_MAX = 12;
 
 /** Bus events remembered for the hook. */
 const EMITTED_MAX = 24;
+
+/** A leader whose subject is not on screen yet is looked for again this often (real seconds). */
+const LEADER_RETRY = 0.25;
+/** The leader sits a little under the line's own amber. */
+const LEADER_ALPHA = 0.9;
+
+/** The leader line as the hook reports it (comms-8), in page CSS pixels. */
+export interface CommsLeaderState {
+  /** lineMeta's subject ('part:idle', 'zone:gauge', 'key:two'). */
+  subject: string;
+  /** The part id, or the locate name, it found. */
+  target: string;
+  /** Where it leaves the band, where it turns, and where it ends (the target's anchor). */
+  from: { x: number; y: number };
+  corner: { x: number; y: number };
+  to: { x: number; y: number };
+}
 
 /** HOUSE's chip: the door for Grandma, the TV for the TV downstairs. */
 const houseChip = (speaker: string): string =>
@@ -160,6 +182,8 @@ declare module '../live/views/comms' {
     glow: CommsGlowState;
     /** The crew's light-up: 0 dark, 1 lit, eased over 400 ms once run().rescued. */
     crew: { light: number };
+    /** comms-8: every name registered with locate.ts now, and where it is (page px; null when off screen). */
+    located: Record<string, { x: number; y: number } | null>;
   }
 }
 
@@ -172,7 +196,7 @@ declare global {
 
 export class CommsView implements LiveView {
   readonly zone = 'comms' as const;
-  readonly budget: LiveBudget = { objects: 28, texts: 13 };
+  readonly budget: LiveBudget = { objects: 29, texts: 13 };
 
   /** The band's model; replaced, never mutated. */
   state: CommsState = NO_COMMS;
@@ -240,6 +264,18 @@ export class CommsView implements LiveView {
   private dragKind: string | null = null;
   /** The run is held (a card, a scene): clicks on the band are ignored. */
   private held = true;
+
+  /**
+   * comms-8: the leader line from the band to the part or zone the current line is about. Drawn
+   * outside the band's container (it leaves the zone by design), once per line.
+   */
+  private leaderGfx: Phaser.GameObjects.Graphics | null = null;
+  private leader: LeaderTarget | null = null;
+  private leaderPts: readonly [LocatedPoint, LocatedPoint, LocatedPoint] | null = null;
+  /** The line the leader belongs to, and the real time of the last try while it found nothing. */
+  private leaderFor: LineId | null = null;
+  private leaderTry = -Infinity;
+  private shownLeaderAlpha = -1;
 
   preload(scene: Phaser.Scene): void {
     preloadAvatars(scene as never, [
@@ -399,6 +435,8 @@ export class CommsView implements LiveView {
       ...this.logRows,
       this.replayGlyph,
     ]);
+    // The leader leaves the band, so it is not in the band's container (hud.bounds keeps the band).
+    this.leaderGfx = add.graphics().setVisible(false);
 
     const onDown = (p: Phaser.Input.Pointer): void => this.onPointerDown(p.x, p.y);
     scene.input.on('pointerdown', onDown);
@@ -476,8 +514,58 @@ export class CommsView implements LiveView {
     }
     if (frame.rescued !== this.shownPresent) this.setPresent(frame.rescued);
     this.updateMotion(alpha);
+    this.updateLeader(frame, alpha);
     this.held = frame.paused;
     this.updateLog();
+  }
+
+  // ---- comms-8: the leader line ----
+
+  /**
+   * Resolve the current line's leader once when it starts; a line whose subject is not on screen
+   * yet (a role no part plays, a name nobody registered) tries again every LEADER_RETRY seconds.
+   * Allocates only when it resolves.
+   */
+  private updateLeader(frame: Frame, alpha: number): void {
+    const id = this.state.current?.id ?? null;
+    if (id !== this.leaderFor) {
+      this.leaderFor = id;
+      this.leaderTry = -Infinity;
+      if (this.leader) this.setLeader(null);
+    }
+    if (id && !this.leader && leaderSubject(id) !== null && this.real - this.leaderTry >= LEADER_RETRY) {
+      this.leaderTry = this.real;
+      const t = resolveLeader(id, frame);
+      if (t) this.setLeader(t);
+    }
+    if (this.leader && alpha !== this.shownLeaderAlpha) {
+      this.shownLeaderAlpha = alpha;
+      this.leaderGfx!.setAlpha(alpha * LEADER_ALPHA);
+    }
+  }
+
+  /** Draw the leader (a 2 px amber right-angled path ending in a dot) or take it away. */
+  private setLeader(t: LeaderTarget | null): void {
+    const g = this.leaderGfx!;
+    this.leader = t;
+    g.clear();
+    this.shownLeaderAlpha = -1;
+    if (!t) {
+      this.leaderPts = null;
+      g.setVisible(false);
+      return;
+    }
+    const pts = leaderPath(this.rect!, t.to);
+    this.leaderPts = pts;
+    g.lineStyle(2, COLORS.hero, 1);
+    g.beginPath();
+    g.moveTo(pts[0].x, pts[0].y);
+    g.lineTo(pts[1].x, pts[1].y);
+    g.lineTo(pts[2].x, pts[2].y);
+    g.strokePath();
+    g.fillStyle(COLORS.hero, 1);
+    g.fillCircle(pts[2].x, pts[2].y, 4);
+    g.setVisible(true);
   }
 
   // ---- comms-4: glow, iris, tick, crew light-up ----
@@ -655,6 +743,11 @@ export class CommsView implements LiveView {
     this.host = null;
     this.logRows = [];
     this.replayGlyph = null;
+    this.leaderGfx?.destroy();
+    this.leaderGfx = null;
+    this.leader = null;
+    this.leaderPts = null;
+    this.leaderFor = null;
     this.log = LOG_CLOSED;
     this.shownLogOpen = false;
     this.logFor = null;
@@ -843,7 +936,15 @@ export class CommsView implements LiveView {
         replay: pagePoint({ x: L.replay.x + L.replay.w / 2, y: L.replay.y + L.replay.h / 2 }, canvas),
         replayed: [...this.replayed],
       },
-      leader: null,
+      // views/comms.ts still types the field as the placeholder null (a tech-owned file; see the
+      // lane notes): the band reports CommsLeaderState | null here.
+      leader: this.leaderNow(canvas) as unknown as null,
+      located: Object.fromEntries(
+        registeredNames().map((name) => {
+          const p = locate(name);
+          return [name, p ? pagePoint(p, canvas) : null];
+        }),
+      ),
       triage: c && triageMood(c.id) ? { mood: triageMood(c.id)! } : null,
       iris: { ...this.irisNow(), mood: this.mood(), motion: this.reduced() ? 'reduced' : 'full' },
       glow: this.glowNow(),
@@ -861,6 +962,20 @@ export class CommsView implements LiveView {
       rect: pageRect(r, canvas),
       drawn: b ? pageRect({ x: b.x, y: b.y, w: b.width, h: b.height }, canvas) : pageRect(r, canvas),
       emitted: [...this.emitted],
+    };
+  }
+
+  /** The leader in page CSS pixels, or null while the line points at nothing on screen. */
+  private leaderNow(canvas: Parameters<typeof pagePoint>[1]): CommsLeaderState | null {
+    const t = this.leader;
+    const pts = this.leaderPts;
+    if (!t || !pts) return null;
+    return {
+      subject: t.subject,
+      target: t.target,
+      from: pagePoint(pts[0], canvas),
+      corner: pagePoint(pts[1], canvas),
+      to: pagePoint(pts[2], canvas),
     };
   }
 }

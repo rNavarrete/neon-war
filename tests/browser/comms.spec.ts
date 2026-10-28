@@ -604,3 +604,109 @@ test('comms-6: each band line asks for its voice once, in order; voiceStart hold
   expect(c.emitted.filter((e) => e.startsWith('voice:'))).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+// comms-8: the leader line. Through C1 to C3 at speed 20 with the autopilot, a sampler in the page
+// records hud.comms.line and hud.comms.leader every 20 ms (a line lasts a fraction of a second at
+// this speed). A second box racked in C3 fires C3.triage.02, whose leader names that box and ends
+// within 2 page px of its anchor (board.parts[] reports partAnchor). A line with no LEADER_FOR entry
+// (C1.triage.02) reports null; a zone line reports null while its zone is unregistered and ends
+// within 8 page px of the registered point once a lane registers it. About 16 s.
+interface LeaderSample {
+  id: string;
+  leader: { subject: string; target: string; from: Pt; corner: Pt; to: Pt } | null;
+  located: Record<string, Pt | null>;
+}
+type Pt = { x: number; y: number };
+
+test('comms-8: the leader points at the idle box for C3.triage.02; null without an entry or a registered zone', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
+  await page.evaluate(() => {
+    const w = window as unknown as { __leader: unknown[] };
+    w.__leader = [];
+    setInterval(() => {
+      const c = (window.__neonTest!.state as unknown as { hud?: { comms?: CommsTestState } }).hud?.comms as
+        (CommsTestState & { leader: unknown; located: unknown }) | undefined;
+      if (!c?.line) return;
+      w.__leader.push({ id: c.line.id, leader: c.leader, located: c.located });
+    }, 20);
+  });
+  const samples = (): Promise<LeaderSample[]> =>
+    page.evaluate(() => (window as unknown as { __leader: LeaderSample[] }).__leader);
+
+  await dismissJobCard(page);
+  await reach(page, 'c3', { timeout: 30_000 });
+  await expect
+    .poll(async () => (await comms(page)).history, { timeout: 10_000, intervals: [50] })
+    .toContain('C3.triage.01');
+  // Rack a second box in a free pad: TRIAGE asks why it does nothing.
+  const pad = await page.evaluate(
+    () =>
+      (
+        window.__neonTest!.state as unknown as {
+          board: { slots: { id: string; part: string | null; locked: boolean }[] };
+        }
+      ).board.slots.find((s) => s.part === null && !s.locked)!.id,
+  );
+  const idle = await page.evaluate((slot) => window.__neonShell!.place(slot), pad);
+  expect(idle).not.toBeNull();
+  await expect
+    .poll(async () => (await samples()).some((s) => s.id === 'C3.triage.02' && s.leader !== null), {
+      timeout: 15_000,
+      intervals: [50],
+    })
+    .toBe(true);
+
+  const all = await samples();
+  const parts = await page.evaluate(
+    () =>
+      (window.__neonTest!.state as unknown as { board: { parts: { id: string; x: number; y: number }[] } })
+        .board.parts,
+  );
+  const part = parts.find((p) => p.id === idle)!;
+  const near = (a: Pt, b: Pt, px: number): boolean => Math.abs(a.x - b.x) <= px && Math.abs(a.y - b.y) <= px;
+  const triage02 = all.filter((s) => s.id === 'C3.triage.02' && s.leader);
+  expect(triage02.length).toBeGreaterThan(0);
+  for (const s of triage02) {
+    expect(s.leader!.subject).toBe('part:idle');
+    expect(s.leader!.target).toBe(idle);
+    expect(near(s.leader!.to, part, 2), JSON.stringify([s.leader!.to, part])).toBe(true);
+    // Right angles only.
+    const [a, b, c] = [s.leader!.from, s.leader!.corner, s.leader!.to];
+    expect(Math.abs(a.x - b.x) < 0.5 || Math.abs(a.y - b.y) < 0.5).toBe(true);
+    expect(Math.abs(b.x - c.x) < 0.5 || Math.abs(b.y - c.y) < 0.5).toBe(true);
+  }
+
+  // No LEADER_FOR entry: null.
+  const plain = all.filter((s) => s.id === 'C1.triage.02');
+  expect(plain.length).toBeGreaterThan(0);
+  expect(plain.every((s) => s.leader === null)).toBe(true);
+  // Zone lines: null while nobody registered the zone, at the registered point once someone has.
+  const zoneNames: Record<string, string[]> = {
+    'C1.triage.01': ['dialCard', 'dial'],
+    'C3.triage.01': ['inventory', 'inventory:server'],
+  };
+  for (const [id, names] of Object.entries(zoneNames)) {
+    const seen = all.filter((s) => s.id === id);
+    expect(seen.length, id).toBeGreaterThan(0);
+    for (const s of seen) {
+      const registered = names.filter((n) => s.located[n]);
+      if (registered.length === 0) expect(s.leader, id).toBeNull();
+      else if (s.leader) expect(near(s.leader.to, s.located[s.leader.target]!, 8), id).toBe(true);
+    }
+  }
+
+  // The leader is one more object for the band, inside its declared budget.
+  const perf = await page.evaluate(
+    () =>
+      (
+        window.__neonTest!.state as unknown as {
+          perf?: { zones: Record<string, { budget: { objects: number }; actual: { objects: number } }> };
+        }
+      ).perf?.zones.comms ?? null,
+  );
+  if (perf) expect(perf.actual.objects).toBeLessThanOrEqual(perf.budget.objects);
+  expect(errors).toEqual([]);
+});
