@@ -575,7 +575,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
   // Batch 1: board and map.
   {
     key: 'board/table-plate',
-    what: 'perspective PCB table under the parts, pad footprints, no parts',
+    what: 'perspective PCB table under the parts, no pads painted (code draws any number of pads)',
     batch: 1,
     lane: 'board',
     zone: 'feed',
@@ -584,7 +584,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     cut: null,
     states: 'one; midnight is a tint',
     prompt:
-      'PCB desk 30 degrees from above, cyan silkscreen grid, six faint pad footprints, amber rim at the near lip, empty; trapezoid 1215 px wide at the far edge, 1441 px at the near edge',
+      'PCB desk 30 degrees from above, an even cyan silkscreen grid edge to edge, no pads or footprints (code places 6 to 24+ pads), amber rim at the near lip, empty; trapezoid 1215 px wide at the far edge, 1441 px at the near edge',
     fallback: bake(NAVY, 0.9, 'the code-baked slab the board draws today'),
   },
   {
