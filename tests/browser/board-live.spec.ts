@@ -319,6 +319,10 @@ interface AnimRecord {
   pools: number[];
   peak: number;
   frames: number;
+  /** board-10: every effect key the shell heard asked for (shell.recentSfx), new skips seen, refund floats seen. */
+  sfx: string[];
+  skipEdges: number;
+  floats: string[];
 }
 
 /**
@@ -338,19 +342,41 @@ async function recordAnims(page: Page): Promise<void> {
         tags: string[];
       }[];
       particles: { pool: number; peak: number };
+      skipped: string[];
+      floats: string[];
     };
-    const rec = { seen: {}, dead: {}, dark: [], pools: [], peak: 0, frames: 0 } as {
+    const rec = {
+      seen: {},
+      dead: {},
+      dark: [],
+      pools: [],
+      peak: 0,
+      frames: 0,
+      sfx: [],
+      skipEdges: 0,
+      floats: [],
+    } as {
       seen: Record<string, { first: number; last: number }>;
       dead: Record<string, number>;
       dark: { label: string; darkLeft: number | null; tags: string[]; status: string; id: string }[];
       pools: number[];
       peak: number;
       frames: number;
+      sfx: string[];
+      skipEdges: number;
+      floats: string[];
     };
     (window as unknown as { __boardAnims: typeof rec }).__boardAnims = rec;
+    let lastSkipped: string[] = [];
     const tick = () => {
-      const b = (window.__neonTest?.state as unknown as { board?: B } | undefined)?.board;
+      const st = window.__neonTest?.state as unknown as
+        { board?: B; shell?: { recentSfx: string[] } } | undefined;
+      const b = st?.board;
+      for (const k of st?.shell?.recentSfx ?? []) if (!rec.sfx.includes(k)) rec.sfx.push(k);
       if (b) {
+        for (const k of b.skipped) if (!lastSkipped.includes(k)) rec.skipEdges++;
+        lastSkipped = b.skipped;
+        for (const f of b.floats) if (!rec.floats.includes(f)) rec.floats.push(f);
         const t = performance.now();
         rec.frames++;
         for (const n of b.anims) {
@@ -678,7 +704,36 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   expect(logged.length).toBeGreaterThan(0);
   for (const e of b.animLog) expect(e.calm, `${e.name} played calm`).toBe(true);
   expectWithinDurations(b);
+
+  // board-10: the board's own sounds. The boots chimed, the hot box crackled no more than once
+  // per half second, the skip blipped once per new skip; only the three keys, each one that exists.
+  // The sounds the board always made (placing, wiring, cutting, the heat, the dip) still play.
+  expectBoardSounds(b, rec);
+  expect(b.sfx.counts['server-online'], 'a boot chimed').toBeGreaterThan(0);
+  expect(b.sfx.counts['packet-drop'], 'the surge crackled').toBeGreaterThan(0);
+  expect(b.sfx.counts['health-skip'], 'the skip blipped').toBeGreaterThan(0);
+  for (const k of ['place-part', 'wire-connect', 'wire-cut', 'credits', 'server-hot', 'power-dip']) {
+    expect(rec.sfx, `the shell still hears ${k}`).toContain(k);
+  }
 });
+
+/** The Live effects the audio lane added (LIVE_SFX_KEYS in src/game/mixer.ts) that the board asks for. */
+const BOARD_SFX_KEYS = ['server-online', 'packet-drop', 'health-skip'];
+
+/** Each board sound only for a key that exists, the crackle at most once per 0.5 s, a blip at most once per new skip. */
+function expectBoardSounds(b: BoardTestState, rec: AnimRecord): void {
+  for (const e of b.sfx.log) expect(BOARD_SFX_KEYS, e.key).toContain(e.key);
+  for (const k of Object.keys(b.sfx.counts)) expect(BOARD_SFX_KEYS).toContain(k);
+  const drops = b.sfx.log.filter((e) => e.key === 'packet-drop').map((e) => e.at);
+  for (let i = 1; i < drops.length; i++) {
+    expect(drops[i] - drops[i - 1], 'packet-drop at most once per 0.5 s').toBeGreaterThanOrEqual(0.5 - 0.001);
+  }
+  expect(b.sfx.counts['health-skip'] ?? 0, 'one blip per new skip at most').toBeLessThanOrEqual(
+    rec.skipEdges,
+  );
+  // What the board asked for reached the shell.
+  for (const k of Object.keys(b.sfx.counts)) expect(rec.sfx, `the shell heard ${k}`).toContain(k);
+}
 
 const b0 = (b: BoardTestState, id: string) => b.tray.find((t) => t.id === id)!;
 

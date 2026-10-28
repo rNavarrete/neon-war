@@ -243,6 +243,13 @@ export interface BoardTestState {
     levelY: number;
   };
   /**
+   * board-10: the sounds the board asked for itself, oldest first (the last 48): 'server-online'
+   * when a boot or reboot completes, 'packet-drop' while a hot or dark part drops (at most one per
+   * 0.5 s), 'health-skip' per new skip; `at` is the board clock in seconds. Only keys that exist
+   * (isSfxKey). `counts` totals every one asked for since the scene started, by key.
+   */
+  sfx: { log: { key: string; at: number }[]; counts: Record<string, number> };
+  /**
    * board-9: the animations in flight now, by name ('death:<id>', 'flash', 'place:<id>', 'boot:<id>',
    * 'overclock:<id>', 'dip:<id>', 'haze:<id>', 'wire:<key>', 'cut:<key>', 'sparks',
    * 'decommission:<id>', 'float:<id>', 'cable', 'fireworks', 'lightsdown', 'ping'). Never 'flash' or

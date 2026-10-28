@@ -129,6 +129,8 @@ import {
   pingFrame,
 } from './board/anim';
 import type { PartStatus } from './board/view';
+import { isSfxKey } from '../game/audio';
+import { BoardSfx } from './board/sfx';
 
 // Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
 export const GAME_WIDTH = 1920;
@@ -474,6 +476,8 @@ export class BoardScene extends Phaser.Scene {
   private readonly cf = { lower: 0, dy: -CABLE_DROP_PX, sway: 0, landed: false };
   private readonly pf = { along: 0, alpha: 0, radius: 0 };
   private offAction: (() => void) | null = null;
+  /** board-10: the board's own sounds (boot chime, drop crackle, skip blip), only for keys that exist. */
+  private sounds = new BoardSfx(isSfxKey);
   /** Created once with the scene: the pool calls it per wire per frame without a new closure. */
   private readonly travelOf = (wire: string): number => this.geomOf(wire)?.travel ?? 1;
   /** Bound once: drops the sprites of a part no longer on the board (Map.forEach, no iterator). */
@@ -571,6 +575,7 @@ export class BoardScene extends Phaser.Scene {
     this.cutGeoms = new Map();
     this.deathOf = null;
     this.fireworksAt = -1;
+    this.sounds = new BoardSfx(isSfxKey);
 
     this.drawBackdrop();
 
@@ -1053,6 +1058,7 @@ export class BoardScene extends Phaser.Scene {
     this.drawChannel(channelInto(this.chan, f));
     this.stepPackets(dt, f);
     this.stepSparks(dt, parts);
+    if (!f.paused) this.playSounds(occ, parts);
     this.drawWait(wait, f.paused ? 0 : Math.min(seconds, 0.25));
     this.updateGhost(f);
     this.updatePlate(parts, f);
@@ -1555,6 +1561,26 @@ export class BoardScene extends Phaser.Scene {
       if (w && w.to === id) n++;
     }
     return n;
+  }
+
+  /**
+   * board-10: the crackle while a hot or dark part drops requests (at most once per 0.5 s) and the
+   * blip for each new skip. The boot chime is asked for where the boot ring starts.
+   */
+  private playSounds(occ: readonly Occurrence[], parts: readonly Part[]): void {
+    for (let i = 0; i < occ.length; i++)
+      if (occ[i].kind === 'skipped') this.askSound(this.sounds.skip(this.clock));
+    let dropping = false;
+    for (let i = 0; i < parts.length && !dropping; i++) {
+      const id = parts[i].id;
+      dropping = (this.drops[id] ?? 0) > 0 && this.hotParts.has(id);
+    }
+    this.askSound(this.sounds.drop(dropping, this.clock));
+  }
+
+  /** Ask for a board sound the BoardSfx let through (its key exists). */
+  private askSound(key: string | null): void {
+    if (key !== null) bus.emit('sfx', { key });
   }
 
   private showRefusal(reason: string): void {
@@ -2150,6 +2176,7 @@ export class BoardScene extends Phaser.Scene {
       const st = v.look.status;
       if ((v.status === 'booting' || v.status === 'rebooting') && st === 'online') {
         book.start('boot', id, calm, now);
+        this.askSound(this.sounds.online(this.clock));
       }
       v.status = st;
       book.keep('haze', id, st === 'online' && v.look.share !== null && v.look.share > 1, calm, now);
@@ -2798,6 +2825,10 @@ export class BoardScene extends Phaser.Scene {
       },
       keys: [...BOARD_KEYS],
       wireTarget: this.targetRing,
+      sfx: {
+        log: this.sounds.log.map((e) => ({ key: e.key, at: round(e.at) })),
+        counts: { ...this.sounds.counts },
+      },
       anims: this.animBook.names(),
       animLog: this.animBook.log.map((e) => ({
         name: e.name,
