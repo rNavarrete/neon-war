@@ -226,6 +226,36 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       h.dialCard.label,
     ]);
     await shot(page, 'live-gauges-c1');
+
+    // M4 frame kit: each panel is one baked texture of picked pieces, none drawn above its file's size.
+    const kit = (await lane(page)) as LaneHud;
+    const panels = {
+      title: kit.title.panel,
+      gauge: kit.gauge.panel,
+      scope: kit.chart.panel,
+      map: kit.map.panel,
+      headroom: kit.headroom.panel,
+      dialCard: kit.dialCard.panel,
+    };
+    for (const [name, p] of Object.entries(panels)) {
+      expect(p, `${name}.panel`).toBeTruthy();
+      expect(p!.texture, name).toBe(`live-kit:${name}`);
+      expect(p!.pieces, name).toContain('hud/live/panel-frame');
+      expect(p!.pieces, name).toContain('hud/live/corner-marks');
+      expect(p!.missing, name).toEqual([]);
+      expect(p!.maxScale, name).toBeGreaterThan(0);
+      expect(p!.maxScale, name).toBeLessThanOrEqual(1);
+    }
+    for (const name of ['gauge', 'scope', 'map'] as const)
+      expect(panels[name]!.pieces, name).toContain('hud/live/label-tab');
+    for (const name of ['gauge', 'headroom'] as const)
+      expect(panels[name]!.pieces, name).toContain('hud/live/divider');
+    expect(kit.map.base).toBe('hud/city-grid');
+    // The LIVE pill shows exactly while the dot reads live; SET carries the play glyph, dim with it.
+    expect(kit.title.pill).toBe(kit.title.live === 'live');
+    expect(kit.deck.play).toEqual({ drawn: true, lit: false });
+    expect(kit.deck.keys.three.cap).toMatch(/^hud\/live\/keycap-(idle|pressed)$/);
+    await shot(page, 'm4-kit-c1');
   });
 
   await test.step('C2: the Solace banner blocks the deck', async () => {

@@ -54,6 +54,40 @@ test('the alert band: number first, RAID only as a tag, and the raid number clim
     expect(h.surge?.line ?? 'C4.warn.01').toBe('C4.warn.01');
   });
 
+  await test.step('M4 kit: the alert plate and its end cap, the map in the raid, the keycaps', async () => {
+    const h = await hud(page);
+    // The band is the picked alert plate, nine-sliced at k 0.5, with the hazard end cap: one baked
+    // texture, nothing drawn above its file's size.
+    const plate = h.alert!.panel!;
+    expect(plate.texture).toBe('live-kit:alert');
+    expect(plate.pieces).toEqual(['hud/live/alert-plate', 'hud/live/alert-endcap']);
+    expect(plate.missing).toEqual([]);
+    expect(plate.maxScale).toBeGreaterThan(0);
+    expect(plate.maxScale).toBeLessThanOrEqual(1);
+    expect(plate.rect).toEqual({ x: 460, y: 8, w: 1040, h: 84 });
+    // The map is the painted city grid in its frame; CUT OFF sits on the red tag chip in the raid.
+    const map = h.map!;
+    expect(map.base).toBe('hud/city-grid');
+    expect(map.neighboursCut).toBe(true);
+    expect(map.chip).toBe(true);
+    expect(map.panel!.pieces).toEqual([
+      'hud/city-grid',
+      'hud/live/panel-frame',
+      'hud/live/label-tab',
+      'hud/live/corner-marks',
+    ]);
+    expect(map.panel!.maxScale).toBeLessThanOrEqual(1);
+    // Each deck key shows the picked keycap for its state.
+    for (const k of ['one', 'two', 'three'] as const) {
+      const key = h.deck!.keys[k];
+      expect(key.cap, k).toMatch(/^hud\/live\/keycap-(idle|ready|pressed)$/);
+      if (key.cap !== 'hud/live/keycap-pressed')
+        expect(key.cap, k).toBe(key.lit ? 'hud/live/keycap-ready' : 'hud/live/keycap-idle');
+    }
+    expect(h.deck!.play).toEqual({ drawn: true, lit: h.deck!.keys.three.lit });
+    await shot(page, 'm4-kit-raid');
+  });
+
   await test.step('the raid number climbs above 250 once retries are rising', async () => {
     const climbed = (list: AlertHistoryEntry[]): AlertHistoryEntry | undefined =>
       list.find((e) => RAIDING.includes(e.kind) && e.retry > 0 && e.number > 250);
