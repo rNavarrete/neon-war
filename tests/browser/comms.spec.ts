@@ -57,7 +57,11 @@ test('the band shows C1.triage.02 with its speaker and tag, five slots inside it
   expect(line.until - line.since).toBeGreaterThanOrEqual(4 - 1e-6);
   expect(line.typed).toBeGreaterThanOrEqual(0);
   expect(line.typed).toBeLessThanOrEqual(line.text.length);
-  expect(line.voiced).toBe(false);
+  // The recorded clip for the line exists now, so the mixer starts it and the band marks the line
+  // voiced (it was false while no voice file existed).
+  await expect
+    .poll(async () => (await comms(page)).line?.voiced ?? null, { timeout: 5_000, intervals: [25] })
+    .toBe(true);
   for (const [id, span] of spans) expect(span, id).toBeGreaterThanOrEqual(4 - 1e-6);
   // One line at a time: the first ended before the second started.
   expect(c.history).toEqual(['C1.triage.01', 'C1.triage.02']);
@@ -249,10 +253,14 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
   page,
 }) => {
   test.setTimeout(90_000);
+  // Voices off: this test samples who speaks on the band, not the voices. With the recorded clips
+  // on disk a voiced line holds the band for its clip (comms-6), and at the reach speed no line by
+  // another speaker showed before the rescue; tests/browser/voice.spec.ts and comms-6 cover the
+  // voices themselves.
   await page.addInitScript(() => {
     window.localStorage.setItem(
       'neon-war.settings',
-      JSON.stringify({ volume: 0, textSpeed: 'fast', reduceFlicker: true }),
+      JSON.stringify({ volume: 0, textSpeed: 'fast', reduceFlicker: true, voices: 'off' }),
     );
   });
   const { errors } = await openBoard(page);
@@ -498,8 +506,10 @@ const storyOf = (page: Page): Promise<StoryHook | null> =>
 
 // comms-6, scenes: every line the cold open shows in the text box asks for its voice once, through
 // playVoice, in the order shown; a click past a line cuts its voice (story.voiceStops), and the
-// scene ending cuts the last. With no voice files nothing plays (shell.voice.playing stays null)
-// and nothing is fetched. About 7 s.
+// scene ending cuts the last. With the recorded voices on disk each line's clip plays while it
+// shows (shell.voice.started names it), is fetched once and is never missing; once the scene ends
+// nothing plays. (Before the files landed this asserted nothing played and nothing was fetched.)
+// About 9 s.
 test('comms-6: scene lines ask for their voice in order; a click past a line cuts it', async ({ page }) => {
   test.setTimeout(40_000);
   const errors: string[] = [];
@@ -524,6 +534,10 @@ test('comms-6: scene lines ask for their voice in order; a click past a line cut
       expect(s.voices.at(-1), s.lineId).toBe(s.lineId);
       expect((await voiceOf(page)).recentVoice.at(-1), s.lineId).toBe(s.lineId);
       if (shown.length > 1) expect(s.voiceStops.at(-1)).toBe(shown.at(-2));
+      // Its clip starts while the line shows: the mixer reports voiceStart for it.
+      await expect
+        .poll(async () => (await voiceOf(page)).started, { timeout: 5_000, intervals: [25] })
+        .toContain(s.lineId);
     }
     await expect.poll(async () => (await storyOf(page))!.typingDone, { timeout: 5_000 }).toBe(true);
     const before = (await storyOf(page))!;
@@ -552,17 +566,25 @@ test('comms-6: scene lines ask for their voice in order; a click past a line cut
   expect(v.requested).toEqual(shown.map((id) => `ja:${id}`));
   for (const r of v.requested) expect(r).toMatch(/^ja:C0\./);
   expect(v.lastVoice).toBe(shown.at(-1));
-  for (const id of shown) expect(v.missing).toContain(id);
+  // The files exist now: no shown id is missing, each clip started once, in the order shown, and
+  // was fetched once in Japanese. The scene ending cut the last one, so nothing plays.
+  for (const id of shown) expect(v.missing).not.toContain(id);
   expect(v.playing).toBeNull();
-  expect(v.started).toEqual([]);
-  expect(fetched).toEqual([]);
+  expect(v.started).toEqual(shown);
+  for (const id of shown)
+    expect(
+      fetched.filter((u) => u.endsWith(`/audio/voice/ja/${id}.mp3`)),
+      id,
+    ).toHaveLength(1);
+  expect(new Set(fetched).size).toBe(fetched.length);
   expect(errors).toEqual([]);
 });
 
 // comms-6, band: every bark the band shows asks the mixer for its voice exactly once (bus `line`
 // is the request), in the order shown; a voiceStart for the current line marks it voiced and holds
-// it until at least seconds + 0.6 after it started. `window.__neonComms.voiceStart` stands in for
-// the mixer, which never starts a clip headless. About 8 s.
+// it until at least seconds + 0.6 after it started. `window.__neonComms.voiceStart` reports a 3 s
+// clip so the hold is known; the mixer's own voiceStart for the real clip may follow, and the band
+// keeps the longer hold. About 8 s.
 test('comms-6: each band line asks for its voice once, in order; voiceStart holds the line', async ({
   page,
 }) => {
@@ -641,6 +663,11 @@ test('comms-8: the leader points at the idle box for C3.triage.02; null without 
   page,
 }) => {
   test.setTimeout(60_000);
+  // Voices off: the leader is about the band's line and the part, not the voice. A voiced line holds
+  // the band for its clip (comms-6), which at speed 20 changes which C3 lines show in time.
+  await page.addInitScript(() => {
+    window.localStorage.setItem('neon-war.settings', JSON.stringify({ voices: 'off' }));
+  });
   const { errors } = await openBoard(page, { speed: 20, autopilot: true });
   await page.evaluate(() => {
     const w = window as unknown as { __leader: unknown[] };
