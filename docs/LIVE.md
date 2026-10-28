@@ -222,8 +222,8 @@ No view reads the meter, and it allocates nothing per object.
 ### Budgets
 
 The global budget is 750 objects and 110 texts across board and HUD. `live-perf.spec.ts` checks it
-at the C4 surge and at midnight: all objects against 750, and the drawn texts against 110 (all
-texts are over 110 today; see below). It also checks three more things:
+at the C4 surge and at midnight: all objects against 750, the drawn texts and all texts (hidden
+ones included) against 110, and the board's texts against 28. It also checks three more things:
 
 - Every registered view's `actual` stays within its `budget`.
 - `pools.packets` stays at or below 160.
@@ -272,8 +272,7 @@ the comms band's leader line and the leader's locate points):
 - **Drawn texts.** 78 at the surge and 71 at midnight.
 - **All texts, hidden ones included.** 102 at the surge (20 board + 82 HUD) and 105 at midnight
   (23 + 82), so the whole count is now inside 110 too: the board's 20 to 23 are inside its 28.
-  `live-perf.spec.ts` still asserts the drawn texts against 110; the switch to all texts is now
-  free to make.
+  `live-perf.spec.ts` now asserts all texts against 110 and the board's against 28.
 - **Packets.** The pool holds at 116 from the surge to midnight.
 - **Frame rate.** 8.7 fps at the surge and 9.0 at midnight (about 112 ms a frame).
 
