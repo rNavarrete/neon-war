@@ -12,6 +12,7 @@ import { type DialMode, dialDimmed, dialFraction, dialLabel, dialValueAt, turnDi
 import { COLORS, FONT, RIGHT } from './layout';
 import { provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
+import { type PanelTestState, bakePanel, panelSnapshot, releasePanel } from './panel';
 
 /** The dial card's look, mirrored as hud.dialCard. */
 export interface DialCardTestState {
@@ -19,6 +20,8 @@ export interface DialCardTestState {
   dimmed: boolean;
   /** The words on the card's label now. */
   label: string;
+  /** The card's baked plate (m4 panel kit). */
+  panel?: PanelTestState | null;
 }
 
 declare module './hook' {
@@ -36,6 +39,8 @@ const SWEEP = 270;
 /** Offsets inside the painted frame, at the dial's display size (from the 823x835 art). */
 const KNOB = { dx: -7, dy: -12, r: 44 };
 const RING_R = 92;
+/** The card's bracket corners (kit.ts). */
+const CARD_CORNERS = 30;
 const WINDOW = { dx: -7, dy: 70 };
 
 export interface DialHandlers {
@@ -69,11 +74,15 @@ export class DialView {
     const d = RIGHT.dial;
     const c = RIGHT.dialCard;
     this.root = scene.add.container(0, 0);
-    const card = scene.add.graphics();
-    card.fillStyle(COLORS.ink, 0.88);
-    card.fillRoundedRect(c.x, c.y, c.w, c.h, 14);
-    card.lineStyle(2, COLORS.cyan, 0.7);
-    card.strokeRoundedRect(c.x + 1, c.y + 1, c.w - 2, c.h - 2, 14);
+    // The card, baked once with the frame kit (its frame and bracket corners; the views preload them).
+    const plate = bakePanel(
+      scene,
+      'dialCard',
+      c,
+      { frame: true, corners: CARD_CORNERS },
+      { fill: { color: COLORS.ink, alpha: 0.88 } },
+    );
+    const card = plate.object;
     this.label = scene.add
       .text(RIGHT.dialLabel.x, RIGHT.dialLabel.y, '', {
         fontFamily: FONT,
@@ -107,11 +116,13 @@ export class DialView {
     const offHook = provideHudSection('dialCard', () => ({
       dimmed: this.dimmed,
       label: this.shownLabel,
+      panel: panelSnapshot(plate),
     }));
     // The leader line ends at the dial's face while its card is up (game px, made once).
     const face0 = { x: d.x, y: d.y };
     const offLocate = registerLocate('dial', () => (this.root.visible ? face0 : null));
     scene.events.once('shutdown', () => {
+      releasePanel(plate);
       offWired();
       offHook();
       offLocate();

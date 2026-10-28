@@ -23,7 +23,15 @@ import {
   stepHeadroom,
 } from './headroom';
 import { COLORS, FONT } from './layout';
-import { GAUGES_DEPTH } from './panel';
+import { KIT } from './kit';
+import {
+  type BakedPanel,
+  GAUGES_DEPTH,
+  type PanelTestState,
+  bakePanel,
+  panelSnapshot,
+  releasePanel,
+} from './panel';
 
 /** The bar's colours: green while there is room, the amber hero colour when it is short, red over. */
 export const BAR_COLORS: Readonly<Record<HeadroomColour, number>> = {
@@ -43,11 +51,16 @@ export const RED_SOUND = 'headroom-red';
 /** The bar's alpha while the board is held. */
 const HELD_ALPHA = 0.5;
 
+/** The kit pieces the bar's plate draws (DeckView preloads them). */
+export const HEADROOM_KIT = [KIT.frame, KIT.corner, KIT.divider] as const;
+const HEADROOM_CORNERS = 24;
+
 export class HeadroomView {
   /** Objects and texts this view makes. */
   static readonly budget = { objects: 3, texts: 1 };
   readonly state: HeadroomState = emptyHeadroom();
-  private plate: Phaser.GameObjects.Graphics | null = null;
+  private plate: Phaser.GameObjects.Image | Phaser.GameObjects.Graphics | null = null;
+  private baked: BakedPanel | null = null;
   private segments: Phaser.GameObjects.Graphics | null = null;
   private label: Phaser.GameObjects.Text | null = null;
   private layout = headroomLayout({ x: 0, y: 0, w: 0, h: 0 });
@@ -71,28 +84,42 @@ export class HeadroomView {
     this.layout = L;
     const add = scene.add;
 
-    const plate = add.graphics();
-    plate.fillStyle(COLORS.ink, 0.96);
-    plate.fillRect(L.plate.x, L.plate.y, L.plate.w, L.plate.h);
-    plate.lineStyle(1, COLORS.cyan, 0.35);
-    plate.strokeRect(L.plate.x + 0.5, L.plate.y + 0.5, L.plate.w - 1, L.plate.h - 1);
-    // The pulse icon: a flat line with one beat in it.
+    // The plate, baked once with the frame kit: the fill, the pulse icon, the 30%-left marker, a
+    // divider between the icon and the bar, the frame and the bracket corners.
     const i = L.icon;
-    const mid = i.y + i.h / 2;
-    plate.lineStyle(2, COLORS.cyan, 0.9);
-    plate.beginPath();
-    plate.moveTo(i.x, mid);
-    plate.lineTo(i.x + i.w * 0.35, mid);
-    plate.lineTo(i.x + i.w * 0.45, i.y);
-    plate.lineTo(i.x + i.w * 0.58, i.y + i.h);
-    plate.lineTo(i.x + i.w * 0.68, mid);
-    plate.lineTo(i.x + i.w, mid);
-    plate.strokePath();
-    // Where 30% is left: after the ninth segment.
     const s = L.segments;
-    const mx = s.x + L.marker * s.pitch - (s.pitch - s.w) / 2;
-    plate.lineStyle(2, 0xe8f1ff, 0.55);
-    plate.lineBetween(mx, s.y - 6, mx, s.y + s.h + 6);
+    const baked = bakePanel(
+      scene,
+      'headroom',
+      L.plate,
+      {
+        frame: true,
+        corners: HEADROOM_CORNERS,
+        dividers: [{ x: i.x + i.w + 40, y: L.plate.y + 18, h: L.plate.h - 36 }],
+      },
+      {
+        fill: { color: COLORS.ink, alpha: 0.96 },
+        draw: (plate) => {
+          // The pulse icon: a flat line with one beat in it.
+          const mid = i.y + i.h / 2;
+          plate.lineStyle(2, COLORS.cyan, 0.9);
+          plate.beginPath();
+          plate.moveTo(i.x, mid);
+          plate.lineTo(i.x + i.w * 0.35, mid);
+          plate.lineTo(i.x + i.w * 0.45, i.y);
+          plate.lineTo(i.x + i.w * 0.58, i.y + i.h);
+          plate.lineTo(i.x + i.w * 0.68, mid);
+          plate.lineTo(i.x + i.w, mid);
+          plate.strokePath();
+          // Where 30% is left: after the ninth segment.
+          const mx = s.x + L.marker * s.pitch - (s.pitch - s.w) / 2;
+          plate.lineStyle(2, 0xe8f1ff, 0.55);
+          plate.lineBetween(mx, s.y - 6, mx, s.y + s.h + 6);
+        },
+      },
+    );
+    this.baked = baked;
+    const plate = baked.object;
     this.plate = plate;
 
     this.segments = add.graphics();
@@ -170,6 +197,11 @@ export class HeadroomView {
     }
   }
 
+  /** The bar's baked plate, for hud.headroom.panel. */
+  get panel(): PanelTestState | null {
+    return panelSnapshot(this.baked);
+  }
+
   /** The words on the bar now. */
   get labelText(): string {
     return this.label?.text ?? '';
@@ -181,7 +213,8 @@ export class HeadroomView {
   }
 
   shutdown(): void {
-    this.plate?.destroy();
+    releasePanel(this.baked);
+    this.baked = null;
     this.segments?.destroy();
     this.label?.destroy();
     this.plate = null;

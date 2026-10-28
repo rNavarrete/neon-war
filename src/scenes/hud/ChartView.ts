@@ -31,13 +31,31 @@ import { LABELS } from './labels';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
-import { GAUGES_DEPTH, panel } from './panel';
+import { KIT } from './kit';
+import {
+  type BakedPanel,
+  GAUGES_DEPTH,
+  type PanelTestState,
+  bakePanel,
+  panelSnapshot,
+  releasePanel,
+} from './panel';
+import { preloadArt } from '../plates';
 
 const DASH = 10;
 const GAP = 7;
 /** Racked-but-unfed room counts as different from the wired room above half a call a second. */
 const RACKED_FROM = 0.5;
 const ESTIMATE_COLOR = 0xffffff;
+/** The label tab under the title and the bracket corners (kit.ts), sized for the scope's 13 px words. */
+const TAB_H = 20;
+const SCOPE_CORNERS = 26;
+
+/** The scope's plate as the HUD's bounds check reads it: shown or not, and its display bounds. */
+export interface ScopePanel {
+  readonly visible: boolean;
+  getBounds(): { x: number; y: number; width: number; height: number };
+}
 
 /** What the hook mirrors as hud.chart: the legacy fields (hud.spec) plus the scope's own. */
 export interface ScopeTestState {
@@ -63,6 +81,8 @@ export interface ScopeTestState {
   /** The words on screen. */
   title: string;
   legend: string;
+  /** The baked plate: which picked kit pieces it draws, at what largest scale (m4 panel kit). */
+  panel?: PanelTestState | null;
 }
 
 export class ChartView implements LiveView {
@@ -74,8 +94,9 @@ export class ChartView implements LiveView {
   readonly ring = new ChartRing(SCOPE_PAST_SECONDS, 0.25);
   /** The wired room, in the ring's demand slot. */
   readonly wired = new ChartRing(SCOPE_PAST_SECONDS, 0.25);
-  /** The painted frame, the size of the scope zone; null before create. */
-  private frame: Phaser.GameObjects.NineSlice | null = null;
+  /** The baked plate (fill, frame kit), the size of the scope zone; null before create. */
+  private frame: BakedPanel | null = null;
+  private bounds: ScopePanel | null = null;
   private g: Phaser.GameObjects.Graphics | null = null;
   private title: Phaser.GameObjects.Text | null = null;
   private topLabel: Phaser.GameObjects.Text | null = null;
@@ -98,15 +119,19 @@ export class ChartView implements LiveView {
   ceiling = 60;
   private now = 0;
 
-  /** The painted frame (the scope zone's bounds, for the restage hook). */
-  get panel(): Phaser.GameObjects.NineSlice {
-    if (!this.frame) throw new Error('ChartView: panel read before create');
-    return this.frame;
+  /** The plate (the scope zone's bounds, for the restage hook). */
+  get panel(): ScopePanel {
+    if (!this.bounds) throw new Error('ChartView: panel read before create');
+    return this.bounds;
   }
 
-  /** The painted frame, or null while the view is not built (before create, after shutdown). */
-  get builtPanel(): Phaser.GameObjects.NineSlice | null {
-    return this.frame;
+  /** The plate, or null while the view is not built (before create, after shutdown). */
+  get builtPanel(): ScopePanel | null {
+    return this.bounds;
+  }
+
+  preload(scene: Phaser.Scene): void {
+    preloadArt(scene as never, [KIT.frame, KIT.corner, KIT.tab]);
   }
 
   create(scene: Phaser.Scene, host: LiveHost): void {
@@ -114,7 +139,22 @@ export class ChartView implements LiveView {
     const L = scopeLayout(r);
     this.layout = L;
     const add = scene.add;
-    this.frame = panel(scene, 'hud:chart-window', r.x, r.y, r.w, r.h, { k: 0.4 });
+    // The plate, baked once: a dark fill, the frame kit round the zone, the tab under the title.
+    const frame = bakePanel(
+      scene,
+      'scope',
+      r,
+      { frame: true, corners: SCOPE_CORNERS, tab: { x: L.title.x - 8, y: r.y, h: TAB_H } },
+      { fill: { color: COLORS.ink, alpha: 0.92 } },
+    );
+    this.frame = frame;
+    const box = { x: r.x, y: r.y, width: r.w, height: r.h };
+    this.bounds = {
+      get visible() {
+        return frame.object.visible;
+      },
+      getBounds: () => box,
+    };
     this.g = add.graphics();
     const text = (x: number, y: number, s: string, color: string): Phaser.GameObjects.Text =>
       add.text(x, y, s, { fontFamily: FONT, fontSize: '13px', color });
@@ -125,7 +165,7 @@ export class ChartView implements LiveView {
     this.rackedNote.setVisible(false);
     this.ahead = text(L.plot.right - 4, L.plot.top + 2, LABELS.scope.ahead, COLORS.amberText).setOrigin(1, 0);
     this.ahead.setVisible(false);
-    const all = [this.frame, this.g, this.title, this.topLabel, this.legend, this.rackedNote, this.ahead];
+    const all = [frame.object, this.g, this.title, this.topLabel, this.legend, this.rackedNote, this.ahead];
     for (const o of all) o.setDepth(GAUGES_DEPTH);
     this.made.objects = all.length;
     this.made.texts = 5;
@@ -282,15 +322,18 @@ export class ChartView implements LiveView {
       plot: { w: p.right - p.left, h: p.bottom - p.top },
       title: this.title?.text ?? '',
       legend: this.legend?.text ?? '',
+      panel: panelSnapshot(this.frame),
     };
   }
 
   shutdown(): void {
     for (const off of this.off) off();
     this.off = [];
-    for (const o of [this.frame, this.g, this.title, this.topLabel, this.legend, this.rackedNote, this.ahead])
+    releasePanel(this.frame);
+    for (const o of [this.g, this.title, this.topLabel, this.legend, this.rackedNote, this.ahead])
       o?.destroy();
     this.frame = null;
+    this.bounds = null;
     this.g = null;
     this.title = null;
     this.topLabel = null;
