@@ -1,24 +1,22 @@
-// The demand-versus-capacity chart: the board's main readout. One Graphics redrawn every frame from
-// the preallocated ring buffer; labels change only when their rounded numbers do.
+// The demand-versus-capacity chart in the scope zone (the plot at x 46-400, y 905-1050). One
+// Graphics redrawn every frame from the preallocated ring buffer; labels change only when their
+// rounded numbers do. Geometry from src/scenes/hud/layout.ts LEFT, derived from ZONES.scope.
 
 import Phaser from 'phaser';
 import { panel } from './panel';
 import { ChartRing } from './chartRing';
 import { chartCeiling } from './format';
-import { COLORS, FONT, RIGHT } from './layout';
+import { COLORS, FONT, LEFT } from './layout';
 
 const WINDOW_SECONDS = 60;
 const DASH = 10;
 const GAP = 7;
-const PLOT = {
-  left: RIGHT.chart.x + RIGHT.chart.inset,
-  right: RIGHT.chart.x + RIGHT.chart.w - RIGHT.chart.inset,
-  top: RIGHT.chart.y + 36,
-  bottom: RIGHT.chart.y + RIGHT.chart.h - 40,
-};
+const PLOT = LEFT.plot;
 
 export class ChartView {
   readonly ring = new ChartRing(WINDOW_SECONDS, 0.25);
+  /** The painted frame, the size of the scope zone. */
+  readonly panel: Phaser.GameObjects.NineSlice;
   private readonly g: Phaser.GameObjects.Graphics;
   private readonly legend: Phaser.GameObjects.Text;
   private readonly topLabel: Phaser.GameObjects.Text;
@@ -30,17 +28,19 @@ export class ChartView {
   private now = 0;
 
   constructor(scene: Phaser.Scene) {
-    const c = RIGHT.chart;
-    panel(scene, 'hud:chart-window', c.x, c.y, c.w, c.h, { k: 0.4 });
+    const c = LEFT.chart;
+    this.panel = panel(scene, 'hud:chart-window', c.x, c.y, c.w, c.h, { k: 0.4 });
     this.g = scene.add.graphics();
-    this.topLabel = scene.add.text(c.x + c.inset, c.y + 12, '', {
+    this.topLabel = scene.add
+      .text(LEFT.chartTop.right, LEFT.chartTop.y, '', {
+        fontFamily: FONT,
+        fontSize: '13px',
+        color: COLORS.dim,
+      })
+      .setOrigin(1, 0);
+    this.legend = scene.add.text(LEFT.chartLegend.x, LEFT.chartLegend.y, '', {
       fontFamily: FONT,
-      fontSize: '14px',
-      color: COLORS.dim,
-    });
-    this.legend = scene.add.text(c.x + c.inset, c.y + c.h - 30, '', {
-      fontFamily: FONT,
-      fontSize: '15px',
+      fontSize: '13px',
       color: COLORS.white,
     });
   }
@@ -82,7 +82,7 @@ export class ChartView {
     }
     if (this.ceiling !== this.shownTop) {
       this.shownTop = this.ceiling;
-      this.topLabel.setText(`REQ/S  ${this.ceiling}`);
+      this.topLabel.setText(`${this.ceiling}/s`);
     }
   }
 
