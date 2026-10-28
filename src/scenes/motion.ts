@@ -487,3 +487,326 @@ export function followReadout(r: EasedReadout, plotted: number, dt: number, snap
 export function readoutHook(r: EasedReadout): number {
   return r.plotted;
 }
+
+// ---- the glow probe (art3d-6) ----
+//
+// A red Glow filter on at most three over-capacity parts (the hottest first) and one transient
+// GradientMap on the board's camera when the crew's rescue lands. Which parts glow and how strongly
+// are pure functions below; GlowProbe is the adapter BoardScene steps once a frame. It talks to
+// Phaser through the small structural types here (no Phaser import), keeps its Glow controllers
+// while the same parts stay hot, and adds or removes one only when the hot set changes: a steady
+// frame allocates nothing. Under reduce flicker the glow is steady and the GradientMap never shows
+// (a whole-board recolour is a flash).
+
+/** The probe is on. Set false to drop it (no filter is ever made) if the frame budget fails. */
+export const GLOW_PROBE_ON = true;
+/** At most this many parts glow at once. */
+export const GLOW_MAX = 3;
+/** Red: only over capacity. */
+export const GLOW_COLOUR = 0xff2a3a;
+/** Glow sampling quality and distance (fixed at creation; low to keep each pass cheap). */
+export const GLOW_QUALITY = 6;
+export const GLOW_DISTANCE = 8;
+/** The pulse rate when not calm, Hz. */
+export const GLOW_PULSE_HZ = 1.5;
+/** How long the rescue's GradientMap stays on, board-clock seconds. */
+export const RESCUE_MAP_SECONDS = 1.5;
+/** The rescue GradientMap's ramp: navy shadows to lamp cyan. */
+export const RESCUE_MAP_RAMP = Object.freeze({ colorStart: 0x061226, colorEnd: 0x7fe9ff });
+
+/**
+ * The parts to glow: the ids of up to `max` parts over capacity (share > 1, finite, not dark), the
+ * hottest first, ties by id. `ids`, `shares` and `dark` are parallel; `n` of them are read. Fills
+ * `out` (cleared first) and `outShares` alongside and returns `out`: insertion into a top-k of at
+ * most `max`, so nothing allocates once `out` has grown to `max`.
+ */
+export function pickGlowsInto(
+  out: string[],
+  outShares: number[],
+  ids: readonly string[],
+  shares: readonly (number | null)[],
+  dark: readonly boolean[],
+  n: number,
+  max = GLOW_MAX,
+): string[] {
+  out.length = 0;
+  outShares.length = 0;
+  if (max <= 0) return out;
+  for (let i = 0; i < n; i++) {
+    const s = shares[i];
+    if (s === null || s === undefined || !Number.isFinite(s) || s <= 1 || dark[i]) continue;
+    const id = ids[i];
+    // Its place: before the first entry it beats (a higher share, or the same share and a lower id).
+    let at = out.length;
+    for (let k = 0; k < out.length; k++) {
+      if (s > outShares[k] || (s === outShares[k] && id < out[k])) {
+        at = k;
+        break;
+      }
+    }
+    if (at >= max) continue;
+    if (out.length < max) {
+      out.push('');
+      outShares.push(0);
+    }
+    for (let k = out.length - 1; k > at; k--) {
+      out[k] = out[k - 1];
+      outShares[k] = outShares[k - 1];
+    }
+    out[at] = id;
+    outShares[at] = s;
+  }
+  return out;
+}
+
+/** A part offered to the picker. */
+export interface GlowCandidate {
+  readonly id: string;
+  readonly share: number | null;
+  readonly dark?: boolean;
+}
+
+/** pickGlowsInto on a list, as a new array (for tests and one-off reads). Never mutates `parts`. */
+export function pickGlows(parts: readonly GlowCandidate[], max = GLOW_MAX): string[] {
+  return pickGlowsInto(
+    [],
+    [],
+    parts.map((p) => p.id),
+    parts.map((p) => p.share),
+    parts.map((p) => p.dark === true),
+    parts.length,
+    max,
+  );
+}
+
+/**
+ * The Glow's outer strength for a part at `share` (> 1) at board-clock second `t`: hotter glows
+ * more (2 just over 100%, up to 5 at 200% and over). Calm: steady at that level. Otherwise it
+ * breathes at GLOW_PULSE_HZ between 70% and 100% of it.
+ */
+export function glowStrength(share: number, t: number, calm: boolean): number {
+  const over = Math.min(Math.max(share - 1, 0), 1);
+  const level = 2 + 3 * over;
+  if (calm) return level;
+  return level * (0.85 + 0.15 * Math.sin(2 * Math.PI * GLOW_PULSE_HZ * t));
+}
+
+/**
+ * The rescue's GradientMap shows: the rescue landed at board-clock second `rescuedAt` (null
+ * before) and `t` is less than RESCUE_MAP_SECONDS after it. Never when calm.
+ */
+export function rescueMapOn(t: number, rescuedAt: number | null, calm: boolean): boolean {
+  if (calm || rescuedAt === null) return false;
+  const since = t - rescuedAt;
+  return since >= 0 && since < RESCUE_MAP_SECONDS;
+}
+
+// The structural Phaser types the probe touches (Phaser.Filters.Glow, FilterList, an Image).
+
+/** A filter controller: Phaser.Filters.Controller. */
+export interface FilterCtl {
+  active: boolean;
+}
+/** Phaser.Filters.Glow, the field the probe moves. */
+export interface GlowCtl extends FilterCtl {
+  outerStrength: number;
+}
+/** A FilterList's internal half: the calls the probe makes. */
+export interface FilterListLike {
+  addGlow(
+    color?: number,
+    outerStrength?: number,
+    innerStrength?: number,
+    scale?: number,
+    knockout?: boolean,
+    quality?: number,
+    distance?: number,
+  ): GlowCtl;
+  addGradientMap(config?: { ramp?: { colorStart: number; colorEnd: number } }): FilterCtl;
+  remove(filter: FilterCtl, forceDestroy?: boolean): unknown;
+}
+/** A game object that can carry filters once enableFilters() has run. */
+export interface GlowHost {
+  enableFilters(): unknown;
+  readonly filters: { readonly internal: FilterListLike } | null;
+}
+/** What the probe reads of one part's view: its sprite and its look. */
+export interface GlowView {
+  readonly img: GlowHost;
+  readonly look: { readonly share: number | null; readonly dark: boolean };
+}
+/** A camera: its filters exist already. */
+export interface MapHost {
+  readonly filters: { readonly internal: FilterListLike };
+}
+
+/** The probe's hook section (`board.glow`). */
+export interface GlowState {
+  /** Live Glow filters now (at most GLOW_MAX). */
+  glows: number;
+  /** Live GradientMap filters now (at most 1). */
+  gradientMaps: number;
+  /** The parts glowing now, hottest first. */
+  parts: string[];
+}
+
+interface GlowSlot {
+  id: string | null;
+  host: GlowHost | null;
+  glow: GlowCtl | null;
+}
+
+/**
+ * The adapter: `step` once a frame with the part views (after removed parts are swept), the board
+ * clock in seconds, reduce flicker, the board camera, the rescue flag and whether the run is held.
+ * Made once per scene.
+ *
+ * The rescue's GradientMap runs on the running board's time: the rescue's edge holds the run for
+ * the crew's story scene (and pauses this scene, whose last drawn frame stays on screen under it),
+ * so the window starts on the first frame the board runs with the rescue in, and the map is never
+ * on while the run is held.
+ */
+export class GlowProbe {
+  readonly state: GlowState = { glows: 0, gradientMaps: 0, parts: [] };
+  private readonly ids: string[] = [];
+  private readonly shares: (number | null)[] = [];
+  private readonly dark: boolean[] = [];
+  private n = 0;
+  private readonly picks: string[] = [];
+  private readonly pickShares: number[] = [];
+  private readonly slots: GlowSlot[] = [];
+  private views: ReadonlyMap<string, GlowView> | null = null;
+  private map: FilterCtl | null = null;
+  private mapHost: MapHost | null = null;
+  /** The rescue has been seen on a running board (its GradientMap window started). */
+  private rescueSeen = false;
+  private rescuedAt: number | null = null;
+  /** Running-board seconds: the board clock less the time the run was held (story scenes). */
+  private up = 0;
+  private lastT: number | null = null;
+
+  constructor(readonly enabled: boolean = GLOW_PROBE_ON) {
+    for (let i = 0; i < GLOW_MAX; i++) this.slots.push({ id: null, host: null, glow: null });
+  }
+
+  /** Bound once: gathers one view into the parallel arrays (Map.forEach, no iterator). */
+  private readonly gather = (v: GlowView, id: string): void => {
+    const i = this.n++;
+    this.ids[i] = id;
+    this.shares[i] = v.look.share;
+    this.dark[i] = v.look.dark;
+  };
+
+  private slotOf(id: string): GlowSlot | null {
+    for (let i = 0; i < this.slots.length; i++) if (this.slots[i].id === id) return this.slots[i];
+    return null;
+  }
+
+  private freeSlot(): GlowSlot | null {
+    for (let i = 0; i < this.slots.length; i++) if (this.slots[i].id === null) return this.slots[i];
+    return null;
+  }
+
+  step(
+    views: ReadonlyMap<string, GlowView>,
+    t: number,
+    calm: boolean,
+    camera: MapHost,
+    rescued: boolean,
+    held = false,
+  ): GlowState {
+    if (!this.enabled) return this.state;
+    const dt = this.lastT === null ? 0 : Math.min(Math.max(t - this.lastT, 0), 0.25);
+    this.lastT = t;
+    if (!held) this.up += dt;
+    this.views = views;
+    this.n = 0;
+    views.forEach(this.gather);
+    const picks = pickGlowsInto(this.picks, this.pickShares, this.ids, this.shares, this.dark, this.n);
+
+    // Drop a slot whose sprite is gone (destroyed with its filters) or whose part cooled off.
+    for (let i = 0; i < this.slots.length; i++) {
+      const s = this.slots[i];
+      if (s.id === null) continue;
+      const v = views.get(s.id);
+      if (!v || v.img !== s.host) this.clearSlot(s, false);
+      else if (!picks.includes(s.id)) this.clearSlot(s, true);
+    }
+    // Give each new pick a free slot; every live slot takes its strength.
+    for (let k = 0; k < picks.length; k++) {
+      const id = picks[k];
+      let slot = this.slotOf(id);
+      if (slot === null) {
+        slot = this.freeSlot();
+        const v = views.get(id);
+        if (slot === null || !v) continue;
+        const host = v.img;
+        if (!host.filters) host.enableFilters();
+        if (!host.filters) continue; // no WebGL: no filters
+        slot.id = id;
+        slot.host = host;
+        slot.glow = host.filters.internal.addGlow(GLOW_COLOUR, 2, 0, 1, false, GLOW_QUALITY, GLOW_DISTANCE);
+      }
+      slot.glow!.outerStrength = glowStrength(this.pickShares[k], t, calm);
+    }
+
+    // The rescue's GradientMap: from the first running frame with the rescue in, for
+    // RESCUE_MAP_SECONDS of running board; never while held, never calm.
+    if (!rescued) {
+      this.rescueSeen = false;
+      this.rescuedAt = null;
+    } else if (!this.rescueSeen && !held) {
+      this.rescueSeen = true;
+      this.rescuedAt = this.up;
+    }
+    const mapOn = !held && rescueMapOn(this.up, this.rescuedAt, calm);
+    if (mapOn && this.map === null) {
+      this.mapHost = camera;
+      this.map = camera.filters.internal.addGradientMap({ ramp: { ...RESCUE_MAP_RAMP } });
+    } else if (!mapOn && this.map !== null) {
+      this.mapHost?.filters.internal.remove(this.map);
+      this.map = null;
+      this.mapHost = null;
+    }
+    this.publish();
+    return this.state;
+  }
+
+  /** Remove every filter the probe made (scene shutdown, while the sprites still stand). */
+  clear(): void {
+    for (let i = 0; i < this.slots.length; i++) {
+      const s = this.slots[i];
+      if (s.id !== null) this.clearSlot(s, this.views?.get(s.id)?.img === s.host);
+    }
+    if (this.map !== null) this.mapHost?.filters.internal.remove(this.map);
+    this.map = null;
+    this.mapHost = null;
+    this.rescueSeen = false;
+    this.rescuedAt = null;
+    this.lastT = null;
+    this.picks.length = 0;
+    this.publish();
+  }
+
+  private clearSlot(s: GlowSlot, remove: boolean): void {
+    if (remove && s.glow && s.host?.filters) s.host.filters.internal.remove(s.glow);
+    s.id = null;
+    s.host = null;
+    s.glow = null;
+  }
+
+  /** Refill the hook state in place (the glowing parts hottest first, the live filter counts). */
+  private publish(): void {
+    const st = this.state;
+    let n = 0;
+    for (let k = 0; k < this.picks.length; k++) {
+      const id = this.picks[k];
+      if (this.slotOf(id) !== null) st.parts[n++] = id;
+    }
+    st.parts.length = n;
+    let glows = 0;
+    for (let i = 0; i < this.slots.length; i++) if (this.slots[i].glow !== null) glows++;
+    st.glows = glows;
+    st.gradientMaps = this.map !== null ? 1 : 0;
+  }
+}

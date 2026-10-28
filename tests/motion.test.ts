@@ -23,6 +23,7 @@ import {
   specTimeScale,
   variantOf,
 } from '../src/scenes/motion';
+import * as glowKit from '../src/scenes/motion';
 
 // The motion kit (art3d-3): eight named specs as data, each with a calm variant; sampleSpec and the
 // MotionPlayer adapter; board specs slowed by Regroup with the packets; hooks report plotted values.
@@ -369,5 +370,245 @@ describe('MotionPlayer and Regroup', () => {
     const s = m.sample;
     m.play(MOTION.crewTint);
     for (let i = 0; i < 100; i++) expect(m.step(1 / 60, 1, true)).toBe(s);
+  });
+});
+
+// ---- art3d-6: the glow probe ----
+
+describe('art3d-6 glow probe: which parts glow', () => {
+  const { pickGlows, pickGlowsInto, GLOW_MAX } = glowKit;
+
+  it('picks only parts over capacity, hottest first, at most three', () => {
+    const parts = [
+      { id: 'a', share: 0.9 },
+      { id: 'b', share: 1.4 },
+      { id: 'c', share: 2.2 },
+      { id: 'd', share: 1.01 },
+      { id: 'e', share: 1.8 },
+      { id: 'gw', share: null },
+      { id: 'f', share: 1 },
+    ];
+    expect(GLOW_MAX).toBe(3);
+    expect(pickGlows(parts)).toEqual(['c', 'e', 'b']);
+    expect(pickGlows(parts, 5)).toEqual(['c', 'e', 'b', 'd']);
+  });
+
+  it('never picks a part at or under capacity, unlimited, dark or with a non-finite share', () => {
+    expect(
+      pickGlows([
+        { id: 'a', share: 1 },
+        { id: 'b', share: 0.5 },
+        { id: 'c', share: null },
+        { id: 'd', share: 3, dark: true },
+        { id: 'e', share: Number.NaN },
+        { id: 'f', share: Number.POSITIVE_INFINITY },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('breaks ties by id and does not mutate its inputs', () => {
+    const parts = Object.freeze([
+      Object.freeze({ id: 'z', share: 1.5 }),
+      Object.freeze({ id: 'm', share: 1.5 }),
+      Object.freeze({ id: 'a', share: 1.5 }),
+      Object.freeze({ id: 'q', share: 1.5 }),
+    ]);
+    expect(pickGlows(parts)).toEqual(['a', 'm', 'q']);
+  });
+
+  it('pickGlowsInto reuses its output arrays', () => {
+    const out: string[] = [];
+    const shares: number[] = [];
+    const r = pickGlowsInto(out, shares, ['a', 'b'], [1.2, 1.6], [false, false], 2);
+    expect(r).toBe(out);
+    expect(out).toEqual(['b', 'a']);
+    expect(shares).toEqual([1.6, 1.2]);
+    pickGlowsInto(out, shares, ['a', 'b'], [0.2, 0.6], [false, false], 2);
+    expect(out).toEqual([]);
+  });
+
+  it('is steady under reduce flicker and breathes only when not calm', () => {
+    const { glowStrength } = glowKit;
+    const calm = [0, 0.1, 0.33, 0.5, 1.7].map((t) => glowStrength(1.5, t, true));
+    expect(new Set(calm).size).toBe(1);
+    expect(glowStrength(3, 0, true)).toBe(5);
+    expect(glowStrength(1.0001, 0, true)).toBeCloseTo(2, 3);
+    const lively = [0, 0.1, 0.2, 0.3].map((t) => glowStrength(1.5, t, false));
+    expect(new Set(lively).size).toBeGreaterThan(1);
+    for (const v of lively) {
+      expect(v).toBeGreaterThanOrEqual(0.7 * 3.5 - 1e-9);
+      expect(v).toBeLessThanOrEqual(3.5 + 1e-9);
+    }
+  });
+
+  it('shows the rescue GradientMap for 1.5 s after the rescue, never when calm', () => {
+    const { rescueMapOn, RESCUE_MAP_SECONDS } = glowKit;
+    expect(RESCUE_MAP_SECONDS).toBe(1.5);
+    expect(rescueMapOn(10, null, false)).toBe(false);
+    expect(rescueMapOn(10, 10, false)).toBe(true);
+    expect(rescueMapOn(11.4, 10, false)).toBe(true);
+    expect(rescueMapOn(11.5, 10, false)).toBe(false);
+    expect(rescueMapOn(9, 10, false)).toBe(false);
+    expect(rescueMapOn(10.5, 10, true)).toBe(false);
+  });
+});
+
+describe('art3d-6 glow probe: the adapter', () => {
+  const { GlowProbe } = glowKit;
+
+  interface FakeCtl {
+    kind: 'glow' | 'map';
+    active: boolean;
+    outerStrength: number;
+  }
+  /** A fake FilterList that keeps its controllers like Phaser's, and counts adds. */
+  class FakeList {
+    readonly list: FakeCtl[] = [];
+    adds = 0;
+    addGlow(_c?: number, outer = 4): FakeCtl {
+      this.adds++;
+      const g: FakeCtl = { kind: 'glow', active: true, outerStrength: outer };
+      this.list.push(g);
+      return g;
+    }
+    addGradientMap(): FakeCtl {
+      this.adds++;
+      const m: FakeCtl = { kind: 'map', active: true, outerStrength: 0 };
+      this.list.push(m);
+      return m;
+    }
+    remove(f: unknown): void {
+      const i = this.list.indexOf(f as FakeCtl);
+      if (i >= 0) this.list.splice(i, 1);
+    }
+  }
+  class FakeHost {
+    filters: { internal: FakeList } | null = null;
+    enableFilters(): this {
+      this.filters = { internal: new FakeList() };
+      return this;
+    }
+  }
+  type Views = Map<string, { img: FakeHost; look: { share: number | null; dark: boolean } }>;
+  function boardOf(shares: Record<string, number | null>): Views {
+    const views: Views = new Map();
+    for (const [id, share] of Object.entries(shares))
+      views.set(id, { img: new FakeHost(), look: { share, dark: false } });
+    return views;
+  }
+  const camera = () => ({ filters: { internal: new FakeList() } });
+  function glowsOn(views: Views): number {
+    let n = 0;
+    views.forEach((v) => (n += v.img.filters?.internal.list.filter((c) => c.kind === 'glow').length ?? 0));
+    return n;
+  }
+  function addsOn(views: Views): number {
+    let n = 0;
+    views.forEach((v) => (n += v.img.filters?.internal.adds ?? 0));
+    return n;
+  }
+
+  it('glows the three hottest over-capacity parts, and only those', () => {
+    const views = boardOf({ a: 1.3, b: 2.0, c: 0.8, d: 1.6, e: 1.1, gw: null });
+    const probe = new GlowProbe(true);
+    const st = probe.step(views, 0, false, camera(), false);
+    expect(st.parts).toEqual(['b', 'd', 'a']);
+    expect(st.glows).toBe(3);
+    expect(st.gradientMaps).toBe(0);
+    expect(glowsOn(views)).toBe(3);
+    for (const id of st.parts) expect(views.get(id)!.look.share!).toBeGreaterThan(1);
+    expect(views.get('c')!.img.filters).toBeNull();
+  });
+
+  it('keeps its filters on a steady board and drops one only when the hot set changes', () => {
+    const views = boardOf({ a: 1.3, b: 2.0, d: 1.6 });
+    const cam = camera();
+    const probe = new GlowProbe(true);
+    probe.step(views, 0, false, cam, false);
+    expect(addsOn(views)).toBe(3);
+    for (let i = 1; i < 100; i++) probe.step(views, i / 60, false, cam, false);
+    expect(addsOn(views)).toBe(3);
+    views.get('a')!.look.share = 0.9;
+    const st = probe.step(views, 2, false, cam, false);
+    expect(st.parts).toEqual(['b', 'd']);
+    expect(st.glows).toBe(2);
+    expect(glowsOn(views)).toBe(2);
+    expect(addsOn(views)).toBe(3);
+  });
+
+  it('forgets a glow whose part left the board and never holds more than three', () => {
+    const views = boardOf({ a: 1.3, b: 2.0, d: 1.6, e: 1.5 });
+    const cam = camera();
+    const probe = new GlowProbe(true);
+    expect(probe.step(views, 0, false, cam, false).parts).toEqual(['b', 'd', 'e']);
+    views.delete('b');
+    const st = probe.step(views, 1, false, cam, false);
+    expect(st.parts).toEqual(['d', 'e', 'a']);
+    expect(st.glows).toBe(3);
+    expect(glowsOn(views)).toBe(3);
+  });
+
+  it('holds a steady strength under reduce flicker', () => {
+    const views = boardOf({ a: 1.5 });
+    const cam = camera();
+    const probe = new GlowProbe(true);
+    const seen = new Set<number>();
+    for (let i = 0; i < 30; i++) {
+      probe.step(views, i / 10, true, cam, false);
+      seen.add(views.get('a')!.img.filters!.internal.list[0]!.outerStrength);
+    }
+    expect(seen.size).toBe(1);
+  });
+
+  it('puts one GradientMap on the camera for 1.5 s of running board after the rescue, none when calm', () => {
+    const views = boardOf({});
+    const cam = camera();
+    const probe = new GlowProbe(true);
+    const at60 = (from: number, frames: number, rescued: boolean, held: boolean, calm = false) => {
+      const seen: number[] = [];
+      for (let i = 0; i < frames; i++)
+        seen.push(probe.step(views, from + i / 60, calm, cam, rescued, held).gradientMaps);
+      return seen;
+    };
+    expect(at60(0, 60, false, false)).toEqual(Array(60).fill(0));
+    // The rescue's edge holds the run for the crew's scene: no map on the held (frozen) board.
+    expect(at60(1, 120, true, true)).toEqual(Array(120).fill(0));
+    expect(cam.filters.internal.adds).toBe(0);
+    // Back on the running board: on for 1.5 s (90 frames at 60 fps), then off, made once.
+    const back = at60(3, 120, true, false);
+    expect(back.slice(0, 89).every((n) => n === 1)).toBe(true);
+    expect(back.slice(91).every((n) => n === 0)).toBe(true);
+    expect(cam.filters.internal.list.length).toBe(0);
+    expect(cam.filters.internal.adds).toBe(1);
+
+    // Held mid-window: off while held, and the window resumes after.
+    const p2 = new GlowProbe(true);
+    const cam2 = camera();
+    p2.step(views, 0, false, cam2, true, false);
+    expect(p2.step(views, 0.5, false, cam2, true, false).gradientMaps).toBe(1);
+    expect(p2.step(views, 0.6, false, cam2, true, true).gradientMaps).toBe(0);
+    expect(p2.step(views, 20, false, cam2, true, true).gradientMaps).toBe(0);
+    expect(p2.step(views, 20.1, false, cam2, true, false).gradientMaps).toBe(1);
+
+    const calm = new GlowProbe(true);
+    const cam3 = camera();
+    calm.step(views, 5, true, cam3, false);
+    for (let i = 0; i < 60; i++) expect(calm.step(views, 6 + i / 60, true, cam3, true).gradientMaps).toBe(0);
+    expect(cam3.filters.internal.adds).toBe(0);
+  });
+
+  it('makes no filter at all when off, and clear() removes what it made', () => {
+    const views = boardOf({ a: 1.5, b: 1.9 });
+    const cam = camera();
+    const off = new GlowProbe(false);
+    expect(off.step(views, 0, false, cam, true)).toEqual({ glows: 0, gradientMaps: 0, parts: [] });
+    expect(glowsOn(views)).toBe(0);
+    const on = new GlowProbe(true);
+    on.step(views, 0, false, cam, true);
+    expect(glowsOn(views)).toBe(2);
+    on.clear();
+    expect(glowsOn(views)).toBe(0);
+    expect(cam.filters.internal.list.length).toBe(0);
+    expect(on.state).toEqual({ glows: 0, gradientMaps: 0, parts: [] });
   });
 });

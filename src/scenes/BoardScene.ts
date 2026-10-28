@@ -106,7 +106,7 @@ import { LABELS } from './hud/labels';
 import { settings } from '../game/settings';
 import { SCENES } from './keys';
 import { type Occurrence, detectOccurrences } from '../game/occurrences';
-import { MOTION, MotionPlayer } from './motion';
+import { GlowProbe, MOTION, MotionPlayer } from './motion';
 import {
   type AnimEntry,
   AnimBook,
@@ -353,6 +353,8 @@ export class BoardScene extends Phaser.Scene {
   private pingIcons: Phaser.GameObjects.Image[] = [];
   /** The board's waits this frame (board-6), refilled in place. */
   private wait: WaitState = emptyWait();
+  /** art3d-6: the red Glow on at most three over-capacity parts and the rescue's GradientMap. */
+  private readonly glowProbe = new GlowProbe();
   /** Empty pads pulsing this frame (the waits), by slot. */
   private pulsingPads: boolean[] = [];
   private portG!: Phaser.GameObjects.Graphics;
@@ -741,6 +743,7 @@ export class BoardScene extends Phaser.Scene {
       this.offAction = null;
       this.director?.destroy();
       this.director = null;
+      this.glowProbe.clear();
       this.ready = false;
     });
 
@@ -1178,6 +1181,7 @@ export class BoardScene extends Phaser.Scene {
       this.drawPartState(part, v);
     }
     this.views.forEach(this.sweepView);
+    this.glowProbe.step(this.views, t, reduce, this.cameras.main, f.rescued, f.paused);
 
     // Selection can outlive what it pointed at (a cut, a decommission, a new run).
     if (this.selectedPart) {
@@ -3074,6 +3078,7 @@ export class BoardScene extends Phaser.Scene {
       snapshotFrame: this.snap.readAt,
       snapshotChanges: this.snap.changes,
       snapshotCurrent: this.snap.current !== null && this.snap.current === frame(run()),
+      glow: { ...this.glowProbe.state, parts: [...this.glowProbe.state.parts] },
     };
   }
 }
