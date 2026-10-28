@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { MUSIC_FILES, MUSIC_KEY, SFX_KEYS, audio, musicWanted, sfxPath } from '../game/audio';
 import { bus } from '../game/bus';
+import { frame } from '../game/frame';
+import { type SoundPort, type VoiceTestState, bundledLiveSfx, mixer } from '../game/mixer';
 import { run } from '../game/run';
 import { onSettingsChange, settings } from '../game/settings';
 import { provideTestState, testHookEnabled } from '../testHook';
@@ -18,6 +20,8 @@ export interface ShellTestState {
   lastSfx: string | null;
   /** The last 20 effect keys asked for, oldest first. */
   recentSfx: string[];
+  /** The mixer's voice channel (src/game/mixer.ts): ids asked for, ids the manifest lacks, the duck. */
+  voice: VoiceTestState;
   /** True while the board music loop is playing (or queued to start once audio unlocks). */
   musicPlaying: boolean;
   settings: { volume: number; textSpeed: string; reduceFlicker: boolean; fullscreen: boolean };
@@ -53,12 +57,19 @@ declare global {
 }
 
 // Always running, drawn over every scene: the pause button and Esc while the board runs, and all
-// audio (the board music loop and every effect the bus asks for, at the volume in settings).
+// audio (the board music loop and every effect the bus asks for, at the volume in settings). The
+// mixer (src/game/mixer.ts) decides the voice clips and the duck; this scene is its SoundPort.
 export class OverlayScene extends Phaser.Scene {
   ready = false;
   private music: Phaser.Sound.BaseSound | null = null;
   private musicOn = false;
   private pauseButton: ShellButton | null = null;
+  /** The mixer's clock: real seconds times the test speed, stopped while the board is held (the HUD clock). */
+  private mixClock = 0;
+  /** The effects channel's gain from the mixer (ducked under a voice). */
+  private sfxGain = 1;
+  /** The voice clip playing, if any. */
+  private voiceSound: Phaser.Sound.BaseSound | null = null;
 
   constructor() {
     super({ key: SCENES.overlay, active: true });
@@ -82,12 +93,13 @@ export class OverlayScene extends Phaser.Scene {
         if (!this.cache.audio.exists(key)) return;
         // A looping effect (the rain) plays once at a time, however often it is asked for.
         if (loop && this.sound.get(key)?.isPlaying) return;
-        this.sound.play(key, { loop });
+        this.sound.play(key, { loop, volume: this.sfxGain });
       },
       stop: (key) => {
         this.sound.stopByKey(key);
       },
     });
+    mixer.attach(this.soundPort());
     this.loadAudio();
 
     this.pauseButton = addButton(this, 'pause', W - 70, 52, 'II', () => openPause(this), 0.2, 30);
@@ -97,6 +109,7 @@ export class OverlayScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       offSettings();
       audio.attach(null);
+      mixer.attach(null);
     });
     this.ready = true;
   }
@@ -108,20 +121,73 @@ export class OverlayScene extends Phaser.Scene {
   private loadAudio(): void {
     this.load.audio(MUSIC_KEY, [...MUSIC_FILES]);
     for (const key of SFX_KEYS) this.load.audio(key, sfxPath(key));
+    // The Live effects load only once their files have landed (public/audio/sfx/manifest.json).
+    for (const key of bundledLiveSfx()) this.load.audio(key, sfxPath(key));
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       if (!this.cache.audio.exists(MUSIC_KEY)) return;
-      this.music = this.sound.add(MUSIC_KEY, { loop: true });
+      this.music = this.sound.add(MUSIC_KEY, { loop: true, volume: mixer.gain('music') });
       if (this.musicOn) this.playMusic(true);
     });
     this.load.start();
   }
 
-  update(): void {
+  update(_time: number, delta: number): void {
+    const f = frame(run());
+    this.mixClock += f.paused ? 0 : (delta / 1000) * f.speed;
+    mixer.tick(this.mixClock, f.now);
+
     const sm = this.scene;
     const boardOpen = sm.isActive(SCENES.board) || sm.isPaused(SCENES.board);
     const sceneOpen = sm.isActive(SCENES.title) || sm.isActive(SCENES.story) || sm.isActive(SCENES.debrief);
     this.setMusic(musicWanted({ boardOpen, sceneOpen }));
     this.pauseButton?.setVisible(sm.isActive(SCENES.board));
+  }
+
+  /** The mixer's port onto Phaser's sound manager. Every call is guarded: locked audio never throws out. */
+  private soundPort(): SoundPort {
+    return {
+      loadVoice: (key, url) => {
+        if (this.cache.audio.exists(key)) return;
+        this.load.audio(key, url);
+        this.load.start();
+      },
+      unloadVoice: (key) => {
+        this.sound.removeByKey(key);
+        this.cache.audio.remove(key);
+      },
+      voiceReady: (key) => this.cache.audio.exists(key),
+      playVoice: (key, volume, onEnd) => {
+        if (!this.cache.audio.exists(key)) return null;
+        this.voiceSound?.destroy();
+        const s = this.sound.add(key, { volume });
+        s.once(Phaser.Sound.Events.COMPLETE, () => {
+          if (this.voiceSound === s) this.voiceSound = null;
+          s.destroy();
+          onEnd();
+        });
+        if (!s.play()) {
+          s.destroy();
+          return null;
+        }
+        this.voiceSound = s;
+        return Number.isFinite(s.duration) ? s.duration : 0;
+      },
+      stopVoice: () => {
+        this.voiceSound?.destroy();
+        this.voiceSound = null;
+      },
+      setGain: (channel, gain) => {
+        if (channel === 'music') {
+          (this.music as Phaser.Sound.WebAudioSound | null)?.setVolume?.(gain);
+          return;
+        }
+        this.sfxGain = gain;
+        // Effects already sounding (the rain loop) follow the duck too; the music and the voice do not.
+        for (const s of this.sound.getAllPlaying()) {
+          if (s !== this.music && s !== this.voiceSound) (s as Phaser.Sound.WebAudioSound).setVolume?.(gain);
+        }
+      },
+    };
   }
 
   private onEscape(): void {
@@ -154,6 +220,7 @@ export class OverlayScene extends Phaser.Scene {
     return {
       lastSfx: audio.lastSfx,
       recentSfx: [...audio.recentSfx],
+      voice: mixer.snapshot(),
       musicPlaying: this.musicOn && this.music !== null,
       settings: {
         volume: s.volume,

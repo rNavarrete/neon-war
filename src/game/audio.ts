@@ -3,6 +3,7 @@
 // The mapping is pure so it is unit-tested in node; the director only remembers and forwards.
 
 import { type Bus, type GameEvents, bus } from './bus';
+import { type LiveSfxKey, isLiveSfxKey } from './mixer';
 
 /** The board music loop: one key, both files, and Phaser picks the one the browser can play. */
 export const MUSIC_KEY = 'music';
@@ -42,8 +43,9 @@ export function sfxPath(key: string): string {
   return `audio/sfx/${key}.mp3`;
 }
 
-export function isSfxKey(key: string): key is SfxKey {
-  return (SFX_KEYS as readonly string[]).includes(key);
+/** Whether a key names an effect: one of SFX_KEYS or of the Live screen's LIVE_SFX_KEYS (src/game/mixer.ts). */
+export function isSfxKey(key: string): key is SfxKey | LiveSfxKey {
+  return (SFX_KEYS as readonly string[]).includes(key) || isLiveSfxKey(key);
 }
 
 /** The effect for something the player did on the board, or null when it makes no sound. */
