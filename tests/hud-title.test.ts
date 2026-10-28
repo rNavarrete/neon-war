@@ -262,3 +262,85 @@ describe('TitleView and ClockView', () => {
     expect(title.watching).toBe(3);
   });
 });
+
+// Tech follow-up 4: the title's face is the round avatar, and the dot reads held while a story scene
+// or the pause menu pauses the HUD scene (no update runs then, so the view hears the scene's events).
+describe('TitleView: round avatar and held under a paused HUD', () => {
+  const host = (bus: Bus): LiveHost => ({
+    scene: null as never,
+    bus,
+    rect: ZONES.title,
+    flags: { lite: true },
+  });
+
+  /** The stub scene with a scene event emitter, as Phaser's scene.events. */
+  function pausable() {
+    const { scene, made } = stubScene();
+    const handlers = new Map<string, Set<() => void>>();
+    const events = {
+      on(e: string, fn: () => void) {
+        if (!handlers.has(e)) handlers.set(e, new Set());
+        handlers.get(e)!.add(fn);
+      },
+      off(e: string, fn: () => void) {
+        handlers.get(e)?.delete(fn);
+      },
+      emit(e: string) {
+        for (const fn of handlers.get(e) ?? []) fn();
+      },
+      count: () => [...handlers.values()].reduce((n, s) => n + s.size, 0),
+    };
+    return { scene: { ...scene, events }, made, events };
+  }
+
+  const title = (): { live: string; avatar?: string | null; scenePaused?: boolean } =>
+    (
+      getTestState().hud as unknown as {
+        title: { live: string; avatar?: string | null; scenePaused?: boolean };
+      }
+    ).title;
+
+  it('draws the round avatar baked at the ring’s diameter, inside the same budget', () => {
+    const { scene, made } = pausable();
+    const view = new TitleView();
+    view.create(scene as never, host(new Bus()));
+    const r = titleLayout(ZONES.title).avatar.r;
+    expect(title().avatar).toBe(`avatar:hud/live/avatar-luxnet@${2 * r}`);
+    expect(made.length).toBe(view.budget.objects);
+    expect(made.filter((m) => m.kind === 'Image').length).toBe(3);
+    view.shutdown();
+  });
+
+  it('reads held at once when the HUD scene pauses, and live again after the resume', () => {
+    const { scene, made, events } = pausable();
+    const view = new TitleView();
+    view.create(scene as never, host(new Bus()));
+    const words = made.filter((m) => m.kind === 'Text');
+    const r = new Run();
+    openJobCard(r);
+    dismissJobCard(r);
+    firstBuild(r);
+    const clk = { now: 1, dt: 0.016 };
+    view.update(readFrame(r), clk);
+    expect(title().live).toBe('live');
+    expect(words.some((t) => t.text === 'LIVE')).toBe(true);
+
+    // A story scene or the pause menu: the run is held and the HUD scene paused, with no update.
+    events.emit('pause');
+    expect(title()).toMatchObject({ live: 'held', scenePaused: true });
+    expect(words.some((t) => t.text === 'HELD')).toBe(true);
+    expect(words.some((t) => t.text === 'LIVE')).toBe(false);
+
+    // An update that slips in while paused still says held.
+    view.update(readFrame(r), clk);
+    expect(title().live).toBe('held');
+
+    events.emit('resume');
+    view.update(readFrame(r), clk);
+    expect(title()).toMatchObject({ live: 'live', scenePaused: false });
+    expect(words.some((t) => t.text === 'LIVE')).toBe(true);
+
+    view.shutdown();
+    expect(events.count()).toBe(0);
+  });
+});

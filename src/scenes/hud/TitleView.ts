@@ -1,7 +1,9 @@
 // The title cluster (ZONES.title) and the clock (ZONES.clock) as Live screen views. The title shows
-// Lux_Net's face (a square faces-board/deadpan crop behind an amber ring until art3d's roundAvatar
-// lands), the LIVE dot (live, waiting for your build, held), WATCHING with the count the chat lane
-// last announced on the bus (no number before the first), and the trust and credits chips. The clock
+// Lux_Net's round avatar (roundAvatar, src/scenes/avatars.ts, behind an amber ring), the LIVE dot
+// (live, waiting for your build, held), WATCHING with the count the chat lane last announced on the
+// bus (no number before the first), and the trust and credits chips. The dot reads held while a story
+// scene or the pause menu is up: those pause the HUD scene, so the view hears the scene's pause and
+// resume events rather than waiting on an update that does not come. The clock
 // shows the in-world time and "midnight in m:ss", and draws nothing right of x 1800, where the pause
 // button is OverlayScene's. The rules are pure in title.ts; this file only draws them.
 //
@@ -11,6 +13,7 @@
 import type Phaser from 'phaser';
 import type { Frame } from '../../game/frame';
 import { settings } from '../../game/settings';
+import { type AvatarScene, TITLE_AVATAR, preloadAvatars, roundAvatar } from '../avatars';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import { countdownText } from './format';
 import { COLORS, FONT } from './layout';
@@ -41,6 +44,10 @@ export interface TitleTestState {
   right: number;
   /** The right-most game x anything of the clock view is drawn at; null while it is not built. */
   clockRight: number | null;
+  /** The round avatar's baked texture ('avatar:<key>@<size>'), null while not built. */
+  avatar?: string | null;
+  /** True while the HUD scene is paused under a story scene or the pause menu (the dot reads held). */
+  scenePaused?: boolean;
 }
 
 declare module './hook' {
@@ -50,12 +57,9 @@ declare module './hook' {
   }
 }
 
-/** Lux's face until art3d-4's round avatar lands, and the square of it the title shows. */
-export const TITLE_FACE = {
-  key: 'portrait:lux/faces-board/deadpan',
-  file: 'art/chars/lux/faces-board/deadpan.webp',
-  crop: { x: 120, y: 20, size: 250 },
-} as const;
+/** The Phaser scene events the title listens to (Phaser.Scenes.Events.PAUSE and RESUME). */
+const SCENE_PAUSE = 'pause';
+const SCENE_RESUME = 'resume';
 
 const ICON_KEYS = { trust: 'hud:icon-trust', credits: 'hud:icon-credits', clock: 'hud:icon-clock' } as const;
 const ICON_FILES = {
@@ -137,9 +141,12 @@ export class TitleView implements LiveView {
   private shownLive: LiveDot | null = null;
   private shownTrust = NaN;
   private shownCredits = NaN;
+  /** The HUD scene is paused (a story scene or the pause menu over the board). */
+  private scenePaused = false;
+  private avatarTexture: string | null = null;
 
   preload(scene: Phaser.Scene): void {
-    loadOnce(scene, TITLE_FACE.key, TITLE_FACE.file);
+    preloadAvatars(scene as unknown as AvatarScene, [TITLE_AVATAR]);
     loadOnce(scene, ICON_KEYS.trust, ICON_FILES.trust);
     loadOnce(scene, ICON_KEYS.credits, ICON_FILES.credits);
   }
@@ -164,12 +171,14 @@ export class TitleView implements LiveView {
       plate.strokeRoundedRect(c.x + 0.5, c.y + 0.5, c.w - 1, c.h - 1, 8);
     }
 
-    // A square crop of the face, inside the ring (art3d-4's roundAvatar replaces it).
-    const face = add.image(L.avatar.x, L.avatar.y, TITLE_FACE.key);
-    const cr = TITLE_FACE.crop;
-    face.setCrop(cr.x, cr.y, cr.size, cr.size);
-    face.setOrigin((cr.x + cr.size / 2) / face.width, (cr.y + cr.size / 2) / face.height);
-    face.setScale((L.avatar.r * 1.4) / cr.size);
+    // Lux_Net's round avatar, baked once at the size it is shown (the ring's diameter).
+    const size = 2 * L.avatar.r;
+    const a = roundAvatar(scene as unknown as AvatarScene, TITLE_AVATAR, size);
+    this.avatarTexture = a.texture;
+    const face = add.image(L.avatar.x, L.avatar.y, a.texture);
+    face.setDisplaySize(size, size);
+    face.setTint(a.tint);
+    face.setAlpha(a.alpha);
 
     const ring = add.graphics();
     ring.lineStyle(3, COLORS.hero, 1);
@@ -226,26 +235,37 @@ export class TitleView implements LiveView {
     this.shownLive = null;
     this.shownTrust = NaN;
     this.shownCredits = NaN;
+    this.scenePaused = false;
     this.off.push(
       host.bus.on('audience', (e) => {
         this.watching = watchingFrom(e);
       }),
     );
+    // A story scene or the pause menu pauses the HUD scene, so no update runs while it is up: show
+    // held at once, and let the next update after the resume say what the dot is again.
+    const events = (scene as { events?: Phaser.Events.EventEmitter }).events;
+    if (events) {
+      const onPause = (): void => {
+        this.scenePaused = true;
+        this.showLive('held', 0);
+      };
+      const onResume = (): void => {
+        this.scenePaused = false;
+        this.shownLive = null;
+      };
+      events.on(SCENE_PAUSE, onPause);
+      events.on(SCENE_RESUME, onResume);
+      this.off.push(() => {
+        events.off(SCENE_PAUSE, onPause);
+        events.off(SCENE_RESUME, onResume);
+      });
+    }
     this.off.push(provideHudSection('title', () => this.snapshot()));
   }
 
   update(frame: Frame, clock: LiveClock): void {
     if (!this.dot) return;
-    const live = liveState(frame);
-    this.live = live;
-    if (live !== this.shownLive) {
-      this.shownLive = live;
-      this.dot.setFillStyle(DOT_COLOR[live], 1);
-      this.liveWord?.setText(LIVE_WORDS[live]).setColor(WORD_COLOR[live]);
-      if (this.liveWord) fitRight(this.liveWord, this.maxRight);
-    }
-    const steady = settings().reduceFlicker || (this.host?.flags.lite ?? false);
-    this.dot.setAlpha(liveDotAlpha(live, clock.now, steady));
+    this.showLive(this.scenePaused ? 'held' : liveState(frame), clock.now);
 
     if (this.watching !== this.shownWatching) {
       this.shownWatching = this.watching;
@@ -270,6 +290,20 @@ export class TitleView implements LiveView {
     }
   }
 
+  /** Draw the LIVE dot and its word for `live` (the word only on a change) at HUD time `now`. */
+  private showLive(live: LiveDot, now: number): void {
+    if (!this.dot) return;
+    this.live = live;
+    if (live !== this.shownLive) {
+      this.shownLive = live;
+      this.dot.setFillStyle(DOT_COLOR[live], 1);
+      this.liveWord?.setText(LIVE_WORDS[live]).setColor(WORD_COLOR[live]);
+      if (this.liveWord) fitRight(this.liveWord, this.maxRight);
+    }
+    const steady = settings().reduceFlicker || (this.host?.flags.lite ?? false);
+    this.dot.setAlpha(liveDotAlpha(live, now, steady));
+  }
+
   /** hud.title, built only when the hook is read. */
   snapshot(): TitleTestState {
     return {
@@ -277,6 +311,8 @@ export class TitleView implements LiveView {
       watching: this.watching,
       right: rightOf(this.objects),
       clockRight: clockRight(),
+      avatar: this.avatarTexture,
+      scenePaused: this.scenePaused,
     };
   }
 
@@ -291,6 +327,8 @@ export class TitleView implements LiveView {
     this.trustText = null;
     this.creditsText = null;
     this.host = null;
+    this.avatarTexture = null;
+    this.scenePaused = false;
   }
 }
 
