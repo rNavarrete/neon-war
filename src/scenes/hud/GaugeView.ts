@@ -24,7 +24,8 @@ import {
 } from './gauge';
 import { LABELS } from './labels';
 import { COLORS, FONT } from './layout';
-import { GAUGES_DEPTH, provideHudPart } from './panel';
+import { provideHudSection } from './hook';
+import { GAUGES_DEPTH } from './panel';
 
 /** What the hook mirrors as hud.gauge. */
 export interface GaugeTestState {
@@ -164,7 +165,7 @@ export class GaugeView implements LiveView {
     this.shownAlpha = -1;
     this.shownRoomX = NaN;
     this.drawn = { needle: NaN, capacity: NaN, booting: NaN, served: NaN, dropped: NaN, est: NaN, size: NaN };
-    this.off.push(provideHudPart(scene, 'gauge', () => this.snapshot()));
+    this.off.push(provideHudSection('gauge', () => this.snapshot()));
   }
 
   update(frame: Frame, clock: LiveClock): void {

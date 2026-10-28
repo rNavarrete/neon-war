@@ -31,6 +31,7 @@ import { createViews } from '../src/scenes/live/registry';
 import { withinBudget } from '../src/scenes/live/view';
 import { BROWNOUT } from '../src/sim/brownout';
 import { SERVER_SLOTS } from '../src/sim/tick';
+import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 
 // gauges-5: the COMING /s gauge in ZONES.gauge. The pure rules (gauge.ts) against hand-made and
 // real frames, and GaugeView against a stub scene, read back through the hook without a window.
@@ -339,7 +340,7 @@ describe('GaugeView', () => {
     const f = readFrame(r);
     gauge.update(f, { now: 1, dt: 0.016 });
     deck.update(f, { now: 1, dt: 0.016 });
-    const hud = sections.get('hud')!() as {
+    const hud = hudSection({} as HudTestState) as unknown as {
       gauge: Record<string, unknown> & { demand: number; capacity: number };
       headroom: { wiredCapacity: number };
     };

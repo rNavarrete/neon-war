@@ -24,6 +24,7 @@ import { type Rect, ZONES, inside } from '../src/scenes/live/layout';
 import type { LiveHost } from '../src/scenes/live/view';
 import { BROWNOUT } from '../src/sim/brownout';
 import { SERVER_SLOTS } from '../src/sim/tick';
+import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 
 // The hook's sections as the views provide them, read back here without a window.
 const sections = vi.hoisted(() => new Map<string, () => unknown>());
@@ -36,6 +37,8 @@ vi.mock('../src/testHook', async (actual) => ({
 const getTestState = (): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   for (const [k, read] of sections) out[k] = read();
+  // The views provide hud.* through provideHudSection (no HudScene here): the section over an empty base.
+  out.hud = hudSection({} as HudTestState);
   return out;
 };
 

@@ -14,7 +14,8 @@ import { settings } from '../../game/settings';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import { countdownText } from './format';
 import { COLORS, FONT } from './layout';
-import { GAUGES_DEPTH, provideHudPart } from './panel';
+import { provideHudSection } from './hook';
+import { GAUGES_DEPTH } from './panel';
 import {
   type LiveDot,
   LIVE_WORDS,
@@ -230,7 +231,7 @@ export class TitleView implements LiveView {
         this.watching = watchingFrom(e);
       }),
     );
-    this.off.push(provideHudPart(scene, 'title', () => this.snapshot()));
+    this.off.push(provideHudSection('title', () => this.snapshot()));
   }
 
   update(frame: Frame, clock: LiveClock): void {

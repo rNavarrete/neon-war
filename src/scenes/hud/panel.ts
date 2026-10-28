@@ -1,6 +1,4 @@
 import type Phaser from 'phaser';
-import { provideTestState } from '../../testHook';
-import { type HudTestState, hudSection, provideHudSection } from './hook';
 
 /**
  * A painted frame stretched to w x h without distorting its corners: a nine-slice built at 1/k of
@@ -27,27 +25,3 @@ export function panel(
  * placeholders (depth -10).
  */
 export const GAUGES_DEPTH = 1;
-
-/** The HUD scene as provideHudPart needs it: its own snapshot of the section, when it has one. */
-type HudSnapshotSource = { snapshot?: () => HudTestState };
-
-/**
- * Add (or replace) `hud.<key>` in the test hook: provideHudSection (src/scenes/hud/hook.ts) under
- * the name the gauges views already call; new code calls provideHudSection directly. The returned
- * function takes the key out again (call it from shutdown).
- *
- * It also re-provides `hud` as hudSection over the scene's snapshot, exactly what HudScene provides
- * (an equal reader, so the section stays one snapshot); the gauges unit tests read `hud` through a
- * mocked provideTestState and see their keys that way, with no HudScene.
- */
-export function provideHudPart<K extends keyof HudTestState>(
-  scene: Phaser.Scene,
-  key: K,
-  read: () => HudTestState[K],
-): () => void {
-  const off = provideHudSection(key, read);
-  const source = scene as unknown as HudSnapshotSource;
-  const base = typeof source.snapshot === 'function' ? source.snapshot.bind(scene) : null;
-  provideTestState('hud', () => hudSection(base ? base() : ({} as HudTestState)));
-  return off;
-}

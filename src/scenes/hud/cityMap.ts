@@ -10,21 +10,17 @@
 import { BROWNOUT } from '../../sim/brownout';
 import { PACKETS_PER_REQUEST } from '../board/packets';
 import type { Rect } from '../live/layout';
+import { LABELS } from './labels';
 
 const C = BROWNOUT.challenges;
 
 // ---- the map's words ----
 
 /**
- * The words the map prints, in the crew's plain terms. They belong in LABELS.map of labels.ts (the
- * learning lane's file); until that lands they live here, and tests/hud-map.test.ts scans them for
- * the debrief's terms the same way teaching.test.ts scans labels.ts.
+ * The words the map prints, in the crew's plain terms: LABELS.map of labels.ts, under the name
+ * tests/hud-map.test.ts scans for the debrief's terms.
  */
-export const MAP_WORDS = {
-  title: 'CITY GRID',
-  lux: 'LUX',
-  cutOff: 'CUT OFF',
-} as const;
+export const MAP_WORDS = LABELS.map;
 
 // ---- dot rates ----
 

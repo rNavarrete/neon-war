@@ -5,9 +5,9 @@
 // reduce flicker (or the ?test lite flag) nothing moves. It tells the bus when an alert goes up and
 // comes down ('alert' / 'alertEnd', one at a time) and mirrors itself as hud.alert.
 //
-// The rules are pure in alerts.ts; this file only draws them. The HUD scene still draws its own
-// surge/fall band underneath until the tech lane drops it; this view sits above it (GAUGES_DEPTH)
-// and covers it whenever it shows anything.
+// The rules are pure in alerts.ts; this file only draws them. It is the only alert band (the HUD
+// scene's legacy surge/fall band is gone) and plays the band's sound, the forecast's included; the
+// HUD scene lists its container as hud.bounds 'alert'.
 //
 // Phaser is a type here only, so the registry and its node tests can import this file.
 
@@ -30,7 +30,8 @@ import {
   stripeScroll,
 } from './alerts';
 import { COLORS, FONT, FONT_SANS } from './layout';
-import { GAUGES_DEPTH, panel, provideHudPart } from './panel';
+import { provideHudSection } from './hook';
+import { GAUGES_DEPTH, panel } from './panel';
 
 /** One entry of hud.alert.history: a kind or number the band showed, and when (sim seconds). */
 export interface AlertHistoryEntry {
@@ -62,12 +63,6 @@ declare module './hook' {
     alert?: AlertTestState;
   }
 }
-
-/**
- * WIRING(tech): the HUD scene's legacy band (HudScene.updateWarnings) still plays surge-warning when a
- * forecast goes up. Set this false when it stops drawing its band, so the sound plays from here alone.
- */
-export const HUD_PLAYS_FORECAST_SOUND = true;
 
 /** How many entries hud.alert.history keeps. */
 export const ALERT_HISTORY = 60;
@@ -215,7 +210,7 @@ export class AlertView implements LiveView {
     this.shownKind = null;
     this.shownStripes = false;
     this.shownLit = true;
-    this.off.push(provideHudPart(scene, 'alert', () => this.snapshot()));
+    this.off.push(provideHudSection('alert', () => this.snapshot()));
   }
 
   update(frame: Frame, clock: LiveClock): void {
@@ -237,10 +232,9 @@ export class AlertView implements LiveView {
         // Slide in only on a running board: a held board shows the band in place at once.
         this.slideFrom = frame.paused ? -Infinity : realMs;
         this.bus?.emit('alert', { kind: st.kind, line: st.line, text: st.headline, at: clock.now });
-        // The HUD scene still plays the forecast's sound with its own band; this band adds the raid's.
+        // The band's sound: surge-warning when a forecast or the raid goes up.
         const sound = alertSound(prevKind, st.kind);
-        if (sound && (st.kind !== 'forecast' || !HUD_PLAYS_FORECAST_SOUND))
-          this.bus?.emit('sfx', { key: sound });
+        if (sound) this.bus?.emit('sfx', { key: sound });
       } else {
         this.shownAt = null;
       }
@@ -295,6 +289,11 @@ export class AlertView implements LiveView {
       // The flicker flashes its sub-line (POWER FLICKER); steady, it stays lit.
       this.sub?.setAlpha(st.lit ? 1 : 0.15);
     }
+  }
+
+  /** The band's root container (hud.bounds 'alert'); null before create and after shutdown. */
+  get container(): Phaser.GameObjects.Container | null {
+    return this.root;
   }
 
   /** Add the band's kind and number to the history (on a change only). */

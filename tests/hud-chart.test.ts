@@ -21,6 +21,7 @@ import { withinBudget } from '../src/scenes/live/view';
 import { BROWNOUT } from '../src/sim/brownout';
 import { forecastAt } from '../src/sim/demand';
 import { SERVER_SLOTS } from '../src/sim/tick';
+import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 
 // The hook's sections as the views provide them, read back here without a window.
 const sections = vi.hoisted(() => new Map<string, () => unknown>());
@@ -145,7 +146,7 @@ type Chart = {
   title: string;
   legend: string;
 };
-const chart = (): Chart => (sections.get('hud')!() as { chart: Chart }).chart;
+const chart = (): Chart => (hudSection({} as HudTestState) as unknown as { chart: Chart }).chart;
 
 describe('the scope', () => {
   it('is the registry’s scope line, and the HUD finds it there', () => {

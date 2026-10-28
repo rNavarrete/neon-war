@@ -1,5 +1,11 @@
 import titleSource from '../src/scenes/hud/title.ts?raw';
 import { Bus, type GameEvents } from '../src/game/bus';
+import { readFrame } from '../src/game/frame';
+import { Run } from '../src/game/run';
+import { CommsView } from '../src/scenes/hud/CommsView';
+import { LESSON_IDS, isLesson } from '../src/scenes/hud/lineMeta';
+import { ZONES } from '../src/scenes/live/layout';
+import { LINES, type LineId } from '../src/strings';
 
 // The bus catalogue (src/game/bus.ts, docs/LIVE.md "Bus events"): the Live screen's events are
 // declared in GameEvents itself, not by module augmentation in a lane's file.
@@ -31,5 +37,60 @@ describe('the bus catalogue', () => {
   it('has no lane file augmenting GameEvents: title.ts no longer declares audience', () => {
     expect(titleSource).not.toMatch(/declare module '..\/..\/game\/bus'/);
     expect(titleSource).not.toMatch(/audience: \{ watching: number \}/);
+  });
+});
+
+/** A scene stub whose every property and call returns another stub (enough for CommsView). */
+function stubScene(): unknown {
+  const chain = (): unknown => {
+    const o: unknown = new Proxy(() => o, {
+      get(_t, prop) {
+        if (prop === 'then') return undefined;
+        if (prop === Symbol.toPrimitive) return () => 0;
+        return o;
+      },
+      apply: () => o,
+    });
+    return o;
+  };
+  return chain();
+}
+
+describe('line carries the lesson flag', () => {
+  it('declares lesson: boolean on GameEvents line', () => {
+    const bus = new Bus();
+    const seen: GameEvents['line'][] = [];
+    bus.on('line', (e) => seen.push(e));
+    bus.emit('line', { id: 'C1.triage.06', speaker: 'TRIAGE', tag: 'HINT', lesson: true, since: 2 });
+    expect(seen[0].lesson).toBe(true);
+  });
+
+  it('CommsView emits lesson from lineMeta for a lesson line and for a plain one', () => {
+    const lesson = LESSON_IDS[0];
+    const plain = (Object.keys(LINES) as LineId[]).find((id) => LINES[id].kind === 'bark' && !isLesson(id))!;
+    expect(isLesson(lesson)).toBe(true);
+    const bus = new Bus();
+    const seen: GameEvents['line'][] = [];
+    bus.on('line', (e) => seen.push(e));
+    const view = new CommsView();
+    view.create(stubScene() as never, {
+      scene: null as never,
+      bus,
+      rect: ZONES.comms,
+      flags: { lite: true },
+    });
+    const f = readFrame(new Run());
+    let t = 0;
+    const until = (id: LineId): void => {
+      for (let n = 0; n < 4000 && !seen.some((e) => e.id === id); n++)
+        view.update(f, { now: (t += 0.05), dt: 0.05 });
+    };
+    view.enqueue(plain);
+    until(plain);
+    view.enqueue(lesson);
+    until(lesson);
+    view.shutdown();
+    expect(seen.find((e) => e.id === plain)?.lesson).toBe(false);
+    expect(seen.find((e) => e.id === lesson)?.lesson).toBe(true);
   });
 });

@@ -7,9 +7,7 @@ import {
   KEY,
   LEFT,
   RIGHT,
-  TOP,
   homeRect,
-  slotFor,
 } from '../src/scenes/hud/layout';
 import { dialQuestionOpen, sizingPromptOpen } from '../src/scenes/hud/jobCard';
 import { SERVER_MODE_FROM } from '../src/scenes/hud/dial';
@@ -22,7 +20,9 @@ import { BROWNOUT } from '../src/sim/brownout';
 
 describe('hud layout inside the zones', () => {
   it('puts every rect inside the zone or card it belongs to', () => {
-    expect(HUD_RECTS.length).toBeGreaterThan(30);
+    // 30 once the title cluster's, the alert band's, the clock's and the comms band's own rows were
+    // retired with the legacy code that drew them (TitleView, AlertView and CommsView place theirs).
+    expect(HUD_RECTS.length).toBeGreaterThanOrEqual(20);
     for (const { id, rect, home } of HUD_RECTS) {
       expect(inside(rect, homeRect(home)), `${id} in ${home}`).toBe(true);
     }
@@ -44,7 +44,9 @@ describe('hud layout inside the zones', () => {
 
   it('places a piece in every zone it fills', () => {
     const homes = new Set(HUD_RECTS.map((r) => r.home));
-    for (const zone of ['title', 'alert', 'clock', 'scope', 'comms', 'deck', 'chat'] as const) {
+    // title, alert and clock are drawn by their views from their own layouts (title.ts, alerts.ts),
+    // not from this file any more: their rows tested deleted code and are gone.
+    for (const zone of ['scope', 'comms', 'deck', 'chat'] as const) {
       expect(homes.has(zone), zone).toBe(true);
     }
     for (const card of ['dialCard', 'sizingPrompt', 'jobCard', 'banner', 'dipFallback'] as const) {
@@ -54,18 +56,14 @@ describe('hud layout inside the zones', () => {
 });
 
 describe('hud layout owner-fixed internals', () => {
-  it('stages the title cluster, the alert band and the clock across the top', () => {
-    expect(TOP.avatar).toEqual({ x: 56, y: 50, r: 36 });
-    expect({ x: TOP.alertHeadline.x, y: TOP.alertHeadline.y }).toEqual({ x: 540, y: 16 });
-    expect(TOP.alertChip.right).toBe(1470);
-    expect(TOP.alert).toEqual(ZONES.alert);
-    expect({ x: TOP.clockText.x, y: TOP.clockText.y }).toEqual({ x: 1520, y: 20 });
-    expect({ x: TOP.countdown.x, y: TOP.countdown.y }).toEqual({ x: 1520, y: 64 });
-    // The pause button at (1850, 52) stays the overlay's: nothing of the HUD's sits on it.
-    const pause = { x: 1820, y: 22, w: 60, h: 60 };
-    for (const { id, rect } of HUD_RECTS.filter((r) => r.home === 'clock')) {
-      expect(overlaps(rect, pause), id).toBe(false);
-    }
+  it('keeps no legacy piece in the top strip or on the comms band line', () => {
+    // The legacy title cluster, alert band and clock (TOP) and the comms band's own rows (BOTTOM.comms,
+    // the line, the labels, slotFor) were deleted with the code that drew them; their assertions
+    // tested deleted code. Nothing in HUD_RECTS sits in the title, alert or clock zones now.
+    for (const { id, home } of HUD_RECTS) expect(['title', 'alert', 'clock'], id).not.toContain(home);
+    expect(HUD_RECTS.filter((r) => r.home === 'comms').map((r) => r.id)).toEqual(
+      ['TRIAGE', 'REI', 'MIKA', 'OZZIE', 'HOUSE'].map((n) => `comms.slot.${n}`),
+    );
   });
 
   it('puts the chart in the scope with the plot at x 46-400, y 905-1050', () => {
@@ -87,7 +85,7 @@ describe('hud layout owner-fixed internals', () => {
     expect(b.rows).toBe(5);
   });
 
-  it('draws the comms band: five slots r 42 at y 720, x 517 + 98 i, and the line from x 1000 wrapped to 760', () => {
+  it('keeps the comms band’s five slots r 42 at y 720, x 517 + 98 i', () => {
     expect(BOTTOM.slots).toEqual(
       ['TRIAGE', 'REI', 'MIKA', 'OZZIE', 'HOUSE'].map((name, i) => ({
         name,
@@ -96,20 +94,6 @@ describe('hud layout owner-fixed internals', () => {
         r: 42,
       })),
     );
-    expect(BOTTOM.lineText.x).toBe(1000);
-    expect(BOTTOM.lineText.w).toBe(760);
-    expect(BOTTOM.divider.x).toBe(975);
-    // The face fits inside its slot's circle.
-    expect(BOTTOM.slotFace * Math.SQRT2).toBeLessThanOrEqual(84);
-  });
-
-  it('lights the speaker’s slot: the crew by name, anyone else in HOUSE', () => {
-    expect(slotFor('TRIAGE (panicking)')).toBe(0);
-    expect(slotFor('Rei')).toBe(1);
-    expect(slotFor('Mika')).toBe(2);
-    expect(slotFor('Ozzie')).toBe(3);
-    expect(slotFor('Lux')).toBe(4);
-    expect(slotFor('The TV')).toBe(4);
   });
 
   it('puts the keys 80x64 at (1272, 1022), (1360, 1022), (1448, 1022) labelled 1 REGROUP, 2 CUT 3F, 3 SET', () => {

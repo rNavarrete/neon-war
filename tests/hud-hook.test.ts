@@ -1,5 +1,4 @@
 import { type HudTestState, hudSection, hudSectionNames, provideHudSection } from '../src/scenes/hud/hook';
-import { provideHudPart } from '../src/scenes/hud/panel';
 
 // provideHudSection (src/scenes/hud/hook.ts): a view file adds one hud.* key without editing
 // HudScene.ts or src/testHook.ts, and the hook publishes `hud` as one snapshot, the scene's own keys
@@ -12,14 +11,14 @@ const read = (h: HudTestState): Record<string, unknown> => h as unknown as Recor
 
 describe('provideHudSection', () => {
   it('shows two sections provided from two files together under hud, over the scene’s own keys', () => {
-    // One through provideHudSection here, one through panel.ts's provideHudPart (the gauges views' call).
+    // Two sections, as two view files provide them (panel.ts's provideHudPart shim is retired).
     const offTitle = provideHudSection('title', () => ({
       live: 'live',
       watching: 3,
       right: 400,
       clockRight: 1790,
     }));
-    const offDial = provideHudPart({} as never, 'dialCard', () => ({
+    const offDial = provideHudSection('dialCard', () => ({
       dimmed: false,
       label: 'HOW MANY A SECOND?',
     }));

@@ -45,6 +45,8 @@ import {
   typedOf,
 } from './comms';
 import { COLORS, FONT, FONT_SANS } from './layout';
+import { LABELS } from './labels';
+import { isLesson } from './lineMeta';
 import { panel } from './panel';
 
 /** The slot avatars' diameter: the slot's circle, r 42. */
@@ -55,7 +57,7 @@ const DARK_ALPHA = 0.3;
 /** The nameplate a dark crew slot wears. */
 const DARK_NAME = '---';
 /** The band's own words: its title. Slot names are the crew's names; tags are lineMeta's. */
-export const COMMS_TEXT = { title: 'COMMS', replay: '\u21bb' } as const;
+export const COMMS_TEXT = LABELS.comms;
 /** The older two log rows sit back. */
 const LOG_OLDER_ALPHA = 0.65;
 /** Replays the hook remembers. */
@@ -413,7 +415,7 @@ export class CommsView implements LiveView {
     const l = LINES[id];
     this.emitted.push(`line:${id}`);
     if (this.emitted.length > EMITTED_MAX) this.emitted.shift();
-    this.bus?.emit('line', { id, speaker: l.speaker, tag: tag(id), since });
+    this.bus?.emit('line', { id, speaker: l.speaker, tag: tag(id), lesson: isLesson(id), since });
     this.drawLine(id);
     if (slotOf(l.speaker) === 'TRIAGE') {
       this.bus?.emit('sfx', { key: tag(id) === 'WARNING' ? 'triage-panic' : 'triage-blip' });

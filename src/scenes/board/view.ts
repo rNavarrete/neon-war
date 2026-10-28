@@ -237,7 +237,7 @@ export function loadLabel(look: PartLook): string {
   if (look.status === 'booting') return `BOOTING ${look.left.toFixed(1)}s`;
   if (look.status === 'rebooting') return `REBOOTING ${look.left.toFixed(1)}s`;
   if (look.status === 'dark') return `${LABELS.partTags.dark} ${Math.max(0, Math.ceil(look.left))} s`;
-  if (look.status === 'dead') return 'DEAD';
+  if (look.status === 'dead') return LABELS.partTags.dead;
   if (look.status === 'offline') return 'OFFLINE';
   const load = Math.round(look.load);
   if (look.capacity === null || look.share === null) return `${load} req/s`;

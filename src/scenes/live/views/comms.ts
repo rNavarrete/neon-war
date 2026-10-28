@@ -7,7 +7,7 @@ import type { LineTag } from '../../../game/bus';
 import type { LineId } from '../../../strings';
 import type { CommsSlot } from '../../hud/comms';
 import type { PagePoint } from '../../hud/hook';
-import { provideHudPart } from '../../hud/panel';
+import { provideHudSection } from '../../hud/hook';
 import type { Rect } from '../layout';
 
 /** The line the band shows now. */
@@ -85,7 +85,10 @@ declare module '../../hud/hook' {
   }
 }
 
-/** Mirror the band as hud.comms; returns the function that takes it out again. */
-export function provideCommsHook(scene: Phaser.Scene, read: () => CommsTestState): () => void {
-  return provideHudPart(scene, 'comms', read);
+/**
+ * Mirror the band as hud.comms; returns the function that takes it out again. `_scene` is unused
+ * (kept so CommsView's call stays as it is): the section goes through provideHudSection.
+ */
+export function provideCommsHook(_scene: Phaser.Scene, read: () => CommsTestState): () => void {
+  return provideHudSection('comms', read);
 }

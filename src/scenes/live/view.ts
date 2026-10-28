@@ -36,6 +36,12 @@ export interface LiveHost {
   readonly rect: Rect;
   /** The Live flags, read live (a getter on the host). */
   readonly flags: LiveFlags;
+  /**
+   * Press the open dial question's SET (the deck's key 3): records the dial's value and returns true,
+   * or does nothing and returns false while the dial is hidden or locked. Optional so a node test can
+   * hand a view a bare host; the HUD scene always provides it.
+   */
+  pressSet?(): boolean;
 }
 
 export interface LiveView {

@@ -73,6 +73,8 @@ export interface Frame {
   readonly dark: readonly string[];
   /** Overheating: over 100% load and counting down to death. */
   readonly overheating: readonly string[];
+  /** Seconds each overheating server has spent over 100% load, by id (play.heat.overload). */
+  readonly overload: Readonly<Record<string, number>>;
   /** Died from overheating and wait to be replaced. */
   readonly dead: readonly string[];
   /** Every power dip whose warning has started, with its part picked. */
@@ -122,6 +124,18 @@ export function wiredCapacity(
   return total;
 }
 
+/**
+ * Req/s every live server could serve, wired or not: the run's `capacity` worked out from the offline
+ * list the frame already holds, so the frame reads run().offline once. Pure.
+ */
+export function liveCapacity(parts: readonly Part[], offline: readonly string[]): number {
+  let total = 0;
+  for (const p of parts) {
+    if (p.kind === 'server' && !offline.includes(p.id)) total += capacityOf(p, BROWNOUT_RULES);
+  }
+  return total;
+}
+
 /** Whether `id` is a balancer with a wire in from the gateway. */
 function feedsThrough(parts: readonly Part[], wires: readonly Wire[], id: string): boolean {
   const part = parts.find((p) => p.id === id);
@@ -155,7 +169,7 @@ export function readFrame(r: Run): Frame {
     demand,
     blockDemand: r.blockDemand,
     retry: play.retry,
-    capacity: r.capacity,
+    capacity: liveCapacity(board.parts, offline),
     wiredCapacity: wiredCapacity(board.parts, board.wires, offline),
     served: flow.served,
     dropped: flow.dropped,
@@ -164,6 +178,7 @@ export function readFrame(r: Run): Frame {
     flickering: r.flickering,
     dark: darkParts(play.dips, now),
     overheating: Object.keys(play.heat.overload),
+    overload: play.heat.overload,
     dead: play.heat.dead,
     dips: play.dips,
     dip: dipShowing && dipShowing.part !== null ? { partId: dipShowing.part, at: dipShowing.darkAt } : null,

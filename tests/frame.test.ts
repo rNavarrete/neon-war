@@ -1,5 +1,5 @@
 import { bestPlay } from '../src/game/autopilot';
-import { type Frame, frame, readFrame, resetFrame, wiredCapacity } from '../src/game/frame';
+import { type Frame, frame, liveCapacity, readFrame, resetFrame, wiredCapacity } from '../src/game/frame';
 import { Run } from '../src/game/run';
 import { BROWNOUT } from '../src/sim/brownout';
 
@@ -207,5 +207,39 @@ describe('frame(run)', () => {
     expect(sawDark?.dark).toEqual([sawDip?.dip?.partId]);
     expect(sawDark?.offline).toContain(sawDip?.dip?.partId);
     expect(sawDark!.now).toBeGreaterThanOrEqual(sawDip!.dip!.at);
+  });
+});
+
+describe('frame overload and capacity (M2 follow-up)', () => {
+  it('reads run().offline once per refill and works capacity out from it, equal to the run’s', () => {
+    const r = new Run();
+    r.autopilot = bestPlay;
+    const offline = vi.spyOn(r, 'offline', 'get');
+    const capacity = vi.spyOn(r, 'capacity', 'get');
+    let checked = 0;
+    for (let n = 0; r.now < C.c7 && n < 20_000 && !r.play.failure; n++) {
+      r.tick(0.1);
+      if (n % 25 !== 0) continue;
+      offline.mockClear();
+      capacity.mockClear();
+      const f = readFrame(r);
+      expect(offline).toHaveBeenCalledTimes(1);
+      expect(capacity).not.toHaveBeenCalled();
+      // The spy calls through: the run's own getter gives the same number.
+      expect(f.capacity).toBe(r.capacity);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(20);
+    expect(liveCapacity([], [])).toBe(0);
+  });
+
+  it('carries play.heat.overload as overload, its keys as overheating', () => {
+    const { r, id } = runWithServer();
+    expect(readFrame(r).overload).toEqual({});
+    r.play = { ...r.play, heat: { overload: { [id]: 3.5 }, dead: [] } };
+    const f = readFrame(r);
+    expect(f.overload).toBe(r.play.heat.overload);
+    expect(f.overload).toEqual({ [id]: 3.5 });
+    expect(f.overheating).toEqual([id]);
   });
 });

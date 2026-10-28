@@ -24,6 +24,7 @@ import { LABELS } from '../src/scenes/hud/labels';
 import { headroomLayout } from '../src/scenes/hud/headroom';
 import { ZONES, inside } from '../src/scenes/live/layout';
 import { BROWNOUT } from '../src/sim/brownout';
+import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 
 // gauges-8: the deck's keys 1 REGROUP, 2 CUT 3F, 3 SET (src/scenes/hud/deck.ts, DeckView.ts). What
 // each key shows, when a press (a click or its digit) acts, and the guards in front of them.
@@ -230,7 +231,7 @@ describe('where the keys sit', () => {
 
 // ---- the view against a stub scene: a press by click or by digit goes through one handler ----
 
-function stubScene(dial: { pressSet(): boolean } | null) {
+function stubScene() {
   const chain = (extra: Record<string, unknown> = {}): unknown => {
     const o: unknown = new Proxy(extra, {
       get(target, prop) {
@@ -248,7 +249,7 @@ function stubScene(dial: { pressSet(): boolean } | null) {
     const proxy = chain(t);
     return proxy;
   };
-  return { add: { graphics: () => chain(), text }, dial: dial ?? undefined };
+  return { add: { graphics: () => chain(), text } };
 }
 
 describe('DeckView presses', () => {
@@ -256,13 +257,15 @@ describe('DeckView presses', () => {
     newRun(1);
     const r = run();
     let sets = 0;
-    const scene = stubScene({ pressSet: () => (sets++, true) });
+    const scene = stubScene();
     const view = new DeckView();
+    // SET goes through the host (LiveHost.pressSet), never through the scene's private dial.
     view.create(scene as never, {
       scene: null as never,
       bus: new Bus(),
       rect: ZONES.deck,
       flags: { lite: true },
+      pressSet: () => (sets++, true),
     });
 
     // The job card is up at the start: key 3 is ignored.
@@ -291,7 +294,7 @@ describe('DeckView presses', () => {
     view.press('three', 'key');
     expect(sets).toBe(2);
 
-    const hud = sections.get('hud')!() as {
+    const hud = hudSection({} as HudTestState) as unknown as {
       deck: { presses: { key: string; via: string; acted: boolean }[]; set: string; go: string };
     };
     expect(hud.deck.presses.map((p) => [p.via, p.acted])).toEqual([
@@ -310,7 +313,7 @@ describe('DeckView presses', () => {
     const r = run();
     dismissJobCard(r);
     const view = new DeckView();
-    view.create(stubScene(null) as never, {
+    view.create(stubScene() as never, {
       scene: null as never,
       bus: new Bus(),
       rect: ZONES.deck,
@@ -321,7 +324,7 @@ describe('DeckView presses', () => {
     view.press('two', 'key');
     expect(r.play.regroup.left).toBe(0);
     expect(r.play.laundryCut).toBeNull();
-    const hud = sections.get('hud')!() as {
+    const hud = hudSection({} as HudTestState) as unknown as {
       regroup: { visible: boolean; active: boolean; spent: boolean };
       laundry: { available: boolean; cut: boolean };
     };

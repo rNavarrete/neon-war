@@ -85,7 +85,7 @@ function setup(manifest: VoiceManifest = MANIFEST) {
 }
 
 const line = (bus: Bus, id: LineId, since = 0): void =>
-  bus.emit('line', { id, speaker: 'TRIAGE', tag: 'HINT', since });
+  bus.emit('line', { id, speaker: 'TRIAGE', tag: 'HINT', lesson: false, since });
 
 describe('Live sound effect keys', () => {
   it('pins LIVE_SFX_KEYS beside the 21 SFX_KEYS', () => {
