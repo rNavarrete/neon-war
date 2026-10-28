@@ -38,6 +38,7 @@ import {
   toPage,
   wirePath,
 } from './board/layout';
+import { registerPool } from './live/hook';
 import { ZONES, pageRect } from './live/layout';
 import { PacketPool, fillPacketRates, progress, travelSeconds } from './board/packets';
 import { BoardSnapshot } from './board/snapshot';
@@ -404,6 +405,7 @@ export class BoardScene extends Phaser.Scene {
     });
 
     provideTestState('board', () => this.testState());
+    registerPool('packets', () => this.packetSprites.length);
 
     this.syncBoard(0);
     this.ready = true;
