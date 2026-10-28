@@ -169,7 +169,8 @@ export class Run {
       this.play = step(this.play, slice);
       left -= slice;
       if (!wasRescued && this.rescued) break;
-      if (this.play.dips.length > dips) break;
+      // Only a warning this slice ran into: a clock set past warnAt (a jump) does not stop the frame.
+      if (toWarn > -1e-6 && this.play.dips.length > dips) break;
     }
     if (this.play !== before) this.announce(before, this.play);
   }

@@ -49,6 +49,14 @@ describe('Run.tick stops at a dip warning', () => {
     });
   }
 
+  it('a clock set past a warning (a jump) does not stop the frame: only a warning a step runs into does', () => {
+    const r = runTo(WARN[0].warnAt, 30);
+    r.now = WARN[0].warnAt + 15;
+    r.tick(0.05);
+    expect(r.play.dips.map((d) => d.id)).toEqual([WARN[0].id]);
+    expect(r.now).toBeCloseTo(WARN[0].warnAt + 16, 6);
+  });
+
   it('a frame that crosses no warning steps its whole length', () => {
     const r = runTo(WARN[0].warnAt, 30);
     const before = r.now;
