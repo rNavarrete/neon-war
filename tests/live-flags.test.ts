@@ -24,7 +24,7 @@ import { bus } from '../src/game/bus';
 // the hook sections, all without Phaser (the placeholder gets a stub scene).
 
 /** The registry zones no lane has drawn yet, in registry order (each lane takes its zones out). */
-const STILL_PLACEHOLDERS: ZoneId[] = ['cam'];
+const STILL_PLACEHOLDERS: ZoneId[] = [];
 
 describe('live flags', () => {
   it('turns lite on under ?test and off in play', () => {
@@ -69,12 +69,10 @@ describe('live registry', () => {
     expect(placeholderZones(views)).toEqual(STILL_PLACEHOLDERS);
     const again = createViews();
     for (let i = 0; i < views.length; i++) expect(again[i]).not.toBe(views[i]);
-    // A lane's view in place of a placeholder drops out of the placeholder list.
-    const at = views.findIndex((v) => v.zone === STILL_PLACEHOLDERS[0]);
-    const custom = { ...views[at], zone: STILL_PLACEHOLDERS[0] };
-    expect(placeholderZones([...views.slice(0, at), custom, ...views.slice(at + 1)])).toEqual(
-      STILL_PLACEHOLDERS.slice(1),
-    );
+    // Every zone has its lane's view now; a placeholder put back in a zone shows up in the list.
+    const at = views.findIndex((v) => v.zone === 'cam');
+    const back = [...views.slice(0, at), new PlaceholderView('cam'), ...views.slice(at + 1)];
+    expect(placeholderZones(back)).toEqual(['cam']);
   });
 });
 
