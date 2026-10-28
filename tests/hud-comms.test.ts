@@ -538,6 +538,8 @@ describe('comms-9: plate, round avatars and HOUSE chips through the art manifest
   const plateReq = artRequest(COMMS_PLATE)!;
   /** The manifest entry as it will read once the owner's pick lands (its cut size set). */
   const picked = <T extends { target: { w: number; h: number } }>(r: T): T => ({ ...r, cut: r.target });
+  /** The manifest entry as it read before the owner's pick landed (no cut): the fallback draws. */
+  const unpicked = <T extends { cut: unknown }>(r: T): T => ({ ...r, cut: null });
   const all = (): boolean => true;
   const none = (): boolean => false;
 
@@ -572,12 +574,20 @@ describe('comms-9: plate, round avatars and HOUSE chips through the art manifest
   });
 
   it('falls back to the text-box plate, then to code, while the pick is missing', () => {
-    expect(plateFile()).toBeNull();
+    // M4: Rolando's comms-plate has landed, so the manifest names its file; without its cut the
+    // fallbacks below still hold.
+    expect(plateFile()).toBe('art/hud/comms-plate.webp');
+    expect(plateArt(all)).toMatchObject({ use: 'picked', texture: fileTexture('art/hud/comms-plate.webp') });
+    expect(plateFile(unpicked(plateReq))).toBeNull();
     const reuse = plateReq.fallback.kind === 'reuse' ? plateReq.fallback : null;
     expect(reuse?.file).toBe('art/hud/textbox.webp');
     // Not picked: the reused file, nine-sliced, at the manifest's tint and alpha.
-    expect(plateArt(all)).toMatchObject({ use: 'reuse', texture: fileTexture(reuse!.file), nine: true });
-    expect(plateArt(all).alpha).toBe(reuse!.alpha);
+    expect(plateArt(all, unpicked(plateReq))).toMatchObject({
+      use: 'reuse',
+      texture: fileTexture(reuse!.file),
+      nine: true,
+    });
+    expect(plateArt(all, unpicked(plateReq)).alpha).toBe(reuse!.alpha);
     // The reused file not loaded: the HUD's own text box.
     expect(plateArt((t) => t === LEGACY_PLATE)).toMatchObject({
       use: 'reuse',
@@ -588,13 +598,16 @@ describe('comms-9: plate, round avatars and HOUSE chips through the art manifest
     expect(plateArt((t) => t === LEGACY_PLATE, picked(plateReq)).texture).toBe(LEGACY_PLATE);
     // Nothing loaded: the code plate.
     expect(plateArt(none)).toMatchObject({ use: 'code', texture: null });
+    expect(plateArt(none, unpicked(plateReq))).toMatchObject({ use: 'code', texture: null });
     expect(plateArt(none, undefined).use).toBe('code');
   });
 
   it('draws a picked HOUSE chip and the code glyph until then', () => {
     for (const key of COMMS_AVATARS.HOUSE) {
       const r = artRequest(key)!;
-      expect(chipArt(key, all)).toEqual({ key, use: 'code', texture: null });
+      // M4: the door and TV chips have landed, so they draw; without their cut, the code glyph.
+      expect(chipArt(key, all)).toEqual({ key, use: 'picked', texture: fileTexture(`art/${key}.webp`) });
+      expect(chipArt(key, all, unpicked(r))).toEqual({ key, use: 'code', texture: null });
       expect(chipArt(key, all, picked(r))).toEqual({
         key,
         use: 'picked',
@@ -607,7 +620,9 @@ describe('comms-9: plate, round avatars and HOUSE chips through the art manifest
   it('resolves the four round avatars through the manifest: the pick when it lands, the reused face until', () => {
     for (const key of [COMMS_AVATARS.TRIAGE, COMMS_AVATARS.REI, COMMS_AVATARS.MIKA, COMMS_AVATARS.OZZIE]) {
       const r = artRequest(key)!;
-      const now = avatarSource(key);
+      // M4: the four badges have landed, so each draws its own file; without its cut, the reused face.
+      expect(avatarSource(key), key).toMatchObject({ fallback: false, file: `art/${key}.webp` });
+      const now = avatarSource(key, unpicked(r));
       expect(now.fallback, key).toBe(true);
       expect(now.file, key).toBe(r.fallback.kind === 'reuse' ? r.fallback.file : null);
       const later = avatarSource(key, picked(r));

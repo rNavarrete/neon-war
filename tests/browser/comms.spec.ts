@@ -754,3 +754,108 @@ test('comms-8: the leader points at the idle box for C3.triage.02; null without 
   if (perf) expect(perf.actual.objects).toBeLessThanOrEqual(perf.budget.objects);
   expect(errors).toEqual([]);
 });
+
+// ---- comms-9 (M4): Rolando's picked band art ----
+
+const COMMS_ART = [
+  'hud/comms-plate',
+  'chars/comms/triage',
+  'chars/comms/rei',
+  'chars/comms/mika',
+  'chars/comms/ozzie',
+  'hud/icons/door',
+  'hud/icons/tv',
+] as const;
+
+// With the picks on disk the band draws them: the plate at its own 1450x144 centred in the band
+// (never stretched to 1455x150), the four badges baked round at 84 px, and the HOUSE door chip at
+// 64x60 (its 128x120 file fitted down at its own aspect). TRIAGE's iris sits over her painted lens.
+test('comms-9 (M4): the band draws the picked plate, four round badges and the HOUSE chip, none upscaled', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const { errors } = await openBoard(page, { speed: 4, autopilot: false });
+  await dismissJobCard(page);
+  await expect
+    .poll(async () => (await comms(page)).line?.id ?? null, { timeout: 40_000, intervals: [50] })
+    .toBe('C1.triage.02');
+  const c = await comms(page);
+  for (const key of COMMS_ART) expect(isPicked(artRequest(key)!), key).toBe(true);
+
+  // The plate: the pick, at its file's size, inside the band.
+  expect(c.art.plate.use).toBe('picked');
+  expect(c.art.plate.texture).toBe('art:hud/comms-plate');
+  expect(c.art.plate.source).toEqual({ w: 1450, h: 144 });
+  expect(c.art.plate.size).toEqual({ w: 1450, h: 144 });
+  expect(insideRect(c.art.plate.drawn, c.rect)).toBe(true);
+
+  // The four badges: picked, baked once into 84 px round avatars.
+  expect(c.art.faces.map((f) => [f.slot, f.use, f.texture])).toEqual(
+    (['TRIAGE', 'REI', 'MIKA', 'OZZIE'] as const).map((slot) => [
+      slot,
+      'picked',
+      `avatar:chars/comms/${slot.toLowerCase()}@84`,
+    ]),
+  );
+
+  // HOUSE: the door chip drawn as art at 64x60 from its 128x120 file.
+  expect(c.art.house.shown).toBe('door');
+  expect(c.art.house.chips.map((h) => h.use)).toEqual(['picked', 'picked']);
+  expect(c.art.house.drawn).toBe('art');
+  expect(c.art.house.source).toEqual({ w: 128, h: 120 });
+  expect(c.art.house.size).toEqual({ w: 64, h: 60 });
+
+  // TRIAGE's iris over the badge's lens: left of centre, still inside her slot.
+  expect(c.art.lens.dx).toBeLessThan(-15);
+  expect(Math.abs(c.art.lens.dy)).toBeLessThan(6);
+
+  // Every slot (the four badges and the HOUSE chip) and the plate sit inside the band.
+  for (const s of c.slots) {
+    expect(insideRect({ x: s.x - s.r, y: s.y - s.r, w: 2 * s.r, h: 2 * s.r }, c.rect), s.name).toBe(true);
+  }
+  expect(insideRect(c.drawn, c.rect)).toBe(true);
+  const art = await page.evaluate(
+    () => (window.__neonTest!.state as unknown as { art: { missing: string[] } }).art,
+  );
+  expect(art.missing).toEqual([]);
+
+  await shot(page, 'm4-comms-live');
+  await page.screenshot({
+    path: 'test-results/screens/m4-comms-band.png',
+    clip: { x: c.rect.x, y: c.rect.y, width: c.rect.w, height: c.rect.h },
+  });
+  expect(errors).toEqual([]);
+});
+
+// With the picks missing (their requests fail) the band draws its fallbacks: the text-box plate or
+// the code plate, stand-in faces and the code door glyph, with no page error and no missing texture.
+test('comms-9 (M4): with the band art absent the code fallback draws without errors', async ({ page }) => {
+  test.setTimeout(60_000);
+  for (const key of COMMS_ART) await page.route(`**/art/${key}.webp`, (route) => route.abort());
+  const { errors } = await openBoard(page, { speed: 4, autopilot: false });
+  await dismissJobCard(page);
+  const c = await comms(page);
+
+  expect(['reuse', 'code']).toContain(c.art.plate.use);
+  expect(c.art.plate.source).toBeNull();
+  expect(c.art.plate.size).toEqual({ w: 1455, h: 150 });
+  for (const f of c.art.faces) expect(f.use, f.key).not.toBe('picked');
+  expect(c.art.house.chips.map((h) => h.use)).toEqual(['code', 'code']);
+  expect(c.art.house.drawn).toBe('glyph');
+  expect(c.art.house.size).toBeNull();
+  expect(c.art.lens).toEqual({ dx: 0, dy: 0 });
+  for (const s of c.slots) {
+    expect(insideRect({ x: s.x - s.r, y: s.y - s.r, w: 2 * s.r, h: 2 * s.r }, c.rect), s.name).toBe(true);
+  }
+  expect(insideRect(c.drawn, c.rect)).toBe(true);
+  const art = await page.evaluate(
+    () => (window.__neonTest!.state as unknown as { art: { missing: string[] } }).art,
+  );
+  expect(art.missing).toEqual([]);
+
+  await page.screenshot({
+    path: 'test-results/screens/m4-comms-fallback.png',
+    clip: { x: c.rect.x, y: c.rect.y, width: c.rect.w, height: c.rect.h },
+  });
+  expect(errors).toEqual([]);
+});
