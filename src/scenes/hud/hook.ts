@@ -1,5 +1,11 @@
 // The HUD's section of the read-only test hook (window.__neonTest.state.hud). Positions are page
 // CSS pixels, ready for page.mouse.click.
+//
+// The section is one public snapshot: HudScene provides `hud` once, as its own snapshot with every
+// sub-section a view file adds through provideHudSection laid over it (hudSection). A view adds
+// `hud.<name>` without editing HudScene.ts or src/testHook.ts: it declares the key on HudTestState
+// by module augmentation and calls provideHudSection from its create. Test mirror only: no view
+// reads it back. Pure: no Phaser.
 
 import type { LineId } from '../../strings';
 import type { DialMode } from './dial';
@@ -76,4 +82,39 @@ declare module '../../testHook' {
   interface TestSections {
     hud: HudTestState;
   }
+}
+
+// ---- sub-sections provided by view files ----
+
+/** The sub-sections view files have provided, by key; read each time the hook is read. */
+const sections = new Map<string, () => unknown>();
+
+/**
+ * Add (or replace) `hud.<name>` in the test hook, read from `read` each time the hook is read. The
+ * returned function takes it out again, unless another provider has replaced it since (call it from
+ * the view's shutdown). A section with the name of one of HudScene's own keys replaces that key.
+ */
+export function provideHudSection<K extends keyof HudTestState>(
+  name: K,
+  read: () => HudTestState[K],
+): () => void {
+  sections.set(name, read);
+  return () => {
+    if (sections.get(name) === read) sections.delete(name);
+  };
+}
+
+/**
+ * The `hud` section as the hook publishes it: `base` (HudScene's own snapshot, built fresh for this
+ * read) with every provided sub-section laid over it. Writes into `base` and returns it.
+ */
+export function hudSection(base: HudTestState): HudTestState {
+  const out = base as unknown as Record<string, unknown>;
+  for (const [name, read] of sections) out[name] = read();
+  return base;
+}
+
+/** The names provided right now, in the order they were first provided (tests). */
+export function hudSectionNames(): string[] {
+  return [...sections.keys()];
 }

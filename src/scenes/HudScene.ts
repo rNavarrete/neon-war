@@ -29,7 +29,7 @@ import {
 import { type CueView, type DirectorState, NEW_DIRECTOR, direct } from './hud/cues';
 import { type DialMode, applyEstimate, applySizing, dialModeAt } from './hud/dial';
 import { countdownText, errorState } from './hud/format';
-import type { HudBounds, HudTestState, PagePoint } from './hud/hook';
+import { type HudBounds, type HudTestState, type PagePoint, hudSection } from './hud/hook';
 import { dialQuestionOpen, dismissJobCard, jobCardDue, openJobCard, sizingPromptOpen } from './hud/jobCard';
 import {
   BANNER_BUTTONS,
@@ -215,7 +215,8 @@ export class HudScene extends Phaser.Scene {
       canvas.addEventListener('pointerdown', onDown);
       this.earlyClick = () => canvas.removeEventListener('pointerdown', onDown);
     }
-    provideTestState('hud', () => this.snapshot());
+    // One public snapshot: the scene's own keys with every view's provideHudSection keys over them.
+    provideTestState('hud', () => hudSection(this.snapshot()));
 
     this.flags = flagsFrom(window.location.search);
     this.views = createViews();

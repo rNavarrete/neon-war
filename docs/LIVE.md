@@ -123,6 +123,13 @@ no view reads them.
   `perf.graphics`: Text and Graphics objects on both together; `perf.fps.avg`: the frame rate;
   `perf.lite`: the lite flag.
 
+The `hud` section is one public snapshot. `HudScene` provides it once, as its own keys with every
+key a view file adds laid over them (`hudSection` in `src/scenes/hud/hook.ts`). A view adds
+`hud.<name>` with `provideHudSection(name, read)` from the same file, without editing `HudScene.ts`
+or `src/testHook.ts`: it declares the key on `HudTestState` by module augmentation, calls
+`provideHudSection` in `create` and the remover it returns in `shutdown`. `provideHudPart` in
+`src/scenes/hud/panel.ts` is the same call under the gauges views' older name.
+
 ### Script anchors
 
 Each lane adds the lines its views need under its own anchored section of `docs/SCRIPT.md` ("Lane
