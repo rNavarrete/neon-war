@@ -7,27 +7,14 @@ import type { Part, PartKind } from '../../sim/board';
 import { LABELS, diesIn } from '../hud/labels';
 import type { PartLook, PartStatus } from './view';
 
-/** What a part is called on its plate. */
-export const PLATE_NAMES: Readonly<Record<PartKind, string>> = {
-  gateway: 'GATEWAY',
-  balancer: 'SPLITTER',
-  server: LABELS.inventory.server,
-  database: 'DATABASE',
-};
+/** What a part is called on its plate (LABELS.plates.names). */
+export const PLATE_NAMES: Readonly<Record<PartKind, string>> = LABELS.plates.names;
 
-/** The plate's words for how a part is doing, beside the tags it wears. */
-export const PLATE_STATE = {
-  online: 'running',
-  over: 'more coming in than it answers',
-  unfed: 'nothing feeds it',
-  skipped: 'the splitter passes it over',
-  darkBack: 'power back in',
-  dead: 'drop a SERVER card on it or press REPLACE',
-  offline: 'off',
-} as const;
+/** The plate's words for how a part is doing, beside the tags it wears (LABELS.plates.state). */
+export const PLATE_STATE = LABELS.plates.state;
 
-/** The button on a dead box's pinned plate. */
-export const REPLACE_LABEL = 'REPLACE';
+/** The button on a dead box's pinned plate (LABELS.plates.replace). */
+export const REPLACE_LABEL: string = LABELS.plates.replace;
 
 const r = (n: number) => Math.round(n);
 

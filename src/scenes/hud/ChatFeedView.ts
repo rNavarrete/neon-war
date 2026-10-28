@@ -71,17 +71,18 @@ import {
 } from './chatEngine';
 import { provideHudSection } from './hook';
 import { COLORS, FONT, FONT_SANS } from './layout';
+import { LABELS } from './labels';
 import { isLesson } from './lineMeta';
 import { panel } from './panel';
 
 /** Seed for the chat's randomness, so a run's chat is the same every time (and in tests). */
 export const CHAT_SEED = 20261231;
 
-/** The header's words (UI micro-copy, not lines). */
+/** The header's words (UI micro-copy, not lines): LABELS.chat. */
 export const CHAT_TEXT = Object.freeze({
-  title: 'LIVE CHAT',
-  all: 'BLOCK + STREAM',
-  block: 'BLOCK ONLY',
+  title: LABELS.chat.title,
+  all: LABELS.chat.both,
+  block: LABELS.chat.blockOnly,
 });
 
 /** The header tag for a filter. */
