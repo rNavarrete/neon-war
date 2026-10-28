@@ -15,6 +15,11 @@ export class BoardSnapshot {
   changes = 0;
   /** The frame this sync draws from, or null before the first one. */
   current: Frame | null = null;
+  /**
+   * Seconds each server has been over 100% in a row (the sim's play.heat.overload), read with the
+   * Frame for the DIES IN countdown: the Frame lists who overheats but not how long they have left.
+   */
+  overload: Readonly<Record<string, number>> = {};
 
   /** Start a board frame: read the run's Frame once and keep it as `current`. */
   next(r: Run): Frame {
@@ -22,6 +27,7 @@ export class BoardSnapshot {
     const f = frame(r);
     if (f !== this.current) this.changes++;
     this.current = f;
+    this.overload = r.play.heat.overload;
     this.readAt = this.count;
     return f;
   }
@@ -32,5 +38,6 @@ export class BoardSnapshot {
     this.readAt = 0;
     this.changes = 0;
     this.current = null;
+    this.overload = {};
   }
 }

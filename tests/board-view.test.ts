@@ -6,13 +6,20 @@ import { BROWNOUT } from '../src/sim/brownout';
 import { balancerGiven, balancerGivenIn } from '../src/scenes/board/crew';
 import { BoardSnapshot } from '../src/scenes/board/snapshot';
 import {
+  FLICKER_HZ,
   LabelCache,
+  type PartTrouble,
+  SKIP_TAG_HOLD,
   artFor,
   emptyLook,
+  flickerLit,
   loadColour,
   loadLabel,
   partLook,
   partLookInto,
+  partTags,
+  skipTagUntil,
+  tagChip,
 } from '../src/scenes/board/view';
 
 const server: Part = { id: 'server-p1', kind: 'server', slot: 's1' };
@@ -286,5 +293,142 @@ describe('test speed', () => {
     expect(r.play.failure).toBeNull();
     expect(r.now).toBeGreaterThanOrEqual(BROWNOUT.challenges.c3);
     expect(real).toBeLessThan(30);
+  });
+});
+
+describe('part states (board-5)', () => {
+  const now = 100;
+  const dip = { id: 'surge', part: server.id, warnAt: now - 7, darkAt: now - 5, endsAt: now + 15 };
+  const calm: PartTrouble = { dead: [], dark: [], dips: [], overload: {} };
+
+  it('reads a dipped server DARK with its countdown, never DEAD, on unlit (not dead) art', () => {
+    const trouble: PartTrouble = { ...calm, dark: [server.id], dips: [dip] };
+    const look = partLook(server, 40, [server.id], {}, now, trouble);
+    expect(look.status).toBe('dark');
+    expect(look.darkLeft).toBeCloseTo(15);
+    expect(look.dark).toBe(true);
+    expect(look.art).toBe('server');
+    expect(partLook(boosted, 0, [server.id], {}, now, trouble).art).toBe('server-overclocked');
+    expect(loadLabel(look)).toBe('DARK 15 s');
+    expect(loadLabel(look)).not.toMatch(/DEAD/);
+    expect(look.warning).toBe(true);
+    expect(look.diesIn).toBeNull();
+    expect(partTags(look, false)).toEqual(['DARK']);
+    expect(loadLabel(partLook(server, 0, [server.id], {}, now + 14.2, trouble))).toBe('DARK 1 s');
+  });
+
+  it('reads a cooked server DEAD on the dead art, its DIES IN at 0', () => {
+    const look = partLook(server, 0, [server.id], {}, now, { ...calm, dead: [server.id] });
+    expect(look.status).toBe('dead');
+    expect(look.art).toBe('server-dead');
+    expect(loadLabel(look)).toBe('DEAD');
+    expect(look.diesIn).toBe(0);
+    expect(look.darkLeft).toBeNull();
+    expect(partTags(look, false)).toEqual([]);
+  });
+
+  it('counts DIES IN down from 8 for a server over 100%, with a red full bar and the triangle', () => {
+    const look = partLook(server, 90, [], {}, now, { ...calm, overload: { [server.id]: 3 } });
+    expect(look.diesIn).toBeCloseTo(BROWNOUT.overheat.overloadSeconds - 3);
+    expect(look.warning).toBe(true);
+    expect(look.bar).toBe(1);
+    expect(look.barColour).toBe('red');
+    expect(partTags(look, false)).toEqual(['DIES IN']);
+    expect(tagChip(look)).toBe('DIES IN 5 s');
+    expect(tagChip(partLook(server, 90, [], {}, now, { ...calm, overload: { [server.id]: 7.9 } }))).toBe(
+      'DIES IN 1 s',
+    );
+    // Not overloaded (yet): no countdown.
+    expect(partLook(server, 90, [], {}, now, calm).diesIn).toBeNull();
+  });
+
+  it('runs DIES IN down to 0 on the tick the sim kills the server', () => {
+    resetFrame();
+    const r = wiredRun();
+    const seen: number[] = [];
+    let deadLook: ReturnType<typeof partLook> | null = null;
+    const id = r.session.board.parts.find((p) => p.kind === 'server')!.id;
+    for (let i = 0; i < 4000 && !deadLook; i++) {
+      r.tick(0.1);
+      const f = readFrame(r);
+      const part = f.parts.find((p) => p.id === id)!;
+      const trouble: PartTrouble = {
+        dead: f.dead,
+        dark: f.dark,
+        dips: f.dips,
+        overload: r.play.heat.overload,
+      };
+      const look = partLook(part, f.flow.load[id] ?? 0, f.offline, f.offlineUntil, f.now, trouble);
+      if (look.status === 'dead') deadLook = look;
+      else if (look.diesIn !== null) seen.push(look.diesIn);
+    }
+    expect(deadLook).not.toBeNull();
+    expect(deadLook!.diesIn).toBe(0);
+    expect(loadLabel(deadLook!)).toBe('DEAD');
+    // The countdown started near 8 and only ever went down, to within a tick of 0.
+    expect(seen.length).toBeGreaterThan(10);
+    expect(seen[0]).toBeGreaterThan(7.5);
+    for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeLessThan(seen[i - 1]);
+    expect(seen[seen.length - 1]).toBeLessThanOrEqual(0.1 + 1e-9);
+  });
+
+  it('tags an online server with no load UNFED, and nothing else', () => {
+    const idle = partLook(server, 0, [], {}, now, calm);
+    expect(idle.unfed).toBe(true);
+    expect(partTags(idle, false)).toEqual(['UNFED']);
+    expect(tagChip(idle)).toBe('UNFED');
+    expect(idle.bar).toBe(0);
+    expect(partLook(server, 10, [], {}, now, calm).unfed).toBe(false);
+    expect(partLook(server, 0, [server.id], { [server.id]: now + 2 }, now, calm).unfed).toBe(false);
+    expect(partLook(gateway, 0, [], {}, now, calm).unfed).toBe(false);
+    expect(partLook(database, 0, [], {}, now, calm).unfed).toBe(false);
+  });
+
+  it('puts the triangle on the database only over 200 (D2), never on the gateway', () => {
+    expect(partLook(database, 150, [], {}, now, calm).warning).toBe(false);
+    expect(partLook(database, 200, [], {}, now, calm).warning).toBe(false);
+    expect(partLook(database, 250, [], {}, now, calm).warning).toBe(true);
+    expect(partLook(gateway, 400, [], {}, now, calm).warning).toBe(false);
+    expect(partLook(server, 55, [], {}, now, calm).warning).toBe(false);
+  });
+
+  it('fills the bar with load / capacity in cyan, amber and red, and with boot progress in cyan', () => {
+    const at = (load: number) => partLook(server, load, [], {}, now, calm);
+    expect(at(30)).toMatchObject({ bar: 0.5, barColour: 'cyan' });
+    expect(at(54)).toMatchObject({ bar: 0.9, barColour: 'amber' });
+    expect(at(120)).toMatchObject({ bar: 1, barColour: 'red' });
+    const boot = partLook(server, 0, [server.id], { [server.id]: now + 1.5 }, now, calm);
+    expect(boot.bar).toBeCloseTo(1 - 1.5 / BROWNOUT.server.bootSeconds);
+    expect(boot.barColour).toBe('cyan');
+    expect(partTags(boot, false)).toEqual(['BOOTING']);
+    expect(partTags(boot, true)).toEqual(['SKIPPED', 'BOOTING']);
+    expect(partLook(server, 0, [server.id], {}, now, { ...calm, dead: [server.id] }).barColour).toBe('grey');
+  });
+
+  it('keeps the SKIPPED tag at least 1 s after the skip clears', () => {
+    expect(SKIP_TAG_HOLD).toBe(1);
+    let until = -Infinity;
+    const shown = (t: number) => t < until;
+    for (const t of [10, 10.2, 10.4]) {
+      until = skipTagUntil(until, true, t);
+      expect(shown(t)).toBe(true);
+    }
+    // The skip clears after 10.4: the tag stays until 11.4.
+    for (const t of [10.5, 10.9, 11.3, 11.39]) {
+      until = skipTagUntil(until, false, t);
+      expect(shown(t)).toBe(true);
+    }
+    until = skipTagUntil(until, false, 11.41);
+    expect(shown(11.41)).toBe(false);
+  });
+
+  it('blinks a flickering part at 6 Hz, and never under reduce flicker', () => {
+    expect(FLICKER_HZ).toBe(6);
+    const samples = Array.from({ length: 60 }, (_, i) => i / 60);
+    expect(new Set(samples.map((t) => flickerLit(true, t, false)))).toEqual(new Set([true, false]));
+    for (const t of samples) {
+      expect(flickerLit(true, t, true)).toBe(true);
+      expect(flickerLit(false, t, false)).toBe(true);
+    }
   });
 });

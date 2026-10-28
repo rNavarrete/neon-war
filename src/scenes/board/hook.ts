@@ -5,7 +5,7 @@ import type { PartKind } from '../../sim/board';
 import type { Rect } from '../live/layout';
 import type { Point } from './layout';
 import type { InventoryCounts } from './tray';
-import type { PartStatus } from './view';
+import type { BarColour, PartStatus, PartTag } from './view';
 
 export interface BoardTestState {
   /** The feed zone the board draws in (BOARD_AREA), in page CSS pixels. */
@@ -44,7 +44,51 @@ export interface BoardTestState {
     art: string;
     dark: boolean;
     label: string;
+    /** Seconds until an overloaded server cooks; 0 once dead; null when it is not overloaded (board-5). */
+    diesIn: number | null;
+    /** Seconds until a part dark in a power dip comes back on, or null. */
+    darkLeft: number | null;
+    /** An online server nothing reaches (no load). */
+    unfed: boolean;
+    /** The warning triangle is up: a server over 100% or dark; the database only over 200 (D2). */
+    warning: boolean;
+    /** The load bar's fill, 0..1, and its colour. */
+    bar: number;
+    barColour: BarColour;
+    /** Lit this frame: false only on the dark half of a power flicker's blink; always true under reduce flicker. */
+    flickerLit: boolean;
+    /** The row's draw scale (1 off the rack). */
+    scale: number;
+    /** The tags the part wears (the lead's enum), first is the one shown. */
+    tags: PartTag[];
+    /** Packets on their way into the part right now. */
+    packetsIn: number;
   })[];
+  /**
+   * Every pad (board-5): the balancer's and the six server pads, with their drawn box (page CSS
+   * pixels), rack row and scale, the part on it, whether the balancer skips that part now
+   * (`skipped`, the sim's flow.skipped), the board-clock second the SKIPPED tag shows until
+   * (`skipTagUntil`, sticky 1 s after the skip clears; null before any skip) and whether the pad is
+   * drawn grey and dashed with the tag on it now (`dashed`).
+   */
+  pads: (Point & {
+    slot: string;
+    w: number;
+    h: number;
+    row: number | null;
+    scale: number;
+    part: string | null;
+    locked: boolean;
+    state: 'empty' | 'taken' | 'dead' | 'locked';
+    skipped: boolean;
+    skipTagUntil: number | null;
+    dashed: boolean;
+    pulsing: boolean;
+  })[];
+  /** The board clock in seconds (the scene's own time): what skipTagUntil and the blinks count on. */
+  clock: number;
+  /** settings().reduceFlicker as the board read it this frame: nothing blinks while it is true. */
+  reduceFlicker: boolean;
   wires: (Point & { key: string; from: string; to: string; rate: number; skipped: boolean })[];
   offline: string[];
   /** Wire keys the load balancer skipped, each drawn with a grey "skipped" tag. */
