@@ -35,7 +35,8 @@ test('a bark asks the mixer for its voice: the clip is fetched once and plays, n
     if (req.url().includes('/audio/voice/')) failed.push(req.url());
   });
   page.on('response', (res) => {
-    if (res.url().includes('/audio/voice/') && res.status() >= 400) failed.push(`${res.status()} ${res.url()}`);
+    if (res.url().includes('/audio/voice/') && res.status() >= 400)
+      failed.push(`${res.status()} ${res.url()}`);
   });
 
   const { errors } = await openBoard(page, { speed: 20, autopilot: true });

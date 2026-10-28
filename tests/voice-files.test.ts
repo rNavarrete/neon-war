@@ -23,10 +23,9 @@ const fs = (
 const PUBLIC = new URL('../public/', import.meta.url).pathname;
 const LANGS = ['ja', 'en'] as const;
 
-const manifest = JSON.parse(fs.readFileSync(`${PUBLIC}audio/voice/manifest.json`, 'utf8') as string) as Record<
-  string,
-  string[]
->;
+const manifest = JSON.parse(
+  fs.readFileSync(`${PUBLIC}audio/voice/manifest.json`, 'utf8') as string,
+) as Record<string, string[]>;
 
 /**
  * Voiced lines with no clip in a language, written out so a gap is a decision, not an accident.
@@ -39,7 +38,10 @@ const MAX_BYTES = 1024 * 1024;
 
 type Recorded = [id: string, character: string, en: string, ja: string];
 const RECORDED = JSON.parse(
-  fs.readFileSync(new URL('./fixtures/voice-recorded-lines.json', import.meta.url).pathname, 'utf8') as string,
+  fs.readFileSync(
+    new URL('./fixtures/voice-recorded-lines.json', import.meta.url).pathname,
+    'utf8',
+  ) as string,
 ) as Recorded[];
 
 /** A line's words with the performance tags ([excited]), stage directions ((beat)) and quotes taken out. */
@@ -82,7 +84,8 @@ describe('voice manifest', () => {
 
   it('lists only spoken lines (a scene line or a bark, never a stage direction)', () => {
     const voiced = new Set<string>(voicedLines());
-    for (const lang of LANGS) for (const id of manifest[lang]) expect(voiced.has(id) && isVoiced(id), id).toBe(true);
+    for (const lang of LANGS)
+      for (const id of manifest[lang]) expect(voiced.has(id) && isVoiced(id), id).toBe(true);
   });
 
   it('lists every spoken line in each language, apart from the known gaps', () => {
