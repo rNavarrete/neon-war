@@ -48,7 +48,7 @@ test('the Live skeleton: zones on the page, ten placeholders, perf numbers and l
     expect(z.x + z.w, zone).toBeLessThanOrEqual(canvas.left + canvas.width + 0.1);
     expect(z.y + z.h, zone).toBeLessThanOrEqual(canvas.top + canvas.height + 0.1);
   }
-  expect(live.placeholders).toEqual(['alert', 'map', 'cam', 'gauge', 'scope', 'comms', 'chat']);
+  expect(live.placeholders).toEqual(['alert', 'cam', 'gauge', 'scope', 'comms', 'chat']);
 
   for (const n of [perf.objects.board, perf.objects.hud, perf.texts, perf.graphics, perf.fps.avg]) {
     expect(typeof n).toBe('number');
