@@ -61,6 +61,7 @@ import {
   toggleFilter,
   visibleRows,
 } from './chatEngine';
+import { provideHudSection } from './hook';
 import { COLORS, FONT, FONT_SANS } from './layout';
 import { isLesson } from './lineMeta';
 import { panel } from './panel';
@@ -79,6 +80,82 @@ export const CHAT_TEXT = Object.freeze({
 export const headerTag = (filter: ChatFilter): string =>
   filter === 'block' ? CHAT_TEXT.block : CHAT_TEXT.all;
 
+// ---- the trace (chat-5): what the chat stepped on, as edges, for the browser spec ----
+
+/** One spell of errors as the chat saw it (Frame.errorShare > 0), on the HUD clock. */
+export interface ChatErrorSpell {
+  from: number;
+  /** When the errors stopped, or null while they still run. */
+  to: number | null;
+}
+
+/** The retries level as the chat saw it climb past a step (TRACE_RETRY_STEP), on the HUD clock. */
+export interface ChatRetryMark {
+  at: number;
+  retry: number;
+}
+
+/**
+ * hud.chatTrace: the error spells and retry climbs the chat stepped on, so a spec can order rows
+ * against them (a complaint after the errors start, the thanks after they stop) on the same clock.
+ * A test mirror: nothing reads it back.
+ */
+export interface ChatTraceTestState {
+  /** The last TRACE_KEEP spells, oldest first. */
+  errors: ChatErrorSpell[];
+  /** The last TRACE_KEEP retry climbs, oldest first. */
+  retries: ChatRetryMark[];
+}
+
+declare module './hook' {
+  interface HudTestState {
+    /** The chat's trace (chat-5). */
+    chatTrace?: ChatTraceTestState;
+  }
+}
+
+/** Spells and climbs the trace keeps. */
+export const TRACE_KEEP = 16;
+/** A retry climb is marked each time the level passes a multiple of this. */
+export const TRACE_RETRY_STEP = 0.1;
+
+/** The trace's working state: edges only, so a quiet frame changes nothing. */
+export interface ChatTrace {
+  readonly errors: readonly ChatErrorSpell[];
+  readonly retries: readonly ChatRetryMark[];
+  /** The highest retry step marked since retries were last at 0. */
+  readonly retryStep: number;
+}
+
+export const EMPTY_TRACE: ChatTrace = Object.freeze({ errors: [], retries: [], retryStep: 0 });
+
+const keepLast = <T>(list: readonly T[], item: T): T[] => {
+  const next = [...list, item];
+  return next.length > TRACE_KEEP ? next.slice(next.length - TRACE_KEEP) : next;
+};
+
+/**
+ * One frame of the trace. Pure: returns `t` itself unless an error spell starts or stops or the
+ * retries climb past a new step (so it allocates on those edges only); a rewind clock drop is not
+ * special, the spells simply carry their own times.
+ */
+export function traceStep(t: ChatTrace, clock: number, errorShare: number, retry: number): ChatTrace {
+  let next = t;
+  const open = t.errors.length > 0 && t.errors[t.errors.length - 1].to === null;
+  if (errorShare > 0 && !open) next = { ...next, errors: keepLast(next.errors, { from: clock, to: null }) };
+  else if (errorShare <= 0 && open) {
+    const errors = next.errors.slice();
+    errors[errors.length - 1] = { from: errors[errors.length - 1].from, to: clock };
+    next = { ...next, errors };
+  }
+  const step = Math.floor(retry / TRACE_RETRY_STEP + 1e-9);
+  if (retry <= 0 && t.retryStep !== 0) next = { ...next, retryStep: 0 };
+  else if (step > t.retryStep) {
+    next = { ...next, retryStep: step, retries: keepLast(next.retries, { at: clock, retry }) };
+  }
+  return next;
+}
+
 /**
  * The chat's controller: the engine state, what it heard on the bus since the last frame, the
  * audience it last announced. Phaser-free; the view hosts one.
@@ -94,6 +171,8 @@ export class ChatFeed {
   clock = 0;
   /** The last audience announced on the bus: null until the first viewersOf change. */
   watching: number | null = null;
+  /** The error spells and retry climbs stepped on (hud.chatTrace). */
+  trace: ChatTrace = EMPTY_TRACE;
 
   private rand: () => number;
   private bus: Bus | null = null;
@@ -154,6 +233,7 @@ export class ChatFeed {
     this.state = initialChat(clock, this.rand);
     this.pending = [];
     this.posts = 0;
+    this.trace = EMPTY_TRACE;
     this.clock = clock;
     this.rewinds = 0;
     this.lastEvent = null;
@@ -189,6 +269,7 @@ export class ChatFeed {
     for (let i = 0; i < occurrences.length; i++) ev.push({ kind: 'occurrence', occurrence: occurrences[i] });
     if (ev.length > 0) this.lastEvent = describe(ev[ev.length - 1]);
     const inputs = chatInputsOf(f, clock, this.inputs);
+    this.trace = traceStep(this.trace, clock, inputs.errorShare, inputs.retry);
     this.apply(stepChat(this.state, inputs, ev, this.rand), null);
     if (inputs.rewinds > this.rewinds) {
       this.rewinds = inputs.rewinds;
@@ -320,6 +401,10 @@ export class ChatFeedView implements LiveView {
         () => this.snapshot(),
         () => ({ watching: this.feed.watching }),
       ),
+      provideHudSection('chatTrace', () => ({
+        errors: this.feed.trace.errors.map((e) => ({ ...e })),
+        retries: this.feed.trace.retries.map((r) => ({ ...r })),
+      })),
     );
     this.drawHeader();
     this.draw();
