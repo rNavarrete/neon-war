@@ -107,7 +107,10 @@ test('the COMING /s gauge at speed 5: estimate tick after SET, needle on demand,
             g.strip !== null &&
             g.strip.startsWith('OVER BY') &&
             g.dropped > 0 &&
-            Math.abs(g.capacity - h.headroom!.wiredCapacity) <= 1;
+            Math.abs(g.capacity - h.headroom!.wiredCapacity) <= 1 &&
+            // With the HUD clock at true game time a headless frame at speed 5 can be most of a game
+            // second, so read on a frame where the gauge and hud.sim are within one small rise.
+            Math.abs(g.demand - h.sim.demand) <= 10;
           if (ok) read = h;
           return ok ? 'ok' : last;
         },
