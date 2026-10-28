@@ -26,7 +26,16 @@ import { LABELS } from './labels';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
-import { GAUGES_DEPTH } from './panel';
+import { KIT } from './kit';
+import {
+  type BakedPanel,
+  GAUGES_DEPTH,
+  type PanelTestState,
+  bakePanel,
+  panelSnapshot,
+  releasePanel,
+} from './panel';
+import { preloadArt } from '../plates';
 
 /** What the hook mirrors as hud.gauge. */
 export interface GaugeTestState {
@@ -55,6 +64,8 @@ export interface GaugeTestState {
   strip: string | null;
   /** Every tick number printed on the arc. */
   ticks: string[];
+  /** The baked plate: which picked kit pieces it draws, at what largest scale (m4 panel kit). */
+  panel?: PanelTestState | null;
 }
 
 declare module './hook' {
@@ -67,6 +78,9 @@ declare module './hook' {
 /** The gauge's alpha while the board is held. */
 const HELD_ALPHA = 0.5;
 const ESTIMATE_COLOR = 0xffffff;
+/** The label tab's height under the title, and the bracket corners' size (kit.ts). */
+const TAB_H = 26;
+const GAUGE_CORNERS = 26;
 
 export class GaugeView implements LiveView {
   readonly zone = 'gauge' as const;
@@ -76,7 +90,7 @@ export class GaugeView implements LiveView {
   readonly state: GaugeState = emptyGauge();
   private readonly memo = emptyGaugeMemo();
   private layout: GaugeLayout = gaugeLayout({ x: 0, y: 0, w: 0, h: 0 });
-  private plate: Phaser.GameObjects.Graphics | null = null;
+  private plate: BakedPanel | null = null;
   private dial: Phaser.GameObjects.Graphics | null = null;
   private title: Phaser.GameObjects.Text | null = null;
   private readout: Phaser.GameObjects.Text | null = null;
@@ -103,6 +117,10 @@ export class GaugeView implements LiveView {
   /** How many times the moving parts were redrawn (for tests). */
   draws = 0;
 
+  preload(scene: Phaser.Scene): void {
+    preloadArt(scene as never, [KIT.frame, KIT.corner, KIT.tab, KIT.divider]);
+  }
+
   create(scene: Phaser.Scene, host: LiveHost): void {
     const L = gaugeLayout(host.rect);
     this.layout = L;
@@ -110,25 +128,34 @@ export class GaugeView implements LiveView {
     Object.assign(this.state, emptyGauge());
     Object.assign(this.memo, emptyGaugeMemo());
 
-    const plate = add.graphics();
-    plate.fillStyle(COLORS.ink, 0.92);
-    plate.fillRect(L.plate.x, L.plate.y, L.plate.w, L.plate.h);
-    plate.lineStyle(1, COLORS.cyan, 0.35);
-    plate.strokeRect(L.plate.x + 0.5, L.plate.y + 0.5, L.plate.w - 1, L.plate.h - 1);
-    // The empty track and the tick marks every 100.
-    plate.lineStyle(L.outer - L.inner, COLORS.unlit, 0.35);
-    plate.beginPath();
-    plate.arc(L.centre.x, L.centre.y, (L.outer + L.inner) / 2, gaugeAngle(0), gaugeAngle(GAUGE_MAX), false);
-    plate.strokePath();
-    plate.lineStyle(2, 0xe8f1ff, 0.6);
-    for (const v of GAUGE_TICKS) {
-      const a = arcPoint(L, v, L.outer + 4);
-      const b = arcPoint(L, v, L.inner - 6);
-      plate.lineBetween(a.x, a.y, b.x, b.y);
-    }
-    // The right column's divider.
-    plate.lineStyle(1, COLORS.cyan, 0.25);
-    plate.lineBetween(L.readout.x - 14, L.plate.y + 16, L.readout.x - 14, L.plate.y + L.plate.h - 16);
+    // The plate, baked once with the frame kit: the empty track, the ticks every 100, the label tab
+    // under the title, the divider before the right column and the four bracket corners.
+    const plate = bakePanel(
+      scene,
+      'gauge',
+      L.plate,
+      {
+        frame: true,
+        corners: GAUGE_CORNERS,
+        tab: { x: L.title.x - 8, y: L.title.y - 4, h: TAB_H },
+        dividers: [{ x: L.readout.x - 16, y: L.plate.y + 16, h: L.plate.h - 32 }],
+      },
+      {
+        fill: { color: COLORS.ink, alpha: 0.92 },
+        draw: (g) => {
+          g.lineStyle(L.outer - L.inner, COLORS.unlit, 0.35);
+          g.beginPath();
+          g.arc(L.centre.x, L.centre.y, (L.outer + L.inner) / 2, gaugeAngle(0), gaugeAngle(GAUGE_MAX), false);
+          g.strokePath();
+          g.lineStyle(2, 0xe8f1ff, 0.6);
+          for (const v of GAUGE_TICKS) {
+            const a = arcPoint(L, v, L.outer + 4);
+            const b = arcPoint(L, v, L.inner - 6);
+            g.lineBetween(a.x, a.y, b.x, b.y);
+          }
+        },
+      },
+    );
     this.plate = plate;
 
     this.dial = add.graphics();
@@ -147,7 +174,7 @@ export class GaugeView implements LiveView {
     });
 
     const all = [
-      plate,
+      plate.object,
       this.dial,
       this.title,
       this.readout,
@@ -304,14 +331,15 @@ export class GaugeView implements LiveView {
       sub: this.sub?.text ?? '',
       strip: this.strip?.text ? this.strip.text : null,
       ticks: this.numbers.map((t) => t.text),
+      panel: panelSnapshot(this.plate),
     };
   }
 
   shutdown(): void {
     for (const off of this.off) off();
     this.off = [];
+    releasePanel(this.plate);
     for (const o of [
-      this.plate,
       this.dial,
       this.title,
       this.readout,

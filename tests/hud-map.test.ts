@@ -314,8 +314,15 @@ describe('MapView', () => {
     const { scene, made, loaded } = stubScene();
     const v = new MapView();
     v.preload(scene as never);
-    // hud/city-grid is requested, not picked: nothing is queued, the vector base draws.
-    expect(loaded).toEqual([]);
+    // hud/city-grid and the frame kit are picked (M4): their files are queued from public/art. The
+    // stub scene loads nothing, so the vector base draws here.
+    expect(loaded).toEqual([
+      'art:hud/city-grid',
+      'art:hud/live/panel-frame',
+      'art:hud/live/corner-marks',
+      'art:hud/live/label-tab',
+      'art:hud/live/tag-chip',
+    ]);
     expect(CITY_GRID_KEY).toBe('hud/city-grid');
     v.create(scene as never, host(new Bus()));
     expect(made.length).toBeLessThanOrEqual(v.budget.objects);

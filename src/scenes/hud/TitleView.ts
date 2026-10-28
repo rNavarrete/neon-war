@@ -19,7 +19,16 @@ import { countdownText } from './format';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
-import { GAUGES_DEPTH } from './panel';
+import { KIT, livePill } from './kit';
+import {
+  type BakedPanel,
+  GAUGES_DEPTH,
+  type PanelTestState,
+  bakePanel,
+  panelSnapshot,
+  releasePanel,
+} from './panel';
+import { preloadArt, resolveArt } from '../plates';
 import {
   type LiveDot,
   LIVE_WORDS,
@@ -49,6 +58,10 @@ export interface TitleTestState {
   avatar?: string | null;
   /** True while the HUD scene is paused under a story scene or the pause menu (the dot reads held). */
   scenePaused?: boolean;
+  /** The LIVE pill (hud/live/live-pill) shows under the word: exactly while the dot reads live. */
+  pill?: boolean;
+  /** The baked plate: which picked kit pieces it draws, at what largest scale (m4 panel kit). */
+  panel?: PanelTestState | null;
 }
 
 declare module './hook' {
@@ -79,8 +92,11 @@ const DOT_COLOR: Readonly<Record<LiveDot, number>> = {
   held: COLORS.unlit,
 };
 
+/** The LIVE word sits on the amber pill while live, so it is dark there. */
+const ON_PILL = '#1a0f02';
+
 const WORD_COLOR: Readonly<Record<LiveDot, string>> = {
-  live: COLORS.magentaText,
+  live: ON_PILL,
   waiting: COLORS.heroText,
   held: COLORS.dim,
 };
@@ -108,6 +124,9 @@ function clockRight(): number | null {
 /** The right-most game x anything of the clock view is drawn at, by the pause button's rule. */
 const CLOCK_MAX_RIGHT = 1796;
 
+/** The title's bracket corners (kit.ts). */
+const TITLE_CORNERS = 22;
+
 /**
  * Shrinks a text so its right edge stays at or left of maxRight. Glyph widths depend on which
  * monospace font the machine has, so a word that fits here can overflow elsewhere; this keeps the
@@ -124,6 +143,8 @@ export class TitleView implements LiveView {
   readonly budget: LiveBudget = { objects: 11, texts: 5 };
   private objects: Phaser.GameObjects.GameObject[] = [];
   private dot: Phaser.GameObjects.Arc | null = null;
+  private plate: BakedPanel | null = null;
+  private pill: Phaser.GameObjects.Image | Phaser.GameObjects.Graphics | null = null;
   private liveWord: Phaser.GameObjects.Text | null = null;
   private watchingWord: Phaser.GameObjects.Text | null = null;
   private trustText: Phaser.GameObjects.Text | null = null;
@@ -148,6 +169,7 @@ export class TitleView implements LiveView {
 
   preload(scene: Phaser.Scene): void {
     preloadAvatars(scene as unknown as AvatarScene, [TITLE_AVATAR]);
+    preloadArt(scene as never, [KIT.frame, KIT.corner, KIT.pill]);
     loadOnce(scene, ICON_KEYS.trust, ICON_FILES.trust);
     loadOnce(scene, ICON_KEYS.credits, ICON_FILES.credits);
   }
@@ -160,17 +182,31 @@ export class TitleView implements LiveView {
     this.trustRight = L.trust.x + L.trust.w - 6;
     this.creditsRight = L.credits.x + L.credits.w - 6;
 
-    const plate = add.graphics();
-    plate.fillStyle(COLORS.ink, 0.96);
-    plate.fillRect(L.plate.x, L.plate.y, L.plate.w, L.plate.h);
-    plate.fillStyle(COLORS.ink, 1);
-    plate.fillCircle(L.avatar.x, L.avatar.y, L.avatar.r);
-    for (const c of [L.trust, L.credits]) {
-      plate.fillStyle(0x0b1224, 0.9);
-      plate.fillRoundedRect(c.x, c.y, c.w, c.h, 8);
-      plate.lineStyle(1, COLORS.cyan, 0.45);
-      plate.strokeRoundedRect(c.x + 0.5, c.y + 0.5, c.w - 1, c.h - 1, 8);
-    }
+    // The plate, baked once with the frame kit: the fill, the avatar's backing and amber ring, the
+    // chips' wells, the frame and the bracket corners.
+    const plate = bakePanel(
+      scene,
+      'title',
+      L.plate,
+      { frame: true, corners: TITLE_CORNERS },
+      {
+        fill: { color: COLORS.ink, alpha: 0.96 },
+        draw: (g) => {
+          g.fillStyle(COLORS.ink, 1);
+          g.fillCircle(L.avatar.x, L.avatar.y, L.avatar.r);
+          // The ring sits just outside the face, so the face drawn over the plate leaves it whole.
+          g.lineStyle(3, COLORS.hero, 1);
+          g.strokeCircle(L.avatar.x, L.avatar.y, L.avatar.r + 1.5);
+          for (const c of [L.trust, L.credits]) {
+            g.fillStyle(0x0b1224, 0.9);
+            g.fillRoundedRect(c.x, c.y, c.w, c.h, 8);
+            g.lineStyle(1, COLORS.cyan, 0.45);
+            g.strokeRoundedRect(c.x + 0.5, c.y + 0.5, c.w - 1, c.h - 1, 8);
+          }
+        },
+      },
+    );
+    this.plate = plate;
 
     // Lux_Net's round avatar, baked once at the size it is shown (the ring's diameter).
     const size = 2 * L.avatar.r;
@@ -181,9 +217,20 @@ export class TitleView implements LiveView {
     face.setTint(a.tint);
     face.setAlpha(a.alpha);
 
-    const ring = add.graphics();
-    ring.lineStyle(3, COLORS.hero, 1);
-    ring.strokeCircle(L.avatar.x, L.avatar.y, L.avatar.r);
+    // The LIVE pill under the dot and the word, shown only while live.
+    const P = livePill(L.dot.x - L.dot.r - 2, L.dot.y - 14);
+    const pillArt = resolveArt(KIT.pill);
+    // A scene that can hand out the file's frames draws the picked pill; a bare stub gets the code pill.
+    const tx = scene.textures as Partial<Phaser.Textures.TextureManager> | undefined;
+    if (!pillArt.fallback && typeof tx?.get === 'function' && tx.exists?.(pillArt.texture)) {
+      this.pill = add.image(P.x, P.y, pillArt.texture).setOrigin(0, 0).setDisplaySize(P.w, P.h);
+    } else {
+      const g = add.graphics();
+      g.fillStyle(COLORS.hero, 0.9);
+      g.fillRoundedRect(P.x, P.y, P.w, P.h, P.h / 2);
+      this.pill = g;
+    }
+    this.pill.setVisible(false);
 
     const name = add.text(L.name.x, L.name.y, 'Lux_Net', {
       fontFamily: FONT,
@@ -217,9 +264,9 @@ export class TitleView implements LiveView {
     this.creditsText = creditsText;
 
     this.objects = [
-      plate,
+      plate.object,
       face,
-      ring,
+      this.pill,
       name,
       this.dot,
       this.liveWord,
@@ -301,6 +348,7 @@ export class TitleView implements LiveView {
     if (live !== this.shownLive) {
       this.shownLive = live;
       this.dot.setFillStyle(DOT_COLOR[live], 1);
+      this.pill?.setVisible(live === 'live');
       this.liveWord?.setText(LIVE_WORDS[live]).setColor(WORD_COLOR[live]);
       if (this.liveWord) fitRight(this.liveWord, this.maxRight);
     }
@@ -317,13 +365,19 @@ export class TitleView implements LiveView {
       clockRight: clockRight(),
       avatar: this.avatarTexture,
       scenePaused: this.scenePaused,
+      pill: this.pill?.visible ?? false,
+      panel: panelSnapshot(this.plate),
     };
   }
 
   shutdown(): void {
     for (const off of this.off) off();
     this.off = [];
-    for (const o of this.objects) o.destroy();
+    const plate = this.plate?.object;
+    for (const o of this.objects) if (o !== plate) o.destroy();
+    releasePanel(this.plate);
+    this.plate = null;
+    this.pill = null;
     this.objects = [];
     this.dot = null;
     this.liveWord = null;

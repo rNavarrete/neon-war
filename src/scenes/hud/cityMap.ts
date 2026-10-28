@@ -245,7 +245,13 @@ function street(id: StreetId, points: MapPoint[]): Street {
   return { id, points, along, length: along[along.length - 1] };
 }
 
-/** The map's layout in its zone `r` (408 x 310 in frame 54); computed once at create. */
+/**
+ * The map's layout in its zone `r` (408 x 310 in frame 54); computed once at create. The places sit
+ * on the picked hud/city-grid painting (816 x 620, drawn at half size): Lux's block is the big
+ * right-of-centre building, the neighbours are the dark blocks down the left column, and the dots
+ * walk the painted streets: the right avenue from the top, the left avenue and the lower road from
+ * the bottom-left, and the cross street from the neighbours.
+ */
 export function mapLayout(r: Rect): MapLayout {
   const at = (fx: number, fy: number): MapPoint => ({ x: r.x + fx * r.w, y: r.y + fy * r.h });
   const box = (fx: number, fy: number, fw: number, fh: number): Rect => ({
@@ -254,8 +260,8 @@ export function mapLayout(r: Rect): MapLayout {
     w: fw * r.w,
     h: fh * r.h,
   });
-  // Lux's block right of centre, low; its windows inset 6 px with 12 columns and 10 floors.
-  const lux = box(0.68, 0.48, 0.2, 0.34);
+  // Lux's block on the painted building right of centre; its windows inset 6 px, 12 columns, 10 floors.
+  const lux = box(0.585, 0.33, 0.235, 0.37);
   const inset = 6;
   const pitchX = (lux.w - 2 * inset) / WINDOWS_PER_FLOOR;
   const pitchY = (lux.h - 2 * inset) / FLOORS;
@@ -271,12 +277,12 @@ export function mapLayout(r: Rect): MapLayout {
     }
   const luxIn = (fx: number, fy: number): MapPoint => ({ x: lux.x + fx * lux.w, y: lux.y + fy * lux.h });
   const streets = [
-    // From the top of the district down to the block's roof.
-    street('north', [at(0.86, 0.1), at(0.82, 0.3), luxIn(0.55, 0)]),
-    // From the bottom-left corner along the lower road to the block's west side.
-    street('west', [at(0.03, 0.95), at(0.4, 0.9), luxIn(0, 0.8)]),
-    // From the neighbours' blocks across the middle to the block's west side.
-    street('district', [at(0.22, 0.45), at(0.45, 0.52), luxIn(0, 0.35)]),
+    // Down the right avenue from the top of the district, in at the block's east side.
+    street('north', [at(0.865, 0.03), at(0.858, 0.37), luxIn(1, 0.12)]),
+    // Up the left avenue from the bottom edge, along the lower road, in at the block's south-west.
+    street('west', [at(0.255, 0.97), at(0.262, 0.78), at(0.55, 0.76), luxIn(0, 0.9)]),
+    // From the neighbours' blocks along the cross street to the block's west side.
+    street('district', [at(0.22, 0.44), at(0.545, 0.45), luxIn(0, 0.35)]),
   ];
   const sparkles: MapPoint[] = [];
   for (let i = 0; i < 6; i++) {
