@@ -45,6 +45,9 @@ if the outcome is not `pass`, a required step is missing or did not pass (skippe
 the commit does not match (stale evidence), or the tree was dirty. The evidence and logs are uploaded as the
 `check-evidence-<sha>` artifact.
 
+In CI the e2e step is not run inside the `check` job: four shard jobs run it in parallel and the `check` job
+records it from their results (see Sharded e2e). The evidence file looks the same either way.
+
 Only a clean CI run on the exact candidate commit counts. A local run is useful, but it is not evidence.
 
 ## Contract claim
@@ -77,10 +80,46 @@ and runs `scripts/verify-evidence.mjs --expect-contract-digest <sha256>`. Verifi
 evidence's contract digest is missing, `null` or different (the comparison ignores case). Without that flag a
 `null` digest is accepted, so a CI pass on its own says nothing about which task it was for.
 
+## Sharded e2e
+
+The browser tests take about 27 minutes in one job, so CI splits them across four parallel `e2e` jobs (a matrix,
+`shard: [1, 2, 3, 4]`). Playwright splits by test file.
+
+1. Each shard job checks out the exact candidate commit and runs
+   `node scripts/check.mjs --e2e-shard <n>/4`. That runs only the Node version check and
+   `playwright test --shard=<n>/4`, and writes `check-evidence-e2e-shard-<n>.json`: the commit, whether the tree
+   was clean, the check revision hashes, the shard number, both steps' results and the full e2e log. It uploads
+   that file and `check-logs/` as `e2e-shard-<n>-<sha>`, and its screenshots as `screenshots-shard-<n>-<sha>`.
+2. The `check` job waits for all four (it also runs when one failed, so the failure is recorded). It downloads
+   the shard artifacts and runs `node scripts/check.mjs --e2e-from-shards <dir>`. Every other step runs there as
+   usual. The e2e step is recorded as passed only if:
+   - the set is complete: shards 1 to n, each exactly once, all saying the same n
+   - every shard is for the same commit as this run
+   - every shard has the same check revision (check script, workflow and config hashes) as this run
+   - every shard had a clean tree, and its Node check and e2e step passed
+
+   Anything else (a missing or duplicate shard, a file that cannot be read or parsed, another commit or config)
+   fails the step, and its log says why. The step's command says it was merged from n shards, its time is the
+   slowest shard's, and `check-logs/e2e.log` holds every shard's log in order.
+3. The `check` job then verifies and uploads `check-evidence-<sha>` exactly as before, and merges the shard
+   screenshots into one `screenshots-<sha>` artifact.
+
+So the factory still gets one `check-evidence.json` with every step, and `verify-evidence.mjs` is unchanged. A
+shard file is never accepted as check evidence on its own: it has no format, lint, typecheck, test or build
+step.
+
+`--e2e-shard` takes only `i/n` with whole numbers, 1 ≤ i ≤ n ≤ 8. It cannot be combined with
+`--e2e-from-shards` or a contract digest, and it changes no timeout. Without either flag, `npm run check` runs
+every step itself, e2e included, as before. The selftest runs the shard flow too: one shard set that must pass
+and one with a shard never run, which must fail the e2e step.
+
+Expected time with four shards: the slowest shard holds about 8.5 minutes of tests, plus about 2 minutes to
+install and build, then the `check` job's other steps take a few minutes.
+
 ## The job to require
 
-ENG-142's ruleset must require the **`verified`** job. It passes only when both `check` and `check-selftest`
-succeeded. Skipped, cancelled or neutral counts as a failure.
+ENG-142's ruleset must require the **`verified`** job. It passes only when `e2e` (every shard), `check` and
+`check-selftest` all succeeded. Skipped, cancelled or neutral counts as a failure.
 
 ## Control changes
 
