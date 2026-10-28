@@ -1,13 +1,13 @@
-// One chat panel (the block chat or Lux's stream chat): the painted panel, a header, and a fixed set
-// of rows (avatar, name, line) that are re-filled only when a message arrives.
+// The chat column in ZONES.chat (the block's chat and Lux's stream merged): the painted panel the
+// size of the zone, a header, and a fixed set of rows (avatar, name, line) in the body rect, re-filled
+// only when a message arrives. Geometry from src/scenes/hud/layout.ts RIGHT, derived from ZONES.chat.
 
 import Phaser from 'phaser';
 import { panel } from './panel';
 import { type ChatEntry, avatarFor } from './chat';
 import { COLORS, FONT, FONT_SANS } from './layout';
 
-const AVATAR = 40;
-const PAD = 22;
+const AVATAR = 36;
 
 interface Row {
   avatar: Phaser.GameObjects.Image;
@@ -20,37 +20,44 @@ export class ChatView {
   private readonly rows: Row[] = [];
   private readonly rowHeight: number;
 
+  /** The painted panel, the size of the chat zone. */
+  readonly panel: Phaser.GameObjects.NineSlice;
+
   constructor(
     scene: Phaser.Scene,
-    box: { x: number; y: number; w: number; h: number; rows: number },
+    box: { x: number; y: number; w: number; h: number },
+    titleAt: { x: number; y: number },
+    body: { x: number; y: number; w: number; h: number; rows: number },
     title: string,
   ) {
-    panel(scene, 'hud:chat-panel', box.x, box.y, box.w, box.h, { k: 0.55, slice: [70, 70, 70, 70] });
-    scene.add.text(box.x + PAD + 4, box.y + 18, title, {
+    this.panel = panel(scene, 'hud:chat-panel', box.x, box.y, box.w, box.h, {
+      k: 0.55,
+      slice: [70, 70, 70, 70],
+    });
+    scene.add.text(titleAt.x, titleAt.y, title, {
       fontFamily: FONT,
-      fontSize: '15px',
+      fontSize: '14px',
       color: COLORS.cyanText,
     });
-    const top = box.y + 46;
-    this.rowHeight = (box.h - 46 - PAD) / box.rows;
-    for (let i = 0; i < box.rows; i++) {
-      const y = top + i * this.rowHeight;
-      const x = box.x + PAD;
+    this.rowHeight = body.h / body.rows;
+    for (let i = 0; i < body.rows; i++) {
+      const y = body.y + i * this.rowHeight;
+      const x = body.x;
       const avatar = scene.add
-        .image(x, y + 2, 'avatar:kenji')
+        .image(x, y + 3, 'avatar:kenji')
         .setOrigin(0)
         .setDisplaySize(AVATAR, AVATAR);
-      const dot = scene.add.circle(x + AVATAR / 2, y + 2 + AVATAR / 2, AVATAR / 2 - 4, 0x6a3fb5, 0.9);
-      const name = scene.add.text(x + AVATAR + 10, y, '', {
+      const dot = scene.add.circle(x + AVATAR / 2, y + 3 + AVATAR / 2, AVATAR / 2 - 4, 0x6a3fb5, 0.9);
+      const name = scene.add.text(x + AVATAR + 8, y, '', {
         fontFamily: FONT,
-        fontSize: '13px',
+        fontSize: '12px',
         color: COLORS.amberText,
       });
-      const text = scene.add.text(x + AVATAR + 10, y + 16, '', {
+      const text = scene.add.text(x + AVATAR + 8, y + 12, '', {
         fontFamily: FONT_SANS,
-        fontSize: '15px',
+        fontSize: '13px',
         color: COLORS.white,
-        wordWrap: { width: box.w - PAD * 2 - AVATAR - 16 },
+        wordWrap: { width: body.w - AVATAR - 8 },
         maxLines: 2,
       });
       this.rows.push({ avatar, dot, name, text });

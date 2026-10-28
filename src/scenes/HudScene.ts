@@ -29,9 +29,21 @@ import {
 import { type CueView, type DirectorState, NEW_DIRECTOR, direct } from './hud/cues';
 import { type DialMode, applyEstimate, applySizing, dialModeAt } from './hud/dial';
 import { countdownText, errorState } from './hud/format';
-import type { HudTestState, PagePoint } from './hud/hook';
-import { dismissJobCard, jobCardDue, openJobCard } from './hud/jobCard';
-import { BOTTOM, CENTRE, COLORS, FONT, FONT_SANS, LEFT, RIGHT, TOP } from './hud/layout';
+import type { HudBounds, HudTestState, PagePoint } from './hud/hook';
+import { dialQuestionOpen, dismissJobCard, jobCardDue, openJobCard, sizingPromptOpen } from './hud/jobCard';
+import {
+  BANNER_BUTTONS,
+  BOTTOM,
+  CENTRE,
+  COLORS,
+  FONT,
+  FONT_SANS,
+  type Home,
+  JOB_ART,
+  KEY,
+  RIGHT,
+  TOP,
+} from './hud/layout';
 import { laundryCutAvailable } from '../sim/failures';
 import { cutLaundry, laundryCutAt, regroupAvailable, upcomingDip } from './hud/pending503';
 import { REGROUP_UNUSED, type RegroupState, regroupActive, regroupSpent, startRegroup } from './hud/regroup';
@@ -41,7 +53,7 @@ import { storyEnd } from '../story/state';
 import { SCENES } from './keys';
 import { type LiveFlags, PLAY_FLAGS, flagsFrom } from './live/flags';
 import { liveTestState, perfTestState } from './live/hook';
-import { ZONES } from './live/layout';
+import { ZONES, pageRect } from './live/layout';
 import { createViews } from './live/registry';
 import type { LiveHost, LiveView } from './live/view';
 
@@ -65,12 +77,17 @@ const HUD_ART = [
 const ICONS = ['trust', 'credits', 'warning', 'power-dip', 'cut', 'clock'];
 const AVATARS = ['kenji', 'mrs-okafor', 'young-father', 'old-man-noodles'];
 
-/** Where on the painted Solace banner (1431x700) its three buttons sit, from its centre. */
-const BANNER_BUTTONS: Record<BannerChoice, { dx: number; dy: number; w: number; h: number }> = {
-  pay: { dx: 166, dy: 275, w: 250, h: 72 },
-  ignore: { dx: 438, dy: 275, w: 250, h: 72 },
-  bin: { dx: 632, dy: 275, w: 80, h: 80 },
-};
+/** Lux's face in the title cluster. */
+const LUX_AVATAR = 'portrait:lux/faces-board/determined';
+
+/** One of the deck's three keys: its cap, its digit and word, and whether it is lit (pressable). */
+interface DeckKey {
+  cap: Phaser.GameObjects.NineSlice;
+  digit: Phaser.GameObjects.Text;
+  word: Phaser.GameObjects.Text;
+  lit: boolean;
+  alpha: number;
+}
 
 /** Seed for the chat filler, so a run's chat is the same every time (and in tests). */
 const CHAT_SEED = 20261231;
@@ -84,10 +101,13 @@ const CARD_GUARD_MS = 400;
 const cardGuarded = (): boolean => performance.now() - storyEnd.at < CARD_GUARD_MS;
 
 /**
- * The board's HUD, drawn over BoardScene with a transparent background: job card, estimate dial and
- * chart, clock and countdown, trust and credits, surge and power-dip warnings, the Solace banner,
- * the laundry cut, Regroup, the sizing prompt, barks and both chats. It reads run() every frame and
- * only calls the run's actions; the rules stay in src/sim/.
+ * The board's HUD, drawn over BoardScene with a transparent background and staged into the Live
+ * screen's zones (src/scenes/live/layout.ts, docs/LIVE.md): the title cluster (Lux, LIVE, trust and
+ * credits), the alert band (surge and fall), the clock and countdown, the chart in the scope, the
+ * barks as the comms band's line, one chat column, and the deck's keys (1 REGROUP, 2 CUT 3F, 3 SET).
+ * Over the feed, only while asked: the job card, the Solace banner, the dial card, the sizing prompt
+ * and the power-dip warning. It reads run() every frame and only calls the run's actions; the rules
+ * stay in src/sim/.
  */
 export class HudScene extends Phaser.Scene {
   ready = false;
@@ -117,6 +137,8 @@ export class HudScene extends Phaser.Scene {
   private director: DirectorState = NEW_DIRECTOR;
   private barks: BarkState = NO_BARKS;
   private chats: Record<ChatKind, ChatEntry[]> = { block: [], stream: [] };
+  /** Both chats in arrival order, for the one chat column. */
+  private merged: ChatEntry[] = [];
   private fillerAt: Record<ChatKind, number> = { block: 0, stream: 0 };
   private lastFiller: Record<ChatKind, LineId | null> = { block: null, stream: null };
   private rand = seededRandom(CHAT_SEED);
@@ -132,6 +154,13 @@ export class HudScene extends Phaser.Scene {
   private shownTrust = NaN;
   private shownCredits = NaN;
   private dip: DipWarning | null = null;
+  /** What the dial question reads, one object reused every update. */
+  private readonly ask: { now: number; cardOpen: boolean; estimate: number | null; sizing: number | null } = {
+    now: 0,
+    cardOpen: false,
+    estimate: null,
+    sizing: null,
+  };
   private readonly view: CueView = {
     now: 0,
     demand: 0,
@@ -157,8 +186,9 @@ export class HudScene extends Phaser.Scene {
   private chart!: ChartView;
   private dial!: DialView;
   private barkView!: BarkView;
-  private blockChat!: ChatView;
-  private streamChat!: ChatView;
+  private chatView!: ChatView;
+  private title!: Phaser.GameObjects.Container;
+  private clockPanel!: Phaser.GameObjects.Image;
   private clockText!: Phaser.GameObjects.Text;
   private countdown!: Phaser.GameObjects.Text;
   private trustText!: Phaser.GameObjects.Text;
@@ -169,12 +199,15 @@ export class HudScene extends Phaser.Scene {
   private dipMark!: Phaser.GameObjects.Container;
   private dipText!: Phaser.GameObjects.Text;
   private card!: Phaser.GameObjects.Container;
+  private cardArt!: Phaser.GameObjects.Image;
   private banner!: Phaser.GameObjects.Container;
   private bannerOpen = false;
   private sizingPanel!: Phaser.GameObjects.Container;
-  private laundry!: Phaser.GameObjects.Container;
-  private laundryButton!: Phaser.GameObjects.NineSlice;
-  private regroupButton!: Phaser.GameObjects.Image;
+  /** The deck's keys, in KEY order: 1 REGROUP, 2 CUT 3F, 3 SET. */
+  private keys: DeckKey[] = [];
+  /** Whether the laundry cut is on offer (the surge window), and whether Regroup's key shows. */
+  private laundryOn = false;
+  private regroupShown = false;
 
   constructor() {
     super(SCENES.hud);
@@ -224,7 +257,9 @@ export class HudScene extends Phaser.Scene {
     this.resetForRun(run());
     // The Live screen's views go first, so their placeholders sit under everything drawn below.
     for (const v of this.views) v.create(this, this.hostFor(v));
-    this.buildTopStrip();
+    this.buildTitle();
+    this.buildAlert();
+    this.buildClock();
     this.chart = new ChartView(this);
     this.dial = new DialView(this, {
       touched: () => {
@@ -232,11 +267,9 @@ export class HudScene extends Phaser.Scene {
       },
       set: (value) => this.onDialSet(value),
     });
-    this.blockChat = new ChatView(this, LEFT.block, 'BLOCK CHAT');
-    this.streamChat = new ChatView(this, LEFT.stream, 'LUX // LIVE');
+    this.chatView = new ChatView(this, RIGHT.chat, RIGHT.chatTitle, RIGHT.chatBody, 'LIVE CHAT');
     this.barkView = new BarkView(this);
-    this.buildLaundry();
-    this.buildRegroup();
+    this.buildDeck();
     this.buildDipMark();
     this.buildSizingPrompt();
     this.buildBanner();
@@ -283,12 +316,19 @@ export class HudScene extends Phaser.Scene {
       estimate,
       sizing !== null ? sizing * BROWNOUT.server.capacity : null,
     );
-    this.updateDial(r);
+    const ask = this.ask;
+    ask.now = now;
+    ask.cardOpen = this.cardOpen;
+    ask.estimate = estimate;
+    ask.sizing = sizing;
+    const asked = dialQuestionOpen(ask);
+    const sizingOpen = sizingPromptOpen(ask);
+    this.updateDial(r, asked);
     this.updateWarnings(r);
     this.updateBanner(r);
     this.updateLaundry(r);
     this.updateRegroup(r);
-    const sizingOpen = this.dial.mode === 'servers' && sizing === null && now < MIDNIGHT && !this.cardOpen;
+    this.setKey(KEY.set, asked && !this.dial.locked, 1);
     this.sizingPanel.setVisible(sizingOpen);
 
     this.runDirector(r, sizingOpen);
@@ -336,6 +376,7 @@ export class HudScene extends Phaser.Scene {
     this.director = NEW_DIRECTOR;
     this.barks = NO_BARKS;
     this.chats = { block: [], stream: [] };
+    this.merged = [];
     this.rand = seededRandom(CHAT_SEED);
     this.fillerAt = {
       block: this.clock + fillerDelay(this.rand),
@@ -348,8 +389,7 @@ export class HudScene extends Phaser.Scene {
     this.droppedInC6 = false;
     this.lastSurgeAt = -1;
     if (this.ready) {
-      this.blockChat.show([]);
-      this.streamChat.show([]);
+      this.chatView.show([]);
       this.chart.ring.clear();
       this.dial.reset();
       if (jobCardDue(r)) {
@@ -360,15 +400,92 @@ export class HudScene extends Phaser.Scene {
     }
   }
 
-  // ---- top strip: clock, countdown, trust, credits, surge warning ----
+  // ---- top strip: the title cluster, the alert band, the clock ----
 
-  private buildTopStrip(): void {
+  /** Lux in her ring, the LIVE dot, and the trust and credits chips, in ZONES.title. */
+  private buildTitle(): void {
+    const a = TOP.avatar;
+    const g = this.add.graphics();
+    g.fillStyle(COLORS.ink, 0.9);
+    g.fillCircle(a.x, a.y, a.r);
+    g.lineStyle(3, COLORS.cyan, 0.9);
+    g.strokeCircle(a.x, a.y, a.r);
+    for (const c of [TOP.trust, TOP.credits]) {
+      g.fillStyle(COLORS.ink, 0.75);
+      g.fillRoundedRect(c.x, c.y, c.w, c.h, 8);
+      g.lineStyle(1, COLORS.cyan, 0.45);
+      g.strokeRoundedRect(c.x, c.y, c.w, c.h, 8);
+    }
+    const face = this.add.image(a.x, a.y, LUX_AVATAR);
+    face.setScale((a.r * 1.4) / Math.max(face.width, face.height));
+    const dot = this.add.circle(TOP.live.x, TOP.live.y, TOP.live.r, COLORS.magenta, 1);
+    const live = this.add
+      .text(TOP.liveText.x, TOP.liveText.y, 'LIVE', {
+        fontFamily: FONT,
+        fontSize: '18px',
+        color: COLORS.magentaText,
+      })
+      .setOrigin(0, 0.5);
+    const chip = (c: typeof TOP.trust, icon: string): [Phaser.GameObjects.Image, Phaser.GameObjects.Text] => {
+      const i = this.add.image(c.x + 22, c.y + c.h / 2, icon);
+      i.setScale((c.h - 8) / Math.max(i.width, i.height));
+      const t = this.add
+        .text(c.x + 44, c.y + c.h / 2, '', { fontFamily: FONT, fontSize: '26px', color: COLORS.white })
+        .setOrigin(0, 0.5);
+      return [i, t];
+    };
+    const [trustIcon, trustText] = chip(TOP.trust, 'hud:icon-trust');
+    const [creditsIcon, creditsText] = chip(TOP.credits, 'hud:icon-credits');
+    this.trustText = trustText;
+    this.creditsText = creditsText;
+    this.title = this.add.container(0, 0, [
+      g,
+      face,
+      dot,
+      live,
+      trustIcon,
+      trustText,
+      creditsIcon,
+      creditsText,
+    ]);
+  }
+
+  /** The alert band (surge and fall), filling ZONES.alert while it has something to say. */
+  private buildAlert(): void {
+    const w = TOP.alert;
+    const bar = panel(this, 'hud:warning-bar', w.x, w.y, w.w, w.h, { k: 0.85, slice: [90, 90, 40, 40] });
+    const icon = this.add.image(TOP.alertIcon.x, TOP.alertIcon.y, 'hud:icon-warning');
+    icon.setScale(TOP.alertIcon.size / Math.max(icon.width, icon.height));
+    this.warningLine = this.add.text(TOP.alertHeadline.x, TOP.alertHeadline.y, '', {
+      fontFamily: FONT_SANS,
+      fontSize: '17px',
+      color: COLORS.white,
+      wordWrap: { width: TOP.alertHeadline.w },
+      maxLines: 3,
+    });
+    this.warningNumber = this.add
+      .text(TOP.alertChip.right, TOP.alertChip.y, '', {
+        fontFamily: FONT,
+        fontSize: '28px',
+        color: COLORS.heroText,
+        backgroundColor: 'rgba(5,7,15,0.6)',
+        padding: { x: 10, y: 4 },
+      })
+      .setOrigin(1, 0.5);
+    this.warning = this.add
+      .container(0, 0, [bar, icon, this.warningLine, this.warningNumber])
+      .setVisible(false);
+  }
+
+  /** The in-world clock and the countdown, in ZONES.clock (the pause button there is the overlay's). */
+  private buildClock(): void {
     const p = TOP.clockPanel;
-    this.add
+    this.clockPanel = this.add
       .image(p.x, p.y, 'hud:clock-panel')
       .setOrigin(0)
       .setDisplaySize(p.size, p.size * (207 / 213));
-    this.add.image(p.x + p.size / 2, p.y + p.size / 2, 'hud:icon-clock').setScale(0.2);
+    const icon = this.add.image(p.x + p.size / 2, p.y + p.size / 2, 'hud:icon-clock');
+    icon.setScale((p.size * 0.6) / Math.max(icon.width, icon.height));
     this.clockText = this.add.text(TOP.clockText.x, TOP.clockText.y, '', {
       fontFamily: FONT,
       fontSize: '40px',
@@ -377,38 +494,8 @@ export class HudScene extends Phaser.Scene {
     this.countdown = this.add.text(TOP.countdown.x, TOP.countdown.y, '', {
       fontFamily: FONT,
       fontSize: '22px',
-      color: COLORS.amberText,
+      color: COLORS.heroText,
     });
-    this.add.image(TOP.trust.x, TOP.trust.y, 'hud:icon-trust').setScale(0.17);
-    this.trustText = this.add
-      .text(TOP.trust.x + 38, TOP.trust.y, '', { fontFamily: FONT, fontSize: '34px', color: COLORS.white })
-      .setOrigin(0, 0.5);
-    this.add.image(TOP.credits.x, TOP.credits.y, 'hud:icon-credits').setScale(0.17);
-    this.creditsText = this.add
-      .text(TOP.credits.x + 38, TOP.credits.y, '', {
-        fontFamily: FONT,
-        fontSize: '34px',
-        color: COLORS.white,
-      })
-      .setOrigin(0, 0.5);
-
-    const w = TOP.warning;
-    const bar = panel(this, 'hud:warning-bar', 0, 0, w.w, w.h, { k: 0.85, slice: [90, 90, 40, 40] });
-    this.warningNumber = this.add.text(96, 18, '', {
-      fontFamily: FONT,
-      fontSize: '28px',
-      color: COLORS.amberText,
-    });
-    this.warningLine = this.add.text(96, 56, '', {
-      fontFamily: FONT_SANS,
-      fontSize: '17px',
-      color: COLORS.white,
-      wordWrap: { width: w.w - 192 },
-      maxLines: 3,
-    });
-    this.warning = this.add
-      .container(w.x, w.y, [bar, this.warningNumber, this.warningLine])
-      .setVisible(false);
   }
 
   private updateTopStrip(r: Run): void {
@@ -422,13 +509,13 @@ export class HudScene extends Phaser.Scene {
     if (trust !== this.shownTrust) {
       this.shownTrust = trust;
       this.trustText.setText(String(trust));
-      this.trustText.setColor(trust < BROWNOUT.rescue.trustBelow ? COLORS.redText : COLORS.white);
+      this.trustText.setColor(trust < BROWNOUT.rescue.trustBelow ? COLORS.heroText : COLORS.white);
     }
     const credits = Math.floor(r.session.board.credits);
     if (credits !== this.shownCredits) {
       this.shownCredits = credits;
       this.creditsText.setText(String(credits));
-      this.creditsText.setColor(credits < 0 ? COLORS.redText : COLORS.white);
+      this.creditsText.setColor(credits < 0 ? COLORS.heroText : COLORS.white);
     }
   }
 
@@ -481,10 +568,11 @@ export class HudScene extends Phaser.Scene {
 
   // ---- dial and sizing prompt ----
 
-  private updateDial(r: Run): void {
+  /** The dial card shows only while a dial question is open (src/scenes/hud/jobCard.ts). */
+  private updateDial(r: Run, asked: boolean): void {
     const mode: DialMode = dialModeAt(r.now);
-    this.dial.setVisible(!this.cardOpen);
-    this.dial.setMode(mode, mode === 'reqps' ? 'EXPECTED REQ/S' : 'BOXES FOR MIDNIGHT');
+    this.dial.setVisible(asked);
+    this.dial.setMode(mode, mode === 'reqps' ? 'HOW MANY A SECOND?' : 'BOXES FOR MIDNIGHT');
     const answer = mode === 'reqps' ? r.notes.estimate : r.notes.sizing;
     if (answer !== null && !this.dial.locked) this.dial.lock(answer);
     this.dial.draw();
@@ -501,16 +589,18 @@ export class HudScene extends Phaser.Scene {
     const s = CENTRE.sizing;
     const box = panel(this, 'hud:textbox', 0, 0, s.w, s.h, { k: 0.6 });
     const text = this.add
-      .text(s.w / 2 - 20, s.h / 2, line('C6.prompt'), {
+      .text((s.w - 56) / 2 + 8, s.h / 2, line('C6.prompt'), {
         fontFamily: FONT,
-        fontSize: '28px',
+        fontSize: '21px',
         color: COLORS.white,
+        align: 'center',
+        wordWrap: { width: s.w - 80 },
       })
       .setOrigin(0.5);
     const arrow = this.add
-      .text(s.w - 40, s.h / 2, '→', { fontFamily: FONT, fontSize: '40px', color: COLORS.magentaText })
+      .text(s.w - 34, s.h / 2, '→', { fontFamily: FONT, fontSize: '36px', color: COLORS.magentaText })
       .setOrigin(0.5);
-    this.tweens.add({ targets: arrow, x: s.w - 26, duration: 500, yoyo: true, repeat: -1 });
+    this.tweens.add({ targets: arrow, x: s.w - 24, duration: 500, yoyo: true, repeat: -1 });
     this.sizingPanel = this.add.container(s.x, s.y, [box, text, arrow]).setVisible(false);
   }
 
@@ -522,12 +612,16 @@ export class HudScene extends Phaser.Scene {
     const dim = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.ink, 0.6).setOrigin(0);
     dim.setInteractive();
     const art = this.add.image(j.x, j.y, 'hud:job-card').setScale(k);
+    this.cardArt = art;
     art.setInteractive({ useHandCursor: true });
     art.on('pointerdown', () => {
       if (!cardGuarded()) this.closeJobCard();
     });
     // Positions inside the 864x1252 card art, scaled.
-    const at = (ax: number, ay: number): [number, number] => [j.x + (ax - 432) * k, j.y + (ay - 626) * k];
+    const at = (ax: number, ay: number): [number, number] => [
+      j.x + (ax - JOB_ART.w / 2) * k,
+      j.y + (ay - JOB_ART.h / 2) * k,
+    ];
     const text = (ax: number, ay: number, s: string, size: number, color: string, wrap: number) =>
       this.add
         .text(...at(ax, ay), s, {
@@ -549,7 +643,7 @@ export class HudScene extends Phaser.Scene {
       text(432, 1107, line('C1.card.rate'), 23, COLORS.amberText, 560),
     ];
     const [okX, okY] = this.jobCardOk();
-    const ok = panel(this, 'hud:button', okX, okY, 170, 62, {
+    const ok = panel(this, 'hud:button', okX, okY, CENTRE.jobCardOk.w, CENTRE.jobCardOk.h, {
       k: 0.4,
       slice: [70, 70, 60, 60],
       centred: true,
@@ -569,10 +663,9 @@ export class HudScene extends Phaser.Scene {
     this.card = this.add.container(0, 0, [...parts, ok, okText]).setVisible(this.cardOpen);
   }
 
-  /** The OK button under the job card, in game space. */
+  /** The OK button along the job card's bottom edge, in game space. */
   private jobCardOk(): [number, number] {
-    const j = CENTRE.jobCard;
-    return [j.x, j.y + (1252 / 2) * j.scale + 10];
+    return [CENTRE.jobCardOk.x, CENTRE.jobCardOk.y];
   }
 
   private closeJobCard(): void {
@@ -652,61 +745,104 @@ export class HudScene extends Phaser.Scene {
     if (res.ok && choice === 'pay') bus.emit('sfx', { key: 'credits' });
   }
 
-  // ---- laundry cut and Regroup ----
+  // ---- the deck: 1 REGROUP, 2 CUT 3F, 3 SET ----
 
-  private buildLaundry(): void {
-    const l = RIGHT.laundry;
-    this.laundryButton = panel(this, 'hud:button', 0, 0, l.w, l.h, { k: 0.45, slice: [70, 70, 60, 60] });
-    this.laundryButton.setInteractive({ useHandCursor: true });
-    this.laundryButton.on('pointerover', () => this.laundryButton.setTexture('hud:button-hover'));
-    this.laundryButton.on('pointerout', () => this.laundryButton.setTexture('hud:button'));
-    this.laundryButton.on('pointerdown', () => {
-      const r = run();
-      if (laundryCutAt(r) !== null) return;
-      this.laundryButton.setTexture('hud:button-pressed');
-      cutLaundry(r);
-      bus.emit('sfx', { key: 'wire-cut' });
+  /** The three keys in ZONES.deck, each pressable by click or by its digit on the keyboard. */
+  private buildDeck(): void {
+    const press = [(): void => this.pressRegroup(), (): void => this.pressCut(), (): void => this.pressSet()];
+    this.keys = BOTTOM.keys.map((k, i) => {
+      const cap = panel(this, 'hud:button', k.x, k.y, k.w, k.h, {
+        k: 0.4,
+        slice: [70, 70, 60, 60],
+        centred: true,
+      });
+      cap.setInteractive({ useHandCursor: true });
+      cap.on('pointerover', () => cap.setTexture('hud:button-hover'));
+      cap.on('pointerout', () => cap.setTexture('hud:button'));
+      cap.on('pointerdown', () => {
+        cap.setTexture('hud:button-pressed');
+        press[i]();
+      });
+      cap.disableInteractive();
+      const digit = this.add
+        .text(k.x, k.y - 10, k.digit, { fontFamily: FONT, fontSize: '24px', color: COLORS.dim })
+        .setOrigin(0.5);
+      const word = this.add
+        .text(k.x, k.y + 16, k.word, { fontFamily: FONT, fontSize: '12px', color: COLORS.dim })
+        .setOrigin(0.5);
+      const key: DeckKey = { cap, digit, word, lit: true, alpha: 1 };
+      return key;
     });
-    const icon = this.add.image(46, l.h / 2, 'hud:icon-cut').setScale(0.13);
-    const text = this.add
-      .text(84, l.h / 2, line('C4.cut.button'), {
-        fontFamily: FONT_SANS,
-        fontSize: '18px',
-        color: COLORS.white,
-        wordWrap: { width: l.w - 110 },
-      })
-      .setOrigin(0, 0.5);
-    this.laundry = this.add.container(l.x, l.y, [this.laundryButton, icon, text]).setVisible(false);
+    for (let i = 0; i < this.keys.length; i++) this.setKey(i, false, 1);
+    const kb = this.input.keyboard;
+    if (kb) {
+      const keys: [string, () => void][] = [
+        ['keydown-ONE', () => this.pressRegroup()],
+        ['keydown-TWO', () => this.pressCut()],
+        ['keydown-THREE', () => this.pressSet()],
+      ];
+      for (const [event, fn] of keys) kb.on(event, fn);
+      this.unsubscribe.push(() => {
+        for (const [event, fn] of keys) kb.off(event, fn);
+      });
+    }
+  }
+
+  /** Light a key (pressable, hero colour) or put it out; `alpha` dims a used key. Changes only on change. */
+  private setKey(i: number, lit: boolean, alpha: number): void {
+    const k = this.keys[i];
+    if (!k) return;
+    if (k.lit !== lit) {
+      k.lit = lit;
+      if (lit) k.cap.setInteractive({ useHandCursor: true });
+      else k.cap.disableInteractive().setTexture('hud:button');
+      k.digit.setColor(lit ? COLORS.heroText : COLORS.dim);
+      k.word.setColor(lit ? COLORS.heroText : COLORS.dim);
+    }
+    const a = lit ? 1 : alpha;
+    if (k.alpha !== a) {
+      k.alpha = a;
+      k.cap.setAlpha(a);
+      k.digit.setAlpha(a);
+      k.word.setAlpha(a);
+    }
+  }
+
+  private pressCut(): void {
+    const r = run();
+    if (!this.keys[KEY.cut]?.lit || laundryCutAt(r) !== null) return;
+    cutLaundry(r);
+    bus.emit('sfx', { key: 'wire-cut' });
+  }
+
+  private pressRegroup(): void {
+    const r = run();
+    if (!this.keys[KEY.regroup]?.lit || !regroupAvailable(r) || this.regroup.startedAt !== null) return;
+    // The sim slows itself to quarter speed for 10 s and plays the effect; the HUD tracks the key.
+    if (r.regroup().ok) this.regroup = startRegroup(this.regroup, this.clock);
+  }
+
+  private pressSet(): void {
+    if (!this.keys[KEY.set]?.lit) return;
+    this.dial.pressSet();
   }
 
   private updateLaundry(r: Run): void {
-    const inSurge = laundryCutAvailable(r.now, r.rescued) || (laundryCutAt(r) !== null && r.now < C.c5);
     const cut = laundryCutAt(r) !== null;
-    this.laundry.setVisible(inSurge);
-    this.laundry.setAlpha(cut ? 0.45 : 1);
-  }
-
-  private buildRegroup(): void {
-    const g = BOTTOM.regroup;
-    this.regroupButton = this.add.image(g.x, g.y, 'hud:regroup-ready').setDisplaySize(g.size, g.size);
-    this.regroupButton.setInteractive({ useHandCursor: true, pixelPerfect: false });
-    this.regroupButton.on('pointerdown', () => {
-      const r = run();
-      if (!regroupAvailable(r) || this.regroup.startedAt !== null) return;
-      // The sim slows itself to quarter speed for 10 s and plays the effect; the HUD tracks the button.
-      if (r.regroup().ok) this.regroup = startRegroup(this.regroup, this.clock);
-    });
-    this.regroupButton.setVisible(false);
+    this.laundryOn = laundryCutAvailable(r.now, r.rescued) || (cut && r.now < C.c5);
+    this.setKey(KEY.cut, this.laundryOn && !cut, this.laundryOn ? 0.45 : 0.3);
   }
 
   private updateRegroup(r: Run): void {
     const used = this.regroup.startedAt !== null;
-    this.regroupButton.setVisible(regroupAvailable(r) || used);
-    if (!used) return;
+    this.regroupShown = regroupAvailable(r) || used;
+    if (!used) {
+      this.setKey(KEY.regroup, this.regroupShown, 0.3);
+      return;
+    }
     const spent = regroupSpent(this.regroup, this.clock);
-    this.regroupButton.setTexture(spent ? 'hud:regroup-spent' : 'hud:regroup-ready');
-    this.regroupButton.setDisplaySize(BOTTOM.regroup.size, BOTTOM.regroup.size);
-    this.regroupButton.setAlpha(spent ? 0.7 : 0.75 + 0.25 * Math.sin(this.clock * 6));
+    const pulse = this.flags.lite || settings().reduceFlicker ? 1 : 0.75 + 0.25 * Math.sin(this.clock * 6);
+    this.setKey(KEY.regroup, false, spent ? 0.45 : pulse);
   }
 
   // ---- barks and chat ----
@@ -762,8 +898,10 @@ export class HudScene extends Phaser.Scene {
   }
 
   private say(chat: ChatKind, id: LineId): void {
-    this.chats[chat] = pushChat(this.chats[chat], chatEntry(id));
-    (chat === 'block' ? this.blockChat : this.streamChat).show(this.chats[chat]);
+    const entry = chatEntry(id);
+    this.chats[chat] = pushChat(this.chats[chat], entry);
+    this.merged = pushChat(this.merged, entry);
+    this.chatView.show(this.merged);
   }
 
   private updateBarks(): void {
@@ -824,7 +962,7 @@ export class HudScene extends Phaser.Scene {
         locked: built && this.dial.locked,
         minus: this.toPage(RIGHT.dialMinus.x, RIGHT.dialMinus.y),
         plus: this.toPage(RIGHT.dialPlus.x, RIGHT.dialPlus.y),
-        set: this.toPage(RIGHT.dialSet.x, RIGHT.dialSet.y),
+        set: this.keyPoint(KEY.set),
       },
       notes: { ...r.notes },
       chart: built
@@ -864,15 +1002,15 @@ export class HudScene extends Phaser.Scene {
         bin: built ? this.bannerButton('bin') : { x: 0, y: 0 },
       },
       laundry: {
-        available: built && this.laundry.visible && laundryCutAt(r) === null,
+        available: built && this.laundryOn && laundryCutAt(r) === null,
         cut: laundryCutAt(r) !== null,
-        button: this.toPage(RIGHT.laundry.x + RIGHT.laundry.w / 2, RIGHT.laundry.y + RIGHT.laundry.h / 2),
+        button: this.keyPoint(KEY.cut),
       },
       regroup: {
-        visible: built && this.regroupButton.visible,
+        visible: built && this.regroupShown,
         active: regroupActive(this.regroup, this.clock),
         spent: regroupSpent(this.regroup, this.clock),
-        button: this.toPage(BOTTOM.regroup.x, BOTTOM.regroup.y),
+        button: this.keyPoint(KEY.regroup),
       },
       sizingPrompt: { open: built && this.sizingPanel.visible },
       bark: {
@@ -885,6 +1023,52 @@ export class HudScene extends Phaser.Scene {
         stream: this.chats.stream.map((e) => `${e.who}: ${e.text}`),
       },
       timeScale: r.timeScale,
+      bounds: built ? this.bounds() : [],
     };
+  }
+
+  /** A deck key's centre in page CSS pixels. */
+  private keyPoint(i: number): PagePoint {
+    const k = BOTTOM.keys[i];
+    return this.toPage(k.x, k.y);
+  }
+
+  /**
+   * Where each restaged piece is drawn right now (its display bounds, in page CSS pixels), with the
+   * zone or card it belongs in and whether it shows. For tests; built only when the hook is read.
+   */
+  private bounds(): HudBounds[] {
+    const canvas = this.game.canvas.getBoundingClientRect();
+    type Bounded = {
+      readonly visible: boolean;
+      getBounds(): { x: number; y: number; width: number; height: number };
+    };
+    const pieces: [string, Home, Bounded][] = [
+      ['title', 'title', this.title],
+      ['alert', 'alert', this.warning],
+      ['clock.text', 'clock', this.clockText],
+      ['clock.countdown', 'clock', this.countdown],
+      ['clock.panel', 'clock', this.clockPanel],
+      ['scope', 'scope', this.chart.panel],
+      ['dial', 'dialCard', this.dial.container],
+      ['sizing', 'sizingPrompt', this.sizingPanel],
+      ['chat', 'chat', this.chatView.panel],
+      ['comms', 'comms', this.barkView.container],
+      ['deck.1', 'deck', this.keys[KEY.regroup].cap],
+      ['deck.2', 'deck', this.keys[KEY.cut].cap],
+      ['deck.3', 'deck', this.keys[KEY.set].cap],
+      ['jobCard', 'jobCard', this.cardArt],
+      ['banner', 'banner', this.banner],
+    ];
+    return pieces.map(([id, home, o]) => {
+      const b = o.getBounds();
+      const shown = id === 'jobCard' ? this.card.visible : o.visible;
+      return {
+        id,
+        home,
+        visible: shown,
+        rect: pageRect({ x: b.x, y: b.y, w: b.width, h: b.height }, canvas),
+      };
+    });
   }
 }

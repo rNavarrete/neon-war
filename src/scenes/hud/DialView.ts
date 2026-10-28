@@ -1,9 +1,10 @@
-// The estimate dial: the painted dial frame with its value drawn in code, minus and plus buttons,
-// drag and wheel to turn it, and a SET button. It doesn't know what the value means; the HUD reads
-// `value` and decides what SET records (req/s in C1, servers for the midnight sizing prompt).
+// The estimate dial on its card over the feed (CARDS.dialCard): the painted 230 px dial frame with
+// its value drawn in code, minus and plus buttons in the card's lower corners, drag and wheel to
+// turn it. SET is the deck's key 3 (the HUD calls pressSet). It doesn't know what the value means;
+// the HUD reads `value` and decides what SET records (req/s in C1, servers for the sizing prompt).
+// Geometry from src/scenes/hud/layout.ts RIGHT, derived from CARDS.dialCard.
 
 import Phaser from 'phaser';
-import { panel } from './panel';
 import { type DialMode, dialFraction, dialValueAt, turnDial } from './dial';
 import { COLORS, FONT, RIGHT } from './layout';
 
@@ -30,8 +31,6 @@ export class DialView {
   private readonly g: Phaser.GameObjects.Graphics;
   private readonly valueText: Phaser.GameObjects.Text;
   private readonly label: Phaser.GameObjects.Text;
-  private readonly setButton: Phaser.GameObjects.NineSlice;
-  private readonly setText: Phaser.GameObjects.Text;
   private shown = '';
 
   constructor(
@@ -39,14 +38,22 @@ export class DialView {
     private readonly handlers: DialHandlers,
   ) {
     const d = RIGHT.dial;
+    const c = RIGHT.dialCard;
     this.root = scene.add.container(0, 0);
+    const card = scene.add.graphics();
+    card.fillStyle(COLORS.ink, 0.88);
+    card.fillRoundedRect(c.x, c.y, c.w, c.h, 14);
+    card.lineStyle(2, COLORS.cyan, 0.7);
+    card.strokeRoundedRect(c.x + 1, c.y + 1, c.w - 2, c.h - 2, 14);
     this.label = scene.add
       .text(RIGHT.dialLabel.x, RIGHT.dialLabel.y, '', {
         fontFamily: FONT,
-        fontSize: '17px',
+        fontSize: '14px',
         color: COLORS.cyanText,
+        backgroundColor: 'rgba(5,7,15,0.85)',
+        padding: { x: 6, y: 2 },
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5, 0);
     const face = scene.add.image(d.x, d.y, 'hud:estimate-dial').setDisplaySize(d.size, d.size * (835 / 823));
     face.setInteractive({ useHandCursor: true, draggable: false });
     face.on('pointerdown', (p: Phaser.Input.Pointer) => this.turnTo(p));
@@ -62,39 +69,24 @@ export class DialView {
     const minus = this.roundButton(RIGHT.dialMinus.x, RIGHT.dialMinus.y, '−', () => this.step(-1));
     const plus = this.roundButton(RIGHT.dialPlus.x, RIGHT.dialPlus.y, '+', () => this.step(1));
 
-    const s = RIGHT.dialSet;
-    this.setButton = panel(scene, 'hud:button', s.x, s.y, s.w, s.h, {
-      k: 0.4,
-      slice: [70, 70, 60, 60],
-      centred: true,
-    });
-    this.setButton.setInteractive({ useHandCursor: true });
-    this.setButton.on('pointerover', () => this.setButton.setTexture('hud:button-hover'));
-    this.setButton.on('pointerout', () => this.setButton.setTexture('hud:button'));
-    this.setButton.on('pointerdown', () => {
-      if (this.locked) return;
-      this.setButton.setTexture('hud:button-pressed');
-      this.handlers.set(this.value);
-    });
-    this.setText = scene.add
-      .text(s.x, s.y, 'SET', { fontFamily: FONT, fontSize: '22px', color: COLORS.cyanText })
-      .setOrigin(0.5);
-
-    this.root.add([
-      this.label,
-      face,
-      this.g,
-      this.valueText,
-      ...minus,
-      ...plus,
-      this.setButton,
-      this.setText,
-    ]);
+    this.root.add([card, face, this.g, this.valueText, ...minus, ...plus, this.label]);
     this.root.setVisible(false);
   }
 
   get visible(): boolean {
     return this.root.visible;
+  }
+
+  /** The dial and its card, for the HUD's bounds check. */
+  get container(): Phaser.GameObjects.Container {
+    return this.root;
+  }
+
+  /** SET (the deck's key 3 or the keyboard): record the value unless the dial is locked or hidden. */
+  pressSet(): boolean {
+    if (this.locked || !this.root.visible) return false;
+    this.handlers.set(this.value);
+    return true;
   }
 
   setVisible(v: boolean): void {
@@ -144,8 +136,6 @@ export class DialView {
       this.shown = text;
       this.valueText.setText(text);
     }
-    this.setButton.setAlpha(this.locked ? 0.45 : 1);
-    this.setText.setAlpha(this.locked ? 0.45 : 1);
   }
 
   private step(steps: number): void {

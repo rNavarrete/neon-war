@@ -51,6 +51,18 @@ export interface HudTestState {
   bark: { current: LineId | null; text: string | null; history: LineId[] };
   chat: { block: string[]; stream: string[] };
   timeScale: number;
+  /**
+   * Where each restaged HUD piece is drawn now (its display bounds in page CSS pixels), the zone or
+   * card it belongs in (src/scenes/hud/layout.ts Home), and whether it shows. Empty until built.
+   */
+  bounds: HudBounds[];
+}
+
+export interface HudBounds {
+  id: string;
+  home: string;
+  visible: boolean;
+  rect: { x: number; y: number; w: number; h: number };
 }
 
 declare module '../../testHook' {
