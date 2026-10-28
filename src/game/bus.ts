@@ -59,8 +59,11 @@ export interface GameEvents {
     card: 'server' | 'overclock' | 'balancer' | null;
     over: 'pad' | 'part' | null;
   };
-  /** A comms band line started (the comms lane emits it); `since` is the HUD clock it started at. */
-  line: { id: LineId; speaker: string; tag: LineTag; since: number };
+  /**
+   * A comms band line started (the comms lane emits it); `since` is the HUD clock it started at.
+   * `lesson` is lineMeta's flag: one of the lesson lines (the chat goes quiet for it).
+   */
+  line: { id: LineId; speaker: string; tag: LineTag; lesson: boolean; since: number };
   /** The band line ended (its dwell ran out or a warning pre-empted it). */
   lineEnd: { id: LineId };
   /** A chat line was posted, scripted (by id) or filler (id null); `at` is the HUD clock. */

@@ -45,6 +45,7 @@ import {
   typedOf,
 } from './comms';
 import { COLORS, FONT, FONT_SANS } from './layout';
+import { isLesson } from './lineMeta';
 import { panel } from './panel';
 
 /** The slot avatars' diameter: the slot's circle, r 42. */
@@ -413,7 +414,7 @@ export class CommsView implements LiveView {
     const l = LINES[id];
     this.emitted.push(`line:${id}`);
     if (this.emitted.length > EMITTED_MAX) this.emitted.shift();
-    this.bus?.emit('line', { id, speaker: l.speaker, tag: tag(id), since });
+    this.bus?.emit('line', { id, speaker: l.speaker, tag: tag(id), lesson: isLesson(id), since });
     this.drawLine(id);
     if (slotOf(l.speaker) === 'TRIAGE') {
       this.bus?.emit('sfx', { key: tag(id) === 'WARNING' ? 'triage-panic' : 'triage-blip' });
