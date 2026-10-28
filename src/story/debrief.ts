@@ -5,6 +5,7 @@
 import type { RunNotes } from '../game/run';
 import { TERM_GROUP, TERM_KEYS, type TermGroup, type TermKey } from '../scenes/hud/lineMeta';
 import type { MomentKind, TaughtEntry, TaughtTrace } from '../scenes/hud/taught';
+import { twelveHour } from '../scenes/hud/format';
 import { BROWNOUT } from '../sim/brownout';
 import type { BannerChoice, Session } from '../sim/economy';
 import { LINES, type LineId, line } from '../strings';
@@ -137,11 +138,11 @@ export interface SeenLine {
   readonly text: string;
 }
 
-/** DRAFT pending D8: "you saw it at hh:mm:ss: <line>" for one trace entry; a spoken line in quotes. */
+/** DRAFT pending D8: "you saw it at h:mm:ss AM/PM: <line>" for one trace entry; a spoken line in quotes. */
 export function seenText(e: TaughtEntry): string {
   const what =
     e.line !== null ? `“${line(e.line)}”` : e.moment !== null ? MOMENT_WORDS[e.moment](e.value) : '';
-  return `you saw it at ${e.clock}: ${what}`;
+  return `you saw it at ${twelveHour(e.clock)}: ${what}`;
 }
 
 /**

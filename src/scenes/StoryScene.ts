@@ -18,6 +18,7 @@ import { playSfx, playVoice, setLiveView, stopSfx, storyEnd, storyState } from '
 import type { RewindKind } from '../story/rewind';
 import { FrameClock, H, VnView, W, cover, fileKey, preloadView } from '../story/view';
 import { testHookEnabled } from '../testHook';
+import { twelveHour } from './hud/format';
 import { SCENES } from './keys';
 
 const EXTRA = {
@@ -217,7 +218,11 @@ export class StoryScene extends Phaser.Scene {
     if (this.script.photo) {
       this.add.image(1180, 560, fileKey(EXTRA.photo)).setScale(0.42).setAngle(-6).setDepth(8);
       this.clock = this.add
-        .text(80, 60, run().clock(0), { fontFamily: 'monospace', fontSize: '40px', color: '#ff5a5a' })
+        .text(80, 60, twelveHour(run().clock(0)), {
+          fontFamily: 'monospace',
+          fontSize: '40px',
+          color: '#ff5a5a',
+        })
         .setDepth(9);
     }
   }
@@ -244,10 +249,10 @@ export class StoryScene extends Phaser.Scene {
     // the board picks the run up however long she sits there (src/game/flow.ts).
     if (this.flickerPending) {
       this.flickerPending = false;
-      this.clock.setText('02:14:00');
+      this.clock.setText(twelveHour('02:14:00'));
       return;
     }
-    this.clock.setText(run().clock(Math.min(Math.floor(this.elapsed), BROWNOUT.challenges.c1)));
+    this.clock.setText(twelveHour(run().clock(Math.min(Math.floor(this.elapsed), BROWNOUT.challenges.c1))));
   }
 
   // --- TRIAGE's stream replay: VHS lines over the frozen board -----------------------------------

@@ -15,7 +15,7 @@ import type { Frame } from '../../game/frame';
 import { settings } from '../../game/settings';
 import { type AvatarScene, TITLE_AVATAR, preloadAvatars, roundAvatar } from '../avatars';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
-import { countdownText } from './format';
+import { countdownText, twelveHour } from './format';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
@@ -434,7 +434,7 @@ export class ClockView implements LiveView {
     const second = Math.floor(frame.now);
     if (second !== this.shownSecond) {
       this.shownSecond = second;
-      this.clockText.setText(frame.clock);
+      this.clockText.setText(twelveHour(frame.clock));
       this.countdown.setText(`midnight in ${countdownText(frame.now)}`);
       fitRight(this.clockText, CLOCK_MAX_RIGHT);
       fitRight(this.countdown, CLOCK_MAX_RIGHT);

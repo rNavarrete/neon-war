@@ -8,6 +8,17 @@ export function secondsToMidnight(now: number, midnight: number = BROWNOUT.clock
   return Math.max(0, Math.ceil(midnight - now - 1e-9));
 }
 
+/**
+ * An hh:mm:ss in-world clock as the player reads it, in 12-hour time: '23:51:45' is '11:51:45 PM',
+ * '00:00:00' is '12:00:00 AM' (Rolando, 28 Oct 2026: no 24-hour clock on screen).
+ */
+export function twelveHour(hms: string): string {
+  const [h, m, s] = hms.split(':');
+  const hour = Number(h);
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h12}:${m}:${s} ${hour < 12 ? 'AM' : 'PM'}`;
+}
+
 /** The "midnight in m:ss" countdown: 8:30 when the clock opens, 0:00 from midnight on. */
 export function countdownText(now: number, midnight: number = BROWNOUT.clock.midnight): string {
   const left = secondsToMidnight(now, midnight);
