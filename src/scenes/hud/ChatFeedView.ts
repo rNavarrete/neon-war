@@ -20,7 +20,10 @@
 // chat-6 drops the requested art in through the manifest: the wide plate, the four stream avatars
 // and the system glyph each draw once picked and their texture is in, and the code fallbacks (the
 // portrait panel nine-sliced, the cyan ring, the amber rule) until then; nothing loads a file that
-// has not landed. The chat plays no sound: its post tick stays off (05-comms, D5).
+// has not landed. Rolando's picks have landed: the wide plate is nine-sliced so its painted header
+// band sits in the header strip (the title and tag centre on it), the viewers' painted discs and
+// the unnamed neighbour's draw at 32 px from 243-244 px files, the glyph at 20 px from 64. The chat
+// plays no sound: its post tick stays off (05-comms, D5).
 //
 // Phaser is a type here only, so the registry and its node tests can import this file.
 
@@ -97,6 +100,56 @@ export const CHAT_PLATE_WIDE = 'hud/chat-plate-wide';
 export const SYSTEM_GLYPH = 'hud/icons/system';
 /** The system glyph's size on a row, in game pixels (its request's display size). */
 export const SYSTEM_GLYPH_SIZE = 20;
+
+/**
+ * The wide plate as it landed (770x485, a little shorter than its 770x550 cut) drawn into the
+ * 385x275 zone. A plain scale would squash it unevenly (0.5 across, 0.57 down) and drop the painted
+ * header band to 24-45 px, past the 40 px header strip; so it is nine-sliced at corner scale k 0.42:
+ * the rim, the corner tape and the band keep their shape, the band lands at 20-38 px inside the
+ * header strip, and only the plain glass in the middle stretches. Every region still draws smaller
+ * than its file (chatPlateScales), so nothing is upscaled.
+ */
+export const CHAT_PLATE_K = 0.42;
+/** The wide plate's nine-slice insets in file pixels, [left, right, top, bottom]: the tape pieces sit inside them. */
+export const CHAT_PLATE_SLICE: readonly [number, number, number, number] = [100, 120, 100, 125];
+/** The wide plate's painted header band, in file pixel rows. */
+export const CHAT_PLATE_BAND = Object.freeze({ top: 48, bottom: 90 });
+
+/** How much each part of a nine-sliced file is scaled to draw at `display` (1 = file size). Pure. */
+export function nineSliceScales(
+  file: { w: number; h: number },
+  display: { w: number; h: number },
+  k: number,
+  slice: readonly [number, number, number, number],
+): { corner: number; midX: number; midY: number } {
+  const [l, r, t, b] = slice;
+  return {
+    corner: k,
+    midX: (display.w - (l + r) * k) / (file.w - l - r),
+    midY: (display.h - (t + b) * k) / (file.h - t - b),
+  };
+}
+
+/** Where the header's title and tag sit, by plate: centred on the wide plate's band, else as chat-4 drew them. */
+export interface ChatHeaderLayout {
+  /** The title's top edge (portrait) or centre line (wide), in game pixels. */
+  titleY: number;
+  titleOriginY: number;
+  /** The tag's centre line, in game pixels. */
+  tagY: number;
+  /** Whether the code divider is drawn under the header (the wide plate paints its own band edge). */
+  divider: boolean;
+}
+
+/** The header layout for a plate. Pure. */
+export function chatHeaderLayout(plate: ChatArt['plate']): ChatHeaderLayout {
+  if (plate === 'wide') {
+    const mid =
+      CHAT_HEADER.y + Math.round(((CHAT_PLATE_BAND.top + CHAT_PLATE_BAND.bottom) / 2) * CHAT_PLATE_K);
+    return { titleY: mid, titleOriginY: 0.5, tagY: mid, divider: false };
+  }
+  return { titleY: CHAT_HEADER.y + 14, titleOriginY: 0, tagY: CHAT_HEADER.y + 22, divider: true };
+}
 
 /** Whether a requested key's picked file has landed (the manifest carries its cut size). */
 export function chatArtPicked(key: string): boolean {
@@ -387,6 +440,8 @@ export class ChatFeedView implements LiveView {
   private plate: Phaser.GameObjects.NineSlice | Phaser.GameObjects.Image | null = null;
   /** The art that draws: what the manifest says has landed, less anything whose texture is not in. */
   private art: ChatArt;
+  /** Where the header's words sit on the plate that draws. */
+  private header: ChatHeaderLayout = chatHeaderLayout('portrait');
   private tagText: Phaser.GameObjects.Text | null = null;
   private chrome: Phaser.GameObjects.Graphics | null = null;
   /** The pooled row slots, oldest on top; never more than VISIBLE_ROWS. */
@@ -444,16 +499,22 @@ export class ChatFeedView implements LiveView {
 
     this.plate =
       this.art.plate === 'wide'
-        ? add.image(r.x, r.y, artTexture(CHAT_PLATE_WIDE)).setOrigin(0).setDisplaySize(r.w, r.h)
+        ? panel(scene, artTexture(CHAT_PLATE_WIDE), r.x, r.y, r.w, r.h, {
+            k: CHAT_PLATE_K,
+            slice: [...CHAT_PLATE_SLICE],
+          })
         : panel(scene, 'hud:chat-panel', r.x, r.y, r.w, r.h, { k: 0.55, slice: [70, 70, 70, 70] });
-    const title = add.text(TITLE_AT.x, TITLE_AT.y, CHAT_TEXT.title, {
-      fontFamily: FONT,
-      fontSize: '15px',
-      color: COLORS.cyanText,
-    });
+    this.header = chatHeaderLayout(this.art.plate);
+    const title = add
+      .text(TITLE_X, this.header.titleY, CHAT_TEXT.title, {
+        fontFamily: FONT,
+        fontSize: '15px',
+        color: COLORS.cyanText,
+      })
+      .setOrigin(0, this.header.titleOriginY);
     title.setLetterSpacing(2);
     this.tagText = add
-      .text(TAG_AT.x, TAG_AT.y, CHAT_TEXT.all, { fontFamily: FONT, fontSize: '11px', color: COLORS.dim })
+      .text(TAG_X, this.header.tagY, CHAT_TEXT.all, { fontFamily: FONT, fontSize: '11px', color: COLORS.dim })
       .setOrigin(1, 0.5);
     this.chrome = add.graphics();
 
@@ -559,11 +620,13 @@ export class ChatFeedView implements LiveView {
     tag.setText(headerTag(this.feed.state.filter));
     tag.setColor(block ? COLORS.heroText : COLORS.dim);
     g.clear();
-    g.lineStyle(1, COLORS.cyan, 0.35);
-    g.lineBetween(CHAT_BODY.x, CHAT_BODY.y - 4, CHAT_BODY.x + CHAT_BODY.w, CHAT_BODY.y - 4);
+    if (this.header.divider) {
+      g.lineStyle(1, COLORS.cyan, 0.35);
+      g.lineBetween(CHAT_BODY.x, CHAT_BODY.y - 4, CHAT_BODY.x + CHAT_BODY.w, CHAT_BODY.y - 4);
+    }
     const w = tag.width + 14;
     g.lineStyle(1, block ? COLORS.hero : COLORS.cyan, block ? 0.9 : 0.45);
-    g.strokeRoundedRect(TAG_AT.x - w + 7, TAG_AT.y - 10, w, 20, 4);
+    g.strokeRoundedRect(TAG_X - w + 7, this.header.tagY - 10, w, 20, 4);
   }
 
   /** Lay the newest rows out bottom-up, only when the feed, the filter or the silence changed. */
@@ -622,7 +685,9 @@ export class ChatFeedView implements LiveView {
         .setPosition(cx, cy)
         .setDisplaySize(ROW_AVATAR, ROW_AVATAR)
         .setVisible(true);
-      g.lineStyle(2, COLORS.hero, 0.9);
+      // A resident's face rings amber; a viewer's painted disc keeps a cyan ring, the stream's colour.
+      const viewer = look.nameColor === 'cyan';
+      g.lineStyle(viewer ? 1.5 : 2, viewer ? COLORS.cyan : COLORS.hero, 0.9);
       g.strokeCircle(cx, cy, ROW_AVATAR / 2);
     } else {
       slot.avatar.setVisible(false);
@@ -714,11 +779,11 @@ const TICK: Readonly<Record<TickColor, number>> = {
   cyan: COLORS.cyan,
 };
 
-/** The filter tag, right-aligned in the header strip. */
-const TAG_AT = { x: CHAT_HEADER.x + CHAT_HEADER.w - 46, y: CHAT_HEADER.y + 22 };
+/** The filter tag's right edge in the header strip (its line is the header layout's tagY). */
+const TAG_X = CHAT_HEADER.x + CHAT_HEADER.w - 46;
 
-/** The title, clear of the plate's corner. */
-const TITLE_AT = { x: CHAT_HEADER.x + 30, y: CHAT_HEADER.y + 14 };
+/** The title's left edge, clear of the plate's corner. */
+const TITLE_X = CHAT_HEADER.x + 30;
 
 function hideSlot(s: RowSlot): void {
   s.g.clear();

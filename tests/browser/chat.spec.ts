@@ -55,12 +55,26 @@ test('the chat opens with the phone messages, reacts to the first serve and togg
   expect(last.y + last.h).toBe(1060);
   for (const r of c.rows) {
     expect(r.y, r.id).toBeGreaterThanOrEqual(840);
-    if (r.chat === 'stream') expect(r).toMatchObject({ ring: 'cyan', nameColor: 'cyan' });
-    else if (!r.rule) expect(r.nameColor, r.id).toBe('amber');
+    // chat-6: the viewers' discs have landed, so a stream row shows its painted avatar, not the cyan ring.
+    if (r.chat === 'stream') {
+      expect(r).toMatchObject({ ring: null, nameColor: 'cyan' });
+      expect(r.avatar, r.id).toMatch(/^chars\/avatars\/stream-[1-4]$/);
+    } else if (!r.rule) expect(r.nameColor, r.id).toBe('amber');
   }
   // The panel sits in its zone (hud.bounds, page pixels) and the zone is no placeholder any more.
   const panel = h.bounds.find((b) => b.id === 'chat');
   expect(panel?.visible).toBe(true);
+  // chat-6: Rolando's picks draw (the wide plate, the viewers' discs, the system glyph), and nothing
+  // on screen draws Phaser's missing texture.
+  expect(h.chatArt).toEqual({ plate: 'wide', streamAvatars: true, systemGlyph: true });
+  const drawn = await page.evaluate(
+    () => (window.__neonTest!.state as unknown as { art?: { missing: string[] } }).art?.missing ?? null,
+  );
+  expect(drawn).toEqual([]);
+  await page.screenshot({
+    path: 'test-results/screens/m4-chat-zone.png',
+    clip: { x: panel!.rect.x, y: panel!.rect.y, width: panel!.rect.w, height: panel!.rect.h },
+  });
   const live = await page.evaluate(
     () => (window.__neonTest!.state as unknown as { live: { placeholders: string[] } }).live,
   );

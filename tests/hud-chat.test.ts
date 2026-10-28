@@ -794,7 +794,8 @@ describe('the chat art drop-in (chat-6)', () => {
       () => true,
     );
     expect(hudRead().chatArt).toEqual({ plate: 'wide', streamAvatars: true, systemGlyph: true });
-    expect(calls.image).toContain(artTexture(CHAT_PLATE_WIDE));
+    // The landed plate draws nine-sliced (CHAT_PLATE_K) so its header band sits in the header strip.
+    expect(calls.nineslice).toContain(artTexture(CHAT_PLATE_WIDE));
     expect(calls.nineslice).not.toContain('hud:chat-panel');
     const rows = chatRead().rows;
     const stream = rows.filter((r) => r.chat === 'stream');
@@ -839,6 +840,34 @@ describe('the chat art drop-in (chat-6)', () => {
       expect(calls.image, key).not.toContain(key);
       expect(calls.setTexture, key).not.toContain(key);
     }
+    view.shutdown();
+  });
+
+  it("with Rolando's picks in the manifest, every chat piece draws its painted art, the neighbour too", () => {
+    // The shipped manifest (no stand-in for `picked`): all of the chat's requested keys have landed.
+    expect(chatArtOf()).toEqual({ plate: 'wide', streamAvatars: true, systemGlyph: true });
+    for (const key of [...CHAT_ART_KEYS, 'chars/avatars/unnamed-neighbour']) {
+      const r = artRequest(key);
+      expect(r !== undefined && isPicked(r), key).toBe(true);
+    }
+    // A fresh scene queues every landed chat file, the neighbour's disc with the block's.
+    const empty = artScene(() => false);
+    new ChatFeedView().preload(empty.scene);
+    for (const key of [...CHAT_ART_KEYS, 'chars/avatars/unnamed-neighbour'])
+      expect(empty.calls.load, key).toContain(artTexture(key));
+    const b = new Bus();
+    const s = artScene(() => true);
+    const view = new ChatFeedView();
+    view.preload(s.scene);
+    view.create(s.scene, hostOn(s.scene, b));
+    b.emit('cue', { id: 'C4.chat.seed', kind: 'chat', at: 1 });
+    for (let c = 1; c < 2; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
+    expect(s.calls.nineslice).toContain(artTexture(CHAT_PLATE_WIDE));
+    expect(chatRead().rows.find((r) => r.id === 'C4.chat.seed')).toMatchObject({
+      avatar: 'chars/avatars/unnamed-neighbour',
+      ring: null,
+      nameColor: 'amber',
+    });
     view.shutdown();
   });
 
