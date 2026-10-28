@@ -1,4 +1,4 @@
-import { ART_REQUESTS, artRequest, pickedArt, requestFile } from '../src/game/artManifest';
+import { ART_REQUESTS, artRequest, isPicked, pickedArt, requestFile } from '../src/game/artManifest';
 import {
   BUST,
   FULL,
@@ -23,7 +23,7 @@ import {
   resetAvatarsForTests,
   roundAvatar,
 } from '../src/scenes/avatars';
-import { fileTexture, resetBakedForTests, standInTexture } from '../src/scenes/plates';
+import { resetBakedForTests, standInTexture } from '../src/scenes/plates';
 
 // Round avatars (art3d-4): faceCrop picks the square of a picture a disc shows, circleCorners the
 // corner shapes a bake erases once; roundAvatar bakes one DynamicTexture per key and size from the
@@ -33,7 +33,9 @@ import { fileTexture, resetBakedForTests, standInTexture } from '../src/scenes/p
 function cutOf(texture: string): { width: number; height: number } | null {
   const file = texture.startsWith('art:') ? `art/${texture.slice(4)}.webp` : null;
   const p = file ? pickedArt(file) : undefined;
-  return p ? { width: p.cut.w, height: p.cut.h } : null;
+  if (p) return { width: p.cut.w, height: p.cut.h };
+  const r = texture.startsWith('art:') ? artRequest(texture.slice(4)) : undefined;
+  return r?.cut ? { width: r.cut.w, height: r.cut.h } : null;
 }
 
 type Call = [string, ...unknown[]];
@@ -192,38 +194,35 @@ describe('circleCorners', () => {
 });
 
 describe('avatarSource: the art each round avatar draws today', () => {
-  it('draws the four COMMS faces from existing portraits until their badges are picked', () => {
-    expect(avatarSource(COMMS_AVATARS.TRIAGE)).toMatchObject({
-      texture: 'art:chars/triage/eager',
-      file: 'art/chars/triage/eager.webp',
-      fallback: true,
-    });
-    expect(avatarSource(COMMS_AVATARS.REI).file).toBe('art/chars/rei/faces/smirk.webp');
-    expect(avatarSource(COMMS_AVATARS.MIKA).file).toBe('art/chars/mika/faces/calm.webp');
-    expect(avatarSource(COMMS_AVATARS.OZZIE).file).toBe('art/chars/ozzie/faces/smug.webp');
-    for (const key of [COMMS_AVATARS.TRIAGE, COMMS_AVATARS.REI, COMMS_AVATARS.MIKA, COMMS_AVATARS.OZZIE])
-      expect(pickedArt(avatarSource(key).file!), key).toBeDefined();
+  // Since the M4 picks landed, every avatar key draws its own picked file (no portraits reused,
+  // no stand-ins); the stand-in path stays covered by 'slots a newly picked sheet in' below and by
+  // 'crops a stand-in plate when a file did not load'.
+  const pickedSource = (key: string) => ({
+    texture: `art:${key}`,
+    file: `art/${key}.webp`,
+    tint: 0xffffff,
+    alpha: 1,
+    fallback: false,
   });
 
-  it('draws the HOUSE chips from their baked stand-in plates', () => {
-    for (const key of COMMS_AVATARS.HOUSE)
-      expect(avatarSource(key)).toMatchObject({ texture: standInTexture(key), file: null, fallback: true });
-  });
-
-  it("draws the block's chat avatars from their picked files, and the viewers' from stand-ins", () => {
-    for (const name of ['kenji', 'mrs okafor', 'young father', 'old man noodles']) {
-      const key = BLOCK_AVATARS[name];
-      expect(avatarSource(key), name).toEqual({
-        texture: fileTexture(requestFile(key)),
-        file: requestFile(key),
-        tint: 0xffffff,
-        alpha: 1,
-        fallback: false,
-      });
-      expect(pickedArt(requestFile(key))).toBeDefined();
+  it('draws the four COMMS faces from their picked round badges', () => {
+    for (const key of [COMMS_AVATARS.TRIAGE, COMMS_AVATARS.REI, COMMS_AVATARS.MIKA, COMMS_AVATARS.OZZIE]) {
+      expect(isPicked(artRequest(key)!), key).toBe(true);
+      expect(avatarSource(key), key).toEqual(pickedSource(key));
     }
-    for (const key of [...STREAM_AVATARS, BLOCK_AVATARS['unnamed neighbour']])
-      expect(avatarSource(key)).toMatchObject({ texture: standInTexture(key), fallback: true });
+  });
+
+  it('draws the HOUSE chips from their picked icons', () => {
+    for (const key of COMMS_AVATARS.HOUSE) expect(avatarSource(key), key).toEqual(pickedSource(key));
+  });
+
+  it("draws the block's and the viewers' chat avatars from their picked files", () => {
+    for (const name of ['kenji', 'mrs okafor', 'young father', 'old man noodles', 'unnamed neighbour']) {
+      const key = BLOCK_AVATARS[name];
+      expect(avatarSource(key), name).toEqual({ ...pickedSource(key), file: requestFile(key) });
+    }
+    for (const key of [...STREAM_AVATARS, TITLE_AVATAR])
+      expect(avatarSource(key), key).toEqual(pickedSource(key));
   });
 
   it('draws any picked face by its key, so per-line moods crop the same way', () => {
@@ -263,7 +262,8 @@ describe('avatarSource: the art each round avatar draws today', () => {
     const files = avatarFiles(AVATAR_KEYS);
     expect(new Set(files.map((f) => f.file)).size).toBe(files.length);
     expect(files.map((f) => f.file)).toContain('art/chars/avatars/kenji.webp');
-    expect(files.map((f) => f.file)).toContain('art/chars/lux/faces-board/determined.webp');
+    expect(files.map((f) => f.file)).toContain('art/chars/comms/rei.webp');
+    expect(files).toHaveLength(AVATAR_KEYS.length);
     const s = stubScene(['art:chars/avatars/kenji']);
     preloadAvatars(s.scene);
     expect(s.queued.map(([k]) => k)).not.toContain('art:chars/avatars/kenji');
@@ -273,7 +273,7 @@ describe('avatarSource: the art each round avatar draws today', () => {
 
 describe('roundAvatar: one baked texture per key and size', () => {
   it('bakes a crop and a one-shot corner erase into one DynamicTexture, then reuses it', () => {
-    const s = stubScene(['art:chars/rei/faces/smirk']);
+    const s = stubScene(['art:chars/comms/rei']);
     const a = roundAvatar(s.scene, COMMS_AVATARS.REI, 84);
     expect(a).toEqual({
       key: COMMS_AVATARS.REI,
@@ -281,18 +281,18 @@ describe('roundAvatar: one baked texture per key and size', () => {
       texture: avatarTexture(COMMS_AVATARS.REI, 84),
       tint: 0xffffff,
       alpha: 1,
-      fallback: true,
+      fallback: false,
     });
     expect(s.dynamic).toHaveLength(1);
     const dt = s.dynamic[0];
     expect(dt).toMatchObject({ key: 'avatar:chars/comms/rei@84', w: 84, h: 84, forceEven: false });
     // Stamp the bust, erase the corners, render once: the mask exists for this one render only.
     expect(dt.calls.map((c) => c[0])).toEqual(['stamp', 'erase', 'render']);
-    const crop = faceCrop(420, 449, 84, BUST);
-    // The whole picture, scaled and shifted so the bust square lands on the 84 x 84 bake.
+    const crop = faceCrop(240, 256, 84, FULL);
+    // The picked badge, shown whole: its centred square lands on the 84 x 84 bake.
     expect(dt.calls[0]).toEqual([
       'stamp',
-      'art:chars/rei/faces/smirk',
+      'art:chars/comms/rei',
       undefined,
       -crop.x * crop.scale,
       -crop.y * crop.scale,

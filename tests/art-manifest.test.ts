@@ -198,10 +198,9 @@ const PROMISED = [
  * its line is removed. A new pick drawn above its size fails the test below until it is listed.
  */
 const DRAWN_ABOVE_CUT: Readonly<Record<string, string>> = {
-  'board/table-plate':
-    '1228x416 against a 1441x390 feed: no view draws it yet; the board lane must draw it at most 1228 wide',
-  'hud/comms-plate':
-    '1450x144 against the 1455x150 band: CommsView draws the picked plate at the band size (a 1.04x upscale)',
+  // Empty since M4 wave 2: the board draws the table plate at its 1228x416 file size
+  // (tablePlatePlace) and CommsView the comms plate at its 1450x144 (fitCentred), and their
+  // display sizes say so.
 };
 
 describe('the art manifest: requests', () => {

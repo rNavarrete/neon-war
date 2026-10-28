@@ -105,14 +105,13 @@ const size = (w: number, h: number): Size => ({ w, h });
  * 120x140 card. hud/live/corner-marks (59x59) is ONE bracket, not four: a view draws it four times,
  * rotated or flipped, at 48x48. The cam busts (924x548) have transparent sides.
  *
- * Three are smaller than their display (tests/art-manifest.test.ts lists them by name):
- * - hud/live/topbar-strip came out 1536x33 against a 1920x100 bar. Stretching it would upscale it
- *   1.25x wide and 3x tall and blur its hairline, so its request's display is the file's own size:
- *   the view draws it 1:1 (centred, or repeated at scale 1 along the bar) and fills the rest of the
- *   bar in code. Nothing drew it yet, so no view changes.
- * - hud/comms-plate (1450x144) is drawn at the band's 1455x150 by CommsView, and board/table-plate
- *   (1228x416) asks for 1441 px across the feed. Their views must draw them at their file size (or
- *   nine-slice them) before the list in the test can be emptied.
+ * Three came out smaller than the size first asked for, so each request's display is the file's
+ * own size and its view draws it 1:1, never upscaled (tests/art-manifest.test.ts checks every pick):
+ * - hud/live/topbar-strip is 1536x33 against a 1920x100 bar. Stretching it would blur its
+ *   hairline, so the view draws it 1:1 (centred, or repeated at scale 1 along the bar) and fills
+ *   the rest of the bar in code.
+ * - hud/comms-plate is 1450x144 in the 1455x150 band: CommsView centres it on whole pixels.
+ * - board/table-plate is 1228x416 under a 1441 px feed: the board centres it (tablePlatePlace).
  */
 const PICKED_CUTS: Readonly<Record<string, Size>> = {
   'board/table-plate': size(1228, 416),
@@ -651,7 +650,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 1,
     lane: 'board',
     zone: 'feed',
-    display: size(1441, 390),
+    display: size(1228, 416),
     target: size(1536, 416),
     cut: picked('board/table-plate'),
     states: 'one; midnight is a tint',
@@ -772,7 +771,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 2,
     lane: 'comms',
     zone: 'comms',
-    display: size(1455, 150),
+    display: size(1450, 144),
     target: size(1455, 150),
     cut: picked('hud/comms-plate'),
     states: 'one; the WARNING border is code',

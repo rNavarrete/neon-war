@@ -546,7 +546,11 @@ describe('comms-9: plate, round avatars and HOUSE chips through the art manifest
   it('asks for the plate at the band size and never upscales it', () => {
     expect(plateReq.lane).toBe('comms');
     expect(plateReq.zone).toBe('comms');
-    expect(plateReq.display).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
+    // Asked for at the band size; the picked file came out 1450x144, so it is shown at that size.
+    expect(plateReq.target).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
+    expect(plateReq.display).toEqual(plateReq.cut);
+    expect(plateReq.display.w).toBeLessThanOrEqual(ZONES.comms.w);
+    expect(plateReq.display.h).toBeLessThanOrEqual(ZONES.comms.h);
     expect(plateReq.target.w).toBeGreaterThanOrEqual(plateReq.display.w);
     expect(plateReq.target.h).toBeGreaterThanOrEqual(plateReq.display.h);
     for (const key of [COMMS_AVATARS.TRIAGE, COMMS_AVATARS.REI, COMMS_AVATARS.MIKA, COMMS_AVATARS.OZZIE]) {

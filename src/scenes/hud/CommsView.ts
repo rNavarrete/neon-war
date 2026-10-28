@@ -375,7 +375,7 @@ export class CommsView implements LiveView {
     this.plateSource = null;
     this.plateRect = { x: r.x, y: r.y, w: r.w, h: r.h };
     if (pa.texture && !pa.nine) {
-      // The picked plate came out a little under the band (1450x144 for 1455x150): drawn at its own
+      // The picked plate is a little under the band (1450x144 in 1455x150): drawn at its own
       // size, centred on whole pixels, never stretched up to the band.
       const src = this.frameSize(scene, pa.texture);
       const at = fitCentred(src.w, src.h, r);

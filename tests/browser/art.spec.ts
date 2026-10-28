@@ -74,7 +74,9 @@ test('the art hook lists the stand-ins and the picked keys as arrays', async ({ 
   expect(art!.missing).toEqual([]);
 });
 
-test('the Live screen runs with the picked pieces in and nothing drawing a missing texture', async ({ page }) => {
+test('the Live screen runs with the picked pieces in and nothing drawing a missing texture', async ({
+  page,
+}) => {
   // art3d-5: the look of batches 1 to 4 can't be judged by an assertion, so the running Live screen
   // (job card away, the night under way) is saved for Rolando to judge.
   test.setTimeout(90_000);
