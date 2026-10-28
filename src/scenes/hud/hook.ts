@@ -44,6 +44,12 @@ export interface HudTestState {
     shownAt: number | null;
   } | null;
   dip: { partId: string; lit: boolean; flashing: boolean } | null;
+  /**
+   * Where the power-dip mark sits while a dip warning shows, in page CSS pixels to a tenth: on the
+   * part (dipMarkAt in src/scenes/hud/warnings.ts, the point board.parts[] reports for it), or the
+   * centre of CARDS.dipFallback when the board can't place it. Null while no dip warning shows.
+   */
+  dipMark: PagePoint | null;
   banner: { open: boolean; choice: string | null; pay: PagePoint; ignore: PagePoint; bin: PagePoint };
   laundry: { available: boolean; cut: boolean; button: PagePoint };
   regroup: { visible: boolean; active: boolean; spent: boolean; button: PagePoint };

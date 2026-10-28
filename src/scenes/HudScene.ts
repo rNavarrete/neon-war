@@ -48,13 +48,13 @@ import { laundryCutAvailable } from '../sim/failures';
 import { cutLaundry, laundryCutAt, regroupAvailable, upcomingDip } from './hud/pending503';
 import { REGROUP_UNUSED, type RegroupState, regroupActive, regroupSpent, startRegroup } from './hud/regroup';
 import { shownCredits, shownTrust } from './hud/title';
-import { type DipWarning, dipWarningAt, fallForecastAt, surgeWarningAt } from './hud/warnings';
+import { type DipWarning, dipMarkAt, dipWarningAt, fallForecastAt, surgeWarningAt } from './hud/warnings';
 import { GAME_HEIGHT, GAME_WIDTH } from './BoardScene';
 import { storyEnd } from '../story/state';
 import { SCENES } from './keys';
 import { type LiveFlags, PLAY_FLAGS, flagsFrom } from './live/flags';
 import { liveTestState, perfTestState } from './live/hook';
-import { ZONES, pageRect } from './live/layout';
+import { ZONES, pagePoint, pageRect } from './live/layout';
 import { createViews } from './live/registry';
 import type { LiveHost, LiveView } from './live/view';
 
@@ -109,12 +109,6 @@ const cardGuarded = (): boolean => performance.now() - storyEnd.at < CARD_GUARD_
  */
 export class HudScene extends Phaser.Scene {
   ready = false;
-  /**
-   * WIRING(board): where a part sits in game space, for the power-dip warning. The board sets this
-   * when it can say; until then the warning shows at CENTRE.dipFallback.
-   */
-  partLocator: ((partId: string) => { x: number; y: number } | null) | null = null;
-
   private runRef: Run | null = null;
   /** The frame the last update read, to detect occurrences against; null before the first. */
   private lastFrame: Frame | null = null;
@@ -149,6 +143,8 @@ export class HudScene extends Phaser.Scene {
   /** Sim time the current surge warning first went on screen. */
   private surgeShownAt = -1;
   private dip: DipWarning | null = null;
+  /** Where the dip mark was last placed, in game pixels (one object, reused). */
+  private readonly dipAt: { x: number; y: number } = { x: 0, y: 0 };
   /** What the dial question reads, one object reused every update. */
   private readonly ask: { now: number; cardOpen: boolean; estimate: number | null; sizing: number | null } = {
     now: 0,
@@ -441,7 +437,10 @@ export class HudScene extends Phaser.Scene {
 
     this.dip = dipWarningAt(upcomingDip(r), r.now, settings().reduceFlicker);
     if (this.dip) {
-      const at = this.partLocator?.(this.dip.partId) ?? CENTRE.dipFallback;
+      // On the part, at the board's own anchor for it (board.parts[]), or on the fallback card.
+      const at = dipMarkAt(r.session.board, this.dip.partId);
+      this.dipAt.x = at.x;
+      this.dipAt.y = at.y;
       this.dipMark.setPosition(at.x, at.y);
       this.dipText.setText(line(r.now < C.c5 ? 'C4.flicker.01' : 'C6.flicker.01'));
     }
@@ -838,6 +837,12 @@ export class HudScene extends Phaser.Scene {
     };
   }
 
+  /** Game-space point to page CSS pixels to a tenth, as the board's hook reports parts (pagePoint). */
+  private toPagePoint(x: number, y: number): PagePoint {
+    const p = pagePoint({ x, y }, this.game.canvas.getBoundingClientRect());
+    return { x: p.x, y: p.y };
+  }
+
   private snapshot(): HudTestState {
     const r = run();
     const f = frame(r);
@@ -889,6 +894,7 @@ export class HudScene extends Phaser.Scene {
           }
         : null,
       dip: this.dip ? { ...this.dip } : null,
+      dipMark: this.dip ? this.toPagePoint(this.dipAt.x, this.dipAt.y) : null,
       banner: {
         open: this.bannerOpen,
         choice: r.session.banner?.choice ?? null,

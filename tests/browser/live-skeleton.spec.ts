@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { LiveTestState, PerfTestState } from '../../src/scenes/live/hook';
 import { CARDS, LAYOUT_VERSION, ZONES, ZONE_IDS, pageRect } from '../../src/scenes/live/layout';
-import { openBoard, reach, shot } from './live/reach';
+import { dismissJobCard, openBoard, reach, shot } from './live/reach';
 
 // The Live screen's skeleton (tech-3): the twelve zones reported on the page, the placeholders the
 // registry still draws, and the perf section, asserted on window.__neonTest.state.live and .perf.
@@ -304,5 +304,59 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     expect(after.dial.visible).toBe(false);
   });
 
+  expect(errors).toEqual([]);
+});
+
+// Tech follow-up (gauges-2's dip mark): the power-dip mark sits on the part the dip takes, at the
+// point the board's hook reports for it, within 2 page px.
+
+type DipRead = {
+  now: number;
+  dip: { partId: string } | null;
+  dipMark: { x: number; y: number } | null;
+  parts: { id: string; x: number; y: number }[];
+};
+
+test('the power-dip mark sits on its part: |hud.dipMark - board.parts[id]| <= 2 page px', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
+  await dismissJobCard(page);
+  // No dip showing: no mark.
+  const before = (await page.evaluate(() => window.__neonTest!.state.hud)) as unknown as DipRead;
+  expect(before.dip).toBeNull();
+  expect(before.dipMark).toBeNull();
+  await expect
+    .poll(async () => (await hudState(page)).now, { timeout: 60_000, intervals: [100] })
+    .toBeGreaterThanOrEqual(290);
+  // The warning is up for 2 sim seconds: watch for it from inside the page, every frame.
+  const read = await page.evaluate(
+    () =>
+      new Promise<DipRead | null>((resolve) => {
+        const end = performance.now() + 60_000;
+        const look = (): void => {
+          const s = window.__neonTest!.state as unknown as {
+            hud: { now: number; dip: { partId: string } | null; dipMark: { x: number; y: number } | null };
+            board: { parts: { id: string; x: number; y: number }[] };
+          };
+          if (s.hud.dip) {
+            resolve({ now: s.hud.now, dip: s.hud.dip, dipMark: s.hud.dipMark, parts: s.board.parts });
+            return;
+          }
+          if (performance.now() > end) resolve(null);
+          else requestAnimationFrame(look);
+        };
+        look();
+      }),
+  );
+  expect(read, 'a dip warning showed').not.toBeNull();
+  const r = read!;
+  expect(r.dip!.partId).toMatch(/^server-/);
+  const part = r.parts.find((p) => p.id === r.dip!.partId);
+  expect(part, `board.parts has ${r.dip!.partId}`).toBeDefined();
+  expect(r.dipMark).not.toBeNull();
+  expect(Math.abs(r.dipMark!.x - part!.x)).toBeLessThanOrEqual(2);
+  expect(Math.abs(r.dipMark!.y - part!.y)).toBeLessThanOrEqual(2);
   expect(errors).toEqual([]);
 });
