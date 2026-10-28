@@ -1,10 +1,13 @@
-// The debrief (C8): the night's raw results and which of Rei's grade lines they earn. Pure: the
-// results come in as data. There are no letter grades; each category is shown as its raw number.
+// The debrief (C8): the night's raw results, which of Rei's grade lines they earn, and the grey
+// "you saw it at" line under each term the taught trace has an entry for. Pure: the results and the
+// trace come in as data. There are no letter grades; each category is shown as its raw number.
 
 import type { RunNotes } from '../game/run';
+import { TERM_GROUP, TERM_KEYS, type TermGroup, type TermKey } from '../scenes/hud/lineMeta';
+import type { MomentKind, TaughtEntry, TaughtTrace } from '../scenes/hud/taught';
 import { BROWNOUT } from '../sim/brownout';
 import type { BannerChoice, Session } from '../sim/economy';
-import type { LineId } from '../strings';
+import { LINES, type LineId, line } from '../strings';
 import { LABELS } from './labels';
 
 export interface DebriefResults {
@@ -84,4 +87,72 @@ export function resultRows(r: DebriefResults): { label: string; value: string }[
     { label: LABELS.ozzie, value: String(Math.round(r.ozzieTab)) },
     { label: LABELS.scaledDown, value: r.scaledDown ? LABELS.yes : LABELS.no },
   ];
+}
+
+// ---- the moment each term was seen (learning-4, decision D10) ----
+
+/** The three C8.terms lines, in the order the debrief names their groups. */
+const TERM_LINES = ['C8.terms.sizing', 'C8.terms.scaling', 'C8.terms.failure'] as const;
+
+/**
+ * The debrief's bold terms by code key, as C8.terms.* print them (lineMeta's TERM_KEYS follow the
+ * same order; tests/teaching.test.ts pins it).
+ */
+export const TERM_NAMES: Readonly<Record<TermKey, string>> = (() => {
+  const bold = TERM_LINES.flatMap((id) => [...LINES[id].text.matchAll(/\*\*(.+?)\*\*/g)].map((m) => m[1]));
+  const out = {} as Record<TermKey, string>;
+  TERM_KEYS.forEach((k, i) => {
+    // "health checks" is bold mid-sentence; as a heading it starts with a capital.
+    const name = bold[i] ?? k;
+    out[k] = name.charAt(0).toUpperCase() + name.slice(1);
+  });
+  return out;
+})();
+
+/**
+ * DRAFT pending D8 (the owner approves the wording): what each moment was, in the crew's words, for
+ * the grey line under its term. `n` is the number the moment carries (the dial value, the boxes).
+ */
+export const MOMENT_WORDS: Readonly<Record<MomentKind, (n: number | null) => string>> = {
+  estimateSet: (n) => `you set the dial to ${n ?? '?'} a second`,
+  firstLive: () => 'your first box went live',
+  kitFitted: () => 'you fitted the kit to a box',
+  secondBox: () => 'a second box went on the rack',
+  splitterRacked: () => 'the crew racked the splitter',
+  firstSkipped: () => 'the splitter stepped over a dark box',
+  bigBoxDark: () => 'the big box went dark',
+  retriesRising: () => 'refreshes piled on top',
+  laundryCut: () => 'you cut the laundry floor loose',
+  sizingSet: (n) => `you picked ${n ?? '?'} boxes for midnight`,
+  diesInAtMidnight: () => 'a box read DIES IN at midnight',
+  heldWithSpare: (n) => `midnight held on ${n ?? '?'} boxes, one of them dark`,
+  decommission: () => 'you switched a box off',
+};
+
+/** One grey line in the debrief, printed under `name` (the bold term) in its group's column. */
+export interface SeenLine {
+  readonly term: TermKey;
+  readonly group: TermGroup;
+  readonly name: string;
+  readonly text: string;
+}
+
+/** DRAFT pending D8: "you saw it at hh:mm:ss: <line>" for one trace entry; a spoken line in quotes. */
+export function seenText(e: TaughtEntry): string {
+  const what =
+    e.line !== null ? `“${line(e.line)}”` : e.moment !== null ? MOMENT_WORDS[e.moment](e.value) : '';
+  return `you saw it at ${e.clock}: ${what}`;
+}
+
+/**
+ * The grey lines the debrief prints: one per term that has an entry in the trace (its first
+ * sighting), in the debrief's term order. A term with no entry gets no line.
+ */
+export function seenLines(trace: TaughtTrace): SeenLine[] {
+  const out: SeenLine[] = [];
+  for (const term of TERM_KEYS) {
+    const e = trace.find((t) => t.term === term);
+    if (e) out.push({ term, group: TERM_GROUP[term], name: TERM_NAMES[term], text: seenText(e) });
+  }
+  return out;
 }
