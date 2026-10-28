@@ -6,27 +6,16 @@ import { type Occurrence, detectOccurrences } from '../game/occurrences';
 import { allPortraits } from '../game/portraits';
 import { type Run, run } from '../game/run';
 import { settings } from '../game/settings';
-import { errorShare } from '../sim/board';
 import { BROWNOUT } from '../sim/brownout';
 import type { BannerChoice } from '../sim/economy';
 import { LINES, type LineId, line } from '../strings';
 import { provideTestState } from '../testHook';
 import { CommsView } from './hud/CommsView';
 import { type ChartView, scopeViewOf } from './hud/ChartView';
-import { ChatView } from './hud/ChatView';
+import { ChatFeedView } from './hud/ChatFeedView';
 import { DialView } from './hud/DialView';
+import { chatOf } from './hud/chat';
 import {
-  type ChatEntry,
-  type ChatKind,
-  chatEntry,
-  chatOf,
-  fillerDelay,
-  pickFiller,
-  pushChat,
-  seededRandom,
-} from './hud/chat';
-import {
-  CHAT_SILENCE,
   type CueView,
   type DirectorState,
   NEW_DIRECTOR,
@@ -36,7 +25,7 @@ import {
   emptyCueView,
 } from './hud/cues';
 import { type DialMode, applyEstimate, applySizing, dialModeAt } from './hud/dial';
-import { countdownText, errorState } from './hud/format';
+import { countdownText } from './hud/format';
 import { type HudBounds, type HudTestState, type PagePoint, hudSection } from './hud/hook';
 import { dialQuestionOpen, dismissJobCard, jobCardDue, openJobCard, sizingPromptOpen } from './hud/jobCard';
 import {
@@ -86,8 +75,6 @@ const HUD_ART = [
 const ICONS = ['trust', 'credits', 'warning', 'power-dip', 'cut', 'clock'];
 const AVATARS = ['kenji', 'mrs-okafor', 'young-father', 'old-man-noodles'];
 
-/** Seed for the chat filler, so a run's chat is the same every time (and in tests). */
-const CHAT_SEED = 20261231;
 
 /**
  * The job card ignores clicks this soon after a story scene ends: they are the second half of a
@@ -101,7 +88,7 @@ const cardGuarded = (): boolean => performance.now() - storyEnd.at < CARD_GUARD_
  * The board's HUD, drawn over BoardScene with a transparent background and staged into the Live
  * screen's zones (src/scenes/live/layout.ts, docs/LIVE.md). It hosts the zone views (the registry:
  * the title cluster and the clock are TitleView and ClockView, the alert band AlertView, the deck's
- * keys 1 REGROUP, 2 CUT 3F, 3 SET DeckView) and still draws one chat column.
+ * keys 1 REGROUP, 2 CUT 3F, 3 SET DeckView, LIVE CHAT ChatFeedView).
  * Over the feed, only while asked: the job card, the Solace banner, the dial card, the sizing prompt
  * and the power-dip warning. It reads run() every frame and only calls the run's actions; the rules
  * stay in src/sim/.
@@ -131,12 +118,6 @@ export class HudScene extends Phaser.Scene {
   private unsubscribe: (() => void)[] = [];
 
   private director: DirectorState = NEW_DIRECTOR;
-  private chats: Record<ChatKind, ChatEntry[]> = { block: [], stream: [] };
-  /** Both chats in arrival order, for the one chat column. */
-  private merged: ChatEntry[] = [];
-  private fillerAt: Record<ChatKind, number> = { block: 0, stream: 0 };
-  private lastFiller: Record<ChatKind, LineId | null> = { block: null, stream: null };
-  private rand = seededRandom(CHAT_SEED);
   private dialTouched = false;
   private bannerShown = false;
   private decommissionsAfterMidnight = 0;
@@ -180,7 +161,8 @@ export class HudScene extends Phaser.Scene {
   /** The alert band and the deck (registry views): hud.bounds and hud.laundry/regroup read them. */
   private alertView: AlertView | null = null;
   private deckView: DeckView | null = null;
-  private chatView!: ChatView;
+  /** LIVE CHAT (the registry's chat view): it hears the cue table's chat ids on the bus. */
+  private chatFeed: ChatFeedView | null = null;
   private dipMark!: Phaser.GameObjects.Container;
   private dipText!: Phaser.GameObjects.Text;
   private card!: Phaser.GameObjects.Container;
@@ -216,6 +198,7 @@ export class HudScene extends Phaser.Scene {
     this.comms = (this.views.find((v) => v instanceof CommsView) as CommsView | undefined) ?? null;
     this.alertView = (this.views.find((v) => v instanceof AlertView) as AlertView | undefined) ?? null;
     this.deckView = (this.views.find((v) => v instanceof DeckView) as DeckView | undefined) ?? null;
+    this.chatFeed = (this.views.find((v) => v instanceof ChatFeedView) as ChatFeedView | undefined) ?? null;
     provideTestState('live', () => liveTestState(this.game.canvas.getBoundingClientRect(), this.views));
     this.perf = new PerfMeter(this.flags.lite);
     provideTestState('perf', () => this.perf.state);
@@ -257,7 +240,6 @@ export class HudScene extends Phaser.Scene {
       },
       set: (value) => this.onDialSet(value),
     });
-    this.chatView = new ChatView(this, RIGHT.chat, RIGHT.chatTitle, RIGHT.chatBody, 'LIVE CHAT');
     this.buildDipMark();
     this.buildSizingPrompt();
     this.buildBanner();
@@ -315,7 +297,6 @@ export class HudScene extends Phaser.Scene {
     this.sizingPanel.setVisible(sizingOpen);
 
     this.runDirector(f, sizingOpen);
-    this.updateFiller(r);
     if (this.perf.frame(delta)) this.samplePerf();
   }
 
@@ -375,13 +356,7 @@ export class HudScene extends Phaser.Scene {
     this.occurrences.length = 0;
     this.director = NEW_DIRECTOR;
     this.comms?.reset();
-    this.chats = { block: [], stream: [] };
-    this.merged = [];
-    this.rand = seededRandom(CHAT_SEED);
-    this.fillerAt = {
-      block: this.clock + fillerDelay(this.rand),
-      stream: this.clock + fillerDelay(this.rand),
-    };
+    this.chatFeed?.reset(this.clock);
     this.dialTouched = false;
     this.bannerShown = false;
     this.decommissionsAfterMidnight = 0;
@@ -390,7 +365,6 @@ export class HudScene extends Phaser.Scene {
     this.firedCues = [];
     this.lastSurgeAt = -1;
     if (this.ready) {
-      this.chatView.show([]);
       this.chart.ring.clear();
       this.dial.reset();
       if (jobCardDue(r)) {
@@ -642,36 +616,14 @@ export class HudScene extends Phaser.Scene {
   }
 
   /**
-   * Send a fired line out as bus `cue` and route it: chat lines to their chat, barks to the bark
-   * queue. C6.fail.chat is the chat going silent, not a row: it is never posted.
+   * Send a fired line out as bus `cue` and route it: barks to the bark queue. Chat ids are the chat
+   * view's: it hears the cue and posts it (ChatFeedView; C6.fail.chat silences it instead of a row).
    */
   private cue(id: LineId): void {
     const chat = chatOf(id);
     this.firedCues.push(id);
     bus.emit('cue', { id, kind: chat ? 'chat' : 'bark', at: this.clock });
-    if (id === CHAT_SILENCE) return;
-    if (chat) this.say(chat, id);
-    else if (LINES[id].kind === 'bark') this.comms?.enqueue(id);
-  }
-
-  private say(chat: ChatKind, id: LineId): void {
-    const entry = chatEntry(id);
-    this.chats[chat] = pushChat(this.chats[chat], entry);
-    this.merged = pushChat(this.merged, entry);
-    this.chatView.show(this.merged);
-  }
-
-  private updateFiller(r: Run): void {
-    // No filler while the job card is up, nor while the chat is silent (dark at midnight, until the rewind).
-    if (this.cardOpen || chatSilenced(this.director)) return;
-    const state = errorState(errorShare(r.flow, r.demand));
-    for (const chat of ['block', 'stream'] as const) {
-      if (this.clock < this.fillerAt[chat]) continue;
-      const id = pickFiller(chat, state, this.rand, this.lastFiller[chat]);
-      this.lastFiller[chat] = id;
-      this.say(chat, id);
-      this.fillerAt[chat] = this.clock + fillerDelay(this.rand);
-    }
+    if (!chat && LINES[id].kind === 'bark') this.comms?.enqueue(id);
   }
 
   // ---- helpers ----
@@ -772,10 +724,8 @@ export class HudScene extends Phaser.Scene {
       },
       bark: this.comms?.barkSnapshot() ?? { current: null, text: null, history: [] },
       cues: { fired: [...this.firedCues], silenced: chatSilenced(this.director) },
-      chat: {
-        block: this.chats.block.map((e) => `${e.who}: ${e.text}`),
-        stream: this.chats.stream.map((e) => `${e.who}: ${e.text}`),
-      },
+      // The chat view provides hud.chat (block and stream kept, the feed beside them) over this.
+      chat: { block: [], stream: [] },
       timeScale: r.timeScale,
       bounds: built ? this.bounds() : [],
     };
@@ -800,7 +750,6 @@ export class HudScene extends Phaser.Scene {
     const pieces: [string, Home, Bounded][] = [
       ['dial', 'dialCard', this.dial.container],
       ['sizing', 'sizingPrompt', this.sizingPanel],
-      ['chat', 'chat', this.chatView.panel],
       ['jobCard', 'jobCard', this.cardArt],
       ['banner', 'banner', this.banner],
     ];
@@ -813,6 +762,8 @@ export class HudScene extends Phaser.Scene {
     const keys = this.deckView?.keyHits() ?? [];
     for (let i = 0; i < keys.length; i++)
       pieces.splice(pieces.length - 2, 0, [`deck.${i + 1}`, 'deck', keys[i]]);
+    const chatPanel = this.chatFeed?.panel;
+    if (chatPanel) pieces.push(['chat', 'chat', chatPanel]);
     const band = this.comms?.container;
     if (band) pieces.push(['comms', 'comms', band]);
     return pieces.map(([id, home, o]) => {

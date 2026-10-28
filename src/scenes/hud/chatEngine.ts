@@ -19,11 +19,12 @@
 // Pure: no Phaser, no Date. Time comes in as the HUD clock; randomness from an injected rand.
 // stepChat returns the identical state and NO_POSTS on a frame with no edges or events.
 
+import type { Frame } from '../../game/frame';
 import type { Occurrence, OccurrenceKind } from '../../game/occurrences';
 import type { BannerChoice } from '../../sim/economy';
 import { BROWNOUT } from '../../sim/brownout';
 import { LINES, type LineId } from '../../strings';
-import { type ChatKind, chatEntry, chatOf, fillerDelay } from './chat';
+import { type ChatKind, chatEntry, chatOf, fillerDelay, fitRows } from './chat';
 import { type ErrorState, errorState } from './format';
 import { isLesson } from './lineMeta';
 
@@ -134,10 +135,11 @@ const SO = 'fill.stream.ok.';
 const BO = 'fill.block.ok.';
 
 /**
- * Every reaction, from 05-comms "Live chat". Until chat-2 writes a reaction's own lines, the calm
- * ones borrow the pinned all-fine filler and the error ones the some-errors or heavy-errors filler
- * (posted only while the block has errors); reactions with no honest stand-in (a hot, dead or dark
- * box, the laundry, the surge landing) stay silent.
+ * Every reaction, from 05-comms "Live chat". Each draws from its own pool, written by chat-2 into the
+ * chat anchor of docs/SCRIPT.md and src/strings.ts. The fallback stands in only if a pool is ever
+ * emptied: the calm ones borrow the pinned all-fine filler and the error ones the some-errors or
+ * heavy-errors filler (posted only while the block has errors); reactions with no honest stand-in
+ * (a hot, dead or dark box, the laundry, the surge landing) stay silent then.
  */
 export const REACTIONS: Readonly<Record<ReactionKey, Reaction>> = Object.freeze({
   placed: R('fill.stream.placed.', SO, 12),
@@ -502,7 +504,8 @@ export function stepChat(
   const c = inp.clock;
   let d: Draft | null = null;
   const draft = (): Draft => (d ??= { ...s });
-  const posts: ChatRow[] = [];
+  // Allocated only on a frame that posts.
+  let posts: ChatRow[] | null = null;
 
   // A rewind reseeds: the block is back, the queue and the silence go, the trackers restart.
   if (inp.rewinds > s.rewinds) {
@@ -689,7 +692,7 @@ export function stepChat(
       post(x, row, c, rand);
       x.cooldown = { ...x.cooldown, [head.key]: c + r.cap };
       if (head.key === 'rejoin') x.left = [];
-      posts.push(row);
+      (posts ??= []).push(row);
       break;
     }
   } else if (open && fillerAllowed(st, c)) {
@@ -705,14 +708,14 @@ export function stepChat(
       post(x, row, c, rand);
       x.fillers += 1;
       x.lastFiller = id;
-      posts.push(row);
+      (posts ??= []).push(row);
     } else {
       x.nextFillerAt = c + fillerDelay(rand);
     }
   }
 
   if (d === null) return { state: s, posts: NO_POSTS };
-  return { state: d, posts: posts.length > 0 ? posts : NO_POSTS };
+  return { state: d, posts: posts ?? NO_POSTS };
 }
 
 function fresh(q: QueuedReaction, s: ChatState, clock: number): boolean {
@@ -778,8 +781,71 @@ export function toggleFilter(s: ChatState): ChatState {
   return { ...s, filter: s.filter === 'all' ? 'block' : 'all' };
 }
 
-/** The newest `n` rows the filter lets through, oldest first (the view lays them out bottom-up). */
-export function visibleRows(s: ChatState, n = VISIBLE_ROWS): ChatRow[] {
-  const rows = s.filter === 'block' ? s.feed.filter((r) => r.chat === 'block') : s.feed;
+/**
+ * The rows on show, oldest first (the view lays them out bottom-up).
+ *
+ * - `visibleRows(state, n)`: the newest `n` rows the state's filter lets through.
+ * - `visibleRows(feed, filter)`: what the LIVE CHAT panel draws: the newest of those rows that fit
+ *   the 220 px body (chat.ts fitRows), four or five. hud.chat.shown is its length.
+ */
+export function visibleRows(s: ChatState, n?: number): ChatRow[];
+export function visibleRows(feed: readonly ChatRow[], filter: ChatFilter): ChatRow[];
+export function visibleRows(a: ChatState | readonly ChatRow[], b?: number | ChatFilter): ChatRow[] {
+  if (isFeed(a)) {
+    const filter = b === 'block' ? 'block' : 'all';
+    return fitRows(filtered(a, filter), VISIBLE_ROWS);
+  }
+  const n = typeof b === 'number' ? b : VISIBLE_ROWS;
+  const rows = filtered(a.feed, a.filter);
   return rows.slice(Math.max(0, rows.length - n));
+}
+
+const isFeed = (a: ChatState | readonly ChatRow[]): a is readonly ChatRow[] => Array.isArray(a);
+
+const filtered = (feed: readonly ChatRow[], filter: ChatFilter): readonly ChatRow[] =>
+  filter === 'block' ? feed.filter((r) => r.chat === 'block') : feed;
+
+// ---- the Frame, flattened ----
+
+/** ChatInputs the host fills in place each frame. */
+export type ChatInputsDraft = { -readonly [K in keyof ChatInputs]: ChatInputs[K] };
+
+/** A ChatInputs to fill with chatInputsOf; one per view, reused every frame. */
+export function emptyChatInputs(): ChatInputsDraft {
+  return {
+    clock: 0,
+    now: 0,
+    errorShare: 0,
+    retry: 0,
+    served: 0,
+    servingBoxes: 0,
+    surgeAt: null,
+    midnightHeld: false,
+    midnightDark: false,
+    rewinds: 0,
+  };
+}
+
+/**
+ * What the chat reads from this frame, written into `out` (no allocation): the shared Frame's
+ * routing (read once per sim change by frame()), never run().flow.
+ */
+export function chatInputsOf(f: Frame, clock: number, out: ChatInputsDraft): ChatInputsDraft {
+  const flow = f.flow;
+  let serving = 0;
+  for (let i = 0; i < f.parts.length; i++) {
+    const p = f.parts[i];
+    if (p.kind === 'server' && (flow.load[p.id] ?? 0) > 0) serving++;
+  }
+  out.clock = clock;
+  out.now = f.now;
+  out.errorShare = f.errorShare;
+  out.retry = f.retry;
+  out.served = f.served;
+  out.servingBoxes = serving;
+  out.surgeAt = f.surge ? f.surge.surge.startsAt : null;
+  out.midnightHeld = f.midnight !== null && f.midnight.held;
+  out.midnightDark = f.midnight !== null && !f.midnight.held;
+  out.rewinds = f.rewinds.length;
+  return out;
 }

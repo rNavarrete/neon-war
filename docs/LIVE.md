@@ -188,12 +188,14 @@ The rows for `cam` and `chat` are the share their lanes have to declare when the
 | `scope` (ChartView)                                  |     5 |                  7 |
 | `comms` (CommsView)                                  |    13 |                 24 |
 | `deck` (DeckView with HeadroomView)                  |     8 |                 21 |
-| `chat` (chat, placeholder today)                     |    10 |                  2 |
+| `chat` (ChatFeedView)                                |    17 |                 31 |
 | `feed` and `inventory` (BoardScene)                  |    28 |                  - |
-| Cards (HUD host: job card, banner, dial, sizing, dip) |    20 |                  - |
+| Cards (HUD host: job card, banner, dial, sizing, dip) |    13 |                  - |
 | **Total**                                             | **110** |                  |
 
-Measured on 28 Oct 2026 (speed 20 with autopilot, headless):
+The chat feed's five rows of name and words need 17 texts, so the host's cards give up 7 of their 20 to keep the total at 110. The cards measure 19 today, so tech-8 has to cut 6 of them (for example the dip and sizing prompt sharing one text each) before `live-perf.spec.ts` can assert all texts.
+
+Measured on 28 Oct 2026 (speed 20 with autopilot, headless), before the chat feed landed:
 
 - **Objects.** 414 to 421 at the surge and 427 to 440 at midnight, well inside 750.
 - **Every view.** Each registered view is at or under its declared budget.

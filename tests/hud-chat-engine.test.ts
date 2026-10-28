@@ -1,4 +1,5 @@
-import { seededRandom } from '../src/scenes/hud/chat';
+import script from '../docs/SCRIPT.md?raw';
+import { chatEntry, chatOf, fillerPool, seededRandom } from '../src/scenes/hud/chat';
 import {
   CHAT_PACE,
   type ChatEvent,
@@ -13,6 +14,7 @@ import {
   fillerAllowed,
   initialChat,
   inSurge,
+  linesOf,
   postScripted,
   reactionLines,
   seedChat,
@@ -24,7 +26,7 @@ import {
 import { isLesson } from '../src/scenes/hud/lineMeta';
 import type { Occurrence, OccurrenceKind } from '../src/game/occurrences';
 import { BROWNOUT } from '../src/sim/brownout';
-import type { LineId } from '../src/strings';
+import { LINES, type LineId } from '../src/strings';
 
 // chat-1: the pure chat model (src/scenes/hud/chatEngine.ts).
 
@@ -477,7 +479,132 @@ describe('scripted extras', () => {
     for (const key of Object.keys(REACTIONS) as (keyof typeof REACTIONS)[]) {
       for (const id of reactionLines(key)) expect(id.startsWith('fill.')).toBe(true);
     }
-    expect(reactionLines('errorsBlock').every((id) => id.startsWith('fill.block.slow.'))).toBe(true);
-    expect(reactionLines('hot')).toEqual([]);
+    // chat-2 wrote every reaction's own pool, so none borrows its fallback any more (before chat-2
+    // errorsBlock borrowed fill.block.slow. and hot stayed silent); the fallbacks stay declared.
+    expect(reactionLines('errorsBlock').every((id) => id.startsWith('fill.block.errors.'))).toBe(true);
+    expect(REACTIONS.errorsBlock.fallback).toBe('fill.block.slow.');
+    expect(reactionLines('hot').length).toBeGreaterThan(0);
+    expect(reactionLines('hot').every((id) => id.startsWith('fill.stream.hot.'))).toBe(true);
+  });
+});
+
+// chat-2: the reaction lines in the chat anchor of docs/SCRIPT.md and src/strings.ts.
+describe('the chat anchor lines (chat-2)', () => {
+  const ROW = /^\| (C\d|fill)\.[\w.-]+ \|/;
+  const cells = (l: string): string[] =>
+    l
+      .slice(1, -1)
+      .split('|')
+      .map((c) => c.trim());
+  /** The rows of the script's "Chat lane" section: [id, kind, speaker, when, line]. */
+  const section = script.split('<!-- anchor: chat -->')[1].split('\n### ')[0];
+  const rows = section
+    .split('\n')
+    .filter((l) => ROW.test(l))
+    .map(cells);
+  const scriptIds = script
+    .split('\n')
+    .filter((l) => ROW.test(l))
+    .map((l) => cells(l)[0]);
+
+  /** Every bold debrief term (each half of "Redundancy, N+1") and the stems a reworded one keeps. */
+  const BOLD = (['C8.terms.sizing', 'C8.terms.scaling', 'C8.terms.failure'] as const).flatMap((id) =>
+    [...LINES[id].text.matchAll(/\*\*(.+?)\*\*/g)].map((m) => m[1]),
+  );
+  const BANNED = [
+    ...BOLD.flatMap((t) => t.split(/,\s*/)).map((t) => t.toLowerCase()),
+    'headroom',
+    'throughput',
+    'balancer',
+    'health check',
+    'scaling',
+    'scale up',
+    'scale out',
+    'scale down',
+    'single point',
+    'cascad',
+    'retry storm',
+    'shedding',
+    'redundan',
+    'estimate',
+  ];
+
+  it('has about 48 lines, and Object.keys(LINES) equals the SCRIPT.md id set, word for word', () => {
+    expect(rows.length).toBeGreaterThanOrEqual(44);
+    expect(rows.length).toBeLessThanOrEqual(56);
+    expect(Object.keys(LINES).sort()).toEqual([...scriptIds].sort());
+    for (const r of rows) {
+      const id = r[0] as LineId;
+      expect(LINES[id], id).toBeDefined();
+      expect(LINES[id].text, id).toBe(r[r.length - 1]);
+      expect(LINES[id].kind, id).toBe(r[1]);
+      expect(LINES[id].speaker, id).toBe(r[2]);
+    }
+  });
+
+  it('keeps every fill.* line free of digits and of the debrief terms', () => {
+    expect(BANNED).toEqual(expect.arrayContaining(['headroom', 'load balancer', 'capacity', 'n+1']));
+    const fills = (Object.keys(LINES) as LineId[]).filter((id) => id.startsWith('fill.'));
+    expect(fills.length).toBeGreaterThan(60);
+    for (const id of fills) {
+      const text = LINES[id].text;
+      expect(/\d/.test(text), `${id}: ${text}`).toBe(false);
+      const lower = text.toLowerCase();
+      expect(
+        BANNED.filter((t) => lower.includes(t)),
+        `${id}: ${text}`,
+      ).toEqual([]);
+    }
+  });
+
+  it('gives every REACTIONS pool at least one line of its own, in the chat its prefix names', () => {
+    for (const key of Object.keys(REACTIONS) as (keyof typeof REACTIONS)[]) {
+      const r = REACTIONS[key];
+      const chat = r.pool.split('.')[1];
+      expect(['block', 'stream'], key).toContain(chat);
+      const own = linesOf(r.pool);
+      expect(own.length, key).toBeGreaterThan(0);
+      for (const id of own) {
+        expect(LINES[id], id).toBeDefined();
+        expect(chatOf(id), id).toBe(chat);
+        // Every row parses to a writer and words.
+        const e = chatEntry(id);
+        expect(e.who.length, id).toBeGreaterThan(0);
+        expect(e.text.length, id).toBeGreaterThan(0);
+      }
+      expect(reactionLines(key), key).toEqual(own);
+    }
+    // Block rows are spoken by the residents (or the system row).
+    const residents = ['kenji', 'mrs okafor', 'young father', 'old man noodles', 'system'];
+    for (const r of rows) {
+      const id = r[0] as LineId;
+      if (chatOf(id) === 'block') expect(residents, id).toContain(chatEntry(id).who);
+    }
+  });
+
+  it('has fill.block.rejoin.01 (Mrs Okafor rejoins) and no new ok, slow or down pool', () => {
+    expect(rows.map((r) => r[0])).toContain('fill.block.rejoin.01');
+    expect(LINES['fill.block.rejoin.01'].text).toContain('Mrs Okafor');
+    expect(LINES['fill.block.rejoin.01'].speaker).toContain('(system)');
+    for (const r of rows) expect(r[0].split('.')[2], r[0]).not.toMatch(/^(ok|slow|down)$/);
+    // The pinned pool sizes in tests/hud-chat.test.ts are unchanged.
+    expect(fillerPool('block', 'ok')).toHaveLength(4);
+    expect(fillerPool('block', 'slow')).toHaveLength(3);
+    expect(fillerPool('block', 'down')).toHaveLength(2);
+    expect(fillerPool('stream', 'ok')).toHaveLength(3);
+    expect(fillerPool('stream', 'slow')).toHaveLength(2);
+    expect(fillerPool('stream', 'down')).toHaveLength(2);
+  });
+
+  it('posts the rejoin as a system row once calm holds after Mrs Okafor left', () => {
+    const m = sim(0, 3);
+    m.s = postScripted(m.s, 'C4.chat.03', 0, m.rand).state;
+    expect(m.s.left).toEqual(['mrs okafor']);
+    // A 5 s spell of errors, then calm.
+    play(m, 0, 5, () => ({ errorShare: 0.3 }));
+    play(m, 5, 40, () => ({ errorShare: 0 }));
+    const rejoin = m.rows.find((r) => r.id === 'fill.block.rejoin.01');
+    expect(rejoin).toMatchObject({ system: true, cause: 'recovered', chat: 'block', who: 'system' });
+    expect(m.s.left).toEqual([]);
   });
 });

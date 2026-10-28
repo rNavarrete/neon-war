@@ -24,7 +24,7 @@ import { bus } from '../src/game/bus';
 // the hook sections, all without Phaser (the placeholder gets a stub scene).
 
 /** The registry zones no lane has drawn yet, in registry order (each lane takes its zones out). */
-const STILL_PLACEHOLDERS: ZoneId[] = ['cam', 'chat'];
+const STILL_PLACEHOLDERS: ZoneId[] = ['cam'];
 
 describe('live flags', () => {
   it('turns lite on under ?test and off in play', () => {
