@@ -11,15 +11,21 @@ import type Phaser from 'phaser';
 import type { Frame } from '../../game/frame';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import {
+  GAUGE_ART_K,
+  GAUGE_FACE_KEY,
   GAUGE_MAX,
+  GAUGE_NEEDLE_KEY,
   GAUGE_TICKS,
+  NEEDLE_PIVOT,
   type GaugeLayout,
   type GaugeState,
   arcPoint,
   emptyGauge,
   emptyGaugeMemo,
   gaugeAngle,
+  gaugeFacePlace,
   gaugeLayout,
+  needleRotation,
   stepGauge,
 } from './gauge';
 import { LABELS } from './labels';
@@ -35,7 +41,7 @@ import {
   panelSnapshot,
   releasePanel,
 } from './panel';
-import { preloadArt } from '../plates';
+import { preloadArt, resolveArt } from '../plates';
 
 /** What the hook mirrors as hud.gauge. */
 export interface GaugeTestState {
@@ -66,6 +72,13 @@ export interface GaugeTestState {
   ticks: string[];
   /** The baked plate: which picked kit pieces it draws, at what largest scale (m4 panel kit). */
   panel?: PanelTestState | null;
+  /**
+   * The picked dial (batch 5): the face's art key when the painted face is baked into the plate,
+   * else null (the vector track and ticks); the needle's art key and draw scale when the painted
+   * needle draws, else null (a code line).
+   */
+  face?: string | null;
+  needleArt?: { key: string; scale: number } | null;
 }
 
 declare module './hook' {
@@ -84,14 +97,22 @@ const GAUGE_CORNERS = 26;
 
 export class GaugeView implements LiveView {
   readonly zone = 'gauge' as const;
-  /** A plate, the moving parts, and title, readout, sub-line, strip, ROOM tag and five numbers. */
-  readonly budget: LiveBudget = { objects: 12, texts: 10 };
+  /**
+   * A plate, the moving parts, the painted needle, and title, readout, sub-line, strip, ROOM tag and
+   * five numbers.
+   */
+  readonly budget: LiveBudget = { objects: 13, texts: 10 };
   readonly made = { objects: 0, texts: 0 };
   readonly state: GaugeState = emptyGauge();
   private readonly memo = emptyGaugeMemo();
   private layout: GaugeLayout = gaugeLayout({ x: 0, y: 0, w: 0, h: 0 });
   private plate: BakedPanel | null = null;
   private dial: Phaser.GameObjects.Graphics | null = null;
+  /** The painted needle (hud/gauge-needle) when its file is loaded; the dial draws a line without it. */
+  private needle: Phaser.GameObjects.Image | null = null;
+  /** The painted face is baked into the plate (hud/gauge-face loaded). */
+  private face = false;
+  private shownNeedle = NaN;
   private title: Phaser.GameObjects.Text | null = null;
   private readout: Phaser.GameObjects.Text | null = null;
   private sub: Phaser.GameObjects.Text | null = null;
@@ -118,7 +139,14 @@ export class GaugeView implements LiveView {
   draws = 0;
 
   preload(scene: Phaser.Scene): void {
-    preloadArt(scene as never, [KIT.frame, KIT.corner, KIT.tab, KIT.divider]);
+    preloadArt(scene as never, [
+      KIT.frame,
+      KIT.corner,
+      KIT.tab,
+      KIT.divider,
+      GAUGE_FACE_KEY,
+      GAUGE_NEEDLE_KEY,
+    ]);
   }
 
   create(scene: Phaser.Scene, host: LiveHost): void {
@@ -128,8 +156,16 @@ export class GaugeView implements LiveView {
     Object.assign(this.state, emptyGauge());
     Object.assign(this.memo, emptyGaugeMemo());
 
-    // The plate, baked once with the frame kit: the empty track, the ticks every 100, the label tab
-    // under the title, the divider before the right column and the four bracket corners.
+    // The plate, baked once with the frame kit: the painted dial face (or, without it, the empty
+    // track and the ticks every 100), the label tab under the title, the divider before the right
+    // column and the four bracket corners.
+    const loaded = (key: string): string | null => {
+      const a = resolveArt(key);
+      return !a.fallback && (scene.textures?.exists?.(a.texture) ?? false) ? a.texture : null;
+    };
+    const face = loaded(GAUGE_FACE_KEY) !== null;
+    this.face = face;
+    const fp = gaugeFacePlace(L);
     const plate = bakePanel(
       scene,
       'gauge',
@@ -139,10 +175,12 @@ export class GaugeView implements LiveView {
         corners: GAUGE_CORNERS,
         tab: { x: L.title.x - 8, y: L.title.y - 4, h: TAB_H },
         dividers: [{ x: L.readout.x - 16, y: L.plate.y + 16, h: L.plate.h - 32 }],
+        face: face ? { key: KIT.gaugeFace, x: fp.x, y: fp.y, h: fp.h } : undefined,
       },
       {
         fill: { color: COLORS.ink, alpha: 0.92 },
         draw: (g) => {
+          if (face) return;
           g.lineStyle(L.outer - L.inner, COLORS.unlit, 0.35);
           g.beginPath();
           g.arc(L.centre.x, L.centre.y, (L.outer + L.inner) / 2, gaugeAngle(0), gaugeAngle(GAUGE_MAX), false);
@@ -159,6 +197,17 @@ export class GaugeView implements LiveView {
     this.plate = plate;
 
     this.dial = add.graphics();
+    // The painted needle at half its file, pivoting on its hub at the arc's centre.
+    const needleTex = loaded(GAUGE_NEEDLE_KEY);
+    this.needle =
+      needleTex !== null && typeof add.image === 'function'
+        ? add
+            .image(L.centre.x, L.centre.y, needleTex)
+            .setOrigin(NEEDLE_PIVOT.x, NEEDLE_PIVOT.y)
+            .setScale(GAUGE_ART_K)
+            .setRotation(needleRotation(0))
+        : null;
+    this.shownNeedle = NaN;
 
     const text = (x: number, y: number, s: string, size: number, color: string): Phaser.GameObjects.Text =>
       add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color });
@@ -176,6 +225,7 @@ export class GaugeView implements LiveView {
     const all = [
       plate.object,
       this.dial,
+      ...(this.needle ? [this.needle] : []),
       this.title,
       this.readout,
       this.sub,
@@ -185,7 +235,7 @@ export class GaugeView implements LiveView {
     ];
     for (const o of all) o.setDepth(GAUGES_DEPTH);
     this.made.objects = all.length;
-    this.made.texts = all.length - 2;
+    this.made.texts = all.length - (this.needle ? 3 : 2);
 
     this.shownDemand = NaN;
     this.shownSub = '';
@@ -250,10 +300,17 @@ export class GaugeView implements LiveView {
       }
     }
 
+    // The painted needle turns only when its eased value moves.
+    if (this.needle && st.needle !== this.shownNeedle) {
+      this.shownNeedle = st.needle;
+      this.needle.setRotation(needleRotation(st.needle));
+    }
+
     const alpha = frame.paused ? HELD_ALPHA : 1;
     if (alpha !== this.shownAlpha) {
       this.shownAlpha = alpha;
       this.dial.setAlpha(alpha);
+      this.needle?.setAlpha(alpha);
       this.readout.setAlpha(alpha);
     }
   }
@@ -295,7 +352,8 @@ export class GaugeView implements LiveView {
     // The estimate (white) and sizing (magenta) ticks across the band.
     if (st.estimateMark !== null) this.mark(g, st.estimateMark, ESTIMATE_COLOR);
     if (st.sizingMark !== null) this.mark(g, st.sizingMark, COLORS.magenta);
-    // The needle and its hub.
+    // The needle and its hub: the painted needle turns on its own (update), else a code line.
+    if (this.needle) return;
     const tip = arcPoint(L, st.needle, L.needle);
     g.lineStyle(4, COLORS.amber, 1);
     g.lineBetween(L.centre.x, L.centre.y, tip.x, tip.y);
@@ -332,6 +390,8 @@ export class GaugeView implements LiveView {
       strip: this.strip?.text ? this.strip.text : null,
       ticks: this.numbers.map((t) => t.text),
       panel: panelSnapshot(this.plate),
+      face: this.face && this.plate?.state.pieces.includes(GAUGE_FACE_KEY) ? GAUGE_FACE_KEY : null,
+      needleArt: this.needle ? { key: GAUGE_NEEDLE_KEY, scale: GAUGE_ART_K } : null,
     };
   }
 
@@ -341,6 +401,7 @@ export class GaugeView implements LiveView {
     releasePanel(this.plate);
     for (const o of [
       this.dial,
+      this.needle,
       this.title,
       this.readout,
       this.sub,
@@ -351,6 +412,8 @@ export class GaugeView implements LiveView {
       o?.destroy();
     this.plate = null;
     this.dial = null;
+    this.needle = null;
+    this.face = false;
     this.title = null;
     this.readout = null;
     this.sub = null;

@@ -276,3 +276,35 @@ export function arcPoint(L: GaugeLayout, v: number, r: number): { x: number; y: 
   const a = gaugeAngle(v);
   return { x: L.centre.x + Math.cos(a) * r, y: L.centre.y + Math.sin(a) * r };
 }
+
+// ---- the picked dial (batch 5): the painted face and needle, drawn at half their files ----
+
+/** The painted dial face (480 x 269) and its needle (24 x 162), by art key. */
+export const GAUGE_FACE_KEY = 'hud/gauge-face'; // KIT.gaugeFace: baked into the plate
+export const GAUGE_NEEDLE_KEY = 'hud/gauge-needle';
+/** Both are drawn at half their file size: the face 240 x 134.5, the needle 12 x 81. */
+export const GAUGE_ART_K = 0.5;
+/** The face file's size and the dial's centre in it (where the 0 and 400 ticks meet under 200). */
+export const FACE_FILE = { w: 480, h: 269 } as const;
+export const FACE_HUB = { x: 241, y: 225 } as const;
+/** The needle file's size, and its pivot (the hub's centre) as a share of it. */
+export const NEEDLE_FILE = { w: 24, h: 162 } as const;
+export const NEEDLE_PIVOT = { x: 0.5, y: 150 / 162 } as const;
+
+/**
+ * Where the face draws at GAUGE_ART_K: its hub on the arc's centre, kept inside the plate. Its
+ * height is the file's at k (134.5), so the face is never drawn above its file's size. Pure.
+ */
+export function gaugeFacePlace(L: GaugeLayout): { x: number; y: number; w: number; h: number } {
+  const w = FACE_FILE.w * GAUGE_ART_K;
+  const h = FACE_FILE.h * GAUGE_ART_K;
+  const p = L.plate;
+  const x = Math.max(p.x, Math.round(L.centre.x - FACE_HUB.x * GAUGE_ART_K));
+  const y = Math.min(p.y + p.h - Math.ceil(h), Math.round(L.centre.y - FACE_HUB.y * GAUGE_ART_K));
+  return { x, y, w, h };
+}
+
+/** The needle image's rotation for `v` req/s: the file points up, so the arc's angle plus a quarter turn. */
+export function needleRotation(v: number): number {
+  return gaugeAngle(v) + Math.PI / 2;
+}

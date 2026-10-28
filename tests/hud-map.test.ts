@@ -322,6 +322,7 @@ describe('MapView', () => {
       'art:hud/live/corner-marks',
       'art:hud/live/label-tab',
       'art:hud/live/tag-chip',
+      'art:hud/city-grid-lit',
     ]);
     expect(CITY_GRID_KEY).toBe('hud/city-grid');
     v.create(scene as never, host(new Bus()));

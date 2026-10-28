@@ -1,6 +1,6 @@
 import { artRequest, isPicked } from '../src/game/artManifest';
 import { Bus } from '../src/game/bus';
-import { readFrame } from '../src/game/frame';
+import { type Frame, readFrame } from '../src/game/frame';
 import { Run } from '../src/game/run';
 import { AlertView } from '../src/scenes/hud/AlertView';
 import { ChartView } from '../src/scenes/hud/ChartView';
@@ -29,7 +29,19 @@ import {
   panelStamps,
   stampKeys,
 } from '../src/scenes/hud/kit';
-import { MapView } from '../src/scenes/hud/MapView';
+import {
+  FACE_FILE,
+  GAUGE_ART_K,
+  GAUGE_FACE_KEY,
+  GAUGE_NEEDLE_KEY,
+  NEEDLE_FILE,
+  gaugeAngle,
+  gaugeFacePlace,
+  gaugeLayout,
+  needleRotation,
+} from '../src/scenes/hud/gauge';
+import { CITY_GRID_LIT_KEY, LIT_FADE, MapView } from '../src/scenes/hud/MapView';
+import { BROWNOUT } from '../src/sim/brownout';
 import { bakePanel, panelTexture, releasePanel } from '../src/scenes/hud/panel';
 import { TitleView } from '../src/scenes/hud/TitleView';
 import { CARDS, type Rect, ZONES } from '../src/scenes/live/layout';
@@ -370,5 +382,143 @@ describe('the gauges lane views with the kit loaded', () => {
     const h = hudSection({} as HudTestState);
     expect(h.map!.base).toBe('hud/city-grid');
     v.shutdown();
+  });
+});
+
+// ---- batch 5 on the gauges lane: the painted dial and the lit city ----
+
+describe('batch 5: the painted gauge face and needle', () => {
+  it('knows both files at their manifest cut, and draws them at half', () => {
+    expect(artRequest(GAUGE_FACE_KEY)!.cut).toEqual(FACE_FILE);
+    expect(artRequest(GAUGE_NEEDLE_KEY)!.cut).toEqual(NEEDLE_FILE);
+    expect(KIT_FILE[KIT.gaugeFace]).toEqual(FACE_FILE);
+    expect(GAUGE_ART_K).toBe(0.5);
+  });
+
+  it('puts the face inside the gauge plate with its hub on the arc centre, at most 1:1', () => {
+    const L = gaugeLayout(ZONES.gauge);
+    const at = gaugeFacePlace(L);
+    const z = ZONES.gauge;
+    expect(at.x).toBeGreaterThanOrEqual(z.x);
+    expect(at.y).toBeGreaterThanOrEqual(z.y);
+    expect(at.x + at.w).toBeLessThanOrEqual(z.x + z.w);
+    expect(at.y + at.h).toBeLessThanOrEqual(z.y + z.h);
+    expect(at.w).toBeLessThanOrEqual(FACE_FILE.w);
+    expect(at.h).toBeLessThanOrEqual(FACE_FILE.h);
+    // Its painted hub lands within a pixel of the arc's centre.
+    expect(Math.abs(at.x + 241 * GAUGE_ART_K - L.centre.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(at.y + 225 * GAUGE_ART_K - L.centre.y)).toBeLessThanOrEqual(1);
+    // As a stamp in the plate: inside it and at or under 1:1.
+    const st = panelStamps(z, { face: { key: KIT.gaugeFace, ...at } });
+    expect(st).toHaveLength(1);
+    expect(inBox(st[0], z.w, z.h)).toBe(true);
+    expect(maxScale(st)).toBeLessThanOrEqual(0.51);
+  });
+
+  it('turns the needle with the arc: pointing left at 0, up at 200, right at 400', () => {
+    // The file points up; Phaser turns clockwise: three quarters (left), a whole turn (up), and a
+    // quarter more (right).
+    expect(needleRotation(0)).toBeCloseTo(1.5 * Math.PI, 6);
+    expect(needleRotation(200)).toBeCloseTo(2 * Math.PI, 6);
+    expect(needleRotation(400)).toBeCloseTo(2.5 * Math.PI, 6);
+    expect(needleRotation(123)).toBeCloseTo(gaugeAngle(123) + Math.PI / 2, 9);
+  });
+
+  it('GaugeView bakes the face into its plate at half and draws the needle at half, inside its budget', () => {
+    const { scene, rec, made } = bakingScene();
+    const v = new GaugeView();
+    v.create(scene as never, {
+      scene: null as never,
+      bus: new Bus(),
+      rect: ZONES.gauge,
+      flags: { lite: true },
+    });
+    const face = rec.stamps.filter((x) => x.texture === artTexture(GAUGE_FACE_KEY));
+    expect(face).toHaveLength(1);
+    expect(face[0].scaleX).toBe(0.5);
+    expect(face[0].scaleY).toBeLessThanOrEqual(0.51);
+    expect(rec.images.filter((i) => i.key === artTexture(GAUGE_NEEDLE_KEY))).toHaveLength(1);
+    expect(made.filter((m) => m.kind !== 'MadeGraphics').length).toBeLessThanOrEqual(v.budget.objects);
+    v.update(readFrame(new Run()), { now: 1, dt: 0.016 });
+    const g = hudSection({} as HudTestState).gauge!;
+    expect(g.face).toBe(GAUGE_FACE_KEY);
+    expect(g.needleArt).toEqual({ key: GAUGE_NEEDLE_KEY, scale: 0.5 });
+    expect(g.panel!.pieces).toContain(GAUGE_FACE_KEY);
+    expect(g.panel!.maxScale).toBeLessThanOrEqual(1);
+    v.shutdown();
+  });
+
+  it('GaugeView without the files keeps the vector dial and the code needle', () => {
+    const { scene, rec } = bakingScene(false);
+    const v = new GaugeView();
+    v.create(scene as never, {
+      scene: null as never,
+      bus: new Bus(),
+      rect: ZONES.gauge,
+      flags: { lite: true },
+    });
+    expect(rec.images.some((i) => i.key === artTexture(GAUGE_NEEDLE_KEY))).toBe(false);
+    v.update(readFrame(new Run()), { now: 1, dt: 0.016 });
+    const g = hudSection({} as HudTestState).gauge!;
+    expect(g.face).toBeNull();
+    expect(g.needleArt).toBeNull();
+    v.shutdown();
+  });
+});
+
+describe('batch 5: the lit city painting on the map', () => {
+  const C = BROWNOUT.challenges;
+  const at = (now: number, over: Partial<Frame> = {}): Frame => ({ ...readFrame(new Run()), now, ...over });
+  const midnight = (held: boolean): Partial<Frame> =>
+    ({ midnight: { held, dropped: 0, servers: 3, waste: false } }) as Partial<Frame>;
+
+  it('bakes the lit painting as a second plate at half its 816 x 620 file, hidden before midnight', () => {
+    expect(artRequest(CITY_GRID_LIT_KEY)!.cut).toEqual({ w: 816, h: 620 });
+    const { scene, rec } = bakingScene();
+    const v = new MapView();
+    v.create(scene as never, {
+      scene: null as never,
+      bus: new Bus(),
+      rect: ZONES.map,
+      flags: { lite: false },
+    });
+    expect(rec.textures).toContain(panelTexture('map-lit'));
+    expect(rec.stamps.some((s) => s.texture === artTexture(CITY_GRID_LIT_KEY) && s.scaleX === 0.5)).toBe(
+      true,
+    );
+    v.update(at(C.c7 - 5), { now: 1, dt: 0.016 });
+    expect(hudSection({} as HudTestState).map!.lit).toEqual({ key: CITY_GRID_LIT_KEY, alpha: 0 });
+    v.shutdown();
+  });
+
+  it('fades it in over LIT_FADE at a held midnight, and never when the block went dark', () => {
+    const { scene } = bakingScene();
+    const v = new MapView();
+    v.create(scene as never, {
+      scene: null as never,
+      bus: new Bus(),
+      rect: ZONES.map,
+      flags: { lite: false },
+    });
+    v.update(at(C.c7 + 1, midnight(true)), { now: 10, dt: 0.016 });
+    expect(hudSection({} as HudTestState).map!.lit!.alpha).toBe(0);
+    v.update(at(C.c7 + 1.5, midnight(true)), { now: 10 + LIT_FADE / 2, dt: 0.016 });
+    expect(hudSection({} as HudTestState).map!.lit!.alpha).toBeCloseTo(0.5, 5);
+    v.update(at(C.c7 + 3, midnight(true)), { now: 10 + LIT_FADE * 2, dt: 0.016 });
+    expect(hudSection({} as HudTestState).map!.lit!.alpha).toBe(1);
+    v.shutdown();
+
+    const dark = bakingScene();
+    const w = new MapView();
+    w.create(dark.scene as never, {
+      scene: null as never,
+      bus: new Bus(),
+      rect: ZONES.map,
+      flags: { lite: false },
+    });
+    w.update(at(C.c7 + 1, midnight(false)), { now: 10, dt: 0.016 });
+    w.update(at(C.c7 + 3, midnight(false)), { now: 13, dt: 0.016 });
+    expect(hudSection({} as HudTestState).map!.lit!.alpha).toBe(0);
+    w.shutdown();
   });
 });

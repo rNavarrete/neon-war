@@ -50,6 +50,10 @@ test('the COMING /s gauge: NO ROOM YET before the first build, in crew words', a
   expect(h.gauge.strip).toBe('NO ROOM YET');
   expect(h.gauge.estimateMark).toBeNull();
   expect(h.gauge.tick).toBeNull();
+  // Batch 5: the painted face is baked into the plate and the painted needle turns, both at half.
+  expect(h.gauge.face).toBe('hud/gauge-face');
+  expect(h.gauge.needleArt).toEqual({ key: 'hud/gauge-needle', scale: 0.5 });
+  expect(h.gauge.panel!.maxScale).toBeLessThanOrEqual(1);
   expectGaugeMatchesSim(h);
   expectCrewWords(h.gauge);
   expect(errors).toEqual([]);

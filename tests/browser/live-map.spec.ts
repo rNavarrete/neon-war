@@ -26,6 +26,8 @@ test('the city map: pooled dots, more in the surge, the raid, the laundry cut an
   let m = await map(page);
   expect(m.raid).toBe(false);
   expect(m.midnight).toBe(false);
+  // Batch 5: the lit city painting is baked and waits, hidden, for a held midnight.
+  expect(m.lit).toEqual({ key: 'hud/city-grid-lit', alpha: 0 });
 
   let at90 = 0;
   await test.step('steady at the climb (90/s): the pool does not grow over 3 s', async () => {

@@ -30,6 +30,8 @@ export const KIT = {
   alertEndcap: 'hud/live/alert-endcap',
   play: 'hud/icons/play',
   cityGrid: 'hud/city-grid',
+  cityGridLit: 'hud/city-grid-lit',
+  gaugeFace: 'hud/gauge-face',
 } as const;
 
 export type KitKey = (typeof KIT)[keyof typeof KIT];
@@ -53,6 +55,8 @@ export const KIT_FILE: Readonly<Record<KitKey, { readonly w: number; readonly h:
   'hud/live/alert-endcap': { w: 135, h: 168 },
   'hud/icons/play': { w: 128, h: 123 },
   'hud/city-grid': { w: 816, h: 620 },
+  'hud/city-grid-lit': { w: 816, h: 620 },
+  'hud/gauge-face': { w: 480, h: 269 },
 };
 
 /** The nine-slice corner scale the requests give (panel-frame, alert-plate, keycaps). */
@@ -242,8 +246,10 @@ export interface PanelSpec {
   readonly tab?: { readonly x: number; readonly y: number; readonly h: number };
   /** Divider rules: top-left and length. */
   readonly dividers?: readonly { readonly x: number; readonly y: number; readonly h: number }[];
-  /** A painted base filling the rect (the map's city grid). */
+  /** A painted base filling the rect (the map's city grid, or its lit midnight painting). */
   readonly base?: KitKey;
+  /** A painted face under the view's own drawing (the gauge's dial): top-left and height, uniform. */
+  readonly face?: { readonly key: KitKey; readonly x: number; readonly y: number; readonly h: number };
   /** The alert plate nine-sliced over the rect, and its hazard end cap at the right end. */
   readonly alert?: { readonly endcap: boolean };
 }
@@ -266,6 +272,7 @@ export function panelStamps(rect: Rect, spec: PanelSpec): Stamp[] {
       stretch: false,
     });
   }
+  if (spec.face) out.push(wholeStamp(spec.face.key, spec.face.x - rect.x, spec.face.y - rect.y, spec.face.h));
   if (spec.alert) {
     out.push(...alertPlateStamps(w, h));
     if (spec.alert.endcap) {
@@ -289,7 +296,7 @@ export function panelStamps(rect: Rect, spec: PanelSpec): Stamp[] {
 
 /** The base stamps (under the view's own static drawing) and the rest (over it). */
 export function isBase(s: Stamp): boolean {
-  return s.key === KIT.cityGrid;
+  return s.key === KIT.cityGrid || s.key === KIT.cityGridLit || s.key === KIT.gaugeFace;
 }
 
 /** The largest scale any non-rail stamp draws its file at (1 is 1:1); 0 with none. */

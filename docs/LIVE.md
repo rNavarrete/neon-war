@@ -381,7 +381,7 @@ against the built views):
 | `clock` (ClockView)                                  |     2 |                  4 |
 | `map` (MapView)                                      |     3 |                 10 |
 | `cam` (LuxCamView)                                   |     2 |                 15 |
-| `gauge` (GaugeView)                                  |    10 |                 12 |
+| `gauge` (GaugeView)                                  |    10 |                 13 |
 | `scope` (ChartView)                                  |     5 |                  7 |
 | `comms` (CommsView, with the leader line)            |    13 |                 29 |
 | `deck` (DeckView with HeadroomView)                  |     8 |                 21 |

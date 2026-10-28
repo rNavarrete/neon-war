@@ -55,6 +55,14 @@ import {
 
 /** The painted base (docs/ART-REQUESTS.md), drawn at half its 816 x 620 file; a vector grid without it. */
 export const CITY_GRID_KEY = KIT.cityGrid;
+/**
+ * The lit painting (batch 5): the city with every window of Lux's block lit amber, at the same half
+ * size. It fades in over the base when the block holds at midnight; without it, only the code
+ * windows turn warm.
+ */
+export const CITY_GRID_LIT_KEY = KIT.cityGridLit;
+/** How long the lit painting takes to fade in at a held midnight, in HUD seconds (instant when steady). */
+export const LIT_FADE = 1.2;
 
 /** What the hook mirrors as hud.map. */
 export interface MapTestState {
@@ -69,6 +77,11 @@ export interface MapTestState {
   base: 'hud/city-grid' | 'vector';
   /** The CUT OFF words sit on the red tag chip (hud/live/tag-chip), shown with them. */
   chip: boolean;
+  /**
+   * The lit painting (hud/city-grid-lit) baked as a second plate over the base, or null when it is
+   * not loaded; `alpha` is how far it has faded in (0 hidden, 1 at a held midnight).
+   */
+  lit: { key: 'hud/city-grid-lit'; alpha: number } | null;
   /** The baked plate: which picked kit pieces it draws, at what largest scale (m4 panel kit). */
   panel?: PanelTestState | null;
 }
@@ -115,6 +128,9 @@ export class MapView implements LiveView {
   private cutOff: Phaser.GameObjects.Text | null = null;
   private chip: Phaser.GameObjects.Image | null = null;
   private plate: BakedPanel | null = null;
+  /** The lit painting's plate, faded in over the base at a held midnight; null without the file. */
+  private litPlate: BakedPanel | null = null;
+  private litShown = -1;
   private base: MapTestState['base'] = 'vector';
   private off: (() => void)[] = [];
 
@@ -135,7 +151,7 @@ export class MapView implements LiveView {
   private outlineAlpha = -1;
 
   preload(scene: Phaser.Scene): void {
-    preloadArt(scene as never, [CITY_GRID_KEY, KIT.frame, KIT.corner, KIT.tab, KIT.chip]);
+    preloadArt(scene as never, [CITY_GRID_KEY, KIT.frame, KIT.corner, KIT.tab, KIT.chip, CITY_GRID_LIT_KEY]);
   }
 
   create(scene: Phaser.Scene, host: LiveHost): void {
@@ -163,6 +179,30 @@ export class MapView implements LiveView {
       { fill: { color: BASE_FILL, alpha: 0.96 }, draw: (g) => this.drawBase(g, L, !painted) },
     );
     this.objects.push(this.plate.object);
+
+    // The lit painting, baked once as its own plate with the same frame kit, hidden until a held
+    // midnight fades it in over the base (one Image either way, so the fade costs nothing to draw).
+    const litArt = resolveArt(CITY_GRID_LIT_KEY);
+    const lit = painted && !litArt.fallback && (scene.textures?.exists?.(litArt.texture) ?? false);
+    this.litPlate = lit
+      ? bakePanel(
+          scene,
+          'map-lit',
+          L.plate,
+          {
+            base: CITY_GRID_LIT_KEY,
+            frame: true,
+            corners: MAP_CORNERS,
+            tab: { x: L.title.x - 8, y: L.title.y - 4, h: TAB_H },
+          },
+          { fill: { color: BASE_FILL, alpha: 0.96 }, draw: (g) => this.drawBase(g, L, false, true) },
+        )
+      : null;
+    if (this.litPlate) {
+      this.litPlate.object.setAlpha(0).setVisible(false);
+      this.objects.push(this.litPlate.object);
+    }
+    this.litShown = 0;
 
     this.outlines = add.graphics();
     this.lights = add.graphics();
@@ -253,15 +293,34 @@ export class MapView implements LiveView {
     if (dt > 0) this.pool.step(dt, this.rates, this.travelOf);
     this.drawDots(L);
 
+    // ---- the lit painting fades in at a held midnight ----
+    this.updateLit(clock.now, steady);
+
     // ---- six sparkles, once, at midnight (not with reduced flicker) ----
     this.updateSparkles(clock.now, steady);
+  }
+
+  /** Fade the lit painting in over the base while the block holds at midnight; hide it otherwise. */
+  private updateLit(now: number, steady: boolean): void {
+    const p = this.litPlate;
+    if (!p) return;
+    const s = this.state;
+    const held = s.midnight && s.litFloors > 0;
+    const a = !held
+      ? 0
+      : steady || this.midnightAt === null
+        ? 1
+        : Math.min(1, Math.max(0, (now - this.midnightAt) / LIT_FADE));
+    if (a === this.litShown) return;
+    this.litShown = a;
+    p.object.setAlpha(a).setVisible(a > 0);
   }
 
   private steady(): boolean {
     return (this.host?.flags.lite ?? false) || settings().reduceFlicker;
   }
 
-  private drawBase(g: Phaser.GameObjects.Graphics, L: MapLayout, vector: boolean): void {
+  private drawBase(g: Phaser.GameObjects.Graphics, L: MapLayout, vector: boolean, lit = false): void {
     if (vector) {
       for (const b of L.blocks) {
         g.fillStyle(BLOCK_FILL, 1);
@@ -281,10 +340,13 @@ export class MapView implements LiveView {
         g.fillRect(n.x, n.y, n.w, n.h);
       }
     }
-    // Lux's block: a dark footprint behind its windows (the painted roof shows through), outlined amber.
+    // Lux's block: a dark footprint behind its windows (the painted roof shows through), outlined
+    // amber. Over the lit painting only the outline, so its lit windows show.
     const b = L.lux;
-    g.fillStyle(0x0a0f1c, vector ? 1 : 0.55);
-    g.fillRect(b.x, b.y, b.w, b.h);
+    if (!lit) {
+      g.fillStyle(0x0a0f1c, vector ? 1 : 0.55);
+      g.fillRect(b.x, b.y, b.w, b.h);
+    }
     g.lineStyle(2, COLORS.amber, 0.9);
     g.strokeRect(b.x, b.y, b.w, b.h);
   }
@@ -382,6 +444,7 @@ export class MapView implements LiveView {
       dots: { pool: this.pool.size, active: this.pool.active },
       base: this.base,
       chip: this.chip?.visible ?? false,
+      lit: this.litPlate ? { key: CITY_GRID_LIT_KEY, alpha: Math.max(0, this.litShown) } : null,
       panel: panelSnapshot(this.plate),
     };
   }
@@ -390,9 +453,12 @@ export class MapView implements LiveView {
     for (const off of this.off) off();
     this.off = [];
     const plate = this.plate?.object;
-    for (const o of this.objects) if (o !== plate) o.destroy();
+    const litPlate = this.litPlate?.object;
+    for (const o of this.objects) if (o !== plate && o !== litPlate) o.destroy();
     releasePanel(this.plate);
+    releasePanel(this.litPlate);
     this.plate = null;
+    this.litPlate = null;
     this.chip = null;
     this.objects = [];
     this.lights = null;
