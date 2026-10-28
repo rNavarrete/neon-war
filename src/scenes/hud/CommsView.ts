@@ -451,7 +451,9 @@ export class CommsView implements LiveView {
       () => scene.input?.off('pointerdown', onDown),
       provideCommsHook(scene, () => this.snapshot()),
     );
-    if (testHookEnabled(window.location.search)) this.installTestHandle(host.bus);
+    // Node tests build the view without a window; the handle is a browser-test aid only.
+    if (typeof window !== 'undefined' && testHookEnabled(window.location.search))
+      this.installTestHandle(host.bus);
     this.drawLine(null);
     this.setPresent(false);
     this.showHouse(0);
