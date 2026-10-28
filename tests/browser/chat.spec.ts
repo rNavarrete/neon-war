@@ -2,7 +2,7 @@ import { type Page, expect, test } from '@playwright/test';
 import type { HudTestState } from '../../src/scenes/hud/hook';
 import { type ChatTraceTestState, chatArtOf } from '../../src/scenes/hud/ChatFeedView';
 import type { AudienceTestState, ChatTestState } from '../../src/scenes/live/views/chat';
-import { hud, openBoard, reach, shot } from './live/reach';
+import { hud, openBoard, reach, shot, snap } from './live/reach';
 
 // LIVE CHAT (chat-3, chat-4): the merged panel in ZONES.chat, driven by the host loop. It reads
 // window.__neonTest.state.hud.chat and hud.audience (test mirrors) and clicks where they say.
@@ -258,8 +258,10 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
 });
 
 test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers', async ({ page }) => {
-  test.setTimeout(40_000);
-  const { errors } = await openBoard(page);
+  test.setTimeout(60_000);
+  // At speed 20 one slow frame (about 2 s of sim) can step from before 320 straight to the crew's
+  // arrival at about 322.5, skipping the leave's window: speed 4 gives the window several frames.
+  const { errors } = await openBoard(page, { speed: 4 });
   await reach(page, 'c1');
   // Enter the district surge 18 s in with trust still full, so Lux is alone (no rescue yet) when the
   // surge-window lines play from 320. The leave needs the crew to be late, which the autopilot's
@@ -272,7 +274,23 @@ test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers',
     if (!l) return null;
     return log.rows.find((r) => r.at > l.at && (r.thanks || r.id === 'fill.block.rejoin.01')) ?? null;
   };
-  await log.until(page, "'Mrs Okafor left the chat' (C4.chat.03)", () => leave() !== null);
+  // The jump lands a C1 board in the surge, so a box can overheat before 320 and a rewind screen
+  // hold the run (seen on CI). Click any such screen on, as play would; never the crew's C5.
+  const deadline = Date.now() + 30_000;
+  while (leave() === null) {
+    await log.read(page);
+    if (leave() !== null) break;
+    const s = await snap(page);
+    const story = s.story;
+    if (Date.now() > deadline || story?.scriptId === 'C5')
+      throw new Error(
+        `waited for 'Mrs Okafor left the chat' (C4.chat.03); hud.now=${s.hud?.now ?? 'none'}, ` +
+          `story=${story?.active ? story.scriptId : 'none'}; rows: ${log.ids()}`,
+      );
+    const at = story?.active ? (story.skip.visible ? story.skip : story.click) : null;
+    if (at) await page.mouse.click(at.x, at.y);
+    await page.waitForTimeout(at ? 100 : 50);
+  }
   expect(leave()!.text).toBe('Mrs Okafor left the chat');
   // The crew break in (C5): reach clicks the scene through, then the chat recovers.
   await log.during(page, reach(page, 'rescue'));
