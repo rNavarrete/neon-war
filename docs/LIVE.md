@@ -127,3 +127,108 @@ no view reads them.
 Each lane adds the lines its views need under its own anchored section of `docs/SCRIPT.md` ("Lane
 lines") and the matching `// anchor: <lane>` comment inside `LINES` in `src/strings.ts`, as one
 two-file edit, and nowhere else. `tests/strings.test.ts` checks every line either way.
+
+## Browser test budget
+
+### Reach helpers
+
+`tests/browser/live/reach.ts` is how every Live spec gets to a moment of the night. Use it instead
+of copying the boilerplate from `hud.spec.ts` and `story.spec.ts`.
+
+- `openBoard(page, {speed, autopilot, params, timeout})` opens `/?test&scene=board`. It defaults
+  to speed 20 with autopilot, waits for `hud.ready` and returns `{errors}`, the page errors, which
+  keep filling.
+- `dismissJobCard(page)` clicks the job card away and waits for `hud.jobCard.open` to be false.
+- `setDial(page, value)` uses the dial's plus and minus buttons, then presses SET.
+- `reach(page, moment, {timeout})` runs the night on to `'c1'`, `'c3'`, `'surge'`, `'rescue'` or
+  `'midnight'`, clicking away the job card and clicking through every story scene on the way
+  (Skip when it shows). It returns the hook as read there (`snap`, `hud`), the wall-clock
+  `seconds` it took, the `scenes` it clicked through and what it `seen` (every
+  `hud.surge.startsAt`, the C5 scene). On a page not yet opened it opens the board at speed 20
+  with autopilot first. If it times out, it throws a message naming the hook fields it waited on
+  and the last values it read.
+- `shot(page, name)` saves `test-results/screens/<name>.png`.
+
+| Moment     | Waits on                                                               | Default timeout |
+| ---------- | ---------------------------------------------------------------------- | --------------: |
+| `c1`       | `hud.jobCard.open` false, `hud.paused` false, `hud.now >= 15`          |            10 s |
+| `c3`       | `hud.now >= 180`                                                       |            20 s |
+| `surge`    | `hud.surge.startsAt === 300` seen, then `hud.now >= 300`               |            25 s |
+| `rescue`   | `story.scriptId === 'C5'` seen, then `story.finished` has C5, board up |            40 s |
+| `midnight` | `hud.clock` matches `/^00:00/`                                         |            50 s |
+
+Timeouts count from the `reach` call on a freshly opened board. `tests/browser/live-skeleton.spec.ts`
+proves the two bounds that matter most, `surge` within 25 s and `midnight` within 50 s, and records
+each run's seconds as `boot` and `reach` annotations.
+
+### Measured floors per page load
+
+These were measured on the cloud worker (headless Chromium, software WebGL, one worker) on
+28 Oct 2026, from `page.goto`, with one page reaching each moment in turn. The sim's top speed is
+20 (`src/testHook.ts`), and a frame advances at most 0.25 s times the speed (`Run.tick`). A
+spec cannot go faster than this, whatever it asserts.
+
+| Moment                        | Speed 20 with autopilot (s) | Speed 5 with autopilot (s) |
+| ----------------------------- | --------------------------: | -------------------------: |
+| boot (`hud.ready`)            |                      4 to 6 |                     4 to 6 |
+| `c1`                          |                           7 |                          6 |
+| `c3`                          |                          15 |                         40 |
+| `surge`                       |                    19 to 21 |                         64 |
+| `rescue` (C5 clicked through) |                          34 |                         79 |
+| `midnight`                    |                    44 to 47 |                        119 |
+
+Clicking through the C5 rescue alone costs about 13 s of wall clock: it is all clicks, and speed
+does not shorten it. A spec that needs anything after C5 pays that once, so it should make every
+check after C5 on that one page load.
+
+On a board that is already open, the `reach` call alone takes about 15 s to `surge` and 39 to 41 s
+to `midnight`. Those are the bounds the spec checks against 25 s and 50 s. The two reach tests cost
+about 21 s (surge) and 46 s (midnight), boot included. With the skeleton test, the whole
+`live-skeleton.spec.ts` file runs in about 72 s.
+
+### The e2e seconds budget
+
+`scripts/check.mjs` caps the Playwright step at **900 s**. Playwright runs one worker
+(`playwright.config.ts`), so the cap is serial wall clock for the whole suite. The suite before the
+Live work took 616 s for 34 tests on the last full run (plan figure, not re-measured here). That
+leaves 284 s.
+
+Per lane, for its spec file at M3 (one spec file per lane):
+
+| Lane / spec                                                          | Budget (s) |
+| -------------------------------------------------------------------- | ---------: |
+| board: `board-live.spec.ts`                                          |        150 |
+| gauges: `live-gauges.spec.ts`                                        |        150 |
+| comms: `comms.spec.ts`                                               |         90 |
+| chat: `chat.spec.ts`                                                 |         90 |
+| luxcam: `luxcam.spec.ts`                                             |         60 |
+| tech: `live-skeleton` 75, `live-perf` 30, `voice` 20, `live-tour` 30 |        155 |
+| art3d: `art.spec.ts`                                                 |         30 |
+| learning: `teaching.spec.ts`                                         |        150 |
+| **Live total**                                                       |    **875** |
+| Existing suite                                                       |        616 |
+| **All**                                                              |   **1491** |
+
+- **Under the 900 s cap in force today**, only the M1 specs fit: 616 + 75 (`live-skeleton`) + 30
+  (`art.spec`) = 721 s, which leaves a **179 s reserve**. No M3 spec can merge until the cap is
+  raised.
+- **Under decision D9's 1800 s** (tech-9), the full table is 1491 s, which leaves a **309 s
+  reserve**. Measured, `live-skeleton` costs 75 s, not the 10 s the plan drafted. That makes the
+  tech row 155 s rather than 90 s, and the reserve 309 s rather than 374 s. tech-8 folds the
+  moment tests, these two reach tests among them, into one `live-tour` at M5, and brings the suite
+  under 1500 s.
+- **Raising the cap is a control change.** `scripts/check.mjs` and `.github/workflows/ci.yml` are
+  protected paths. Only the owner (Rolando) can change the cap and the CI job timeout, through
+  the D9 control-change PR (tech-9). No lane edits them, and no lane gets under the cap by
+  weakening an assertion.
+
+Rules for every Live spec:
+
+- Call `test.setTimeout` with the spec's own measured cost plus a margin.
+- Run at speed 20 with autopilot through `reach`. Use speed 5 only for the C4 laundry-cut click.
+- Write one test per lane that goes past C4, and reuse one page load for everything after a
+  moment.
+- Take at most 3 screenshots per lane, through `shot`.
+- Assert on histories (`bark.history`, `story.finished`, `seen`) rather than on what is current,
+  because at speed 20 the current value moves between reads.
+- Before a lane adds seconds, record what its spec costs and update this table.
