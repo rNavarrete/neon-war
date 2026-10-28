@@ -45,6 +45,23 @@ export function portraitFor(speaker: string, where: 'board' | 'room' = 'board'):
   return face ? portrait(face[where]) : null;
 }
 
+/**
+ * The portrait for a file under public/art/chars/: 'art/chars/lux/poses/goggles-up.webp' ->
+ * key 'portrait:lux/poses/goggles-up'. The same key the speaker portraits load under, so a file both
+ * use is loaded once.
+ */
+export function portraitOfFile(file: string): Portrait {
+  return portrait(file.replace(/^art\/chars\//, '').replace(/\.webp$/, ''));
+}
+
+/** Lux's six goggles-down board faces, the ones her cam and the bark faces draw from. */
+const LUX_BOARD_FACES = ['deadpan', 'determined', 'shocked', 'smirk', 'tense', 'triumphant'] as const;
+
+/** Every one of Lux's board faces (public/art/chars/lux/faces-board), for preloading. */
+export function allBoardFaces(): Portrait[] {
+  return LUX_BOARD_FACES.map((f) => portrait(`lux/faces-board/${f}`));
+}
+
 /** Every portrait file, for preloading. */
 export function allPortraits(): Portrait[] {
   const paths = [

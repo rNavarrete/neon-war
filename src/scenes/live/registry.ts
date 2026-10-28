@@ -8,6 +8,7 @@ import { ChartView } from '../hud/ChartView';
 import { CommsView } from '../hud/CommsView';
 import { DeckView } from '../hud/DeckView';
 import { GaugeView } from '../hud/GaugeView';
+import { LuxCamView } from '../hud/LuxCamView';
 import { MapView } from '../hud/MapView';
 import { ClockView, TitleView } from '../hud/TitleView';
 import type { ZoneId } from './layout';
@@ -26,7 +27,7 @@ export const REGISTRY: readonly RegistryEntry[] = [
   { zone: 'alert', lane: 'gauges', make: () => new AlertView() },
   { zone: 'clock', lane: 'gauges', make: () => new ClockView() },
   { zone: 'map', lane: 'gauges', make: () => new MapView() },
-  { zone: 'cam', lane: 'luxcam', make: () => new PlaceholderView('cam') },
+  { zone: 'cam', lane: 'luxcam', make: () => new LuxCamView() },
   { zone: 'gauge', lane: 'gauges', make: () => new GaugeView() },
   { zone: 'scope', lane: 'gauges', make: () => new ChartView() },
   { zone: 'comms', lane: 'comms', make: () => new CommsView() },
