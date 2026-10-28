@@ -229,8 +229,9 @@ texts are over 110 today; see below). It also checks three more things:
 - `pools.packets` stays at or below 160.
 - The pool stops growing: two reads 5 s apart after the rescue are equal.
 
-Per zone, the text budgets sum to 110. A registered view's budget is the one it declares in code.
-The rows for `cam` and `chat` are the share their lanes have to declare when their views land:
+Per zone, the text budgets sum to 110. A registered view's budget is the one it declares in code,
+and each row below is that declaration (`tests/live-perf-table.test.ts` checks both columns
+against the built views):
 
 | Zone / owner                                         | Texts | Objects (declared) |
 | ---------------------------------------------------- | ----: | -----------------: |
@@ -238,10 +239,10 @@ The rows for `cam` and `chat` are the share their lanes have to declare when the
 | `alert` (AlertView)                                  |     4 |                 10 |
 | `clock` (ClockView)                                  |     2 |                  4 |
 | `map` (MapView)                                      |     3 |                 10 |
-| `cam` (luxcam, placeholder today)                    |     2 |                  2 |
+| `cam` (LuxCamView)                                   |     2 |                 15 |
 | `gauge` (GaugeView)                                  |    10 |                 12 |
 | `scope` (ChartView)                                  |     5 |                  7 |
-| `comms` (CommsView)                                  |    13 |                 24 |
+| `comms` (CommsView, with the leader line)            |    13 |                 29 |
 | `deck` (DeckView with HeadroomView)                  |     8 |                 21 |
 | `chat` (ChatFeedView)                                |    17 |                 31 |
 | `feed` and `inventory` (BoardScene)                  |    28 |                  - |
@@ -262,7 +263,21 @@ The chat feed's five rows of name and words need 17 texts, so the host's cards g
 The legacy pieces (the old chat column, the HUD's own deck digits, the old alert line) are gone,
 so nothing else on the host is a text.
 
-Measured on 28 Oct 2026 (speed 20 with autopilot, headless), after the host's cut to 13:
+Measured on 28 Oct 2026 (speed 20 with autopilot, headless), after the M3 wave 2 merge (the cam,
+the comms band's leader line and the leader's locate points):
+
+- **Objects.** 616 at the surge (440 board + 176 HUD) and 632 at midnight (456 + 176), inside 750.
+- **Every view.** Each registered view is at or under its declared budget (the rows above).
+- **Host.** 33 objects and 13 texts.
+- **Drawn texts.** 78 at the surge and 71 at midnight.
+- **All texts, hidden ones included.** 102 at the surge (20 board + 82 HUD) and 105 at midnight
+  (23 + 82), so the whole count is now inside 110 too: the board's 20 to 23 are inside its 28.
+  `live-perf.spec.ts` still asserts the drawn texts against 110; the switch to all texts is now
+  free to make.
+- **Packets.** The pool holds at 116 from the surge to midnight.
+- **Frame rate.** 8.7 fps at the surge and 9.0 at midnight (about 112 ms a frame).
+
+Measured earlier on 28 Oct 2026, after the host's cut to 13:
 
 - **Objects.** 510 at the surge (335 board + 175 HUD) and 529 at midnight, inside 750.
 - **Host.** 33 objects and 13 texts (was 19 card texts and 19 legacy ones).
