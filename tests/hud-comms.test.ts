@@ -546,7 +546,7 @@ describe('comms-9: plate, round avatars and HOUSE chips through the art manifest
   it('asks for the plate at the band size and never upscales it', () => {
     expect(plateReq.lane).toBe('comms');
     expect(plateReq.zone).toBe('comms');
-    // Asked for at the band size; the picked file came out 1450x144, so it is shown at that size.
+    // Asked for at the band size; the picked file is 1455x149, so it is shown at that size.
     expect(plateReq.target).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
     expect(plateReq.display).toEqual(plateReq.cut);
     expect(plateReq.display.w).toBeLessThanOrEqual(ZONES.comms.w);

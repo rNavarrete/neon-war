@@ -767,7 +767,7 @@ const COMMS_ART = [
   'hud/icons/tv',
 ] as const;
 
-// With the picks on disk the band draws them: the plate at its own 1450x144 centred in the band
+// With the picks on disk the band draws them: the plate at its own 1455x149 centred in the band
 // (never stretched to 1455x150), the four badges baked round at 84 px, and the HOUSE door chip at
 // 64x60 (its 128x120 file fitted down at its own aspect). TRIAGE's iris sits over her painted lens.
 test('comms-9 (M4): the band draws the picked plate, four round badges and the HOUSE chip, none upscaled', async ({
@@ -785,8 +785,8 @@ test('comms-9 (M4): the band draws the picked plate, four round badges and the H
   // The plate: the pick, at its file's size, inside the band.
   expect(c.art.plate.use).toBe('picked');
   expect(c.art.plate.texture).toBe('art:hud/comms-plate');
-  expect(c.art.plate.source).toEqual({ w: 1450, h: 144 });
-  expect(c.art.plate.size).toEqual({ w: 1450, h: 144 });
+  expect(c.art.plate.source).toEqual({ w: 1455, h: 149 });
+  expect(c.art.plate.size).toEqual({ w: 1455, h: 149 });
   expect(insideRect(c.art.plate.drawn, c.rect)).toBe(true);
 
   // The four badges: picked, baked once into 84 px round avatars.

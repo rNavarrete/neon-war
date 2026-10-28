@@ -99,11 +99,11 @@ const size = (w: number, h: number): Size => ({ w, h });
  * The real size of each picked file of the Live screen's requests (Rolando's picks of 28 Oct 2026,
  * landed by the owner's art pipeline). A request is picked once its key is here.
  *
- * Some came out smaller than the cut asked for. Most still cover their display size, so they are
- * drawn downscaled as asked: board/server-overclocked-dark (405x626), hud/live/card-frame-idle
- * (192x171), -ready (200x171) and -locked (188x219), whose nine-slice corners at k 0.5 still fit the
- * 120x140 card. hud/live/corner-marks (59x59) is ONE bracket, not four: a view draws it four times,
- * rotated or flipped, at 48x48. The cam busts (924x548) have transparent sides.
+ * Round 2 (28 Oct 2026) replaced six: the comms plate (1455x149), the antenna system icon (41x64),
+ * the shorter channel plate (300x233), the overclocked dark server (466x629), the card frames (all
+ * 240x280, nine-sliced at k 0.5 into the 120x140 card) and hud/live/corner-marks, now a 96x96 SET
+ * of all four brackets, one per 48x48 quadrant: a panel draws each corner from its own quadrant,
+ * unturned (src/scenes/hud/kit.ts cornerStamps). The cam busts (924x548) have transparent sides.
  *
  * Three came out smaller than the size first asked for, so each request's display is the file's
  * own size and its view draws it 1:1, never upscaled (tests/art-manifest.test.ts checks every pick):
@@ -1154,14 +1154,14 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     fallback: bake(0x2a1d08, 1, 'amber hazard stripes drawn in code'),
   },
 
-  // Batch 5: deferred until batches 1 to 4 are in; each has a shipping fallback.
+  // Batch 5: deferred until batches 1 to 4 were in; picked 28 Oct 2026 (round 2). Each keeps its fallback.
   {
     key: 'hud/gauge-face',
     what: 'the demand gauge face',
     batch: 5,
     lane: 'gauges',
     zone: 'gauge',
-    display: size(240, 140),
+    display: size(240, 135),
     target: size(480, 280),
     cut: picked('hud/gauge-face'),
     states: 'one',
@@ -1174,7 +1174,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 5,
     lane: 'gauges',
     zone: 'gauge',
-    display: size(12, 88),
+    display: size(12, 81),
     target: size(24, 176),
     cut: picked('hud/gauge-needle'),
     states: 'one',
@@ -1261,7 +1261,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
   },
 ];
 
-/** The requests the owner runs now (batches 1 to 4) and the deferred ones (batch 5). */
+/** The batches the owner has run: all five, picked by 28 Oct 2026 (batch 5 was deferred until 1 to 4 were in). */
 export const BATCHES_NOW: readonly ArtBatch[] = [1, 2, 3, 4, 5];
 
 /** A picked file's entry by its path under public/. */

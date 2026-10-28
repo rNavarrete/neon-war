@@ -60,11 +60,11 @@ test('the art hook lists the stand-ins and the picked keys as arrays', async ({ 
   expect(Array.isArray(art!.fallback)).toBe(true);
   expect(Array.isArray(art!.loaded)).toBe(true);
   expect(Array.isArray(art!.baked)).toBe(true);
-  // Batches 1 to 4 are picked (28 Oct 2026, art3d-5): only the unpicked keys (batch 5) stand in,
-  // and every loaded key is a picked one whose file the views asked for.
+  // Batches 1 to 5 are all picked (28 Oct 2026, round 2): nothing stands in, and every loaded key is
+  // a picked one whose file the views asked for.
   const unpicked = ART_REQUESTS.filter((r) => !isPicked(r)).map((r) => r.key);
   const picked = ART_REQUESTS.filter(isPicked).map((r) => r.key);
-  expect(unpicked.length).toBeGreaterThan(0);
+  expect(unpicked).toEqual([]);
   expect(art!.fallback).toEqual(unpicked);
   for (const k of picked) expect(art!.fallback, k).not.toContain(k);
   for (const k of art!.loaded) expect(picked, k).toContain(k);

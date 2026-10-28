@@ -199,7 +199,7 @@ const PROMISED = [
  */
 const DRAWN_ABOVE_CUT: Readonly<Record<string, string>> = {
   // Empty since M4 wave 2: the board draws the table plate at its 1228x416 file size
-  // (tablePlatePlace) and CommsView the comms plate at its 1450x144 (fitCentred), and their
+  // (tablePlatePlace) and CommsView the comms plate at its 1455x149 (fitCentred), and their
   // display sizes say so.
 };
 
@@ -218,7 +218,7 @@ describe('the art manifest: requests', () => {
     }
     const batches = ART_REQUESTS.map((r) => r.batch);
     expect(batches).toEqual([...batches].sort((a, b) => a - b));
-    expect(BATCHES_NOW).toEqual([1, 2, 3, 4]);
+    expect(BATCHES_NOW).toEqual([1, 2, 3, 4, 5]);
   });
 
   it('gives every request a code fallback: a picked file to tint, or a plate to bake', () => {
@@ -260,10 +260,10 @@ describe('the art manifest: requests', () => {
     }
   });
 
-  it('marks the 47 pieces of batches 1 to 4 picked and leaves batch 5 on its fallbacks', () => {
+  it('marks all 55 pieces of batches 1 to 5 picked', () => {
     const picked = ART_REQUESTS.filter(isPicked);
-    expect(picked).toHaveLength(47);
-    for (const r of ART_REQUESTS) expect(isPicked(r), r.key).toBe(r.batch !== 5);
+    expect(picked).toHaveLength(55);
+    for (const r of ART_REQUESTS) expect(isPicked(r), r.key).toBe(true);
   });
 
   it('draws no picked request above its file size; the drawn-short ones are listed by name', () => {

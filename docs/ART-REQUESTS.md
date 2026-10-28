@@ -1,6 +1,6 @@
 # Art requests
 
-The owner's run list for the Live screen's new art, in batch order. Batches 1 to 4 are requested now; batch 5 waits until they are in.
+The owner's run list for the Live screen's new art, in batch order. Batches 1 to 4 were requested first and batch 5 after them; all five are picked (28 Oct 2026).
 Every key here is also a request in `src/game/artManifest.ts` (`ART_REQUESTS`), and `tests/art-manifest.test.ts` checks that this file lists exactly those keys, in batch order, with the same sizes, states, prompts and fallbacks.
 Workers never add, edit or resize art. Until a piece is picked, `resolveArt(key)` in `src/scenes/plates.ts` draws its fallback, so no ticket waits on a pick.
 
@@ -51,7 +51,7 @@ Sheet A is the three server frames (`board/server-dark`, `board/server-booting-a
 
 | Key | What | Display | Cut | States | Lane | Zone | Prompt | Fallback |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `hud/comms-plate` | the COMMS band plate: dark glass, amber hairline, divider, tag well | 1450x144 (the picked file, drawn 1:1) | 1455x150 | one; the WARNING border is code | comms | comms | a 10:1 near-black glass strip, 1 px amber outline, a divider 520 px in, a chip well right | `hud/textbox.webp` (untinted, alpha 0.9): the text box plate, nine-sliced |
+| `hud/comms-plate` | the COMMS band plate: dark glass, amber hairline, divider, tag well | 1455x149 (the picked file, drawn 1:1) | 1455x150 | one; the WARNING border is code | comms | comms | a 10:1 near-black glass strip, 1 px amber outline, a divider 520 px in, a chip well right | `hud/textbox.webp` (untinted, alpha 0.9): the text box plate, nine-sliced |
 | `chars/comms/triage` | TRIAGE's round badge: a white drone lens | 84x84 | 256x256 | one; lit or dark by tint | comms | comms | a round badge like chars/avatars/kenji.webp: a white drone lens | `chars/triage/eager.webp` (untinted): the eager TRIAGE face, round-cropped |
 | `chars/comms/rei` | Rei's round badge, neutral | 84x84 | 256x256 | one; dark before the rescue by tint | comms | comms | a round badge like chars/avatars/kenji.webp: Rei, neutral | `chars/rei/faces/smirk.webp` (untinted): her default board face, round-cropped |
 | `chars/comms/mika` | Mika's round badge, neutral | 84x84 | 256x256 | one; dark before the rescue by tint | comms | comms | a round badge like chars/avatars/kenji.webp: Mika, neutral | `chars/mika/faces/calm.webp` (untinted): her default board face, round-cropped |
@@ -102,15 +102,15 @@ Sheet A is the three server frames (`board/server-dark`, `board/server-booting-a
 
 ## Batch 5 (deferred)
 
-Run these only after batches 1 to 4 are in. Each ships with its fallback until then.
+Run after batches 1 to 4 were in; picked 28 Oct 2026. Each keeps its fallback for a file that fails to load.
 
 | Key | What | Display | Cut | States | Lane | Zone | Prompt | Fallback |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `hud/gauge-face` | the demand gauge face | 240x140 | 480x280 | one | gauges | gauge | a dark half-dial with engraved amber ticks, empty | baked: the vector arc gauges-5 draws (0x0b1424) |
-| `hud/gauge-needle` | the demand gauge needle | 12x88 | 24x176 | one | gauges | gauge | a thin amber needle with a dark hub | baked: a code-drawn line (0xffb347) |
+| `hud/gauge-face` | the demand gauge face | 240x135 | 480x280 | one | gauges | gauge | a dark half-dial with engraved amber ticks, empty | baked: the vector arc gauges-5 draws (0x0b1424) |
+| `hud/gauge-needle` | the demand gauge needle | 12x81 | 24x176 | one | gauges | gauge | a thin amber needle with a dark hub | baked: a code-drawn line (0xffb347) |
 | `chars/lux/cam/cheer` | Lux cheering on the cam | 388x230 | 924x548 | cheer | luxcam | cam | same framing as lean-in, both fists up, grinning | `chars/lux/faces-board/triumphant.webp` (untinted): her triumphant board face |
-| `hud/cam-frame` | the cam frame | 408x270 | 408x270 | one; amber or red rim by tint | luxcam | cam | a webcam frame with bracket corners and a thin amber rim, empty | baked: a code-drawn rim (0x0b1424) |
-| `board/table-plate-midnight` | the table plate after midnight | 1441x390 | 1536x416 | one | board | feed | board/table-plate at midnight: the silkscreen dimmer, the amber rim cold | baked: the slab tinted for midnight (0x070d18) |
+| `hud/cam-frame` | the cam frame | 408x243 | 408x270 | one; amber or red rim by tint | luxcam | cam | a webcam frame with bracket corners and a thin amber rim, empty | baked: a code-drawn rim (0x0b1424) |
+| `board/table-plate-midnight` | the table plate after midnight | 1061x416 | 1536x416 | one | board | feed | board/table-plate at midnight: the silkscreen dimmer, the amber rim cold | baked: the slab tinted for midnight (0x070d18) |
 | `hud/city-grid-lit` | the map's lit windows | 408x310 | 816x620 | one; floors light by code | gauges | map | hud/city-grid with every window of Lux's block lit amber | baked: lit floors drawn as code rects (0x0b1424) |
 | `board/packet-cube` | a packet cube | 24x18 | 64x48 | normal and red by tint | board | feed | a small glowing data cube in cyan, three-quarter view | `hud/icons/packet.webp` (tint 0x5ce1ff): the packet icon, tinted |
 | `hud/live/night-shift-sticker` | the NIGHT SHIFT sticker | 160x80 | 320x160 | one | art3d | screen | a scuffed vinyl sticker shape, amber and navy, blank face for code text | baked: an amber-rimmed plate (0x2a1d08) |

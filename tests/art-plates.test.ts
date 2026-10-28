@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { ART_REQUESTS, artRequest, isPicked, requestFile } from '../src/game/artManifest';
+import { ART_REQUESTS, type ArtRequest, artRequest, isPicked, requestFile } from '../src/game/artManifest';
 import {
   type HookGame,
   type DrawnScene,
@@ -97,8 +97,14 @@ function stubScene(loaded: string[] = []) {
   };
 }
 
-// Batches 1 to 4 are picked (28 Oct 2026), so the fallback examples are batch 5 keys still unpicked.
-const unpicked = ART_REQUESTS.filter((r) => !isPicked(r));
+// Every request is picked since batch 5 landed (28 Oct 2026), so the fallback examples come from the
+// manifest as it read before that: batch 5 with no cut. Each function takes it as its request.
+const BEFORE_BATCH_5: readonly ArtRequest[] = ART_REQUESTS.map((r) =>
+  r.batch === 5 ? { ...r, cut: null } : r,
+);
+/** The request a key had before batch 5 was picked. */
+const before = (key: string): ArtRequest | undefined => BEFORE_BATCH_5.find((r) => r.key === key);
+const unpicked = BEFORE_BATCH_5.filter((r) => !isPicked(r));
 const bakeKey = unpicked.find((r) => r.fallback.kind === 'bake')!.key;
 const reuseKey = unpicked.find((r) => r.fallback.kind === 'reuse')!.key;
 /** An unpicked key that reuses the packet icon, tinted cyan. */
@@ -118,9 +124,9 @@ describe('resolveArt', () => {
   });
 
   it('gives a key with a reused fallback the picked file, tinted, flagged as a fallback', () => {
-    const r = artRequest(PACKET)!;
+    const r = before(PACKET)!;
     expect(isPicked(r)).toBe(false);
-    expect(resolveArt(PACKET)).toEqual({
+    expect(resolveArt(PACKET, r)).toEqual({
       key: PACKET,
       texture: 'art:hud/icons/packet',
       tint: 0x5ce1ff,
@@ -141,9 +147,9 @@ describe('resolveArt', () => {
   });
 
   it('gives a key with a baked fallback its stand-in texture at the fallback alpha', () => {
-    const r = artRequest(bakeKey)!;
+    const r = before(bakeKey)!;
     expect(isPicked(r)).toBe(false);
-    expect(resolveArt(bakeKey)).toEqual({
+    expect(resolveArt(bakeKey, r)).toEqual({
       key: bakeKey,
       texture: standInTexture(bakeKey),
       tint: 0xffffff,
@@ -168,12 +174,17 @@ describe('resolveArt', () => {
       expect(a.key).toBe(r.key);
       expect(a.fallback, r.key).toBe(!isPicked(r));
     }
+    for (const r of BEFORE_BATCH_5) {
+      const a = resolveArt(r.key, r);
+      expect(a.key).toBe(r.key);
+      expect(a.fallback, r.key).toBe(!isPicked(r));
+    }
   });
 });
 
 describe('artFiles and preloadArt', () => {
   it('queues each reused file once, and nothing for baked keys', () => {
-    const files = artFiles([PACKET, PACKET, bakeKey, 'hud/not-a-key']);
+    const files = artFiles([PACKET, PACKET, bakeKey, 'hud/not-a-key'], before);
     expect(files).toEqual([{ texture: 'art:hud/icons/packet', file: 'art/hud/icons/packet.webp' }]);
   });
 
@@ -188,7 +199,7 @@ describe('artFiles and preloadArt', () => {
 
   it('skips files the scene already has', () => {
     const s = stubScene(['art:hud/icons/packet', PICKED_TEXTURE]);
-    preloadArt(s.scene, [PACKET, 'chars/lux/cam/cheer', PICKED, 'chars/comms/rei']);
+    preloadArt(s.scene, [PACKET, 'chars/lux/cam/cheer', PICKED, 'chars/comms/rei'], before);
     expect(s.queued).toEqual([
       ['art:chars/lux/faces-board/triumphant', 'art/chars/lux/faces-board/triumphant.webp'],
       ['art:chars/comms/rei', 'art/chars/comms/rei.webp'],
@@ -199,8 +210,8 @@ describe('artFiles and preloadArt', () => {
 describe('ensureArt', () => {
   it('uses the reused file when it is loaded, and bakes nothing', () => {
     const s = stubScene(['art:hud/icons/packet']);
-    expect(ensureArt(s.scene, PACKET)).toEqual(resolveArt(PACKET));
-    expect(ensureArt(s.scene, PACKET).fallback).toBe(true);
+    expect(ensureArt(s.scene, PACKET, before(PACKET))).toEqual(resolveArt(PACKET, before(PACKET)));
+    expect(ensureArt(s.scene, PACKET, before(PACKET)).fallback).toBe(true);
     expect(s.dynamic).toEqual([]);
     expect(artTestState(s.scene.textures).baked).toEqual([]);
   });
@@ -228,9 +239,9 @@ describe('ensureArt', () => {
 
   it('bakes a plate once in the display size, labelled with the key, and frees what it drew with', () => {
     const s = stubScene();
-    const r = artRequest(bakeKey)!;
-    const a = ensureArt(s.scene, bakeKey);
-    const b = ensureArt(s.scene, bakeKey);
+    const r = before(bakeKey)!;
+    const a = ensureArt(s.scene, bakeKey, r);
+    const b = ensureArt(s.scene, bakeKey, r);
     expect(a).toEqual(b);
     expect(a.texture).toBe(standInTexture(bakeKey));
     expect(a.fallback).toBe(true);
@@ -251,7 +262,7 @@ describe('ensureArt', () => {
 
   it('bakes a stand-in, untinted, when a reused file did not load', () => {
     const s = stubScene();
-    const a = ensureArt(s.scene, reuseKey);
+    const a = ensureArt(s.scene, reuseKey, before(reuseKey));
     expect(a).toEqual({
       key: reuseKey,
       texture: standInTexture(reuseKey),
@@ -271,19 +282,25 @@ describe('ensureArt', () => {
 
 describe('the art hook section', () => {
   it('lists every unpicked key as a fallback and no loaded key while no picked file is loaded', () => {
-    const state = artTestState(stubScene().scene.textures);
-    expect(state.fallback).toEqual(ART_REQUESTS.filter((r) => !isPicked(r)).map((r) => r.key));
+    const state = artTestState(stubScene().scene.textures, [], BEFORE_BATCH_5);
+    expect(state.fallback).toEqual(BEFORE_BATCH_5.filter((r) => !isPicked(r)).map((r) => r.key));
     expect(state.fallback).toEqual(unpicked.map((r) => r.key));
+    expect(artTestState(stubScene().scene.textures).loaded).toEqual([]);
     expect(state.loaded).toEqual([]);
     expect(artTestState(null).loaded).toEqual([]);
     expect(artTestState(null).missing).toEqual([]);
   });
 
   it('lists only the unpicked keys as fallbacks: batch 5, none of the 47 picks', () => {
-    const fallback = artTestState(null).fallback;
-    expect(fallback).toEqual(ART_REQUESTS.filter((r) => r.batch === 5).map((r) => r.key));
-    for (const r of ART_REQUESTS) expect(fallback.includes(r.key), r.key).toBe(!isPicked(r));
-    expect(ART_REQUESTS.length - fallback.length).toBe(47);
+    const fallback = artTestState(null, [], BEFORE_BATCH_5).fallback;
+    expect(fallback).toEqual(BEFORE_BATCH_5.filter((r) => r.batch === 5).map((r) => r.key));
+    for (const r of BEFORE_BATCH_5) expect(fallback.includes(r.key), r.key).toBe(!isPicked(r));
+    expect(BEFORE_BATCH_5.length - fallback.length).toBe(47);
+  });
+
+  it('lists no fallback now that all 55 requests are picked', () => {
+    expect(artTestState(null).fallback).toEqual([]);
+    expect(ART_REQUESTS.filter(isPicked)).toHaveLength(55);
   });
 
   it('lists a picked key as loaded once its texture is in, and only then', () => {

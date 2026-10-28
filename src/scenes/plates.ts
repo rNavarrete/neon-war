@@ -52,12 +52,15 @@ function bakedFor(key: string, alpha: number): ResolvedArt {
   return { key, texture: standInTexture(key), tint: WHITE, alpha, fallback: true };
 }
 
+/** Finds a key's request: the manifest's artRequest, or a test's own manifest. */
+export type RequestLookup = (key: string) => ArtRequest | undefined;
+
 /**
  * What draws for a key, from the manifest alone: the picked file once its cut size is set, else the
- * fallback's reused file with its tint, else the baked stand-in. Pure.
+ * fallback's reused file with its tint, else the baked stand-in. `r` is the key's request (the
+ * manifest's by default; a test passes an unpicked one). Pure.
  */
-export function resolveArt(key: string): ResolvedArt {
-  const r = artRequest(key);
+export function resolveArt(key: string, r: ArtRequest | undefined = artRequest(key)): ResolvedArt {
   if (!r) return bakedFor(key, 1);
   if (isPicked(r)) return { key, texture: artTexture(key), tint: WHITE, alpha: 1, fallback: false };
   const f = r.fallback;
@@ -73,11 +76,11 @@ export interface ArtFile {
 }
 
 /** The files that resolving `keys` needs loaded: picked files and reused fallbacks, each once. Pure. */
-export function artFiles(keys: readonly string[]): ArtFile[] {
+export function artFiles(keys: readonly string[], find: RequestLookup = artRequest): ArtFile[] {
   const out: ArtFile[] = [];
   const seen = new Set<string>();
   for (const key of keys) {
-    const r = artRequest(key);
+    const r = find(key);
     if (!r) continue;
     const file = isPicked(r) ? requestFile(key) : r.fallback.kind === 'reuse' ? r.fallback.file : null;
     if (!file || seen.has(file)) continue;
@@ -105,8 +108,12 @@ export interface PlateScene {
 }
 
 /** Queue the files `keys` need; call from a scene's preload. Files already loaded are skipped. */
-export function preloadArt(scene: PlateScene, keys: readonly string[]): void {
-  for (const { texture, file } of artFiles(keys))
+export function preloadArt(
+  scene: PlateScene,
+  keys: readonly string[],
+  find: RequestLookup = artRequest,
+): void {
+  for (const { texture, file } of artFiles(keys, find))
     if (!scene.textures.exists(texture)) scene.load.image(texture, file);
 }
 
@@ -130,10 +137,10 @@ function plateFor(r: ArtRequest | undefined): { w: number; h: number; color: num
 }
 
 /** Bake a key's stand-in once: a filled plate in its display size with a rim and the key as a label. */
-function bakeStandIn(scene: PlateScene, key: string): void {
+function bakeStandIn(scene: PlateScene, key: string, r: ArtRequest | undefined): void {
   const texture = standInTexture(key);
   if (scene.textures.exists(texture)) return;
-  const { w, h, color } = plateFor(artRequest(key));
+  const { w, h, color } = plateFor(r);
   const dt = scene.textures.addDynamicTexture(texture, w, h);
   if (!dt) return;
   const g = scene.make.graphics({}, false);
@@ -165,11 +172,15 @@ function bakeStandIn(scene: PlateScene, key: string): void {
  * otherwise (the reused file was not queued, or the key is unknown) bakes the stand-in once and
  * returns it. Call after preload, outside the update loop: the bake allocates once per key.
  */
-export function ensureArt(scene: PlateScene, key: string): ResolvedArt {
-  const r = resolveArt(key);
+export function ensureArt(
+  scene: PlateScene,
+  key: string,
+  req: ArtRequest | undefined = artRequest(key),
+): ResolvedArt {
+  const r = resolveArt(key, req);
   if (scene.textures.exists(r.texture)) return r;
-  bakeStandIn(scene, key);
-  const f = artRequest(key)?.fallback;
+  bakeStandIn(scene, key, req);
+  const f = req?.fallback;
   return bakedFor(key, f?.kind === 'bake' ? f.alpha : 1);
 }
 
@@ -228,12 +239,13 @@ export function missingDrawn(scenes: readonly DrawnScene[]): string[] {
 export function artTestState(
   textures: TexturesLike | null,
   scenes: readonly DrawnScene[] = [],
+  requests: readonly ArtRequest[] = ART_REQUESTS,
 ): ArtTestState {
   return {
-    fallback: ART_REQUESTS.filter((r) => !isPicked(r)).map((r) => r.key),
-    loaded: ART_REQUESTS.filter(
-      (r) => isPicked(r) && textures !== null && textures.exists(artTexture(r.key)),
-    ).map((r) => r.key),
+    fallback: requests.filter((r) => !isPicked(r)).map((r) => r.key),
+    loaded: requests
+      .filter((r) => isPicked(r) && textures !== null && textures.exists(artTexture(r.key)))
+      .map((r) => r.key),
     baked: [...baked],
     missing: missingDrawn(scenes),
   };

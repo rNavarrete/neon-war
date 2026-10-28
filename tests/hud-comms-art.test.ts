@@ -50,9 +50,9 @@ describe('comms-9: the picked band art, drawn at its own size', () => {
     }
   });
 
-  it('draws the 1450x144 plate at its own size, centred in the 1455x150 band on whole pixels', () => {
+  it('draws the 1455x149 plate at its own size, centred in the 1455x150 band on whole pixels', () => {
     const cut = artRequest(COMMS_PLATE)!.cut!;
-    expect(cut).toEqual({ w: 1450, h: 144 });
+    expect(cut).toEqual({ w: 1455, h: 149 });
     const at = fitCentred(cut.w, cut.h, band);
     expect({ w: at.w, h: at.h }).toEqual(cut);
     expect(inside(at, band)).toBe(true);
