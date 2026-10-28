@@ -23,14 +23,30 @@ import type Phaser from 'phaser';
 import { Bus } from '../src/game/bus';
 import type { Frame } from '../src/game/frame';
 import type { Occurrence } from '../src/game/occurrences';
-import { ChatFeed, ChatFeedView } from '../src/scenes/hud/ChatFeedView';
-import { CHAT_PACE, SEED_IDS } from '../src/scenes/hud/chatEngine';
+import { CHAT_TEXT, ChatFeed, ChatFeedView } from '../src/scenes/hud/ChatFeedView';
+import {
+  ARRIVAL_FADE,
+  CHAT_BODY,
+  CHAT_HEADER,
+  ONE_LINE_CHARS,
+  VIEWER_HANDLES,
+  arrivalAlpha,
+  fitRows,
+  handleFor,
+  rowHeight,
+  rowLook,
+  stackRows,
+  tickOf,
+} from '../src/scenes/hud/chat';
+import { CHAT_PACE, type ChatRow, SEED_IDS, visibleRows } from '../src/scenes/hud/chatEngine';
+import { updateSettings } from '../src/game/settings';
+import { BLOCK_AVATARS } from '../src/scenes/avatars';
 import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 import { LESSON_IDS } from '../src/scenes/hud/lineMeta';
 import { ZONES } from '../src/scenes/live/layout';
 import type { LiveClock, LiveHost } from '../src/scenes/live/view';
 import type { ChatTestState } from '../src/scenes/live/views/chat';
-import { LINES } from '../src/strings';
+import { LINES, type LineId } from '../src/strings';
 import chatFeedSource from '../src/scenes/hud/ChatFeedView.ts?raw';
 import chatSource from '../src/scenes/hud/chat.ts?raw';
 import chatEngineSource from '../src/scenes/hud/chatEngine.ts?raw';
@@ -166,7 +182,8 @@ const SERVING = {
 function stubScene(): { scene: Phaser.Scene; down: ((p: { x: number; y: number }) => void)[] } {
   const down: ((p: { x: number; y: number }) => void)[] = [];
   const chain: unknown = new Proxy(function () {}, {
-    get: (_t, k) => (k === 'then' || typeof k === 'symbol' ? undefined : chain),
+    get: (_t, k) =>
+      k === 'then' || typeof k === 'symbol' ? undefined : k === 'width' || k === 'height' ? 0 : chain,
     apply: () => chain,
   });
   const scene = {
@@ -398,5 +415,217 @@ describe('the chat in the host loop (chat-3)', () => {
       expect(code, name).not.toMatch(/\brun\(\)/);
     }
     expect(hudSceneSource).not.toMatch(/errorShare\(r\.flow/);
+  });
+});
+
+// ---- chat-4: the merged LIVE CHAT panel ----
+
+/** A view on a stub scene, its bus and its pointer handlers. */
+function liveView(): { view: ChatFeedView; bus: Bus; click: (x: number, y: number) => void } {
+  const b = new Bus();
+  const { scene, down } = stubScene();
+  const view = new ChatFeedView();
+  view.create(scene, hostOn(scene, b));
+  return { view, bus: b, click: (x, y) => down.forEach((fn) => fn({ x, y })) };
+}
+
+const chatRead = (): ChatTestState => hudRead().chat as ChatTestState;
+
+describe('the LIVE CHAT panel (chat-4)', () => {
+  it('fits the newest four or five rows into the 220 px body, bottom-up', () => {
+    const one = { text: 'x'.repeat(ONE_LINE_CHARS) };
+    const two = { text: 'x'.repeat(ONE_LINE_CHARS + 1) };
+    expect(rowHeight(one.text)).toBe(36);
+    expect(rowHeight(two.text)).toBe(53);
+    expect(fitRows([one, one, one, one, one, one], 5)).toHaveLength(5);
+    expect(fitRows([two, two, two, two, two, two], 5)).toHaveLength(4);
+    // The worst mix still leaves four, the newest ones.
+    const mix = [one, two, two, two, one, two, two];
+    const fit = fitRows(mix, 5);
+    expect(fit.length).toBeGreaterThanOrEqual(4);
+    expect(fit[fit.length - 1]).toBe(mix[mix.length - 1]);
+    for (const rows of [Array(5).fill(one), Array(4).fill(two), fit]) {
+      const heights = rows.map((r: { text: string }) => rowHeight(r.text));
+      const tops = stackRows(heights);
+      // Inside y 840-1060, the newest on the bottom edge, none over the header.
+      expect(tops[0]).toBeGreaterThanOrEqual(CHAT_BODY.y);
+      expect(CHAT_BODY.y).toBe(840);
+      expect(CHAT_BODY.y + CHAT_BODY.h).toBe(1060);
+      expect(tops[tops.length - 1] + heights[heights.length - 1]).toBe(1060);
+      for (let i = 1; i < tops.length; i++) expect(tops[i]).toBe(tops[i - 1] + heights[i - 1]);
+    }
+    expect(CHAT_HEADER).toEqual({ x: 1525, y: 800, w: 385, h: 40 });
+  });
+
+  it('draws block rows with painted avatars and amber names, stream rows with a cyan ring and a handle', () => {
+    const blockRow = { ...chatEntry('C1.chat.01'), chat: 'block' as const, cause: 'served', at: 0 };
+    const look = rowLook({ ...blockRow, complaint: false, thanks: false, system: false }, BLOCK_AVATARS);
+    expect(look).toMatchObject({ avatar: 'chars/avatars/mrs-okafor', ring: null, nameColor: 'amber' });
+    expect(look.name).toBe('mrs okafor');
+    const stream = rowLook(
+      {
+        ...chatEntry('C1.chat.02'),
+        chat: 'stream',
+        cause: 'served',
+        at: 0,
+        complaint: false,
+        thanks: false,
+        system: false,
+      },
+      BLOCK_AVATARS,
+    );
+    expect(stream).toMatchObject({ avatar: null, ring: 'cyan', nameColor: 'cyan' });
+    expect(VIEWER_HANDLES).toContain(stream.name);
+    expect(stream.name).toBe(handleFor('C1.chat.02'));
+    expect(stream.initial).toBe(stream.name[0].toUpperCase());
+    const system = rowLook(
+      {
+        ...chatEntry('C4.chat.03'),
+        chat: 'block',
+        cause: 'cue',
+        at: 0,
+        complaint: false,
+        thanks: false,
+        system: true,
+      },
+      BLOCK_AVATARS,
+    );
+    expect(system).toMatchObject({ rule: true, avatar: null, ring: null, name: 'Lux_Net' });
+    expect(tickOf({ cause: 'errorsRising', complaint: true, thanks: false })).toBe('red');
+    expect(tickOf({ cause: 'recovered', complaint: false, thanks: true })).toBe('amber');
+    expect(tickOf({ cause: 'filler', complaint: false, thanks: false })).toBe('cyan');
+    // No purple dot stand-in any more.
+    expect(chatFeedSource).not.toMatch(/0x6a3fb5/i);
+    expect(chatFeedSource).not.toMatch(/\bdot\b/);
+  });
+
+  it('shows the newest rows bottom-up in the body with words, badges and names, in the view', () => {
+    const { view, bus: b } = liveView();
+    const posts: [LineId, number][] = [
+      ['C1.chat.02', 1],
+      ['C3.chat.01', 2],
+      ['C3.chat.03', 3],
+      ['C4.chat.03', 4],
+      ['C6.chat.hold.01', 5],
+      ['C1.chat.01', 6],
+    ];
+    for (const [id, at] of posts) b.emit('cue', { id, kind: 'chat', at });
+    view.update(frameAt(), clockAt(6.5), []);
+    const c = chatRead();
+    expect(c.rows.length).toBeGreaterThanOrEqual(4);
+    expect(c.rows.length).toBeLessThanOrEqual(5);
+    expect(c.rows.map((r) => r.id)).toEqual(c.feed.slice(-c.rows.length).map((r) => r.id));
+    const last = c.rows[c.rows.length - 1];
+    expect(last.y + last.h).toBe(1060);
+    for (const r of c.rows) {
+      expect(r.y, r.id).toBeGreaterThanOrEqual(840);
+      expect(r.y + r.h, r.id).toBeLessThanOrEqual(1060);
+      expect(r.x).toBe(1545);
+      if (r.chat === 'stream') {
+        expect(r).toMatchObject({ ring: 'cyan', nameColor: 'cyan', avatar: null });
+        expect(VIEWER_HANDLES).toContain(r.name);
+      } else if (r.rule) {
+        expect(r.name).toBe('Lux_Net');
+      } else {
+        expect(r.nameColor, r.id).toBe('amber');
+        expect(r.avatar !== null || r.ring === 'amber', r.id).toBe(true);
+      }
+    }
+    expect(c.rows.find((r) => r.id === 'C1.chat.01')?.avatar).toBe('chars/avatars/mrs-okafor');
+    expect(c.rows.find((r) => r.id === 'C6.chat.hold.01')?.ring).toBe('amber');
+    view.shutdown();
+  });
+
+  it('toggles BLOCK ONLY from a header click, and the tag says so', () => {
+    const { view, bus: b, click } = liveView();
+    b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 1 });
+    view.update(frameAt(), clockAt(1.5), []);
+    expect(chatRead().rows.some((r) => r.chat === 'stream')).toBe(true);
+    // A click in the body does nothing; one on the header toggles.
+    click(1700, 950);
+    expect(chatRead().filter).toBe('all');
+    click(1700, 820);
+    let c = chatRead();
+    expect(c.filter).toBe('block');
+    expect(c.header.tag).toBe(CHAT_TEXT.block);
+    expect(c.rows.every((r) => r.chat === 'block')).toBe(true);
+    click(1700, 820);
+    c = chatRead();
+    expect(c.filter).toBe('all');
+    expect(c.header.tag).toBe(CHAT_TEXT.all);
+    // The header's words stay plain: no debrief term.
+    for (const w of Object.values(CHAT_TEXT)) {
+      expect(w.toLowerCase()).not.toMatch(/balancer|headroom|capacity|throughput|scal|redundan/);
+    }
+    view.shutdown();
+  });
+
+  it('fades the newest row in over 150 ms, and shows it at once under reduce flicker', () => {
+    expect(arrivalAlpha(0, false)).toBe(0);
+    expect(arrivalAlpha(ARRIVAL_FADE / 2, false)).toBeCloseTo(0.5);
+    expect(arrivalAlpha(ARRIVAL_FADE, false)).toBe(1);
+    expect(arrivalAlpha(0, true)).toBe(1);
+
+    const { view, bus: b } = liveView();
+    updateSettings({ reduceFlicker: false });
+    view.update(frameAt(), clockAt(1), []);
+    b.emit('cue', { id: 'C1.chat.01', kind: 'chat', at: 1 });
+    view.update(frameAt(), clockAt(1.03), []);
+    let newest = chatRead().rows.at(-1)!;
+    expect(newest.id).toBe('C1.chat.01');
+    expect(newest.alpha).toBeLessThan(1);
+    view.update(frameAt(), clockAt(1.2), []);
+    expect(chatRead().rows.at(-1)!.alpha).toBe(1);
+
+    updateSettings({ reduceFlicker: true });
+    b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 2 });
+    view.update(frameAt(), clockAt(2), []);
+    newest = chatRead().rows.at(-1)!;
+    expect(newest.id).toBe('C1.chat.02');
+    expect(newest.alpha).toBe(1);
+    updateSettings({ reduceFlicker: false });
+    view.shutdown();
+  });
+
+  it('sits the rows back to alpha 0.4 while the chat is silent', () => {
+    const { view, bus: b } = liveView();
+    view.update(frameAt(), clockAt(5), []);
+    b.emit('cue', { id: 'C6.fail.chat', kind: 'chat', at: 5 });
+    view.update(frameAt(), clockAt(5.05), []);
+    const c = chatRead();
+    expect(c.silenced).toBe(true);
+    expect(c.rows.every((r) => r.alpha === 0.4)).toBe(true);
+    view.shutdown();
+  });
+
+  it('reports hud.chat.shown as visibleRows(feed, filter).length on every hook read', () => {
+    const { view, bus: b, click } = liveView();
+    const placed: Occurrence = { kind: 'placed', id: 'server-1', at: 120 };
+    const ids: LineId[] = [
+      'C1.chat.01',
+      'C1.chat.02',
+      'C3.chat.01',
+      'C3.chat.02',
+      'C3.chat.03',
+      'C4.chat.03',
+    ];
+    let reads = 0;
+    for (let i = 1; i <= 2400; i++) {
+      const clock = i * 0.05;
+      if (i % 200 === 0 && ids.length > 0) b.emit('cue', { id: ids.shift()!, kind: 'chat', at: clock });
+      if (i % 333 === 0) click(1700, 820);
+      const errors = i > 1200 && i < 1500 ? 0.4 : 0;
+      view.update(frameAt({ ...SERVING, errorShare: errors }), clockAt(clock), i % 150 === 0 ? [placed] : []);
+      if (i % 10 === 0) {
+        const c = chatRead();
+        expect(c.shown).toBe(visibleRows(c.feed as unknown as ChatRow[], c.filter).length);
+        expect(c.rows).toHaveLength(c.shown);
+        expect(c.shown).toBeGreaterThanOrEqual(Math.min(4, c.feed.length));
+        reads++;
+      }
+    }
+    expect(reads).toBe(240);
+    expect(chatRead().posts).toBeGreaterThan(10);
+    view.shutdown();
   });
 });
