@@ -63,10 +63,11 @@ the keys present (for example `["server-online", "headroom-red"]`). The build bu
 and the overlay scene loads only the keys it names, so a half-finished drop never requests a
 missing file.
 
-## Voices (not yet on disk)
+## Voices
 
 Crew and Lux lines are voiced by the owner's pipeline: `public/audio/voice/<lang>/<LINE_ID>.mp3`
-(`ja` and `en`, about -16 LUFS, 128 kbps mono). TRIAGE is always Japanese. With the drop the
+(`ja` and `en`, about -16 LUFS, 128 kbps mono). TRIAGE's English takes are her Japanese voice
+reading the English lines. See `docs/VOICE.md`. With the drop the
 pipeline writes `public/audio/voice/manifest.json`, `{"ja": [ids], "en": [ids]}`: the ids present
 in each language. The build bundles the manifest. Without it the game requests no voice file at all.
 

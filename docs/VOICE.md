@@ -16,8 +16,8 @@ as delivery, not as words). `log.jsonl` there records one row per take.
   build copies `public/` into `dist/` as static files, so nothing is bundled into the game's
   script.
 - English TRIAGE takes use the Japanese TRIAGE voice reading the English text, because ElevenLabs
-  would not design an English one. The game keeps TRIAGE in Japanese under every setting
-  (`src/game/voice.ts`), so those `en` files ship but are not played today.
+  would not design an English one (Rolando's casting). Under the English setting the game plays
+  every line's `en` take, TRIAGE's included (`src/game/voice.ts`).
 - `tests/fixtures/voice-recorded-lines.json` is a copy of the `lines.json` the takes were made
   from. Refresh it whenever you re-record.
 

@@ -43,7 +43,7 @@ const TRIAGE = 'C1.triage.02' as LineId;
 const LUX = 'C1.lux.01' as LineId;
 const MANIFEST: VoiceManifest = {
   ja: ['C1.triage.01', 'C1.triage.02', 'C1.lux.01'],
-  en: ['C1.lux.01'],
+  en: ['C1.triage.01', 'C1.triage.02', 'C1.lux.01'],
 };
 
 function setup(initial: VoiceSettings) {
@@ -62,10 +62,10 @@ function setup(initial: VoiceSettings) {
 }
 
 describe('mixerLangFor', () => {
-  it('is voiceLangFor: off is null, TRIAGE is Japanese, the rest take the setting', () => {
+  it('is voiceLangFor: off is null, every line takes the setting, TRIAGE too', () => {
     expect(mixerLangFor(TRIAGE, 'off')).toBeNull();
     expect(mixerLangFor(LUX, 'off')).toBeNull();
-    expect(mixerLangFor(TRIAGE, 'en')).toBe('ja');
+    expect(mixerLangFor(TRIAGE, 'en')).toBe('en');
     expect(mixerLangFor(LUX, 'en')).toBe('en');
     expect(mixerLangFor(LUX, 'ja')).toBe('ja');
   });
@@ -80,13 +80,13 @@ describe('the mixer honours the voices setting', () => {
     expect(mixer.snapshot().requested).toEqual(['ja:C1.lux.01']);
   });
 
-  it('English: Lux plays in English, TRIAGE stays Japanese', () => {
+  it('English: Lux and TRIAGE both play their English takes', () => {
     const { mixer, port, line } = setup({ voices: 'en', voiceVolume: 1 });
     line(LUX);
     line(TRIAGE);
     expect(port.calls).toContain('play voice:en:C1.lux.01');
-    expect(port.calls).toContain('play voice:ja:C1.triage.02');
-    expect(mixer.snapshot().requested).toEqual(['en:C1.lux.01', 'ja:C1.triage.02']);
+    expect(port.calls).toContain('play voice:en:C1.triage.02');
+    expect(mixer.snapshot().requested).toEqual(['en:C1.lux.01', 'en:C1.triage.02']);
   });
 
   it('off: records the request but neither loads nor plays, and lists nothing as missing', () => {
@@ -119,8 +119,8 @@ describe('the mixer honours the voices setting', () => {
     s.voices = 'en';
     mixer.tick(0.2, 20);
     expect(port.calls).toEqual([
-      'load voice:ja:C1.triage.01 audio/voice/ja/C1.triage.01.mp3',
-      'load voice:ja:C1.triage.02 audio/voice/ja/C1.triage.02.mp3',
+      'load voice:en:C1.triage.01 audio/voice/en/C1.triage.01.mp3',
+      'load voice:en:C1.triage.02 audio/voice/en/C1.triage.02.mp3',
       'load voice:en:C1.lux.01 audio/voice/en/C1.lux.01.mp3',
     ]);
   });

@@ -7,8 +7,9 @@
 //   stage direction (C8.book.open), a chat row or a UI string.
 // - Files are public/audio/voice/<lang>/<LINE_ID>.mp3 (the folder is `voice`, not `voices`), served
 //   at audio/voice/<lang>/<LINE_ID>.mp3, and only the ids in public/audio/voice/manifest.json exist.
-// - The setting picks Japanese (default), English or off. TRIAGE was only recorded in Japanese, so
-//   her lines stay Japanese in English too. Off voices nothing; the line's text always shows.
+// - The setting picks Japanese (default), English or off. TRIAGE has no English cast: her Japanese
+//   voice reads her English lines (Rolando's casting), so English plays the en take for every line.
+//   Off voices nothing; the line's text always shows.
 // - A line's group is the challenge in its id (C4.triage.02 is 4); the mixer keeps the previous,
 //   current and next group loaded.
 
@@ -43,18 +44,18 @@ export function voicePath(id: string, lang: VoiceLang): string {
   return `audio/voice/${lang}/${id}.mp3`;
 }
 
-/** Whether TRIAGE says the line (her clips exist only in Japanese). */
+/** Whether TRIAGE says the line. */
 export function isTriage(id: LineId): boolean {
   return speakerName(LINES[id].speaker) === 'TRIAGE';
 }
 
 /**
  * The language a line is voiced in under the setting, or null when it is not voiced at all: off,
- * or not a spoken line. TRIAGE always speaks Japanese.
+ * or not a spoken line.
  */
 export function voiceLangFor(id: string, setting: VoiceSetting): VoiceLang | null {
   if (setting === 'off' || !isVoiced(id)) return null;
-  return isTriage(id) ? 'ja' : setting;
+  return setting;
 }
 
 /** The challenge group a line loads with (the number after C in its id), or null for other ids. */
@@ -74,7 +75,7 @@ export interface VoiceHookFields {
   lang: VoiceSetting;
   /** The voice volume setting now. */
   volume: number;
-  /** The last 20 requests as 'lang:id' (TRIAGE as 'ja' in every language). */
+  /** The last 20 requests as 'lang:id' (TRIAGE too). */
   requested: string[];
   /** The clip playing, or null. */
   playing: string | null;
@@ -88,8 +89,7 @@ export interface VoiceHookFields {
 
 /**
  * The hook fields from the mixer's snapshot and the settings, for the shell section to merge into
- * shell.voice. Pure. `requested` writes each id in the language the setting gives it now (TRIAGE
- * in Japanese); an id the setting does not voice keeps the setting's own word ('off:C1.lux.01').
+ * shell.voice. Pure. `requested` writes each id in the language the setting gives it now; an id the setting does not voice keeps the setting's own word ('off:C1.lux.01').
  */
 export function voiceHookFields(
   v: Pick<VoiceTestState, 'recentVoice' | 'missing' | 'playing' | 'gains'>,

@@ -67,16 +67,19 @@ describe('voicePath, language and groups', () => {
     expect(VOICE_SETTINGS).toEqual(['ja', 'en', 'off']);
   });
 
-  it('speaks a line in the setting, TRIAGE always in Japanese, nothing when off', () => {
+  it('speaks a line in the setting, TRIAGE too (her Japanese voice reads the English), nothing when off', () => {
     expect(voiceLangFor('C1.lux.01', 'ja')).toBe('ja');
     expect(voiceLangFor('C1.lux.01', 'en')).toBe('en');
     expect(voiceLangFor('C1.lux.01', 'off')).toBeNull();
-    expect(voiceLangFor('C1.triage.02', 'en')).toBe('ja');
+    expect(isTriage('C1.triage.02')).toBe(true);
+    expect(isTriage('C1.lux.01')).toBe(false);
+    expect(voiceLangFor('C1.triage.02', 'en')).toBe('en');
     expect(voiceLangFor('C1.triage.02', 'ja')).toBe('ja');
     expect(voiceLangFor('C1.triage.02', 'off')).toBeNull();
     expect(voiceLangFor('C8.book.open', 'en')).toBeNull();
     for (const id of voicedLines()) {
-      expect(voiceLangFor(id, 'en'), id).toBe(isTriage(id) ? 'ja' : 'en');
+      expect(voiceLangFor(id, 'en'), id).toBe('en');
+      expect(voiceLangFor(id, 'ja'), id).toBe('ja');
     }
     expect(requestKey('C1.triage.02', 'ja')).toBe('ja:C1.triage.02');
   });
@@ -174,7 +177,7 @@ describe('the shell.voice fields', () => {
     expect(voiceHookFields(v, { voices: 'en', voiceVolume: 0.9 })).toEqual({
       lang: 'en',
       volume: 0.9,
-      requested: ['ja:C1.triage.02', 'en:C1.lux.01'],
+      requested: ['en:C1.triage.02', 'en:C1.lux.01'],
       playing: null,
       lastVoice: 'C1.lux.01',
       missing: ['C1.triage.02', 'C1.lux.01'],
