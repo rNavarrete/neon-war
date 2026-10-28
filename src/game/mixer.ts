@@ -14,7 +14,8 @@
 // - The voices setting picks the clip's language (src/game/voice.ts voiceLangFor; TRIAGE stays
 //   Japanese). With voices off every request is still recorded, but nothing loads or plays, and the
 //   band falls back to its text dwell. A clip plays at the voice gain times the voice volume.
-// - A cut clip (a new line, voiceStop) fades to nothing over VOICE_CUT_FADE_MS on the port.
+// - A cut clip (a new line, voiceStop) fades to nothing over VOICE_CUT_FADE_MS on the port; a
+//   voiceStop for a clip still loading drops it, so it never starts late.
 
 import type { LineId } from '../strings';
 import { BROWNOUT } from '../sim/brownout';
@@ -227,6 +228,8 @@ export class Mixer {
     bus.on('voice', ({ id }) => this.request(id));
     bus.on('voiceStop', ({ id }) => {
       if (this.playing?.id === id) this.stopPlaying();
+      // A clip still loading when its line was cut must not start once it arrives.
+      if (this.pending === id) this.pending = null;
     });
   }
 
