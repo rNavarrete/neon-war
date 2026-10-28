@@ -193,9 +193,33 @@ The rows for `cam` and `chat` are the share their lanes have to declare when the
 | Cards (HUD host: job card, banner, dial, sizing, dip) |    13 |                  - |
 | **Total**                                             | **110** |                  |
 
-The chat feed's five rows of name and words need 17 texts, so the host's cards give up 7 of their 20 to keep the total at 110. The cards measure 19 today, so tech-8 has to cut 6 of them (for example the dip and sizing prompt sharing one text each) before `live-perf.spec.ts` can assert all texts.
+The chat feed's five rows of name and words need 17 texts, so the host's cards give up 7 of their 20 to keep the total at 110. The host makes exactly 13 (`HOST_TEXTS` in `src/scenes/hud/cardText.ts`, `tests/hud-card-text.test.ts`, and `perf.host.texts <= 13` in `live-skeleton.spec.ts`):
 
-Measured on 28 Oct 2026 (speed 20 with autopilot, headless), before the chat feed landed:
+- **Job card and banner, 7.** The C1 job card (rate, title, who, what, bar, pay line, OK) and the
+  C2 Solace banner (title, body, three button words) never show together: the banner waits for the
+  card to close. They share one pool of seven texts, made once, which the host moves into whichever
+  card opens and dresses from `jobCardTexts()` or `bannerTexts()` (two stay hidden on the banner).
+  Every word either card showed before is still on it.
+- **Dial card, 4** (DialView: the question, the value, minus and plus).
+- **Sizing prompt, 1.** Its arrow is drawn as a Graphics, not typed as a text.
+- **Dip warning, 1.**
+
+The legacy pieces (the old chat column, the HUD's own deck digits, the old alert line) are gone,
+so nothing else on the host is a text.
+
+Measured on 28 Oct 2026 (speed 20 with autopilot, headless), after the host's cut to 13:
+
+- **Objects.** 510 at the surge (335 board + 175 HUD) and 529 at midnight, inside 750.
+- **Host.** 33 objects and 13 texts (was 19 card texts and 19 legacy ones).
+- **Drawn texts.** 82 at the surge and at midnight.
+- **All texts, hidden ones included.** 117 at the surge (35 board + 82 HUD) and 124 at midnight
+  (42 + 82). The HUD's 82 is its whole share (69 for the views' declared budgets and 13 for the
+  host), so the overage is the board alone: 35 to 42 texts against its 28. `live-perf.spec.ts`
+  therefore still asserts the drawn texts against 110; it switches to all texts once the board
+  lane brings its count to 28 or less.
+- **Frame rate.** 8.7 fps at the surge and 9.2 at midnight (about 110 ms a frame).
+
+Measured earlier on 28 Oct 2026, before the chat feed landed:
 
 - **Objects.** 414 to 421 at the surge and 427 to 440 at midnight, well inside 750.
 - **Every view.** Each registered view is at or under its declared budget.
@@ -209,7 +233,7 @@ Measured on 28 Oct 2026 (speed 20 with autopilot, headless), before the chat fee
     view lands), the HUD's own deck digits and words (6, which DeckView duplicates) and the legacy
     alert line and number (2, which AlertView duplicates).
 
-tech-8 asserts the total including hidden texts once those pieces are gone.
+The host has since been cut to 13 and the legacy pieces removed (above); the switch to all texts now waits on the board alone.
 
 ### Script anchors
 

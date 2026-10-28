@@ -1,5 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
-import type { LiveTestState, PerfTestState } from '../../src/scenes/live/hook';
+import type { LiveTestState, PerfSection, PerfTestState } from '../../src/scenes/live/hook';
 import { CARDS, LAYOUT_VERSION, ZONES, ZONE_IDS, pageRect } from '../../src/scenes/live/layout';
 import { dismissJobCard, openBoard, reach, shot } from './live/reach';
 
@@ -61,6 +61,9 @@ test('the Live skeleton: zones on the page, ten placeholders, perf numbers and l
   expect(perf.graphics).toBeGreaterThanOrEqual(10);
   expect(perf.objects.board).toBeGreaterThan(0);
   expect(perf.lite).toBe(true);
+  // Tech follow-up 3: the host's own texts (the cards, the dial, the dip and sizing lines) are all
+  // made at create, and stay inside the host's 13 (docs/LIVE.md "Budgets").
+  expect((perf as PerfSection).host.texts, 'perf.host.texts').toBeLessThanOrEqual(13);
 
   await page.screenshot({ path: 'test-results/screens/live-skeleton.png' });
   expect(errors).toEqual([]);

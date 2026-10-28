@@ -25,21 +25,11 @@ import {
   emptyCueView,
 } from './hud/cues';
 import { type DialMode, applyEstimate, applySizing, dialModeAt } from './hud/dial';
+import { CARD_TEXT_POOL, type CardTextSpec, bannerTexts, dressCardText, jobCardTexts } from './hud/cardText';
 import { countdownText } from './hud/format';
 import { type HudBounds, type HudTestState, type PagePoint, hudSection } from './hud/hook';
 import { dialQuestionOpen, dismissJobCard, jobCardDue, openJobCard, sizingPromptOpen } from './hud/jobCard';
-import {
-  BANNER_BUTTONS,
-  BOTTOM,
-  CENTRE,
-  COLORS,
-  FONT,
-  FONT_SANS,
-  type Home,
-  JOB_ART,
-  KEY,
-  RIGHT,
-} from './hud/layout';
+import { BANNER_BUTTONS, BOTTOM, CENTRE, COLORS, FONT, type Home, KEY, RIGHT } from './hud/layout';
 import { laundryCutAt, upcomingDip } from './hud/pending503';
 import { shownCredits, shownTrust } from './hud/title';
 import { type DipWarning, dipMarkAt, dipWarningAt, surgeWarningAt } from './hud/warnings';
@@ -168,6 +158,15 @@ export class HudScene extends Phaser.Scene {
   private cardArt!: Phaser.GameObjects.Image;
   private banner!: Phaser.GameObjects.Container;
   private bannerOpen = false;
+  /**
+   * The job card's and the banner's words: one pool of texts, dressed for whichever card shows (the
+   * banner only comes after the card is closed), so the host stays inside its 13 texts.
+   */
+  private cardTexts: Phaser.GameObjects.Text[] = [];
+  private readonly jobWords: CardTextSpec[] = jobCardTexts();
+  private readonly bannerWords: CardTextSpec[] = bannerTexts();
+  /** Which card the pooled texts are dressed for now. */
+  private dressedFor: 'job' | 'banner' | null = null;
   private sizingPanel!: Phaser.GameObjects.Container;
 
   constructor() {
@@ -241,6 +240,9 @@ export class HudScene extends Phaser.Scene {
     });
     this.buildDipMark();
     this.buildSizingPrompt();
+    this.cardTexts = [];
+    this.dressedFor = null;
+    for (let i = 0; i < CARD_TEXT_POOL; i++) this.cardTexts.push(this.add.text(0, 0, ''));
     this.buildBanner();
     this.buildJobCard();
 
@@ -369,6 +371,7 @@ export class HudScene extends Phaser.Scene {
       if (jobCardDue(r)) {
         this.cardOpen = true;
         openJobCard(r);
+        this.dressCards('job');
         this.card.setVisible(true);
       }
     }
@@ -446,9 +449,12 @@ export class HudScene extends Phaser.Scene {
         wordWrap: { width: s.w - 80 },
       })
       .setOrigin(0.5);
-    const arrow = this.add
-      .text(s.w - 34, s.h / 2, '→', { fontFamily: FONT, fontSize: '36px', color: COLORS.magentaText })
-      .setOrigin(0.5);
+    // The arrow is drawn, not typed, so the prompt costs one text (docs/LIVE.md "Budgets").
+    const arrow = this.add.graphics({ x: s.w - 34, y: s.h / 2 });
+    arrow.lineStyle(4, COLORS.magenta, 1);
+    arrow.lineBetween(-13, 0, 11, 0);
+    arrow.fillStyle(COLORS.magenta, 1);
+    arrow.fillTriangle(13, 0, 2, -9, 2, 9);
     this.tweens.add({ targets: arrow, x: s.w - 24, duration: 500, yoyo: true, repeat: -1 });
     this.sizingPanel = this.add.container(s.x, s.y, [box, text, arrow]).setVisible(false);
   }
@@ -466,31 +472,7 @@ export class HudScene extends Phaser.Scene {
     art.on('pointerdown', () => {
       if (!cardGuarded()) this.closeJobCard();
     });
-    // Positions inside the 864x1252 card art, scaled.
-    const at = (ax: number, ay: number): [number, number] => [
-      j.x + (ax - JOB_ART.w / 2) * k,
-      j.y + (ay - JOB_ART.h / 2) * k,
-    ];
-    const text = (ax: number, ay: number, s: string, size: number, color: string, wrap: number) =>
-      this.add
-        .text(...at(ax, ay), s, {
-          fontFamily: FONT_SANS,
-          fontSize: `${size}px`,
-          color,
-          align: 'center',
-          wordWrap: { width: wrap * k },
-        })
-        .setOrigin(0.5);
-    const parts = [
-      dim,
-      art,
-      text(153, 200, '120', 40, COLORS.amberText, 190),
-      text(540, 200, line('C1.card.title'), 30, COLORS.cyanText, 480),
-      text(419, 466, line('C1.card.who'), 24, COLORS.white, 680),
-      text(419, 679, line('C1.card.what'), 24, COLORS.white, 680),
-      text(419, 886, line('C1.card.bar'), 24, COLORS.white, 680),
-      text(432, 1107, line('C1.card.rate'), 23, COLORS.amberText, 560),
-    ];
+    // The words (rate, title, who, what, bar, pay, OK) are the pooled card texts (cardText.ts).
     const [okX, okY] = this.jobCardOk();
     const ok = panel(this, 'hud:button', okX, okY, CENTRE.jobCardOk.w, CENTRE.jobCardOk.h, {
       k: 0.4,
@@ -503,13 +485,24 @@ export class HudScene extends Phaser.Scene {
     ok.on('pointerdown', () => {
       if (!cardGuarded()) this.closeJobCard();
     });
-    const okText = this.add.text(okX, okY, 'OK', {
-      fontFamily: FONT,
-      fontSize: '26px',
-      color: COLORS.cyanText,
-    });
-    okText.setOrigin(0.5);
-    this.card = this.add.container(0, 0, [...parts, ok, okText]).setVisible(this.cardOpen);
+    this.card = this.add.container(0, 0, [dim, art, ok]).setVisible(this.cardOpen);
+    this.dressCards('job');
+  }
+
+  /**
+   * Move the pooled card texts into the card that is about to show and dress them for it. Runs when
+   * a card opens, never per frame; the other card is hidden then (the banner waits for the job card).
+   */
+  private dressCards(which: 'job' | 'banner'): void {
+    if (this.dressedFor === which) return;
+    this.dressedFor = which;
+    const into = which === 'job' ? this.card : this.banner;
+    const words = which === 'job' ? this.jobWords : this.bannerWords;
+    for (let i = 0; i < this.cardTexts.length; i++) {
+      const t = this.cardTexts[i];
+      into.add(t);
+      dressCardText(t, words[i]);
+    }
   }
 
   /** The OK button along the job card's bottom edge, in game space. */
@@ -532,39 +525,17 @@ export class HudScene extends Phaser.Scene {
     const k = b.scale;
     const art = this.add.image(0, 0, 'hud:solace-banner').setScale(k);
     art.setInteractive(); // swallows clicks so they don't reach the board under the banner
-    const title = this.add.text(83, -112, line('C2.banner.title'), {
-      fontFamily: FONT_SANS,
-      fontSize: '24px',
-      fontStyle: 'bold',
-      color: '#1d4f8f',
-    });
-    title.setOrigin(0.5, 0);
-    const body = this.add.text(83, -70, line('C2.banner.body'), {
-      fontFamily: FONT_SANS,
-      fontSize: '19px',
-      color: '#2a3b55',
-      align: 'center',
-      wordWrap: { width: 400 },
-    });
-    body.setOrigin(0.5, 0);
-    const labels = line('C2.banner.buttons').split(' / ');
+    // The title, the body and the three button words are the pooled card texts (cardText.ts).
     const choices: BannerChoice[] = ['pay', 'ignore', 'bin'];
-    const buttons = choices.flatMap((choice, i) => {
+    const buttons = choices.map((choice) => {
       const p = BANNER_BUTTONS[choice];
-      const x = p.dx * k;
-      const y = p.dy * k;
-      const zone = this.add.zone(x, y, p.w * k + 8, p.h * k + 8).setInteractive({ useHandCursor: true });
+      const zone = this.add
+        .zone(p.dx * k, p.dy * k, p.w * k + 8, p.h * k + 8)
+        .setInteractive({ useHandCursor: true });
       zone.on('pointerdown', () => this.chooseBanner(choice));
-      const label = this.add
-        .text(x, choice === 'bin' ? y + 26 : y, labels[i] ?? choice, {
-          fontFamily: FONT_SANS,
-          fontSize: choice === 'bin' ? '13px' : '17px',
-          color: '#2a3b55',
-        })
-        .setOrigin(0.5);
-      return [zone, label];
+      return zone;
     });
-    this.banner = this.add.container(b.x, b.y, [art, title, body, ...buttons]).setVisible(false);
+    this.banner = this.add.container(b.x, b.y, [art, ...buttons]).setVisible(false);
   }
 
   private bannerButton(choice: BannerChoice): PagePoint {
@@ -578,6 +549,7 @@ export class HudScene extends Phaser.Scene {
     if (due && !this.bannerOpen) {
       this.bannerOpen = true;
       this.bannerShown = true;
+      this.dressCards('banner');
       this.banner.setVisible(true).setY(-200);
       this.tweens.add({ targets: this.banner, y: CENTRE.banner.y, duration: 450, ease: 'Back.Out' });
       bus.emit('sfx', { key: 'banner-pop' });
