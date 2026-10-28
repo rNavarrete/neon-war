@@ -53,7 +53,8 @@ export interface HudTestState {
   banner: { open: boolean; choice: string | null; pay: PagePoint; ignore: PagePoint; bin: PagePoint };
   laundry: { available: boolean; cut: boolean; button: PagePoint };
   regroup: { visible: boolean; active: boolean; spent: boolean; button: PagePoint };
-  sizingPrompt: { open: boolean };
+  /** The C6 sizing prompt: whether it shows, and its centre (CARDS.sizingPrompt) in page CSS pixels. */
+  sizingPrompt: { open: boolean; x: number; y: number };
   bark: { current: LineId | null; text: string | null; history: LineId[] };
   chat: { block: string[]; stream: string[] };
   timeScale: number;

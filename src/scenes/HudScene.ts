@@ -54,12 +54,14 @@ import { storyEnd } from '../story/state';
 import { SCENES } from './keys';
 import { type LiveFlags, PLAY_FLAGS, flagsFrom } from './live/flags';
 import { liveTestState, perfTestState } from './live/hook';
-import { ZONES, pagePoint, pageRect } from './live/layout';
+import { CARDS, ZONES, centreOf, pagePoint, pageRect } from './live/layout';
 import { createViews } from './live/registry';
 import type { LiveHost, LiveView } from './live/view';
 
 const C = BROWNOUT.challenges;
 const MIDNIGHT = BROWNOUT.clock.midnight;
+/** The sizing prompt's centre in game pixels, for hud.sizingPrompt. */
+const SIZING_AT = centreOf(CARDS.sizingPrompt);
 
 const HUD_ART = [
   'chart-window',
@@ -913,7 +915,10 @@ export class HudScene extends Phaser.Scene {
         spent: regroupSpent(this.regroup, this.clock),
         button: this.keyPoint(KEY.regroup),
       },
-      sizingPrompt: { open: built && this.sizingPanel.visible },
+      sizingPrompt: {
+        open: built && this.sizingPanel.visible,
+        ...this.toPagePoint(SIZING_AT.x, SIZING_AT.y),
+      },
       bark: {
         current: this.barks.current?.id ?? null,
         text: this.barks.current ? line(this.barks.current.id) : null,

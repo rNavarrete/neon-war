@@ -50,8 +50,8 @@ cover another lane's zone. The banner, job card and dip fallback keep the centre
 
 | Card           |    x |   y |   w |   h | Centre     | When                                                   |
 | -------------- | ---: | --: | --: | --: | ---------- | ------------------------------------------------------ |
-| `dialCard`     | 1650 | 120 | 250 | 250 | 1775, 245  | The 230 px dial, while a dial question is open         |
-| `sizingPrompt` | 1300 | 120 | 340 | 100 | 1470, 170  | The C6 sizing prompt, beside the dial                  |
+| `dialCard`     | 1560 | 120 | 340 | 250 | 1730, 245  | The 230 px dial, while a dial question is open         |
+| `sizingPrompt` | 1210 | 120 | 340 | 100 | 1380, 170  | The C6 sizing prompt, beside the dial                  |
 | `banner`       |  638 | 172 | 644 | 316 | 960, 330   | The Solace banner (1431x700 art at 0.45), in C2        |
 | `jobCard`      |  701 | 156 | 518 | 752 | 960, 532   | The C1 job card (864x1252 art at 0.6), until clicked   |
 | `dipFallback`  |  860 | 240 | 200 | 120 | 960, 300   | The power-dip warning when the board can't place it    |

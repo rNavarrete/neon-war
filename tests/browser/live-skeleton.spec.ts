@@ -137,7 +137,7 @@ type Hud = {
   };
   notes: { estimate: number | null; sizing: number | null };
   surge: { startsAt: number } | null;
-  sizingPrompt: { open: boolean };
+  sizingPrompt: { open: boolean; x?: number; y?: number };
   bounds: Bounds[];
   title?: { right: number; clockRight: number | null };
 };
@@ -296,6 +296,12 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     const ids = (await expectRestaged(page, 'C6')).map((b) => b.id);
     expect(ids).toContain('sizing');
     expect(ids).toContain('dial');
+    // hud.sizingPrompt reports the prompt's centre: CARDS.sizingPrompt's, beside the dial card.
+    const homes = await homeRects(page);
+    const sp = homes.sizingPrompt;
+    expect(Math.abs(h.sizingPrompt.x! - (sp.x + sp.w / 2))).toBeLessThanOrEqual(0.2);
+    expect(Math.abs(h.sizingPrompt.y! - (sp.y + sp.h / 2))).toBeLessThanOrEqual(0.2);
+    expect(sp.x + sp.w).toBeLessThanOrEqual(homes.dialCard.x);
     await page.screenshot({ path: 'test-results/screens/live-restage-c6.png' });
     await turnDialTo(page, 4);
     await expect.poll(async () => (await hudState(page)).notes.sizing).toBe(4);
