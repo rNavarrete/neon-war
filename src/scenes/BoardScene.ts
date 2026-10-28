@@ -67,6 +67,7 @@ import {
   tagChipKey,
 } from './board/view';
 import { dashedOutline } from './live/view';
+import { TumblePool, type WaitState, crewChip, emptyWait, padPulseAlpha, waitInto } from './board/waits';
 import {
   type ChannelState,
   bankMarkPoints,
@@ -225,6 +226,15 @@ export class BoardScene extends Phaser.Scene {
   private clock = 0;
   /** settings().reduceFlicker as read this frame. */
   private reduceFlicker = false;
+  /** The board's waits this frame (board-6), refilled in place. */
+  private wait: WaitState = emptyWait();
+  /** Empty pads pulsing this frame (the waits), by slot. */
+  private pulsingPads: boolean[] = [];
+  private portG!: Phaser.GameObjects.Graphics;
+  private crewText!: Phaser.GameObjects.Text;
+  private crewShown = '';
+  private tumbles = new TumblePool();
+  private tumbleSprites: Phaser.GameObjects.Image[] = [];
   /** Each wire's drawn state (live, skipped, selected) last time the traces were drawn. */
   private wireState: number[] = [];
   private wiresDirty = true;
@@ -316,6 +326,11 @@ export class BoardScene extends Phaser.Scene {
     this.lastWires = null;
     this.lastParts = null;
     this.pool = new PacketPool();
+    this.wait = emptyWait();
+    this.pulsingPads = [];
+    this.crewShown = '';
+    this.tumbles = new TumblePool();
+    this.tumbleSprites = [];
     this.packetSprites = [];
     this.skipTags = [];
     this.chan = emptyChannel();
@@ -351,6 +366,8 @@ export class BoardScene extends Phaser.Scene {
     this.previewG.setDepth(4);
 
     this.drawTray();
+
+    this.drawWaits();
 
     this.ghost = this.add.image(0, 0, 'server').setVisible(false).setAlpha(0.75).setDepth(30);
     this.cutBtn = this.makeButton('icon-cut', 0xff4d5e);
@@ -658,13 +675,19 @@ export class BoardScene extends Phaser.Scene {
     trouble.dark = f.dark;
     trouble.dips = f.dips;
     trouble.overload = this.snap.overload;
+    const wait = waitInto(this.wait, f, t, reduce);
+    const waiting = wait.port !== null;
     for (let i = 0; i < this.padList.length; i++) {
       const pv = this.padList[i];
       const pad = pv.pad;
       const onPad = partInSlot(parts, pv.slot);
       const target = placingServer && onPad === null;
-      pad.setAlpha(target ? 1 : 0.8);
+      // While the board waits for a build, the empty pads pulse: room for a box here.
+      const pulsing = waiting && onPad === null && !target;
+      this.pulsingPads[i] = pulsing;
+      pad.setAlpha(target ? 1 : pulsing ? padPulseAlpha(t, reduce) : 0.8);
       if (target) pad.setTint(0x9ffcff);
+      else if (pulsing) pad.setTint(0x7fe9ff);
       else pad.clearTint();
       // The balancer skips the box on this pad: grey dashed pad, SKIPPED sticky for 1 s after.
       pv.skipped = onPad !== null && this.isSkipped(flow.skipped, onPad.id);
@@ -717,6 +740,7 @@ export class BoardScene extends Phaser.Scene {
     this.drawPreview(parts);
     this.drawChannel(channelInto(this.chan, f));
     this.stepPackets(dt, flow.wires, f.demand);
+    this.drawWait(wait, f.paused ? 0 : Math.min(seconds, 0.25));
     this.placeButtons(parts);
 
     if (this.refusalText.visible && this.time.now > this.refusalUntil) this.refusalText.setVisible(false);
@@ -759,6 +783,65 @@ export class BoardScene extends Phaser.Scene {
       }
     }
     v.warn.setVisible(look.warning && v.lit);
+  }
+
+  /** The waits' port blink, the crew chip and the pool of tumbling cubes, made once. */
+  private drawWaits(): void {
+    this.portG = this.add.graphics().setDepth(6).setVisible(false);
+    this.portG.fillStyle(AMBER, 0.25).fillCircle(0, 0, 20);
+    this.portG.lineStyle(3, AMBER, 1).strokeCircle(0, 0, 13);
+    this.portG.fillStyle(AMBER, 1).fillCircle(0, 0, 6);
+    this.crewText = this.add
+      .text(LB_SLOT.x, LB_SLOT.y + 66, '', {
+        fontFamily: 'monospace',
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: '#2de2e6',
+        backgroundColor: '#05070fdd',
+        padding: { x: 8, y: 3 },
+      })
+      .setOrigin(0.5)
+      .setDepth(6)
+      .setVisible(false);
+    for (let i = 0; i < this.tumbles.items.length; i++) {
+      this.tumbleSprites.push(this.add.image(0, 0, 'packet').setDepth(2.5).setTint(GREY).setVisible(false));
+    }
+  }
+
+  /**
+   * The waits (board-6): the out-port that needs a wire blinks (lit steady under reduce flicker),
+   * the cubes with nowhere to go tumble off it, and in the crew wait a chip says what the boxes
+   * behind the balancer cover of the 120 they must. `dt` is real seconds (0 while held by a card).
+   */
+  private drawWait(w: WaitState, dt: number): void {
+    const port = w.port;
+    if (port) this.portG.setPosition(port.x, port.y);
+    this.portG.setVisible(w.portLit);
+    if (w.crew) {
+      const text = crewChip(w.behind, w.need);
+      if (text !== this.crewShown) {
+        this.crewShown = text;
+        this.crewText.setText(text);
+      }
+    }
+    this.crewText.setVisible(w.crew);
+    // Cubes reach the waiting port at the channel's rate; with nowhere to go they tumble off.
+    this.tumbles.step(dt, port ? Math.min(12, this.chan.lanePps) : 0, port);
+    const items = this.tumbles.items;
+    for (let i = 0; i < items.length; i++) {
+      const s = this.tumbleSprites[i];
+      const p = items[i];
+      if (!p.active) {
+        s.setVisible(false);
+        continue;
+      }
+      const angle = this.tumbles.at(p, this.at);
+      s.setPosition(this.at.x, this.at.y)
+        .setRotation(angle)
+        .setScale(0.7)
+        .setAlpha(1 - p.age / 0.9)
+        .setVisible(true);
+    }
   }
 
   /** Whether the balancer skipped a wire into `id` this frame (plain loops: no closure, no string built). */
@@ -1291,7 +1374,7 @@ export class BoardScene extends Phaser.Scene {
             skipped: pv.skipped,
             skipTagUntil: Number.isFinite(pv.skipUntil) ? round(pv.skipUntil) : null,
             dashed: this.clock < pv.skipUntil,
-            pulsing: false,
+            pulsing: this.pulsingPads[this.padList.indexOf(pv)] === true,
           };
         }),
       ],
@@ -1323,7 +1406,19 @@ export class BoardScene extends Phaser.Scene {
         levelY: page(CHANNEL.mouth.x, levelY(this.chan.level, CHANNEL.mouth.x)).y,
       },
       skipped: [...f.flow.skipped],
-      packets: { pool: this.pool.size, active: this.pool.active },
+      packets: { pool: this.pool.size, active: this.pool.active, tumbled: this.tumbles.active },
+      waiting: {
+        first: this.wait.first,
+        crew: this.wait.crew,
+        behind: round(this.wait.behind),
+        need: this.wait.need,
+        port: this.wait.port ? page(this.wait.port.x, this.wait.port.y) : null,
+        portLit: this.wait.portLit,
+        blinking: this.wait.blinking,
+        tumbled: this.tumbles.active,
+        pulsing: this.padList.filter((_, i) => this.pulsingPads[i] === true).map((pv) => pv.slot),
+        chip: this.crewText.visible ? this.crewText.text : null,
+      },
       rewinds: f.rewinds.map((w) => ({ at: round(w.at), to: w.to })),
       selectedPart: this.selectedPart,
       selectedWire: this.selectedWire,

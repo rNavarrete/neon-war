@@ -203,7 +203,7 @@ async function wire(page: Page, from: string, to: string): Promise<void> {
     .toBe(true);
 }
 
-test('the channel (board-4): bank marks, level on the 0..400 scale, the ROOM tick on wired capacity, no chevrons', async ({
+test('C1 (board-4, board-6): the clock holds and the board shows why; bank marks, level on 0..400, the ROOM tick on wired capacity, no chevrons', async ({
   page,
 }) => {
   await openBoard(page, '&speed=4');
@@ -221,11 +221,36 @@ test('the channel (board-4): bank marks, level on the 0..400 scale, the ROOM tic
   expect(c.lanes.reduce((a, x) => a + x, 0)).toBeCloseTo(c.lanePps, 1);
   expect(c.capacityLevel).toBe(0);
 
+  // board-6: the clock holds in C1 until the first box is wired, and the board shows why: the
+  // gateway's out-port blinks, the cubes with nowhere to go tumble off it, the empty pads pulse.
+  const held = b.now;
+  const lit = new Set<boolean>();
+  let tumbled = 0;
+  for (let i = 0; i < 40; i++) {
+    const x = await board(page);
+    expect(x.now, 'the clock holds').toBe(held);
+    expect(x.waiting.first).toBe(true);
+    expect(x.waiting.crew).toBe(false);
+    expect(x.waiting.blinking).toBe(true);
+    expect(x.waiting.port).not.toBeNull();
+    expect(x.waiting.pulsing.sort()).toEqual(['s1', 's2', 's3', 's4', 's5', 's6']);
+    for (const p of x.pads) expect(p.pulsing).toBe(p.slot !== 'lb');
+    lit.add(x.waiting.portLit);
+    tumbled = Math.max(tumbled, x.waiting.tumbled);
+    await page.waitForTimeout(40);
+  }
+  expect([...lit].sort(), 'the port blinks').toEqual([false, true]);
+  expect(tumbled, 'cubes tumble off the port').toBeGreaterThan(0);
+  const gw = b.parts.find((p) => p.kind === 'gateway')!;
+  expect(b.waiting.port!.x).toBeGreaterThan(gw.x);
+
   // Racked only (the clock holds in C1 until the first build): the ROOM tick stays at 0.
   const id = await placeServer(page, 's1');
   b = await board(page);
   expect(b.channel.capacityLevel).toBe(0);
   expect(b.channel.wired).toBe(0);
+  expect(b.waiting.first).toBe(true);
+  expect(b.waiting.pulsing.sort()).toEqual(['s2', 's3', 's4', 's5', 's6']);
 
   // Wired gateway -> server -> database and online: the tick moves to 60 / 400.
   await wire(page, 'gateway', id);
@@ -234,6 +259,9 @@ test('the channel (board-4): bank marks, level on the 0..400 scale, the ROOM tic
     .poll(async () => (await board(page)).channel.capacityLevel, { timeout: 20_000 })
     .toBeCloseTo(0.15, 3);
   b = await board(page);
+  // Wired: the wait is over, the clock runs, nothing blinks or pulses for it any more.
+  expect(b.waiting).toMatchObject({ first: false, crew: false, port: null, portLit: false, pulsing: [] });
+  expect(b.now).toBeGreaterThan(held);
   expect(b.channel.wired).toBe(60);
   expect(b.channel.roomY).toBeLessThan(b.channel.marks[0].y);
   expect(b.channel.roomY).toBeGreaterThan(b.channel.marks[1].y);
@@ -387,7 +415,7 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   let flickerOk = true;
   let reduceOk = true;
   const look = (b: BoardTestState) => {
-    reduceOk &&= b.reduceFlicker;
+    reduceOk &&= b.reduceFlicker && !b.waiting.blinking && (b.waiting.port === null || b.waiting.portLit);
     for (const p of b.parts) {
       flickerOk &&= p.flickerLit;
       if (p.status === 'dark')
@@ -427,9 +455,25 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   expect(hi.demand).toBeGreaterThan(240);
   expect(hi.lanePps).toBeGreaterThan(lo.lanePps);
 
-  // The crew's balancer feeds the one stock box: the clock waits for the player's build. Rack a box
-  // behind the balancer: it is booting (the clock holds, so it stays booting), so the balancer
-  // skips it: the pad goes grey and dashed with SKIPPED on it.
+  // board-6: the crew's balancer feeds the one stock box, so the clock waits for the player's
+  // build and the board shows it: the balancer's out-port lit (steady under reduce flicker), the
+  // empty pads, and the chip by the balancer reading what the boxes behind it cover of 120.
+  const crew = await watch(page, 'board.waiting.crew', (x) => x.waiting.crew);
+  expect(crew.waiting).toMatchObject({ first: false, behind: 60, need: 120, chip: '60/120', portLit: true });
+  expect(crew.waiting.blinking, 'no blink under reduce flicker').toBe(false);
+  const lb = crew.parts.find((p) => p.kind === 'balancer')!;
+  expect(crew.waiting.port!.x).toBeGreaterThan(lb.x);
+  expect(crew.waiting.pulsing.sort()).toEqual(['s2', 's3', 's4', 's5', 's6']);
+  for (let i = 0; i < 5; i++) {
+    await page.waitForTimeout(100);
+    const x = await board(page);
+    expect(x.now, 'the clock holds in the crew wait').toBe(crew.now);
+    expect(x.waiting.crew).toBe(true);
+    expect(x.waiting.portLit).toBe(true);
+  }
+
+  // Rack a box behind the balancer: it is booting (the clock holds, so it stays booting), so the
+  // balancer skips it: the pad goes grey and dashed with SKIPPED on it.
   const s2 = await placeServer(page, 's2');
   await wire(page, 'balancer', s2);
   let b = await watch(page, 'the s2 pad SKIPPED', (x) => x.pads.find((p) => p.slot === 's2')!.dashed);
@@ -460,6 +504,18 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   expect(pad.skipTagUntil!).toBeGreaterThanOrEqual(lastSkipped + 1 - 0.001);
   b = await watch(page, 'the SKIPPED tag gone', (x) => !x.pads.find((p) => p.slot === 's2')!.dashed);
   expect(b.clock - lastSkipped, 'the tag stayed at least 1 s').toBeGreaterThanOrEqual(1 - 0.05);
+
+  // The wait lasts until the boxes behind the balancer cover 120: wired on to the database it is
+  // still 60, then the balancer's wire back makes 120 and the clock runs again.
+  expect(b.waiting).toMatchObject({ crew: true, behind: 60, chip: '60/120' });
+  await wire(page, s2, 'database');
+  b = await board(page);
+  expect(b.waiting).toMatchObject({ crew: true, behind: 60 });
+  expect(b.now).toBe(crew.now);
+  await wire(page, 'balancer', s2);
+  b = await watch(page, 'the crew wait over', (x) => !x.waiting.crew);
+  expect(b.waiting).toMatchObject({ first: false, crew: false, port: null, chip: null, pulsing: [] });
+  await expect.poll(async () => (await board(page)).now).toBeGreaterThan(crew.now);
 
   // Reduce flicker: nothing blinked on any read.
   expect(reduceOk).toBe(true);

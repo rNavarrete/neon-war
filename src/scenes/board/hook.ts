@@ -93,8 +93,28 @@ export interface BoardTestState {
   offline: string[];
   /** Wire keys the load balancer skipped, each drawn with a grey "skipped" tag. */
   skipped: string[];
-  /** Packet sprites in the pool, and how many are on a wire right now. */
-  packets: { pool: number; active: number };
+  /** Packet sprites in the pool, how many are on a wire right now, and the cubes tumbling off a waiting port. */
+  packets: { pool: number; active: number; tumbled: number };
+  /**
+   * The board's waits (board-6): `first` while C1 holds the clock for the first build, `crew` while
+   * the clock waits after the rescue for the boxes behind the balancer to cover `need` (120; they
+   * cover `behind` now). The board shows why: the out-port that needs a wire (`port`, page CSS
+   * pixels) blinks (`blinking`; `portLit` this frame, always lit under reduce flicker), cubes tumble
+   * off it (`tumbled` now), the empty pads pulse (`pulsing`, by slot) and in the crew wait a chip by
+   * the balancer reads behind/need (`chip`).
+   */
+  waiting: {
+    first: boolean;
+    crew: boolean;
+    behind: number;
+    need: number;
+    port: Point | null;
+    portLit: boolean;
+    blinking: boolean;
+    tumbled: number;
+    pulsing: string[];
+    chip: string | null;
+  };
   /** Each rewind so far: the sim second it happened and the challenge start it went back to. */
   rewinds: { at: number; to: number }[];
   selectedPart: string | null;
