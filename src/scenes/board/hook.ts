@@ -65,6 +65,15 @@ export interface BoardTestState {
     packetsIn: number;
     /** The REPLACE button under this part while it is a selected dead box (board-8), else null. */
     replaceButton: Point | null;
+    /** board-9: the motion.ts spec playing on the sprite ('placeDrop', 'dieCollapse', 'dipBlackout', 'crewTint') or 'idle'. */
+    motion: string;
+    /**
+     * The pose the sprite rests in for its state (the hook rule: the target, never an in-between
+     * value): y offset px from its place, scale and alpha factors. A dead box rests sunk and dim.
+     */
+    pose: { dy: number; scale: number; alpha: number };
+    /** The pose the sprite was drawn in this frame: equal to `pose` once its animation has ended. */
+    drawn: { dy: number; scale: number; alpha: number };
   })[];
   /**
    * Every pad (board-5): the balancer's and the six server pads, with their drawn box (page CSS
@@ -233,6 +242,32 @@ export interface BoardTestState {
     roomY: number;
     levelY: number;
   };
+  /**
+   * board-9: the animations in flight now, by name ('death:<id>', 'flash', 'place:<id>', 'boot:<id>',
+   * 'overclock:<id>', 'dip:<id>', 'haze:<id>', 'wire:<key>', 'cut:<key>', 'sparks',
+   * 'decommission:<id>', 'float:<id>', 'cable', 'fireworks', 'lightsdown', 'ping'). Never 'flash' or
+   * 'sparks' under reduce flicker.
+   */
+  anims: string[];
+  /**
+   * The last 128 animations started, oldest first, on the animation clock (board seconds: frozen
+   * while paused, slowed by Regroup): `end` null while it plays; `ms` its stated duration in the
+   * variant that played (Infinity for a loop, reported as null); `calm` the reduce-flicker variant.
+   */
+  animLog: {
+    name: string;
+    kind: string;
+    start: number;
+    end: number | null;
+    ms: number | null;
+    calm: boolean;
+  }[];
+  /** The animation clock now, seconds. */
+  animClock: number;
+  /** Refund floats on screen now, e.g. '+40'. */
+  floats: string[];
+  /** The particle pool (smoke, sparks, fireworks, embers): its fixed size, live now, the most live at once. */
+  particles: { pool: number; active: number; peak: number; dropped: number };
   /** Board frames synced so far. */
   frame: number;
   /**

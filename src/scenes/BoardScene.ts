@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { bus } from '../game/bus';
+import { type GameEvents, bus } from '../game/bus';
 import { Director } from '../game/director';
 import { run } from '../game/run';
 import { type Part, wireKey } from '../sim/board';
@@ -104,6 +104,31 @@ import {
 import { LABELS } from './hud/labels';
 import { settings } from '../game/settings';
 import { SCENES } from './keys';
+import { type Occurrence, detectOccurrences } from '../game/occurrences';
+import { MOTION, MotionPlayer } from './motion';
+import {
+  type AnimEntry,
+  AnimBook,
+  CABLE_DROP_PX,
+  DEATH_FLASH_MS,
+  FIREWORK_SIZE,
+  EMBER_SIZE,
+  ParticlePool,
+  bootFrame,
+  burstsDue,
+  cableFrame,
+  cutFade,
+  deathFrame,
+  deathSmoke,
+  drawOn,
+  floatFrame,
+  hazeFrame,
+  heldPadGlow,
+  kitFrame,
+  lightsDown,
+  pingFrame,
+} from './board/anim';
+import type { PartStatus } from './board/view';
 
 // Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
 export const GAME_WIDTH = 1920;
@@ -137,6 +162,8 @@ const ART: Readonly<Record<string, string>> = {
   'icon-lock': 'art/hud/icons/lock.webp',
   'icon-cut': 'art/hud/icons/cut.webp',
   'icon-bin': 'art/hud/icons/bin.webp',
+  // The crew's cable lowering the balancer on resume after the rescue (board-9).
+  'board-cable': 'art/board/crew-cable.webp',
 };
 
 interface PartView {
@@ -160,6 +187,19 @@ interface PartView {
   warn: Phaser.GameObjects.Graphics;
   /** Lit this frame (false only on the dark half of a power flicker's 6 Hz blink). */
   lit: boolean;
+  /** board-9: the shared motion spec playing on the sprite (place, death, dip), and the haze over it while hot. */
+  player: MotionPlayer;
+  haze: Phaser.GameObjects.Image | null;
+  /** The status last frame, to see a boot complete. */
+  status: PartStatus | null;
+  /** Where the sprite stands at rest and its art's fit scale; the animation offsets from them. */
+  baseX: number;
+  baseY: number;
+  baseScale: number;
+  /** What the animation drew this frame, relative to rest: y offset px, scale and alpha factors. */
+  dy: number;
+  dscale: number;
+  dalpha: number;
 }
 
 /** A server pad and what the board draws on it: the dashed grey outline and the sticky SKIPPED tag. */
@@ -397,6 +437,43 @@ export class BoardScene extends Phaser.Scene {
   private offBus: (() => void) | null = null;
   private director: Director | null = null;
   private sky!: Phaser.GameObjects.Image;
+  /** board-9: the animations in flight, their clock (board time: frozen while paused, slowed by Regroup) and the particles. */
+  private animBook = new AnimBook();
+  private animClock = 0;
+  private particles = new ParticlePool();
+  private particleSprites: Phaser.GameObjects.Image[] = [];
+  /** One graphics for every drawn animation (draw-on, cut fade, rings, flash, pings), cleared only while one plays. */
+  private animG!: Phaser.GameObjects.Graphics;
+  private animDrawn = false;
+  private shade!: Phaser.GameObjects.Rectangle;
+  private cableImg!: Phaser.GameObjects.Image;
+  private kitImg!: Phaser.GameObjects.Image;
+  private liftImg!: Phaser.GameObjects.Image;
+  private liftPlayer = new MotionPlayer();
+  private floatText!: Phaser.GameObjects.Text;
+  private floatAt = { x: 0, y: 0 };
+  private liftAt = { x: 0, y: 0, scale: 1 };
+  private burstCount = 0;
+  private kitFrom = { x: 0, y: 0 };
+  private kitTo = { x: 0, y: 0 };
+  /** The frame before this one, the edges between them (reused list) and the rewinds seen so far. */
+  private prevFrame: Frame | null = null;
+  private occ: Occurrence[] = [];
+  private rewindsSeen = 0;
+  /** The wires as laid out before the last rebuild, so a cut wire's trace can fade where it was. */
+  private oldWires = new Map<string, WireGeom>();
+  private cutGeoms = new Map<string, WireGeom>();
+  private deathOf: string | null = null;
+  private fireworksAt = -1;
+  /** Reused frames for the timelines. */
+  private readonly df = { flash: 0, shakeX: 0 };
+  private readonly rf = { alpha: 0, scale: 1 };
+  private readonly ff = { along: 0, scale: 1, alpha: 1 };
+  private readonly hf = { alpha: 0, dy: 0, scaleY: 1 };
+  private readonly flf = { dy: 0, alpha: 1 };
+  private readonly cf = { lower: 0, dy: -CABLE_DROP_PX, sway: 0, landed: false };
+  private readonly pf = { along: 0, alpha: 0, radius: 0 };
+  private offAction: (() => void) | null = null;
   /** Created once with the scene: the pool calls it per wire per frame without a new closure. */
   private readonly travelOf = (wire: string): number => this.geomOf(wire)?.travel ?? 1;
   /** Bound once: drops the sprites of a part no longer on the board (Map.forEach, no iterator). */
@@ -408,6 +485,7 @@ export class BoardScene extends Phaser.Scene {
     v.bar?.destroy();
     v.chip.destroy();
     v.warn.destroy();
+    v.haze?.destroy();
     this.views.delete(id);
   };
 
@@ -480,6 +558,19 @@ export class BoardScene extends Phaser.Scene {
     this.plateFor = null;
     this.platePinned = false;
     this.targetRing = null;
+    this.animBook = new AnimBook();
+    this.animClock = 0;
+    this.particles = new ParticlePool();
+    this.particleSprites = [];
+    this.animDrawn = false;
+    this.liftPlayer = new MotionPlayer();
+    this.prevFrame = null;
+    this.occ = [];
+    this.rewindsSeen = run().play.rewinds.length;
+    this.oldWires = new Map();
+    this.cutGeoms = new Map();
+    this.deathOf = null;
+    this.fireworksAt = -1;
 
     this.drawBackdrop();
 
@@ -506,6 +597,8 @@ export class BoardScene extends Phaser.Scene {
     for (let i = 0; i < this.sparks.items.length; i++) {
       this.sparkSprites.push(this.add.image(0, 0, 'packet').setDepth(2.6).setScale(0.3).setVisible(false));
     }
+
+    this.makeAnimObjects();
 
     this.ghost = this.add.image(0, 0, 'server').setVisible(false).setAlpha(0.75).setDepth(30);
     this.ghostOutline = this.add.graphics().setDepth(29);
@@ -569,6 +662,8 @@ export class BoardScene extends Phaser.Scene {
 
     this.offBus?.();
     this.offBus = bus.on('refused', ({ reason }) => this.showRefusal(reason));
+    this.offAction?.();
+    this.offAction = bus.on('action', (a) => this.onAction(a));
     this.director?.destroy();
     this.director = new Director();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -577,6 +672,8 @@ export class BoardScene extends Phaser.Scene {
       kb?.off('keydown-BACKSPACE', this.onDelete, this);
       this.offBus?.();
       this.offBus = null;
+      this.offAction?.();
+      this.offAction = null;
       this.director?.destroy();
       this.director = null;
       this.ready = false;
@@ -584,6 +681,7 @@ export class BoardScene extends Phaser.Scene {
 
     provideTestState('board', () => this.testState());
     registerPool('packets', () => this.packetSprites.length);
+    registerPool('boardParticles', () => this.particleSprites.length);
 
     this.syncBoard(0);
     this.ready = true;
@@ -864,6 +962,7 @@ export class BoardScene extends Phaser.Scene {
     this.inventory.setInFlight(d?.kind === 'card' ? d.id : null);
 
     if (f.wires !== this.lastWires || parts !== this.lastParts) this.rebuildWires(f);
+    const occ = this.edges(f);
 
     // Parts. `unlocked` is already true once a balancer is racked.
     this.lbPad.setTexture(unlocked ? 'slot-empty' : 'slot-locked');
@@ -927,7 +1026,8 @@ export class BoardScene extends Phaser.Scene {
       if (v.art !== look.art) {
         v.art = look.art;
         v.img.setTexture(look.art);
-        v.img.setScale(this.artScale(part, v.img));
+        v.baseScale = this.artScale(part, v.img);
+        v.img.setScale(v.baseScale);
       }
       if (look.dark) v.img.setTint(DARK_TINT);
       else v.img.clearTint();
@@ -946,6 +1046,8 @@ export class BoardScene extends Phaser.Scene {
     }
     if (this.selectedWire && !this.wireByKey.has(this.selectedWire)) this.selectedWire = null;
 
+    // Animations freeze with the board, except on a failure: the death plays out before the rewind.
+    this.stepAnims(f, occ, f.paused && f.failure === null ? 0 : Math.min(seconds, 0.25), reduce);
     this.drawWires(flow.wires, flow.skipped);
     this.drawPreview(parts);
     this.drawChannel(channelInto(this.chan, f));
@@ -1156,6 +1258,15 @@ export class BoardScene extends Phaser.Scene {
       chipKey: -1,
       warn,
       lit: true,
+      player: new MotionPlayer(),
+      haze: null,
+      status: null,
+      baseX: c.x,
+      baseY: c.y,
+      baseScale: 1,
+      dy: 0,
+      dscale: 1,
+      dalpha: 1,
     };
     this.views.set(part.id, v);
     return v;
@@ -1171,6 +1282,7 @@ export class BoardScene extends Phaser.Scene {
   private rebuildWires(f: Frame): void {
     this.lastWires = f.wires;
     this.lastParts = f.parts;
+    this.oldWires = this.wireByKey;
     this.wireList = [];
     this.wireByKey = new Map();
     this.wiresDirty = true;
@@ -1239,7 +1351,8 @@ export class BoardScene extends Phaser.Scene {
       const s =
         (skipped.includes(key) ? 1 : 0) |
         ((rates[key] ?? 0) > 0 ? 2 : 0) |
-        (key === this.selectedWire ? 4 : 0);
+        (key === this.selectedWire ? 4 : 0) |
+        (this.animBook.playing('wire', key) !== undefined ? 8 : 0);
       if (state[i] !== s) {
         state[i] = s;
         dirty = true;
@@ -1253,6 +1366,8 @@ export class BoardScene extends Phaser.Scene {
     let tags = 0;
     for (let i = 0; i < list.length; i++) {
       const w = list[i];
+      // A new trace is drawing on (board-9): the animation draws it until it is whole.
+      if ((state[i] & 8) !== 0) continue;
       const isSkipped = (state[i] & 1) !== 0;
       const live = (state[i] & 2) !== 0;
       const selected = (state[i] & 4) !== 0;
@@ -1942,6 +2057,485 @@ export class BoardScene extends Phaser.Scene {
     if (res.ok) this.selectedPart = null;
   }
 
+  // ---- board-9: animations ----------------------------------------------------------------------
+  // Looks only: everything here reads the Frame the sync took and the bus, draws, and changes no sim
+  // state. Timelines come from board/anim.ts, the sprite specs from motion.ts; under reduce flicker
+  // the calm variants play and nothing flashes or throws sparks. In ?test lite mode no decorative
+  // particle is thrown; every hook value stays the same.
+
+  /** The animation sprites, made once: the drawing layer, the shade, the cable, the kit, the lift, the float, the particles. */
+  private makeAnimObjects(): void {
+    this.bakeHaze();
+    this.animG = this.add.graphics().setDepth(4.5);
+    const feed = ZONES.feed;
+    this.shade = this.add
+      .rectangle(feed.x, feed.y, feed.w, feed.h, 0x000000, 1)
+      .setOrigin(0)
+      .setDepth(20)
+      .setAlpha(0)
+      .setVisible(false);
+    this.cableImg = this.add.image(LB_SLOT.x, feed.y, 'board-cable').setOrigin(0.5, 1).setDepth(2.9);
+    this.cableImg.setScale(CABLE_SCALE).setVisible(false);
+    this.kitImg = this.add.image(0, 0, 'overclock-kit').setDepth(32).setVisible(false);
+    this.liftImg = this.add.image(0, 0, 'server').setDepth(7).setVisible(false);
+    this.floatText = this.add
+      .text(0, 0, '', {
+        fontFamily: 'monospace',
+        fontSize: '26px',
+        fontStyle: 'bold',
+        color: '#ffb02e',
+        stroke: '#05070f',
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(36)
+      .setVisible(false);
+    for (let i = 0; i < this.particles.items.length; i++) {
+      this.particleSprites.push(this.add.image(0, 0, 'packet').setDepth(8).setVisible(false));
+    }
+  }
+
+  /** The heat haze: a soft warm glow baked once into a texture. */
+  private bakeHaze(): void {
+    if (this.textures.exists('board-haze')) return;
+    const g = this.make.graphics({}, false);
+    for (let i = 8; i >= 1; i--) g.fillStyle(0xff7a3a, 0.05).fillEllipse(48, 40, 12 * i, 10 * i);
+    g.generateTexture('board-haze', 96, 80);
+    g.destroy();
+  }
+
+  /** The edges between the last frame and this one (reused list); a rewind clears every animation instead. */
+  private edges(f: Frame): readonly Occurrence[] {
+    const prev = this.prevFrame;
+    this.prevFrame = f;
+    if (prev === null || prev === f) {
+      this.occ.length = 0;
+      return this.occ;
+    }
+    detectOccurrences(prev, f, this.occ);
+    if (f.rewinds.length !== this.rewindsSeen) {
+      this.rewindsSeen = f.rewinds.length;
+      this.resetAnims();
+      this.occ.length = 0;
+    }
+    return this.occ;
+  }
+
+  /** Stop every animation and hide its sprites (a rewind puts the board back as it was). */
+  private resetAnims(): void {
+    this.animBook.clear(this.animClock);
+    this.particles.clear();
+    this.liftPlayer.stop();
+    this.cutGeoms.clear();
+    this.views.forEach(stopPlayer);
+  }
+
+  /**
+   * One frame of the animations: start what this frame's edges and the parts' states call for, end
+   * what is done, then draw. `rawDt` is the frame's real seconds (0 while the board is held, but not
+   * while it stands frozen on a failure); animations run on board time, slowed with the packets
+   * while Regroup runs.
+   */
+  private stepAnims(f: Frame, occ: readonly Occurrence[], rawDt: number, calm: boolean): void {
+    const dt = rawDt * (f.timeScale > 0 ? f.timeScale : 0);
+    this.animClock += dt;
+    const now = this.animClock;
+    const book = this.animBook;
+    for (let i = 0; i < occ.length; i++) this.startFor(occ[i], f, calm, now);
+    const parts = f.parts;
+    for (let i = 0; i < parts.length; i++) {
+      const id = parts[i].id;
+      const v = this.views.get(id);
+      if (!v) continue;
+      const st = v.look.status;
+      if ((v.status === 'booting' || v.status === 'rebooting') && st === 'online') {
+        book.start('boot', id, calm, now);
+      }
+      v.status = st;
+      book.keep('haze', id, st === 'online' && v.look.share !== null && v.look.share > 1, calm, now);
+    }
+    book.keep('ping', null, this.balancerFeeds(f), calm, now);
+    book.step(now);
+    this.drawSprites(f, rawDt, now);
+    this.drawLayer(f, now, calm);
+    this.drawExtras(f, rawDt, now, calm);
+    this.particles.step(dt);
+    this.drawParticles();
+  }
+
+  /** Start what one edge calls for. */
+  private startFor(o: Occurrence, f: Frame, calm: boolean, now: number): void {
+    const book = this.animBook;
+    const id = o.id ?? null;
+    const v = id !== null ? this.views.get(id) : undefined;
+    switch (o.kind) {
+      case 'placed': {
+        const part = id !== null ? partById(f.parts, id) : null;
+        if (!part || !v) return;
+        if (part.kind === 'balancer') {
+          // The crew's balancer comes down on the cable inside the crew-build wait.
+          book.start('cable', null, calm, now);
+          v.player.play(MOTION.crewTint);
+        } else {
+          book.start('place', id, calm, now);
+          v.player.play(MOTION.placeDrop);
+        }
+        return;
+      }
+      case 'died': {
+        if (!v || id === null) return;
+        book.start('death', id, calm, now);
+        v.player.play(MOTION.dieCollapse);
+        if (!calm) book.start('flash', null, calm, now, DEATH_FLASH_MS);
+        if (!this.lite) this.particles.emit('smoke', v.baseX, v.baseY - 20, deathSmoke(calm));
+        return;
+      }
+      case 'dark': {
+        if (id === null) {
+          book.start('lightsdown', null, calm, now);
+          return;
+        }
+        if (!v || f.dead.includes(id)) return;
+        book.start('dip', id, calm, now);
+        v.player.play(MOTION.dipBlackout);
+        return;
+      }
+      case 'held': {
+        book.start('fireworks', null, calm, now);
+        if (!calm) book.start('flash', null, calm, now);
+        this.fireworksAt = -1;
+        return;
+      }
+      case 'wired': {
+        if (id !== null && this.wireByKey.has(id)) book.start('wire', id, calm, now);
+        return;
+      }
+      case 'cut': {
+        const g = id !== null ? (this.oldWires.get(id) ?? this.wireByKey.get(id)) : undefined;
+        if (!g || id === null) return;
+        this.cutGeoms.set(id, g);
+        book.start('cut', id, calm, now);
+        if (calm) return;
+        book.start('sparks', null, calm, now);
+        if (this.lite) return;
+        const a = g.path[0];
+        const b = g.path[g.path.length - 1];
+        this.particles.emit('spark', a.x, a.y, 6);
+        this.particles.emit('spark', b.x, b.y, 6);
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /** What the player did, from the bus: a decommission lifts the part away with its refund; a kit flies on. */
+  private onAction(a: GameEvents['action']): void {
+    const calm = settings().reduceFlicker;
+    const now = this.animClock;
+    if (a.type === 'decommission') {
+      const v = this.views.get(a.id);
+      if (!v) return;
+      this.liftImg
+        .setTexture(v.art)
+        .setPosition(v.baseX, v.baseY)
+        .setScale(v.baseScale)
+        .setAlpha(1)
+        .setVisible(true);
+      this.liftAt.x = v.baseX;
+      this.liftAt.y = v.baseY;
+      this.liftAt.scale = v.baseScale;
+      this.liftPlayer.play(MOTION.cardLift);
+      this.animBook.start('decommission', a.id, calm, now);
+      const refund = Math.round(a.refund);
+      if (refund > 0) {
+        this.floatText.setText(`+${refund}`);
+        this.floatAt.x = v.baseX;
+        this.floatAt.y = v.baseY - v.img.displayHeight / 2;
+        this.animBook.start('float', a.id, calm, now);
+      }
+      return;
+    }
+    if (a.type === 'overclock') {
+      const v = this.views.get(a.id);
+      const card = this.cards.find((c) => c.id === 'overclock');
+      if (!v || !card) return;
+      this.kitFrom.x = card.x;
+      this.kitFrom.y = card.y;
+      this.kitTo.x = v.baseX;
+      this.kitTo.y = v.baseY;
+      this.animBook.start('overclock', a.id, calm, now);
+    }
+  }
+
+  /** Whether a balancer has a wire to a box: its health checks ping down them. */
+  private balancerFeeds(f: Frame): boolean {
+    const wires = f.wires;
+    for (let i = 0; i < wires.length; i++) {
+      const from = partById(f.parts, wires[i].from);
+      if (from !== null && from.kind === 'balancer' && wires[i].to !== 'database') return true;
+    }
+    return false;
+  }
+
+  /** Each part sprite: the motion spec playing on it, else the pose its state rests in; the haze over a hot one. */
+  private drawSprites(f: Frame, rawDt: number, now: number): void {
+    const parts = f.parts;
+    const cable = this.animBook.playing('cable', null);
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const v = this.views.get(part.id);
+      if (!v) continue;
+      const s = v.player.step(rawDt, f.timeScale, this.reduceFlicker);
+      let dy = 0;
+      let sc = 1;
+      let al = 1;
+      let light = 1;
+      let mix = 0;
+      if (v.player.spec !== null) {
+        dy = s.y;
+        sc = s.scale;
+        al = s.alpha;
+        light = s.light;
+        mix = s.mix;
+      } else if (f.dead.includes(part.id)) {
+        // A dead box rests where its collapse left it.
+        const rest = MOTION.dieCollapse.rest;
+        dy = rest.y ?? 0;
+        sc = rest.scale ?? 1;
+        al = rest.alpha ?? 1;
+      }
+      let dx = 0;
+      const death = this.animBook.playing('death', part.id);
+      if (death) dx = deathFrame(now - death.start, death.calm, this.df).shakeX;
+      if (cable && part.kind === 'balancer') {
+        cableFrame(now - cable.start, cable.calm, this.cf);
+        dy += this.cf.dy;
+        dx += this.cf.sway;
+      }
+      v.img.setPosition(v.baseX + dx, v.baseY + dy).setScale(v.baseScale * sc);
+      if (al !== 1) v.img.setAlpha(v.img.alpha * al);
+      if (light < 1) v.img.setTint(lerpColour(0xffffff, DARK_TINT, 1 - light));
+      else if (mix > 0) v.img.setTint(lerpColour(0xffffff, CYAN, mix * 0.6));
+      v.dy = dy;
+      v.dscale = sc;
+      v.dalpha = al;
+      // Heat haze over a box over 100%.
+      const haze = this.animBook.playing('haze', part.id);
+      if (haze) {
+        if (!v.haze) v.haze = this.add.image(v.baseX, v.baseY, 'board-haze').setDepth(5.5);
+        hazeFrame(now - haze.start, haze.calm, this.hf);
+        const h = v.img.displayHeight;
+        v.haze
+          .setPosition(v.baseX, v.baseY - h * 0.45 + this.hf.dy)
+          .setScale((v.img.displayWidth * 1.3) / 96, ((h * 0.6) / 80) * this.hf.scaleY)
+          .setAlpha(this.hf.alpha)
+          .setVisible(true);
+      } else if (v.haze?.visible) v.haze.setVisible(false);
+    }
+    // The held pads glow (flash in full, a slow warm glow when calm).
+    const held = this.animBook.playing('fireworks', null);
+    if (held) {
+      const glow = heldPadGlow(now - held.start, held.calm);
+      for (let i = 0; i < this.padList.length; i++) {
+        const pv = this.padList[i];
+        if (glow > 0 && partInSlot(parts, pv.slot) !== null)
+          pv.pad.setTint(lerpColour(0xffffff, AMBER, glow));
+      }
+    }
+  }
+
+  /** The drawn layer: traces drawing on, cut traces fading, boot rings, the death flash, the pings. Cleared only while one plays. */
+  private drawLayer(f: Frame, now: number, calm: boolean): void {
+    const live = this.animBook.live;
+    const g = this.animG;
+    let any = false;
+    for (let i = 0; i < live.length; i++) {
+      const k = live[i].kind;
+      if (k === 'wire' || k === 'cut' || k === 'boot' || k === 'ping' || (k === 'death' && !live[i].calm)) {
+        any = true;
+        break;
+      }
+    }
+    if (!any) {
+      if (this.animDrawn) g.clear();
+      this.animDrawn = false;
+      if (this.cutGeoms.size > 0) this.cutGeoms.clear();
+      return;
+    }
+    g.clear();
+    this.animDrawn = true;
+    for (let i = 0; i < live.length; i++) {
+      const e = live[i];
+      const t = now - e.start;
+      if (e.kind === 'wire' && e.id !== null) {
+        const w = this.wireByKey.get(e.id);
+        if (w) this.strokePartial(g, w, drawOn(t), 1);
+      } else if (e.kind === 'cut' && e.id !== null) {
+        const w = this.cutGeoms.get(e.id);
+        if (w) this.strokePartial(g, w, 1, cutFade(t));
+      } else if (e.kind === 'boot' && e.id !== null) {
+        const v = this.views.get(e.id);
+        if (!v) continue;
+        bootFrame(t, e.calm, this.rf);
+        const r = (Math.max(v.img.displayWidth, v.img.displayHeight) / 2 + 6) * this.rf.scale;
+        g.lineStyle(4, CYAN, this.rf.alpha).strokeCircle(v.baseX, v.baseY, r);
+      } else if (e.kind === 'death' && e.id !== null && !e.calm) {
+        const v = this.views.get(e.id);
+        if (!v) continue;
+        deathFrame(t, false, this.df);
+        if (this.df.flash > 0) {
+          const w = v.img.displayWidth;
+          const h = v.img.displayHeight;
+          g.fillStyle(0xffffff, this.df.flash * 0.85).fillRect(v.img.x - w / 2, v.img.y - h / 2, w, h);
+        }
+      } else if (e.kind === 'ping') {
+        pingFrame(t, calm, this.pf);
+        for (let j = 0; j < this.wireList.length; j++) {
+          const w = this.wireList[j];
+          const from = partById(f.parts, w.from);
+          if (from === null || from.kind !== 'balancer') continue;
+          pointAlong(w.path, w.length, this.pf.along, this.at);
+          g.lineStyle(2, CYAN, this.pf.alpha).strokeCircle(this.at.x, this.at.y, this.pf.radius);
+        }
+      }
+    }
+  }
+
+  /** Stroke the first `share` of a trace (glow, groove, core) at `alpha`, segment by segment (no allocation). */
+  private strokePartial(g: Phaser.GameObjects.Graphics, w: WireGeom, share: number, alpha: number): void {
+    if (share <= 0 || alpha <= 0) return;
+    const target = w.length * Math.min(1, share);
+    for (let pass = 0; pass < 3; pass++) {
+      if (pass === 0) g.lineStyle(18, CYAN, 0.16 * alpha);
+      else if (pass === 1) g.lineStyle(8, 0x03050b, 0.9 * alpha);
+      else g.lineStyle(3, CYAN, 0.95 * alpha);
+      let done = 0;
+      for (let i = 1; i < w.path.length && done < target; i++) {
+        const a = w.path[i - 1];
+        const b = w.path[i];
+        const seg = Math.hypot(b.x - a.x, b.y - a.y);
+        const k = seg > 0 ? Math.min(1, (target - done) / seg) : 1;
+        g.lineBetween(a.x, a.y, a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k);
+        done += seg;
+      }
+    }
+  }
+
+  /** The cable, the kit in flight, the lifted part, the refund float, the lights going down, the fireworks. */
+  private drawExtras(f: Frame, rawDt: number, now: number, calm: boolean): void {
+    const book = this.animBook;
+    // The cable: its end at the balancer's top as it comes down, cropped to the feed.
+    const cable = book.playing('cable', null);
+    const lb = cable ? partOfKind(f.parts, 'balancer') : null;
+    const lbView = lb ? this.views.get(lb.id) : undefined;
+    if (cable && lbView) {
+      const end = lbView.img.y - lbView.img.displayHeight / 2 + 6;
+      const shown = Math.max(0, end - ZONES.feed.y);
+      const h = this.cableImg.height;
+      const cropH = Math.min(h, shown / CABLE_SCALE);
+      this.cableImg
+        .setPosition(lbView.img.x, end)
+        .setCrop(0, h - cropH, this.cableImg.width, cropH)
+        .setVisible(shown > 0);
+    } else if (this.cableImg.visible) this.cableImg.setVisible(false);
+
+    const kit = this.firstOf('overclock');
+    if (kit) {
+      kitFrame(now - kit.start, this.ff);
+      const p = this.ff.along;
+      this.kitImg
+        .setPosition(
+          this.kitFrom.x + (this.kitTo.x - this.kitFrom.x) * p,
+          this.kitFrom.y + (this.kitTo.y - this.kitFrom.y) * p,
+        )
+        .setScale((KIT_SIZE / this.kitImg.height) * this.ff.scale)
+        .setAlpha(this.ff.alpha)
+        .setVisible(true);
+    } else if (this.kitImg.visible) this.kitImg.setVisible(false);
+
+    if (this.liftPlayer.spec !== null) {
+      const s = this.liftPlayer.step(rawDt, f.timeScale, calm);
+      if (this.liftPlayer.spec !== null) {
+        this.liftImg
+          .setPosition(this.liftAt.x, this.liftAt.y + s.y)
+          .setScale(this.liftAt.scale * s.scale)
+          .setAlpha(s.alpha);
+      } else this.liftImg.setVisible(false);
+    } else if (this.liftImg.visible) this.liftImg.setVisible(false);
+
+    const float = this.firstOf('float');
+    if (float) {
+      floatFrame(now - float.start, this.flf);
+      this.floatText
+        .setPosition(this.floatAt.x, this.floatAt.y + this.flf.dy)
+        .setAlpha(this.flf.alpha)
+        .setVisible(true);
+    } else if (this.floatText.visible) this.floatText.setVisible(false);
+
+    // The block went dark at midnight: the lights go down over the feed and stay down.
+    const down = book.playing('lightsdown', null);
+    const dark = f.midnight !== null && !f.midnight.held;
+    if (down) this.shade.setAlpha(lightsDown(now - down.start)).setVisible(true);
+    else if (dark) this.shade.setAlpha(lightsDown(Infinity)).setVisible(true);
+    else if (this.shade.visible) this.shade.setVisible(false);
+
+    // Midnight held: fireworks burst over the feed (embers rise off the pads when calm).
+    const fw = book.playing('fireworks', null);
+    if (fw) {
+      const t = now - fw.start;
+      const n = burstsDue(this.fireworksAt, t, fw.calm);
+      this.fireworksAt = t;
+      if (!this.lite) for (let i = 0; i < n; i++) this.burst(fw.calm);
+    }
+  }
+
+  /** The first live animation of `kind`, whatever its id. */
+  private firstOf(kind: 'overclock' | 'float'): AnimEntry | undefined {
+    const live = this.animBook.live;
+    for (let i = 0; i < live.length; i++) if (live[i].kind === kind) return live[i];
+    return undefined;
+  }
+
+  /** One firework burst over the feed, or a soft rise of embers off a pad when calm. */
+  private burst(calm: boolean): void {
+    const n = this.burstCount++;
+    if (calm) {
+      const pv = this.padList[n % this.padList.length];
+      this.particles.emit('ember', pv.pad.x, pv.pad.y, EMBER_SIZE);
+      return;
+    }
+    const feed = ZONES.feed;
+    const x = feed.x + feed.w * (0.3 + 0.45 * ((n * 0.618) % 1));
+    const y = feed.y + 70 + 50 * (n % 3);
+    this.particles.emit('firework', x, y, FIREWORK_SIZE);
+  }
+
+  /** Draw the particle pool: grey smoke, white-hot sparks, coloured fireworks, amber embers. */
+  private drawParticles(): void {
+    const items = this.particles.items;
+    for (let i = 0; i < items.length; i++) {
+      const p = items[i];
+      const img = this.particleSprites[i];
+      if (!img) continue;
+      if (!p.active) {
+        if (img.visible) img.setVisible(false);
+        continue;
+      }
+      const k = p.kind;
+      img
+        .setPosition(p.x, p.y)
+        .setAlpha(this.particles.alphaOf(p))
+        .setScale(k === 'smoke' ? 0.9 + p.age * 1.4 : k === 'spark' ? 0.3 : k === 'firework' ? 0.45 : 0.4)
+        .setTint(
+          k === 'smoke' ? 0x7a8094 : k === 'spark' ? 0xfff1c4 : k === 'ember' ? AMBER : FIREWORK_TINTS[i % 3],
+        )
+        .setVisible(true);
+    }
+  }
+
+  // ---- end board-9 -------------------------------------------------------------------------------
+
   // ---- test hook -----------------------------------------------------------------------------
 
   private testState(): BoardTestState {
@@ -2033,6 +2627,19 @@ export class BoardScene extends Phaser.Scene {
               this.replaceBtn.visible && this.selectedPart === part.id
                 ? page(this.replaceBtn.x, this.replaceBtn.y)
                 : null,
+            motion: view?.player.motion ?? 'idle',
+            pose: f.dead.includes(part.id)
+              ? {
+                  dy: MOTION.dieCollapse.rest.y ?? 0,
+                  scale: MOTION.dieCollapse.rest.scale ?? 1,
+                  alpha: MOTION.dieCollapse.rest.alpha ?? 1,
+                }
+              : { dy: 0, scale: 1, alpha: 1 },
+            drawn: {
+              dy: round(view?.dy ?? 0),
+              scale: round(view?.dscale ?? 1),
+              alpha: round(view?.dalpha ?? 1),
+            },
           },
         ];
       }),
@@ -2191,6 +2798,23 @@ export class BoardScene extends Phaser.Scene {
       },
       keys: [...BOARD_KEYS],
       wireTarget: this.targetRing,
+      anims: this.animBook.names(),
+      animLog: this.animBook.log.map((e) => ({
+        name: e.name,
+        kind: e.kind,
+        start: round(e.start),
+        end: e.end === null ? null : round(e.end),
+        ms: Number.isFinite(e.ms) ? e.ms : null,
+        calm: e.calm,
+      })),
+      animClock: round(this.animClock),
+      floats: this.floatText.visible ? [this.floatText.text] : [],
+      particles: {
+        pool: this.particleSprites.length,
+        active: this.particles.active,
+        peak: this.particles.peak,
+        dropped: this.particles.dropped,
+      },
       frame: this.snap.count,
       snapshotFrame: this.snap.readAt,
       snapshotChanges: this.snap.changes,
@@ -2203,6 +2827,32 @@ export class BoardScene extends Phaser.Scene {
 function dropLegalOf(card: string, state: PadState | null): boolean | null {
   if (state === null) return null;
   return state === 'legal' || (card === 'server' && state === 'dead');
+}
+
+/** The crew cable's draw scale (its art at the size the manifest shows it). */
+const CABLE_SCALE = 0.55;
+/** The overclock kit's height in flight, px. */
+const KIT_SIZE = 90;
+const FIREWORK_TINTS: readonly number[] = [0xffb02e, 0x2de2e6, 0xff5ec8];
+
+/** A colour `k` (0..1) of the way from `a` to `b`, channel by channel. */
+function lerpColour(a: number, b: number, k: number): number {
+  const t = k <= 0 ? 0 : k >= 1 ? 1 : k;
+  const r = ((a >> 16) & 255) + (((b >> 16) & 255) - ((a >> 16) & 255)) * t;
+  const g = ((a >> 8) & 255) + (((b >> 8) & 255) - ((a >> 8) & 255)) * t;
+  const bl = (a & 255) + ((b & 255) - (a & 255)) * t;
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(bl);
+}
+
+/** Stop a part view's motion (a rewind). */
+function stopPlayer(v: PartView): void {
+  v.player.stop();
+}
+
+/** The first part of a kind, or null. */
+function partOfKind(parts: readonly Part[], kind: Part['kind']): Part | null {
+  for (let i = 0; i < parts.length; i++) if (parts[i].kind === kind) return parts[i];
+  return null;
 }
 
 /** The part with this id, found with a plain loop (no closure) since the board asks every frame. */
