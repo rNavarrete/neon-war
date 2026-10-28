@@ -107,8 +107,9 @@ went dark at midnight) and `fall`. Identical frames give none. The HUD emits eac
 
 `src/game/bus.ts` carries the lane boundaries as typed events: `drag` (board), `line` / `lineEnd`
 and `chatLine` (comms, chat), `alert` / `alertEnd` (gauges), `occurrence` (tech), `voice` /
-`voiceStart` / `voiceStop` / `voiceEnd` (the mixer) and `perfSample`. Every event before them is
-unchanged.
+`voiceStart` / `voiceStop` / `voiceEnd` (the mixer), `audience {watching}` (chat: the viewer count
+the title draws as WATCHING) and `perfSample`. Every event before them is unchanged. Lanes declare
+no events of their own by module augmentation: a new event is a line in `GameEvents`.
 
 ### Hook sections
 
