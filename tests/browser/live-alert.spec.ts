@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { type Page, expect, test } from '@playwright/test';
 import type { AlertHistoryEntry } from '../../src/scenes/hud/AlertView';
-import { hud, openBoard, reach, shot } from './live/reach';
+import { dismissJobCard, hud, openBoard, reach, shot, snap } from './live/reach';
 
 // The gauges lane's alert band (gauges-3), asserted on window.__neonTest.state.hud.alert: one alert at
 // a time, the number first in the headline, RAID only as the tag, and the district surge's number
@@ -70,6 +70,125 @@ test('the alert band: number first, RAID only as a tag, and the raid number clim
     expect(up.retry).toBeGreaterThan(0);
     // Earlier in the night the C4 forecast read 250 ahead of the surge.
     expect(history.some((e) => e.kind === 'forecast' && e.number === 250)).toBe(true);
+  });
+
+  expect(errors).toEqual([]);
+});
+
+// gauges-8: the deck's keys 1 REGROUP, 2 CUT 3F, 3 SET, pressed on the keyboard: the digits run the
+// same handlers as the keys (hud.deck.presses records each press and whether it acted), and are
+// ignored while the job card or the banner is open, while paused, or during a story scene.
+
+type Press = { key: string; via: string; acted: boolean };
+
+async function presses(page: Page): Promise<Press[]> {
+  return (await hud(page)).deck?.presses ?? [];
+}
+
+/** Press a digit and wait until the deck has recorded it; returns the press. */
+async function pressDigit(page: Page, digit: '1' | '2' | '3'): Promise<Press> {
+  const before = (await hud(page)).deck?.pressed ?? 0;
+  await page.keyboard.press(digit);
+  await expect
+    .poll(async () => (await hud(page)).deck?.pressed ?? 0, {
+      timeout: 5_000,
+      intervals: [10],
+      message: `hud.deck.pressed never counted the ${digit} key`,
+    })
+    .toBeGreaterThan(before);
+  const list = await presses(page);
+  return list[list.length - 1];
+}
+
+test('deck keys: 1, 2 and 3 on the keyboard act like the keys, and wait for the card, the banner, pause and scenes', async ({
+  page,
+}) => {
+  test.setTimeout(300_000);
+  const { errors } = await openBoard(page, { speed: 10, autopilot: true });
+
+  await test.step('every key is interactive from the first frame; key 3 waits while the job card is open', async () => {
+    const h = await hud(page);
+    expect(h.jobCard.open).toBe(true);
+    for (const k of ['one', 'two', 'three'] as const) expect(h.deck!.keys[k].interactive, k).toBe(true);
+    // The SET key sits where hud.dial.set says, the keys where hud.regroup / hud.laundry say.
+    expect(Math.abs(h.deck!.keys.three.x - h.dial.set.x)).toBeLessThanOrEqual(1);
+    expect(h.deck!.keys.one).toMatchObject({ x: h.regroup.button.x, y: h.regroup.button.y });
+    expect(h.deck!.keys.two).toMatchObject({ x: h.laundry.button.x, y: h.laundry.button.y });
+    const p = await pressDigit(page, '3');
+    expect(p).toMatchObject({ key: 'three', via: 'key', acted: false });
+    expect((await hud(page)).notes.estimate).toBeNull();
+  });
+
+  await test.step('with the C1 question open, 3 SETs the dial (the dial card does not block it), once', async () => {
+    await dismissJobCard(page);
+    await expect.poll(async () => (await hud(page)).deck?.set, { timeout: 10_000 }).toBe('ready');
+    const value = (await hud(page)).dial.value;
+    const p = await pressDigit(page, '3');
+    expect(p).toMatchObject({ key: 'three', via: 'key', acted: true });
+    await expect.poll(async () => (await hud(page)).notes.estimate, { timeout: 5_000 }).toBe(value);
+    const again = await pressDigit(page, '3');
+    expect(again.acted).toBe(false);
+    expect((await hud(page)).notes.estimate).toBe(value);
+  });
+
+  await test.step('the Solace banner blocks every key', async () => {
+    await expect
+      .poll(async () => (await hud(page)).banner.open, { timeout: 60_000, intervals: [25] })
+      .toBe(true);
+    expect((await hud(page)).deck!.blocked).toBe(true);
+    for (const d of ['1', '2', '3'] as const) expect((await pressDigit(page, d)).acted, d).toBe(false);
+  });
+
+  await test.step('2 cuts the laundry floor in the district surge', async () => {
+    await expect
+      .poll(async () => (await hud(page)).laundry.available, {
+        timeout: 120_000,
+        intervals: [10],
+        message: 'hud.laundry.available never became true',
+      })
+      .toBe(true);
+    const p = await pressDigit(page, '2');
+    expect(p).toMatchObject({ key: 'two', via: 'key', acted: true });
+    await expect.poll(async () => (await hud(page)).laundry.cut, { timeout: 5_000 }).toBe(true);
+    expect((await hud(page)).deck!.cut).toBe('done');
+  });
+
+  await test.step('a story scene holds the keys: 1 during the rescue does nothing', async () => {
+    await expect
+      .poll(async () => (await snap(page)).story?.scriptId ?? null, { timeout: 60_000, intervals: [25] })
+      .toBe('C5');
+    const before = (await hud(page)).deck!.pressed;
+    await page.keyboard.press('1');
+    await page.waitForTimeout(150);
+    expect((await presses(page)).filter((p) => p.acted && p.key === 'one')).toHaveLength(0);
+    expect((await hud(page)).deck!.pressed).toBe(before);
+    await reach(page, 'rescue', { timeout: 60_000 });
+    await expect.poll(async () => (await hud(page)).deck?.regroup, { timeout: 10_000 }).toBe('ready');
+  });
+
+  await test.step('after the scene, 1 runs Regroup once', async () => {
+    const p = await pressDigit(page, '1');
+    expect(p).toMatchObject({ key: 'one', via: 'key', acted: true });
+    await expect.poll(async () => (await hud(page)).regroup.spent, { timeout: 30_000 }).toBe(true);
+    expect((await pressDigit(page, '1')).acted).toBe(false);
+  });
+
+  await test.step('paused, 3 waits; resumed, 3 answers the sizing prompt', async () => {
+    await expect
+      .poll(async () => (await hud(page)).sizingPrompt.open, { timeout: 60_000, intervals: [25] })
+      .toBe(true);
+    await page.keyboard.press('Escape');
+    await expect.poll(async () => (await hud(page)).paused, { timeout: 5_000 }).toBe(true);
+    await page.keyboard.press('3');
+    await page.waitForTimeout(200);
+    expect((await hud(page)).notes.sizing).toBeNull();
+    await page.keyboard.press('Escape');
+    await expect.poll(async () => (await hud(page)).paused, { timeout: 5_000 }).toBe(false);
+    await shot(page, 'live-m2-deck');
+    const value = (await hud(page)).dial.value;
+    const p = await pressDigit(page, '3');
+    expect(p).toMatchObject({ key: 'three', acted: true });
+    await expect.poll(async () => (await hud(page)).notes.sizing, { timeout: 5_000 }).toBe(value);
   });
 
   expect(errors).toEqual([]);
