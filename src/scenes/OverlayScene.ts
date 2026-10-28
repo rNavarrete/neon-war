@@ -171,6 +171,14 @@ export class OverlayScene extends Phaser.Scene {
         this.load.start();
       },
       unloadVoice: (key) => {
+        // removeByKey destroys every sound of the key, a clip still fading out included: stop its fade
+        // first, or the tween sets the volume of a destroyed sound and throws out of the game loop.
+        for (const s of this.fadingVoices) {
+          if (s.key !== key) continue;
+          this.tweens.killTweensOf(s);
+          this.fadingVoices.delete(s);
+        }
+        if (this.voiceSound?.key === key) this.voiceSound = null;
         this.sound.removeByKey(key);
         this.cache.audio.remove(key);
       },
