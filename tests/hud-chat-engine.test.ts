@@ -157,7 +157,7 @@ describe('complaints and thanks', () => {
 });
 
 describe('scripted ids and pace', () => {
-  it('posts scripted ids at once, once, through the quiet and the cap, and cools their reaction', () => {
+  it('posts scripted ids at once, once, through the quiet, and cools their reaction; at the cap they wait', () => {
     const m = sim(0);
     // Quiet after a lesson line and a full window do not hold a scripted line back.
     let s = stepChat(m.s, { ...CALM, clock: 1 }, [line('C1.triage.06')], m.rand).state;
@@ -173,8 +173,13 @@ describe('scripted ids and pace', () => {
     expect(s.cooldown[SCRIPTED_REACTION['C1.chat.01']!]).toBeCloseTo(1.1 + REACTIONS.servedBlock.cap);
     let full = s;
     for (let i = 0; i < 12; i++) full = { ...full, recent: [...full.recent, 2] };
+    // The cap counts scripted rows (chat-5): over a full window the row waits, then posts as it frees.
     const over = postScripted(full, 'C1.chat.02', 2.1, m.rand);
-    expect(over.posts).toHaveLength(1);
+    expect(over.posts).toBe(NO_POSTS);
+    expect(over.state.waiting.map((w) => w.id)).toEqual(['C1.chat.02']);
+    const freed = stepChat(over.state, { ...CALM, clock: 32.1 }, [], m.rand);
+    expect(freed.posts.map((r) => r.id)).toEqual(['C1.chat.02']);
+    expect(freed.posts[0]).toMatchObject({ scripted: true, at: 32.1 });
   });
 
   it('keeps the minimum gap by error state: 2.5 / 1.8 / 1.2 s', () => {

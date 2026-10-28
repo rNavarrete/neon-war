@@ -51,7 +51,20 @@ import {
   stackRows,
   tickOf,
 } from '../src/scenes/hud/chat';
-import { CHAT_PACE, type ChatRow, SEED_IDS, visibleRows } from '../src/scenes/hud/chatEngine';
+import {
+  CHAT_PACE,
+  type ChatEvent,
+  type ChatInputs,
+  type ChatRow,
+  type ChatState,
+  DROPPABLE_SCRIPTED,
+  NO_POSTS,
+  SEED_IDS,
+  initialChat,
+  postScripted,
+  stepChat,
+  visibleRows,
+} from '../src/scenes/hud/chatEngine';
 import { updateSettings } from '../src/game/settings';
 import { BLOCK_AVATARS } from '../src/scenes/avatars';
 import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
@@ -835,5 +848,207 @@ describe('the chat art drop-in (chat-6)', () => {
       expect(src, name).not.toMatch(/chat-pop/);
       expect(src, name).not.toMatch(/\.sound\.|playSfx|emit\(\s*'sfx'/);
     }
+  });
+});
+
+// ---- the cap counts scripted rows: they wait their turn, paced rows yield to them ----
+
+describe('the 10 per 30 s cap with scripted rows', () => {
+  const DT = 0.05;
+  /** A served block in the district surge, errors heavy. */
+  const SURGE: ChatInputs = {
+    clock: 0,
+    now: 300,
+    errorShare: 0.6,
+    retry: 0,
+    served: 30,
+    servingBoxes: 1,
+    surgeAt: null,
+    midnightHeld: false,
+    midnightDark: false,
+    rewinds: 0,
+  };
+  const occ = (kind: 'placed' | 'wired' | 'skipped' | 'hot', at: number, id: string): ChatEvent =>
+    ({ kind: 'occurrence', occurrence: { kind, id, at } }) as ChatEvent;
+
+  /** The most rows inside any 30 s of chat clock (the browser spec's count). */
+  const most = (rows: readonly ChatRow[]): number => {
+    const at = rows.map((r) => r.at).sort((a, b) => a - b);
+    let best = 0;
+    for (let i = 0, j = 0; i < at.length; i++) {
+      while (at[i] - at[j] >= CHAT_PACE.windowSeconds) j++;
+      best = Math.max(best, i - j + 1);
+    }
+    return best;
+  };
+
+  /** A chat with `n` posts already inside the window at `at`. */
+  const full = (rand: () => number, n = CHAT_PACE.windowMax, at = 1): ChatState => ({
+    ...initialChat(0, rand),
+    servedOnce: true,
+    servingMax: 1,
+    watching: 3,
+    recent: Array.from({ length: n }, () => at),
+    lastPostAt: at,
+  });
+
+  it('a surge of scripted cues, reactions and filler never posts more than 10 in 30 s, and every scripted id posts, in order', () => {
+    const rand = seededRandom(7);
+    let s: ChatState = { ...initialChat(0, rand), servedOnce: true, servingMax: 1, watching: 3 };
+    const rows: ChatRow[] = [];
+    // The surge's scripted ids, cued close together as the autopilot night does.
+    const cues: [number, LineId][] = [
+      [2, 'C3.chat.01'],
+      [3, 'C3.chat.02'],
+      [6, 'C4.chat.01'],
+      [7, 'C4.chat.02'],
+      [9, 'C4.chat.03'],
+      [11, 'C4.chat.04'],
+      [12, 'C4.chat.cut'],
+      [14, 'C3.chat.03'],
+      [40, 'C5.chat.01'],
+    ];
+    const seeded = postScripted(s, 'C1.chat.01', 0.5, rand);
+    s = seeded.state;
+    rows.push(...seeded.posts);
+    for (let i = 1; i <= 90 / DT; i++) {
+      const clock = i * DT;
+      for (const [at, id] of cues) {
+        if (Math.abs(at - clock) < DT / 2) {
+          const p = postScripted(s, id, clock, rand);
+          s = p.state;
+          rows.push(...p.posts);
+        }
+      }
+      const ev = i % 20 === 0 ? [occ(i % 40 === 0 ? 'placed' : 'wired', clock, `p${i}`)] : [];
+      const step = stepChat(s, { ...SURGE, clock, errorShare: clock < 38 ? 0.6 : 0 }, ev, rand);
+      s = step.state;
+      rows.push(...step.posts);
+    }
+    expect(most(rows)).toBeLessThanOrEqual(CHAT_PACE.windowMax);
+    const scripted = rows.filter((r) => r.scripted).map((r) => r.id);
+    // Every cue posted except a complaint whose errors stopped first (none here), in cue order.
+    expect(scripted).toEqual(['C1.chat.01', ...cues.map(([, id]) => id)]);
+    expect(s.waiting).toEqual([]);
+    // Paced rows were there too, so the cap was really contested.
+    expect(rows.filter((r) => !r.scripted).length).toBeGreaterThan(0);
+  });
+
+  it('holds a scripted row that would break the cap, in order, and posts it first as the window frees', () => {
+    const rand = seededRandom(3);
+    let s = full(rand);
+    const a = postScripted(s, 'C4.chat.01', 2, rand);
+    expect(a.posts).toBe(NO_POSTS);
+    s = a.state;
+    // A later cue queues behind it even once room appears: order holds.
+    s = postScripted(s, 'C4.chat.03', 2.5, rand).state;
+    expect(s.waiting.map((w) => w.id)).toEqual(['C4.chat.01', 'C4.chat.03']);
+    // Once a cue waits, its reaction is cooling: the generic complaint does not double it.
+    expect(s.cooldown.errorsBlock).toBeGreaterThan(2);
+    // While they wait nothing paced posts, whatever piles up in the queue.
+    const posted: ChatRow[] = [];
+    let clock = 2;
+    while (clock < 30.9) {
+      clock += DT;
+      const ev = Math.abs(clock - 20) < DT / 2 ? [occ('placed', clock, 'srv')] : [];
+      const step = stepChat(s, { ...SURGE, clock }, ev, rand);
+      s = step.state;
+      posted.push(...step.posts);
+    }
+    expect(posted).toEqual([]);
+    expect(s.waiting).toHaveLength(2);
+    // The window frees at 31: both post at once, scripted, in cue order, before any paced row.
+    const step = stepChat(s, { ...SURGE, clock: 31.05 }, [], rand);
+    expect(step.posts.map((r) => r.id)).toEqual(['C4.chat.01', 'C4.chat.03']);
+    expect(step.posts.every((r) => r.scripted && r.at === 31.05)).toBe(true);
+    expect(step.state.waiting).toEqual([]);
+    // Mrs Okafor leaves when her row posts, not when it was cued.
+    expect(s.left).toEqual([]);
+    expect(step.state.left).toEqual(['mrs okafor']);
+  });
+
+  it('paced filler yields to a waiting scripted row: no filler while one waits, and filler only after it', () => {
+    const rand = seededRandom(5);
+    let s: ChatState = { ...full(rand, CHAT_PACE.windowMax - 1, 0.5), nextFillerAt: 0 };
+    s = postScripted(s, 'C3.chat.01', 1, rand).state;
+    // The one free slot went to the scripted row.
+    expect(s.feed.map((r) => r.id)).toEqual(['C3.chat.01']);
+    s = postScripted(s, 'C3.chat.02', 1.1, rand).state;
+    expect(s.waiting.map((w) => w.id)).toEqual(['C3.chat.02']);
+    const rows: ChatRow[] = [];
+    for (let clock = 1.1; clock < 45; clock += DT) {
+      const step = stepChat(s, { ...SURGE, errorShare: 0, clock }, [], rand);
+      s = step.state;
+      rows.push(...step.posts);
+    }
+    const first = rows[0];
+    expect(first).toMatchObject({ id: 'C3.chat.02', scripted: true });
+    expect(first.at).toBeGreaterThanOrEqual(30.5 - 1e-9);
+    expect(rows.slice(1).every((r) => r.at >= first.at)).toBe(true);
+    expect(rows.some((r) => r.cause === 'filler')).toBe(true);
+  });
+
+  it('lets a droppable scripted row go at a full window, never posting it late', () => {
+    expect(DROPPABLE_SCRIPTED.size).toBe(0);
+    const rand = seededRandom(9);
+    let s = full(rand);
+    const d = postScripted(s, 'C4.chat.04', 2, rand, undefined, true);
+    expect(d.posts).toBe(NO_POSTS);
+    expect(d.state.waiting).toEqual([]);
+    expect(d.state.scripted).toContain('C4.chat.04');
+    s = d.state;
+    for (let clock = 2; clock < 40; clock += DT) s = stepChat(s, { ...SURGE, clock }, [], rand).state;
+    expect(s.feed.some((r) => r.id === 'C4.chat.04')).toBe(false);
+    // With room, a droppable row posts at once like any other.
+    const room = postScripted({ ...full(rand, 0), scripted: [] }, 'C4.chat.04', 2, rand, undefined, true);
+    expect(room.posts.map((r) => r.id)).toEqual(['C4.chat.04']);
+  });
+
+  it('drops a waiting complaint whose errors stopped, and clears the wait on the dark silence and a rewind', () => {
+    const rand = seededRandom(11);
+    let s = postScripted(full(rand), 'C4.chat.01', 2, rand).state;
+    s = postScripted(s, 'C3.chat.02', 2.1, rand).state;
+    const calm = stepChat(s, { ...SURGE, errorShare: 0, clock: 31.05 }, [], rand);
+    // The complaint goes (whileErrors); the surge row behind it posts.
+    expect(calm.posts.map((r) => r.id)).toEqual(['C3.chat.02']);
+
+    const waiting = postScripted(full(rand), 'C4.chat.02', 2, rand).state;
+    expect(waiting.waiting).toHaveLength(1);
+    const dark = postScripted(waiting, 'C6.fail.chat', 3, rand).state;
+    expect(dark.waiting).toEqual([]);
+    const darkOcc: ChatEvent = { kind: 'occurrence', occurrence: { kind: 'dark', at: 3 } as Occurrence };
+    expect(stepChat(waiting, { ...SURGE, clock: 3 }, [darkOcc], rand).state.waiting).toEqual([]);
+    expect(stepChat(waiting, { ...SURGE, clock: 3, rewinds: 1 }, [], rand).state.waiting).toEqual([]);
+  });
+
+  it('through the host loop: a cue at a full window waits on hud.chat.waiting and posts as the window frees', () => {
+    const b = new Bus();
+    const f = new ChatFeed(0);
+    f.attach(b);
+    // The four seeds sit in the window; six cues fill it.
+    const fill: LineId[] = [
+      'C1.chat.01',
+      'C1.chat.02',
+      'C3.chat.01',
+      'C3.chat.02',
+      'C3.chat.03',
+      'C4.chat.04',
+    ];
+    fill.forEach((id, i) => b.emit('cue', { id, kind: 'chat', at: 1 + i * 0.1 }));
+    expect(f.posts).toBe(CHAT_PACE.windowMax);
+    b.emit('cue', { id: 'C4.chat.cut', kind: 'chat', at: 2 });
+    expect(f.posts).toBe(CHAT_PACE.windowMax);
+    expect(f.state.waiting.map((w) => w.id)).toEqual(['C4.chat.cut']);
+    f.step(frameAt(SERVING), 20, []);
+    expect(f.state.feed.some((r) => r.id === 'C4.chat.cut')).toBe(false);
+    // The seeds at 0 leave the window at 30.
+    f.step(frameAt(SERVING), 30.05, []);
+    expect(f.state.feed[f.state.feed.length - 1]).toMatchObject({
+      id: 'C4.chat.cut',
+      at: 30.05,
+      scripted: true,
+    });
+    expect(f.state.waiting).toEqual([]);
+    f.detach();
   });
 });

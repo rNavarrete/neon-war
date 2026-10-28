@@ -5,8 +5,13 @@
 // Reactions come from the occurrence stream (src/game/occurrences.ts), bus actions and a few held
 // edges on the Frame (errors held 1 s, heavy errors held 2 s, calm held 3 s after a spell, the
 // first serve, retries, the surge). Scripted chat ids arrive from cues.ts through postScripted and
-// post at once, once each, setting their reaction's cooldown so the generic pool never doubles
-// them. Everything else is paced (CHAT_PACE): a minimum gap by the block's error state, 10 posts per
+// post at once (through the gap and the lesson quiet), once each, setting their reaction's cooldown
+// so the generic pool never doubles them. Scripted rows count toward the window cap like any other:
+// one that would make an 11th post in 30 s waits, in order, and posts the moment the window frees,
+// before any paced row (reactions and filler yield while a scripted row waits). A waiting row is
+// dropped only when the script marks it droppable (DROPPABLE_SCRIPTED or the caller's flag), or
+// when it is a complaint whose errors stopped while it waited (its reaction's whileErrors rule).
+// Everything else is paced (CHAT_PACE): a minimum gap by the block's error state, 10 posts per
 // 30 s, a queue of 4 with anything older than 6 s dropped, and a 2 s quiet after a lesson line
 // (bus line {lesson: true}); other band lines do not quiet it. Filler keeps the chat alive after
 // 6 to 10 s of silence, from the pool of the block's state (chat.ts), block twice for every stream
@@ -173,6 +178,12 @@ export const REACTIONS: Readonly<Record<ReactionKey, Reaction>> = Object.freeze(
   heldStream: R('fill.stream.held.', SO, 60),
 });
 
+/**
+ * Scripted chat ids the script lets go rather than wait when the window is full: none today (every
+ * scripted row is a beat of the story); a cue may also pass `droppable` to postScripted.
+ */
+export const DROPPABLE_SCRIPTED: ReadonlySet<LineId> = new Set<LineId>();
+
 /** The reaction each scripted chat id stands in for: posting it starts that reaction's cooldown. */
 export const SCRIPTED_REACTION: Readonly<Partial<Record<LineId, ReactionKey>>> = Object.freeze({
   'C1.chat.01': 'servedBlock',
@@ -307,11 +318,21 @@ export interface QueuedReaction {
   readonly at: number;
 }
 
+/** A scripted id held back by the window cap, waiting its turn (in order). */
+export interface WaitingScripted {
+  readonly id: LineId;
+  readonly cause: ChatCause;
+  /** HUD clock the cue fired. */
+  readonly at: number;
+}
+
 export type ChatFilter = 'all' | 'block';
 
 export interface ChatState {
   readonly feed: readonly ChatRow[];
   readonly queue: readonly QueuedReaction[];
+  /** Scripted ids held back by the window cap, oldest first; they post before any paced row. */
+  readonly waiting: readonly WaitingScripted[];
   /** Post times inside the last window (pruned when a post is considered). */
   readonly recent: readonly number[];
   readonly lastPostAt: number;
@@ -354,6 +375,7 @@ export function initialChat(clock: number, rand: () => number, rewinds = 0): Cha
   return {
     feed: [],
     queue: [],
+    waiting: [],
     recent: [],
     lastPostAt: -Infinity,
     nextFillerAt: clock + fillerDelay(rand),
@@ -460,12 +482,18 @@ export function chatSetFor(errorShare: number): ErrorState {
   return errorState(errorShare);
 }
 
+/** Whether the window has room for one more post at `clock`. */
+export function windowOpen(s: ChatState, clock: number): boolean {
+  return windowCount(s.recent, clock) < CHAT_PACE.windowMax;
+}
+
 /** Whether filler may post at `clock`: not silenced, not quiet, nothing waiting and the delay run out. */
 export function fillerAllowed(s: ChatState, clock: number): boolean {
   return (
     !s.silenced &&
     clock >= s.quietUntil - EPS &&
     s.queue.length === 0 &&
+    s.waiting.length === 0 &&
     clock >= s.nextFillerAt - EPS &&
     windowCount(s.recent, clock) < CHAT_PACE.windowMax
   );
@@ -512,6 +540,7 @@ export function stepChat(
     const x = draft();
     x.rewinds = inp.rewinds;
     x.queue = [];
+    x.waiting = [];
     x.silenced = false;
     x.errSince = null;
     x.heavySince = null;
@@ -565,6 +594,7 @@ export function stepChat(
         if (o.id === undefined) {
           x.silenced = true;
           x.queue = [];
+          x.waiting = [];
         }
         break;
       default:
@@ -670,14 +700,30 @@ export function stepChat(
     }
   }
 
+  // Scripted rows the cap held back post first, in order, as the window frees (through the gap and
+  // the quiet, as scripted rows do); while one still waits, no paced row posts.
+  if (cur().waiting.length > 0 && !cur().silenced && windowOpen(cur(), c)) {
+    const x = draft();
+    while (x.waiting.length > 0 && windowOpen(x, c)) {
+      const w = x.waiting[0];
+      x.waiting = x.waiting.slice(1);
+      const key = SCRIPTED_REACTION[w.id];
+      const r = key ? REACTIONS[key] : undefined;
+      // A complaint whose errors stopped while it waited would be dishonest now: it goes.
+      if (r?.whileErrors && inp.errorShare <= 0) continue;
+      (posts ??= []).push(postRow(x, w.id, w.cause, c, rand));
+    }
+  }
+
   // Post at most one reaction, then filler if nothing else is due.
   const st = cur();
   const gap = CHAT_PACE.minGap[errorState(inp.errorShare)];
   const open =
     !st.silenced &&
+    st.waiting.length === 0 &&
     c >= st.quietUntil - EPS &&
     c - st.lastPostAt >= gap - EPS &&
-    windowCount(st.recent, c) < CHAT_PACE.windowMax;
+    windowOpen(st, c);
   if (open && st.queue.length > 0) {
     const x = draft();
     while (x.queue.length > 0) {
@@ -732,9 +778,31 @@ function speaksForLeaver(id: LineId, left: readonly string[]): boolean {
 
 // ---- scripted lines, seeding, the filter ----
 
+/** Start a scripted id's reaction cooldown (and drop that reaction from the queue) at `clock`. */
+function coolScripted(d: Draft, id: LineId, clock: number): void {
+  const key = SCRIPTED_REACTION[id];
+  if (!key) return;
+  d.cooldown = { ...d.cooldown, [key]: clock + REACTIONS[key].cap };
+  d.queue = d.queue.filter((q) => q.key !== key);
+}
+
+/** Post a scripted row now: the row, its reaction's cooldown, and who left. */
+function postRow(d: Draft, id: LineId, cause: ChatCause, clock: number, rand: () => number): ChatRow {
+  const key = SCRIPTED_REACTION[id];
+  const row = rowFor(id, cause, clock, true, key ? REACTIONS[key] : undefined);
+  post(d, row, clock, rand);
+  coolScripted(d, id, clock);
+  const leaver = LEAVERS[id];
+  if (leaver && !d.left.includes(leaver)) d.left = [...d.left, leaver];
+  return row;
+}
+
 /**
- * Post a scripted chat id (a cue from cues.ts) at once, regardless of pace and quiet, and only once
- * per run. It starts its reaction's cooldown so the generic pool does not double it. The dark
+ * Post a scripted chat id (a cue from cues.ts) at once, through the gap and the lesson quiet, and
+ * only once per run. It counts toward the window cap: when the window already holds 10 posts (or an
+ * earlier scripted row still waits) it waits in order and stepChat posts it as the window frees,
+ * before any paced row; a droppable one (`droppable`, or DROPPABLE_SCRIPTED) is let go instead. Its
+ * reaction's cooldown starts at once either way, so the generic pool does not double it. The dark
  * midnight's stage direction silences the chat instead of posting a row.
  */
 export function postScripted(
@@ -743,25 +811,24 @@ export function postScripted(
   clock: number,
   rand: () => number,
   cause?: ChatCause,
+  droppable = DROPPABLE_SCRIPTED.has(id),
 ): ChatStep {
   if (s.scripted.includes(id) || chatOf(id) === null) return { state: s, posts: NO_POSTS };
   const d: Draft = { ...s, scripted: [...s.scripted, id] };
   if (id === SILENCE_ID) {
     d.silenced = true;
     d.queue = [];
+    d.waiting = [];
     return { state: d, posts: NO_POSTS };
   }
   const key = SCRIPTED_REACTION[id];
-  const r = key ? REACTIONS[key] : undefined;
-  const row = rowFor(id, cause ?? (key ? CAUSE_OF[key] : 'cue'), clock, true, r);
-  post(d, row, clock, rand);
-  if (key && r) {
-    d.cooldown = { ...d.cooldown, [key]: clock + r.cap };
-    d.queue = d.queue.filter((q) => q.key !== key);
+  const why = cause ?? (key ? CAUSE_OF[key] : 'cue');
+  if (d.waiting.length > 0 || !windowOpen(d, clock)) {
+    coolScripted(d, id, clock);
+    if (!droppable) d.waiting = [...d.waiting, { id, cause: why, at: clock }];
+    return { state: d, posts: NO_POSTS };
   }
-  const leaver = LEAVERS[id];
-  if (leaver && !d.left.includes(leaver)) d.left = [...d.left, leaver];
-  return { state: d, posts: [row] };
+  return { state: d, posts: [postRow(d, id, why, clock, rand)] };
 }
 
 /** The four phone messages the chat opens with, posted as scripted rows with cause 'seed'. */
