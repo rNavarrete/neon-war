@@ -2,6 +2,10 @@
 // the clock reaches each point, through the same Run actions the mouse uses. Browser tests use it to
 // reach later challenges and to play the whole session; the player never sees it.
 //
+// `?test&autopilot&idle=<t>` (learning-5): the same best play until sim time t, then the autopilot
+// never acts again, so a spec can leave the board alone and watch that nothing advances on a timer.
+// `?idle` with no number keeps it from acting at all (the C1 clock then waits for a first build).
+//
 // Best play: one server wired in C1, leave the banner unanswered, overclock before the climb, three servers
 // behind the crew's balancer after the rescue, four before the midnight dip, back down to two after.
 
@@ -53,10 +57,36 @@ function act(r: Run): boolean {
 }
 
 /**
- * Best play before each step: every action that is due, at once, so the result doesn't depend on
- * how many frames a slow headless browser draws.
+ * The sim time `?test&idle` stops the autopilot at: the number given, 0 for a bare `?idle` (or one
+ * that is not a number at least 0), null without the flag or outside test mode. Pure.
  */
-export function bestPlay(r: Run): void {
-  if (r.paused || r.now < C.c1) return;
+export function idleFrom(search: string): number | null {
+  const params = new URLSearchParams(search);
+  if (!params.has('test') || !params.has('idle')) return null;
+  const raw = params.get('idle') ?? '';
+  const n = Number(raw);
+  return raw === '' || !Number.isFinite(n) || n < 0 ? 0 : n;
+}
+
+/** The page's `?idle`, read once at load (null in node, where there is no page). */
+const PAGE_IDLE: number | null = typeof location === 'undefined' ? null : idleFrom(location.search);
+
+/** Whether the autopilot keeps its hands off at `now`, with the flag stopping it at `idle`. */
+export function idleAt(now: number, idle: number | null): boolean {
+  return idle !== null && now >= idle;
+}
+
+/**
+ * Best play before each step, unless `idle` (the sim time the autopilot stops at) has come: every
+ * action that is due, at once, so the result doesn't depend on how many frames a slow headless
+ * browser draws.
+ */
+export function bestPlayUntil(r: Run, idle: number | null): void {
+  if (r.paused || r.now < C.c1 || idleAt(r.now, idle)) return;
   for (let guard = 0; guard < 8 && act(r); guard++);
+}
+
+/** Best play before each step, stopped by the page's `?idle` when it has one. */
+export function bestPlay(r: Run): void {
+  bestPlayUntil(r, PAGE_IDLE);
 }
