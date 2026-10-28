@@ -6,6 +6,7 @@
 import type { Part } from '../../sim/board';
 import { BROWNOUT } from '../../sim/brownout';
 import { LINES } from '../../strings';
+import { LABELS } from '../hud/labels';
 import { type Box, SERVER_PADS } from './layout';
 
 export type TrayId = 'server' | 'overclock' | 'balancer';
@@ -92,7 +93,16 @@ export function trayCards(balancerUnlocked: boolean): TrayCard[] {
       'overclock-kit',
       false,
     ),
-    card(2, 'balancer', 'BALANCER', 'BALANCER', BROWNOUT.loadBalancer.cost, 'balancer', !balancerUnlocked),
+    // The card prints the crew's word for it: the real name waits for the debrief (C8.terms).
+    card(
+      2,
+      'balancer',
+      LABELS.plates.names.balancer,
+      'BALANCER',
+      BROWNOUT.loadBalancer.cost,
+      'balancer',
+      !balancerUnlocked,
+    ),
   ];
   const locked = LOCKED_KINDS.map((kind, i): TrayCard => ({
     id: kind,
@@ -122,7 +132,7 @@ export const NOT_TONIGHT: string = LINES['C2.lux.ignore'].text;
 
 /** Why a locked card can't be used, to show near the pointer. */
 export function lockedReason(id: string): string {
-  return id === 'balancer' ? "the crew hasn't given you a load balancer" : NOT_TONIGHT;
+  return id === 'balancer' ? LABELS.inventory.splitterLocked : NOT_TONIGHT;
 }
 
 /** How many of each main card the player could use right now. */

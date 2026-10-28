@@ -3,6 +3,7 @@
 
 import type { ActionResult, Run } from '../../game/run';
 import type { Part } from '../../sim/board';
+import { LABELS } from '../hud/labels';
 
 /** Whether the crew has given Lux the load balancer yet. */
 export function balancerGiven(run: Run): boolean {
@@ -18,6 +19,7 @@ export function balancerGivenIn(rescued: boolean, parts: readonly Part[]): boole
 
 /** The crew rack their balancer at the rescue, so there is never a second one to place. */
 export function placeBalancer(run: Run): ActionResult {
-  if (!balancerGiven(run)) return { ok: false, reason: "the crew hasn't given you a load balancer" };
-  return { ok: false, reason: 'the balancer is already racked' };
+  // Refusals print on screen, so they use the crew's word (splitter), not the debrief's name.
+  if (!balancerGiven(run)) return { ok: false, reason: LABELS.inventory.splitterLocked };
+  return { ok: false, reason: 'the splitter is already racked' };
 }

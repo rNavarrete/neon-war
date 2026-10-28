@@ -242,7 +242,7 @@ describe('InventoryView', () => {
     const texts = drawn.filter((o) => o.kind === 'text').map((o) => o.text.toLowerCase());
     for (const kind of LOCKED_KINDS) for (const t of texts) expect(t).not.toContain(kind.replace(/-/g, ' '));
     expect(texts).toEqual(
-      expect.arrayContaining(['server', 'overclock', 'balancer', '80 cr', '60 cr', 'gift']),
+      expect.arrayContaining(['server', 'overclock', 'splitter', '80 cr', '60 cr', 'gift']),
     );
   });
 

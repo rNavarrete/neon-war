@@ -89,7 +89,7 @@ export const LABELS = {
     database: `DATABASE · where every call ends up · takes ${BROWNOUT.database.capacity} a second`,
     server: `SERVER · answers ${BROWNOUT.server.capacity} a second · ${BROWNOUT.server.cost} cr · boots ${BROWNOUT.server.bootSeconds} s`,
     overclock: `OVERCLOCK · makes one box answer ${BROWNOUT.overclock.factor} times as many · ${BROWNOUT.overclock.cost} cr · reboots ${BROWNOUT.overclock.rebootSeconds} s`,
-    splitter: 'SPLITTER · shares the calls across every box wired behind it, and passes over a dark one',
+    splitter: 'SPLITTER · shares the calls across every box wired behind it, and skips a dark one',
     nothingFeeds: 'nothing feeds it',
     /** Each part's name on the first line of its plate, by part kind (the balancer is the splitter). */
     names: { gateway: 'GATEWAY', balancer: 'SPLITTER', server: 'SERVER', database: 'DATABASE' },
@@ -98,7 +98,7 @@ export const LABELS = {
       online: 'running',
       over: 'more coming in than it answers',
       unfed: 'nothing feeds it',
-      skipped: 'the splitter passes it over',
+      skipped: 'the splitter skips it',
       darkBack: 'power back in',
       dead: 'drop a SERVER card on it or press REPLACE',
       offline: 'off',

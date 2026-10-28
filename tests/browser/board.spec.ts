@@ -81,7 +81,9 @@ test('the tray shows the server, the kit and a locked load balancer, and the res
 
   // Trying the locked balancer says why.
   await page.mouse.click(byId.balancer.x, byId.balancer.y);
-  await expect.poll(async () => (await board(page)).refusal).toMatch(/load balancer/i);
+  await expect
+    .poll(async () => (await board(page)).refusal)
+    .toMatch(/the crew hasn't given you one of those/i);
 });
 
 test('dragging a scrap server to a slot places it, spends 80 credits and shows it booting for 3 s', async ({
