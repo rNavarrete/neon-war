@@ -43,10 +43,18 @@ import {
 import { LABELS } from './labels';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
-import { GAUGES_DEPTH } from './panel';
+import { KIT, KIT_FILE } from './kit';
+import {
+  type BakedPanel,
+  GAUGES_DEPTH,
+  type PanelTestState,
+  bakePanel,
+  panelSnapshot,
+  releasePanel,
+} from './panel';
 
-/** The painted base the art pipeline will drop (docs/ART-REQUESTS.md); a vector grid until then. */
-export const CITY_GRID_KEY = 'hud/city-grid';
+/** The painted base (docs/ART-REQUESTS.md), drawn at half its 816 x 620 file; a vector grid without it. */
+export const CITY_GRID_KEY = KIT.cityGrid;
 
 /** What the hook mirrors as hud.map. */
 export interface MapTestState {
@@ -57,6 +65,12 @@ export interface MapTestState {
   midnight: boolean;
   /** The dot pool: slots made so far (never shrinks) and dots walking now. */
   dots: { pool: number; active: number };
+  /** What the base is drawn from: the picked painting, or the vector grid while it is not loaded. */
+  base: 'hud/city-grid' | 'vector';
+  /** The CUT OFF words sit on the red tag chip (hud/live/tag-chip), shown with them. */
+  chip: boolean;
+  /** The baked plate: which picked kit pieces it draws, at what largest scale (m4 panel kit). */
+  panel?: PanelTestState | null;
 }
 
 declare module './hook' {
@@ -78,6 +92,10 @@ const BASE_FILL = 0x070c18;
 const BLOCK_FILL = 0x0e1628;
 const STREET_COLOR = 0x1b2a44;
 const DOT_SIZE = 3;
+/** The label tab under CITY GRID, the bracket corners and the CUT OFF chip's height (kit.ts). */
+const TAB_H = 26;
+const MAP_CORNERS = 30;
+const CHIP_H = 26;
 
 export class MapView implements LiveView {
   readonly zone = 'map' as const;
@@ -95,6 +113,9 @@ export class MapView implements LiveView {
   private dots: Phaser.GameObjects.Graphics | null = null;
   private sparkles: Phaser.GameObjects.Graphics | null = null;
   private cutOff: Phaser.GameObjects.Text | null = null;
+  private chip: Phaser.GameObjects.Image | null = null;
+  private plate: BakedPanel | null = null;
+  private base: MapTestState['base'] = 'vector';
   private off: (() => void)[] = [];
 
   /** This frame's state, refilled every update; compared with `state` to decide what to redraw. */
@@ -114,7 +135,7 @@ export class MapView implements LiveView {
   private outlineAlpha = -1;
 
   preload(scene: Phaser.Scene): void {
-    preloadArt(scene as never, [CITY_GRID_KEY]);
+    preloadArt(scene as never, [CITY_GRID_KEY, KIT.frame, KIT.corner, KIT.tab, KIT.chip]);
   }
 
   create(scene: Phaser.Scene, host: LiveHost): void {
@@ -124,15 +145,24 @@ export class MapView implements LiveView {
     for (const s of L.streets) this.streetTime[s.id] = streetSeconds(s);
     const add = scene.add;
 
+    // The base, baked once with the frame kit: the painting (or the vector grid without it), Lux's
+    // block footprint, the frame, the tab under CITY GRID and the bracket corners.
     const art = resolveArt(CITY_GRID_KEY);
-    if (!art.fallback && scene.textures.exists(art.texture)) {
-      const img = add.image(L.plate.x, L.plate.y, art.texture).setOrigin(0);
-      img.setDisplaySize(L.plate.w, L.plate.h);
-      this.objects.push(img);
-    }
-    const base = add.graphics();
-    this.drawBase(base, L, art.fallback);
-    this.objects.push(base);
+    const painted = !art.fallback && (scene.textures?.exists?.(art.texture) ?? false);
+    this.base = painted ? CITY_GRID_KEY : 'vector';
+    this.plate = bakePanel(
+      scene,
+      'map',
+      L.plate,
+      {
+        base: painted ? CITY_GRID_KEY : undefined,
+        frame: true,
+        corners: MAP_CORNERS,
+        tab: { x: L.title.x - 8, y: L.title.y - 4, h: TAB_H },
+      },
+      { fill: { color: BASE_FILL, alpha: 0.96 }, draw: (g) => this.drawBase(g, L, !painted) },
+    );
+    this.objects.push(this.plate.object);
 
     this.outlines = add.graphics();
     this.lights = add.graphics();
@@ -150,10 +180,22 @@ export class MapView implements LiveView {
       fontSize: '16px',
       color: COLORS.amberText,
     });
+    // The CUT OFF words on the red tag chip (the chip carries the red; the words are white on it).
+    const chipArt = resolveArt(KIT.chip);
+    if (!chipArt.fallback && scene.textures?.exists?.(chipArt.texture) && typeof add.image === 'function') {
+      const f = KIT_FILE[KIT.chip];
+      const w = Math.round((f.w * CHIP_H) / f.h);
+      this.chip = add
+        .image(L.cutOffLabel.x - 20, L.cutOffLabel.y + 8, chipArt.texture)
+        .setOrigin(0, 0.5)
+        .setDisplaySize(w, CHIP_H)
+        .setVisible(false);
+      this.objects.push(this.chip);
+    }
     this.cutOff = add.text(L.cutOffLabel.x, L.cutOffLabel.y, LABELS.map.cutOff, {
       fontFamily: FONT,
       fontSize: '13px',
-      color: COLORS.redText,
+      color: this.chip ? COLORS.white : COLORS.redText,
     });
     this.cutOff.setVisible(false);
     this.objects.push(this.outlines, this.lights, this.dots, this.sparkles, title, lux, this.cutOff);
@@ -198,6 +240,7 @@ export class MapView implements LiveView {
       this.outlineAlpha = alpha;
       this.outlines.setAlpha(alpha);
       this.cutOff?.setAlpha(alpha);
+      this.chip?.setAlpha(alpha);
     }
 
     // ---- dots: the block's calls (before retries), slowed by Regroup, frozen while held ----
@@ -219,10 +262,7 @@ export class MapView implements LiveView {
   }
 
   private drawBase(g: Phaser.GameObjects.Graphics, L: MapLayout, vector: boolean): void {
-    const p = L.plate;
     if (vector) {
-      g.fillStyle(BASE_FILL, 0.96);
-      g.fillRect(p.x, p.y, p.w, p.h);
       for (const b of L.blocks) {
         g.fillStyle(BLOCK_FILL, 1);
         g.fillRect(b.x, b.y, b.w, b.h);
@@ -241,14 +281,12 @@ export class MapView implements LiveView {
         g.fillRect(n.x, n.y, n.w, n.h);
       }
     }
-    // Lux's block: a dark footprint behind its windows, outlined amber.
+    // Lux's block: a dark footprint behind its windows (the painted roof shows through), outlined amber.
     const b = L.lux;
-    g.fillStyle(0x0a0f1c, 1);
+    g.fillStyle(0x0a0f1c, vector ? 1 : 0.55);
     g.fillRect(b.x, b.y, b.w, b.h);
     g.lineStyle(2, COLORS.amber, 0.9);
     g.strokeRect(b.x, b.y, b.w, b.h);
-    g.lineStyle(1, COLORS.cyan, 0.35);
-    g.strokeRect(p.x + 0.5, p.y + 0.5, p.w - 1, p.h - 1);
   }
 
   private drawLights(): void {
@@ -282,6 +320,7 @@ export class MapView implements LiveView {
       g.strokeRect(n.x, n.y, n.w, n.h);
     }
     this.cutOff?.setVisible(s.neighboursCut);
+    this.chip?.setVisible(s.neighboursCut);
   }
 
   private drawDots(L: MapLayout): void {
@@ -341,13 +380,20 @@ export class MapView implements LiveView {
       laundryDark: s.laundryDark,
       midnight: s.midnight,
       dots: { pool: this.pool.size, active: this.pool.active },
+      base: this.base,
+      chip: this.chip?.visible ?? false,
+      panel: panelSnapshot(this.plate),
     };
   }
 
   shutdown(): void {
     for (const off of this.off) off();
     this.off = [];
-    for (const o of this.objects) o.destroy();
+    const plate = this.plate?.object;
+    for (const o of this.objects) if (o !== plate) o.destroy();
+    releasePanel(this.plate);
+    this.plate = null;
+    this.chip = null;
     this.objects = [];
     this.lights = null;
     this.outlines = null;
