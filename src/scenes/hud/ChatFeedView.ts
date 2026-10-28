@@ -102,6 +102,22 @@ export const SYSTEM_GLYPH = 'hud/icons/system';
 export const SYSTEM_GLYPH_SIZE = 20;
 
 /**
+ * The glyph's drawn size: its file fitted inside the 20 px box at its own aspect, never above 1:1
+ * (the round 2 antenna is 41x64, so it draws about 12.8x20 rather than squashed square). Pure.
+ */
+export function systemGlyphSize(cut: { readonly w: number; readonly h: number } | null): {
+  w: number;
+  h: number;
+} {
+  if (!cut || cut.w <= 0 || cut.h <= 0) return { w: SYSTEM_GLYPH_SIZE, h: SYSTEM_GLYPH_SIZE };
+  const k = Math.min(1, SYSTEM_GLYPH_SIZE / cut.w, SYSTEM_GLYPH_SIZE / cut.h);
+  return { w: cut.w * k, h: cut.h * k };
+}
+
+/** The glyph's drawn size from the manifest's cut, resolved once. */
+const GLYPH_DRAWN = systemGlyphSize(artRequest(SYSTEM_GLYPH)?.cut ?? null);
+
+/**
  * The wide plate as it landed (770x485, a little shorter than its 770x550 cut) drawn into the
  * 385x275 zone. A plain scale would squash it unevenly (0.5 across, 0.57 down) and drop the painted
  * header band to 24-45 px, past the 40 px header strip; so it is nine-sliced at corner scale k 0.42:
@@ -677,7 +693,7 @@ export class ChatFeedView implements LiveView {
       slot.avatar
         .setTexture(this.avatarTextures[SYSTEM_GLYPH])
         .setPosition(cx, cy)
-        .setDisplaySize(SYSTEM_GLYPH_SIZE, SYSTEM_GLYPH_SIZE)
+        .setDisplaySize(GLYPH_DRAWN.w, GLYPH_DRAWN.h)
         .setVisible(true);
     } else if (look.avatar) {
       slot.avatar

@@ -7,6 +7,7 @@ import {
   SYSTEM_GLYPH,
   SYSTEM_GLYPH_SIZE,
   chatHeaderLayout,
+  systemGlyphSize,
   nineSliceScales,
 } from '../src/scenes/hud/ChatFeedView';
 import { CHAT_BODY, CHAT_HEADER, ROW_AVATAR } from '../src/scenes/hud/chat';
@@ -72,5 +73,16 @@ describe('the landed chat art draws at display size, never upscaled (chat-6)', (
     expect(glyph.display).toEqual({ w: SYSTEM_GLYPH_SIZE, h: SYSTEM_GLYPH_SIZE });
     expect(glyph.cut!.w).toBeGreaterThanOrEqual(SYSTEM_GLYPH_SIZE);
     expect(glyph.cut!.h).toBeGreaterThanOrEqual(SYSTEM_GLYPH_SIZE);
+  });
+
+  it('draws the 41x64 antenna glyph at its own aspect inside the 20 px box, never squashed or upscaled', () => {
+    const cut = artRequest(SYSTEM_GLYPH)!.cut!;
+    expect(cut).toEqual({ w: 41, h: 64 });
+    const s = systemGlyphSize(cut);
+    expect(s.h).toBe(SYSTEM_GLYPH_SIZE);
+    expect(s.w).toBeLessThanOrEqual(SYSTEM_GLYPH_SIZE);
+    expect(s.w / s.h).toBeCloseTo(cut.w / cut.h, 6);
+    expect(systemGlyphSize({ w: 10, h: 8 })).toEqual({ w: 10, h: 8 });
+    expect(systemGlyphSize(null)).toEqual({ w: SYSTEM_GLYPH_SIZE, h: SYSTEM_GLYPH_SIZE });
   });
 });
