@@ -1,8 +1,10 @@
-// What the story layer reads from the sim: the laundry cut, and the night's numbers for the debrief.
+// What the story layer reads from the sim: the laundry cut, the night's numbers for the debrief, and
+// the taught trace (src/scenes/hud/taught.ts) the debrief's "you saw it at" lines come from.
 // The rescue's effects (balancer, Ozzie's front, Regroup) and rewinds happen in the sim itself
 // (src/sim/play.ts); the story only shows them.
 
 import { run } from '../game/run';
+import { type TaughtTrace, taughtTrace } from '../scenes/hud/taught';
 import type { PendingResults } from './debrief';
 import type { RewindKind } from './rewind';
 
@@ -15,6 +17,8 @@ export interface StoryWiring {
   rewind(kind: RewindKind, target: number): void;
   /** The results only the sim tracks. */
   pendingResults(): PendingResults;
+  /** When the player saw each debrief term in practice this run (learning-4). */
+  taught(): TaughtTrace;
 }
 
 export const storyWiring: StoryWiring = {
@@ -34,4 +38,5 @@ export const storyWiring: StoryWiring = {
       serversAtMidnight: run().play.midnight?.servers ?? 0,
     };
   },
+  taught: () => taughtTrace(),
 };

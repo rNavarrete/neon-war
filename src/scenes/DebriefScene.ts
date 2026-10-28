@@ -2,18 +2,33 @@ import Phaser from 'phaser';
 import { defaultDebriefResults, quitToTitle } from '../game/flow';
 import { run } from '../game/run';
 import { settings } from '../game/settings';
-import { type DebriefResults, debriefLines, resultRows } from '../story/debrief';
+import { type DebriefResults, type SeenLine, debriefLines, resultRows, seenLines } from '../story/debrief';
 import { LABELS } from '../story/labels';
 import { parseBold, runWords } from '../story/markup';
 import { type DebriefStep, playSfx, setLiveView, stopSfx, storyState } from '../story/state';
 import { FrameClock, H, VnView, W, cover, fileKey, preloadView } from '../story/view';
+import { storyWiring } from '../story/wiring';
 import { LINES, type LineId, line } from '../strings';
+import { provideTestState } from '../testHook';
+import type { TermGroup } from './hud/lineMeta';
 import { SCENES } from './keys';
 
 const BG = 'art/bg/bedroom-midnight.webp';
 const BOOK = 'art/story/night-book-page.webp';
 
 const TERMS: readonly LineId[] = ['C8.terms.sizing', 'C8.terms.scaling', 'C8.terms.failure'];
+/** The taught-trace group each TERMS column names. */
+const TERM_GROUPS: readonly TermGroup[] = ['sizing', 'scaling', 'failure'];
+/** The terms columns: top and height (they reach down to the text box's free space on this beat). */
+const TERMS_TOP = 120;
+const TERMS_H = 900;
+
+declare module '../testHook' {
+  interface TestSections {
+    /** The grey "you saw it at" lines the debrief printed under its terms (learning-4, D10). */
+    debriefSeen: SeenLine[];
+  }
+}
 const CARD: readonly LineId[] = [
   'C8.card.1',
   'C8.card.2',
@@ -62,6 +77,8 @@ export class DebriefScene extends Phaser.Scene {
   private sparks: Spark[] = [];
   private nextBurst = 0;
   private frames = new FrameClock();
+  /** The grey lines drawn under the terms, for the test hook. */
+  private seen: SeenLine[] = [];
 
   constructor() {
     super(SCENES.debrief);
@@ -70,6 +87,7 @@ export class DebriefScene extends Phaser.Scene {
   init(data: { results?: DebriefResults }): void {
     this.results = data.results ?? defaultDebriefResults();
     this.ready = false;
+    this.seen = [];
   }
 
   preload(): void {
@@ -91,6 +109,7 @@ export class DebriefScene extends Phaser.Scene {
       onSkip: () => {},
     });
     setLiveView(this.view);
+    provideTestState('debriefSeen', () => this.seen);
 
     const grades = debriefLines(this.results);
     this.beats = [
@@ -189,14 +208,24 @@ export class DebriefScene extends Phaser.Scene {
     });
   }
 
-  /** The terms, named in three groups, with each term in bold. */
+  /**
+   * The terms, named in three groups, with each term in bold; under the group, one grey line per
+   * term the taught trace has an entry for: "you saw it at hh:mm:ss: <line>" (D10).
+   */
   private drawTerms(): void {
     const c = this.layer(25);
     const colW = 560;
     const terms: { group: string; bold: string[] }[] = [];
+    const seen = seenLines(storyWiring.taught());
+    this.seen = seen;
     TERMS.forEach((id, i) => {
       const x = 80 + i * (colW + 40);
-      c.add(this.add.rectangle(x, 120, colW, 800, 0x0b0820, 0.9).setOrigin(0).setStrokeStyle(2, 0xff4fd8));
+      c.add(
+        this.add
+          .rectangle(x, TERMS_TOP, colW, TERMS_H, 0x0b0820, 0.9)
+          .setOrigin(0)
+          .setStrokeStyle(2, 0xff4fd8),
+      );
       const group = LINES[id].speaker;
       c.add(
         this.add.text(x + 30, 150, group, {
@@ -207,20 +236,56 @@ export class DebriefScene extends Phaser.Scene {
         }),
       );
       const runs = parseBold(line(id));
-      this.layoutRuns(c, runs, x + 30, 230, colW - 60);
+      const bottom = this.layoutRuns(c, runs, x + 30, 230, colW - 60);
+      this.drawSeen(
+        c,
+        seen.filter((s) => s.group === TERM_GROUPS[i]),
+        x + 30,
+        bottom + 36,
+        colW - 60,
+      );
       terms.push({ group, bold: runs.filter((r) => r.bold).map((r) => r.text) });
     });
     if (storyState.debrief) storyState.debrief.terms = terms;
   }
 
-  /** Lay bold and plain runs out word by word, wrapping at `width`. */
+  /** The grey "you saw it at" lines of one column, each under its term's name, from `top` down. */
+  private drawSeen(
+    c: Phaser.GameObjects.Container,
+    lines: readonly SeenLine[],
+    left: number,
+    top: number,
+    width: number,
+  ): void {
+    let y = top;
+    for (const s of lines) {
+      const name = this.add.text(left, y, s.name, {
+        fontFamily: FONT,
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: '#c9a95c',
+      });
+      c.add(name);
+      y += name.height + 2;
+      const t = this.add.text(left, y, s.text, {
+        fontFamily: FONT,
+        fontSize: '18px',
+        color: '#9a95ad',
+        wordWrap: { width },
+      });
+      c.add(t);
+      y += t.height + 10;
+    }
+  }
+
+  /** Lay bold and plain runs out word by word, wrapping at `width`; returns the bottom of the last row. */
   private layoutRuns(
     c: Phaser.GameObjects.Container,
     runs: ReturnType<typeof parseBold>,
     left: number,
     top: number,
     width: number,
-  ): void {
+  ): number {
     const lineH = 40;
     const space = 8;
     let x = left;
@@ -246,6 +311,7 @@ export class DebriefScene extends Phaser.Scene {
       x += t.width + gap;
       c.add(t);
     }
+    return y + lineH;
   }
 
   /** The interview-version card. */

@@ -26,6 +26,34 @@ import {
 } from '../src/scenes/hud/lineMeta';
 import { CARD_IDS, ZONE_IDS } from '../src/scenes/live/layout';
 import { LINES, type LineId } from '../src/strings';
+import { bestPlay } from '../src/game/autopilot';
+import { bus } from '../src/game/bus';
+import { type Frame, frame, resetFrame } from '../src/game/frame';
+import { type Occurrence, detectOccurrences } from '../src/game/occurrences';
+import { type Run, newRun, run } from '../src/game/run';
+import { type CueHost, NEW_DIRECTOR, cueViewOf, direct, emptyCueView } from '../src/scenes/hud/cues';
+import { applyEstimate, applySizing } from '../src/scenes/hud/dial';
+import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
+import { sizingPromptOpen } from '../src/scenes/hud/jobCard';
+import {
+  EMPTY_TRACE,
+  MOMENT_KINDS,
+  MOMENT_TEACHES,
+  type TaughtTrace,
+  emptyMeasure,
+  measureNotes,
+  momentOfAction,
+  momentOfOccurrence,
+  seeLine,
+  seeMoment,
+  taughtMeasure,
+  taughtTrace,
+  termsSeen,
+} from '../src/scenes/hud/taught';
+import { BROWNOUT } from '../src/sim/brownout';
+import { SERVER_SLOTS } from '../src/sim/tick';
+import { MOMENT_WORDS, TERM_NAMES, seenLines, seenText } from '../src/story/debrief';
+import { storyWiring } from '../src/story/wiring';
 
 const IDS = Object.keys(LINES) as LineId[];
 
@@ -248,5 +276,289 @@ describe('no term before the debrief', () => {
       expect(metaOf(id)?.tag, id).toBe('HOUSE');
     }
     for (const id of IDS.filter((i) => i.startsWith('fill.'))) expect(LINES[id].text, id).not.toMatch(/\d/);
+  });
+});
+
+// ---- learning-4: hud.measure, the taught trace and the debrief's "you saw it at" lines ----
+
+const C = BROWNOUT.challenges;
+
+/** The hud section as the hook publishes it, over an empty base (only provided sections). */
+function hudHook(): HudTestState {
+  return hudSection({} as HudTestState);
+}
+
+/** Tell the bus what the HUD would on one frame: its occurrences and the cue table's fired ids. */
+function emitFrame(occ: readonly Occurrence[], fired: readonly LineId[], clock: number): void {
+  for (const o of occ) bus.emit('occurrence', o);
+  for (const id of fired) {
+    const kind = LINES[id].kind === 'bark' ? 'bark' : 'chat';
+    bus.emit('cue', { id, kind, at: clock });
+    // The band shows the bark (lessons and WARNINGs are never dropped stale).
+    const m = metaOf(id);
+    if (kind === 'bark' && m) {
+      bus.emit('line', { id, speaker: LINES[id].speaker, tag: m.tag, lesson: m.lesson, since: clock });
+    }
+  }
+}
+
+interface Played {
+  r: Run;
+  /** The trace as it stood on the last frame before the debrief (00:01:00). */
+  beforeDebrief: TaughtTrace;
+}
+
+/**
+ * Best play through the night on the run() singleton, with the HUD's bus traffic replayed: the C1
+ * estimate set to 30 at once, the C6 sizing set to 4 ten HUD seconds after the prompt opens
+ * (TRIAGE's division lands at 8 s), and optionally the laundry cut as soon as it is offered.
+ */
+function playNight(opts: { laundry: boolean }): Played {
+  resetFrame();
+  const r = newRun(1, bestPlay);
+  r.now = C.c1;
+  let prev: Frame | null = null;
+  const occ: Occurrence[] = [];
+  const v = emptyCueView();
+  let s = NEW_DIRECTOR;
+  let clock = 0;
+  let promptAt: number | null = null;
+  let beforeDebrief: TaughtTrace = EMPTY_TRACE;
+  for (let n = 0; n < 20_000 && r.now < C.c8 && !r.play.failure; n++) {
+    if (r.notes.estimate === null) applyEstimate(r, 30);
+    if (opts.laundry && frame(r).laundryCutAvailable && !r.play.laundryCut) r.cutLaundry();
+    const sizingOpen = sizingPromptOpen({
+      now: r.now,
+      cardOpen: false,
+      estimate: r.notes.estimate,
+      sizing: r.notes.sizing,
+    });
+    if (sizingOpen) promptAt ??= clock;
+    if (sizingOpen && promptAt !== null && clock - promptAt >= 10) {
+      applySizing(r, BROWNOUT.finalSizing.holds);
+    }
+    r.tick(0.1);
+    clock += 0.1;
+    const f = frame(r);
+    detectOccurrences(prev, f, occ);
+    prev = f;
+    const host: CueHost = {
+      cardClosed: true,
+      dialTouched: true,
+      sizingOpen,
+      bannerShown: f.now >= C.c2,
+      decommissionsAfterMidnight: 0,
+    };
+    cueViewOf(v, f, occ, clock, host, v);
+    const out = direct(s, v);
+    s = out.state;
+    emitFrame(occ, out.fired, clock);
+    if (f.now < C.c8) beforeDebrief = taughtTrace();
+  }
+  return { r, beforeDebrief };
+}
+
+describe('hud.measure (learning-4)', () => {
+  it('after C1 SET, hud.measure.estimate equals notes.estimate and estimateAt is > 0', () => {
+    resetFrame();
+    const r = newRun(1, null);
+    r.now = C.c1 + 4;
+    bus.emit('perfSample', { at: 1, fps: 60, objects: 0, texts: 0, graphics: 0 });
+    expect(hudHook().measure).toEqual(emptyMeasure());
+    expect(applyEstimate(r, 30)).toBe(true);
+    // The cue table answers a SET on the same frame (C1.triage.03).
+    bus.emit('cue', { id: 'C1.triage.03', kind: 'bark', at: 4 });
+    const m = hudHook().measure;
+    expect(m?.estimate).toBe(r.notes.estimate);
+    expect(m?.estimate).toBe(30);
+    expect(m?.estimateAt).toBeGreaterThan(0);
+    expect(m?.estimateAt).toBe(C.c1 + 4);
+    expect(m?.sizing).toBeNull();
+    // A later frame keeps the first stamp.
+    r.now = C.c1 + 9;
+    bus.emit('perfSample', { at: 9, fps: 60, objects: 0, texts: 0, graphics: 0 });
+    expect(hudHook().measure?.estimateAt).toBe(C.c1 + 4);
+  });
+
+  it('counts the board wires and stamps the first one', () => {
+    resetFrame();
+    const r = newRun(1, null);
+    r.now = C.c1;
+    const before = frame(r);
+    rackOne(r);
+    r.now = C.c1 + 2;
+    const occ: Occurrence[] = [];
+    detectOccurrences(before, frame(r), occ);
+    for (const o of occ) bus.emit('occurrence', o);
+    const m = taughtMeasure();
+    expect(m.wires).toBe(2);
+    expect(m.firstWireAt).toBe(C.c1 + 2);
+    expect(hudHook().measure).toEqual(m);
+    expect(termsSeen(taughtTrace())).toContain('capacity');
+  });
+
+  it('stamps an answer once and returns the same object when nothing changed', () => {
+    const m0 = emptyMeasure();
+    const m1 = measureNotes(m0, { estimate: 30, sizing: null }, 20);
+    expect(m1).not.toBe(m0);
+    expect(m0.estimate).toBeNull();
+    expect(m1).toMatchObject({ estimate: 30, estimateAt: 20, sizing: null, sizingAt: null });
+    expect(measureNotes(m1, { estimate: 30, sizing: null }, 40)).toBe(m1);
+    expect(measureNotes(m1, { estimate: 30, sizing: 4 }, 470)).toMatchObject({
+      estimateAt: 20,
+      sizing: 4,
+      sizingAt: 470,
+    });
+  });
+});
+
+/** Place one server and wire it gateway to database, as the player does in C1. */
+function rackOne(r: Run): void {
+  const slot = SERVER_SLOTS[0];
+  expect(r.placeServer(slot).ok).toBe(true);
+  const id = r.session.board.parts.find((p) => p.kind === 'server')?.id ?? '';
+  expect(r.connect('gateway', id).ok).toBe(true);
+  expect(r.connect(id, 'database').ok).toBe(true);
+}
+
+describe('the taught trace (learning-4)', () => {
+  it('maps every term to at least one line (lineMeta.teaches) or moment, so each term can be seen', () => {
+    const covered = new Set<string>([
+      ...Object.values(TEACHES).flatMap((t) => t ?? []),
+      ...Object.values(MOMENT_TEACHES).flat(),
+    ]);
+    for (const k of TERM_KEYS) expect(covered.has(k), k).toBe(true);
+  });
+
+  it('records the terms of a shown line once, with its clock; a line that teaches nothing leaves it alone', () => {
+    let t = seeLine(EMPTY_TRACE, 'C1.triage.06', 40, '23:52:10');
+    expect(t.map((e) => e.term)).toEqual(['capacity', 'headroom']);
+    expect(t[0]).toMatchObject({
+      line: 'C1.triage.06',
+      moment: null,
+      at: 40,
+      clock: '23:52:10',
+      group: 'sizing',
+    });
+    expect(seeLine(t, 'C1.triage.06', 90, '23:53:00')).toBe(t);
+    expect(seeLine(t, 'C1.triage.02', 50, '23:52:20')).toBe(t);
+    // The WARNINGs C4.triage.02/.03 join the trace too.
+    t = seeLine(t, 'C4.triage.02', 305, '23:56:35');
+    t = seeLine(t, 'C4.triage.03', 310, '23:56:40');
+    expect(termsSeen(t)).toEqual(['capacity', 'headroom', 'singlePointOfFailure', 'retryStorm']);
+    expect(EMPTY_TRACE).toHaveLength(0);
+  });
+
+  it('reads the moments: SET, the first SKIPPED, the dark big box, a decommission, the dip survived with 4', () => {
+    const facts = (parts: unknown[], midnight: unknown = null) => ({ parts, midnight }) as unknown as Frame;
+    const none = facts([]);
+    const big = facts([{ id: 's1', kind: 'server', slot: 'a', boost: 1.5 }]);
+    const stock = facts([{ id: 's1', kind: 'server', slot: 'a' }]);
+    const held = (servers: number) => facts([], { held: true, dropped: 0, servers, waste: false });
+    expect(momentOfOccurrence({ kind: 'skipped', id: 'lb>s2', at: 470 }, none)).toBe('firstSkipped');
+    expect(momentOfOccurrence({ kind: 'dark', id: 's1', at: 305 }, big)).toBe('bigBoxDark');
+    expect(momentOfOccurrence({ kind: 'dark', id: 's1', at: 305 }, stock)).toBeNull();
+    expect(momentOfOccurrence({ kind: 'dark', at: 510 }, big)).toBeNull();
+    expect(momentOfOccurrence({ kind: 'hot', id: 's2', at: 200 }, none)).toBeNull();
+    expect(momentOfOccurrence({ kind: 'hot', id: 's2', at: 505 }, none)).toBe('diesInAtMidnight');
+    expect(momentOfOccurrence({ kind: 'held', at: 510 }, held(4))).toBe('heldWithSpare');
+    expect(momentOfOccurrence({ kind: 'held', at: 510 }, held(3))).toBeNull();
+    expect(momentOfOccurrence({ kind: 'wired', id: 's1>database', at: 20 }, none)).toBe('firstLive');
+    expect(momentOfOccurrence({ kind: 'wired', id: 'gateway>s1', at: 20 }, none)).toBeNull();
+    expect(momentOfOccurrence({ kind: 'laundryCut', at: 330 }, none)).toBe('laundryCut');
+    expect(momentOfOccurrence({ kind: 'retriesRising', at: 18 }, none)).toBeNull();
+    expect(momentOfOccurrence({ kind: 'retriesRising', at: 312 }, none)).toBe('retriesRising');
+    expect(TERM_NAMES.healthChecks).toBe('Health checks');
+    expect(momentOfAction({ type: 'decommission', id: 's4', refund: 40 })).toBe('decommission');
+    expect(momentOfAction({ type: 'overclock', id: 's1' })).toBe('kitFitted');
+    expect(momentOfAction({ type: 'wire', from: 'a', to: 'b' })).toBeNull();
+    const t = seeMoment(EMPTY_TRACE, 'estimateSet', 20, '23:51:50', 30);
+    expect(t.map((e) => e.term)).toEqual(['requirements', 'requestsPerSecond', 'estimate']);
+    expect(t[2]).toMatchObject({ moment: 'estimateSet', line: null, value: 30 });
+    expect(seeMoment(t, 'estimateSet', 25, '23:51:55', 30)).toBe(t);
+  });
+
+  it('on the best-play run has at least one entry per C8 term group before the debrief', () => {
+    const { r, beforeDebrief } = playNight({ laundry: false });
+    expect(r.play.failure).toBeNull();
+    expect(r.play.midnight?.held).toBe(true);
+    const groups = new Set(beforeDebrief.map((e) => e.group));
+    expect([...groups].sort()).toEqual(['failure', 'scaling', 'sizing']);
+    for (const e of beforeDebrief) expect(e.at, e.term).toBeLessThan(C.c8);
+    // Every term but load shedding: best play (src/game/autopilot.ts) never cuts the laundry floor.
+    const seen = termsSeen(beforeDebrief);
+    expect(TERM_KEYS.filter((k) => !seen.includes(k))).toEqual(['loadShedding']);
+    // The moments D10 names are among the entries.
+    const moments = new Set(beforeDebrief.map((e) => e.moment));
+    for (const m of ['estimateSet', 'firstSkipped', 'bigBoxDark', 'decommission', 'heldWithSpare'] as const) {
+      expect(moments.has(m), m).toBe(true);
+    }
+    // C4.triage.02/.03 count although they are WARNINGs; cascading failure points at C6.triage.02 (D2).
+    const lines = new Set(beforeDebrief.map((e) => e.line));
+    expect(lines.has('C4.triage.02')).toBe(true);
+    expect(lines.has('C4.triage.03')).toBe(true);
+    expect(beforeDebrief.find((e) => e.term === 'cascadingFailure')?.line).toBe('C6.triage.02');
+    // Clocks are the in-world hh:mm:ss.
+    for (const e of beforeDebrief) expect(e.clock, e.term).toMatch(/^(23:5\d|00:00):\d\d$/);
+  });
+
+  it('with the laundry cut as well, every C8 term has an entry before the debrief', () => {
+    const { r, beforeDebrief } = playNight({ laundry: true });
+    expect(r.play.laundryCut).not.toBeNull();
+    expect(termsSeen(beforeDebrief).sort()).toEqual([...TERM_KEYS].sort());
+    // The wiring hands the debrief the run's trace.
+    expect(run()).toBe(r);
+    expect(storyWiring.taught()).toBe(taughtTrace());
+  });
+
+  it('starts over on a fresh run', () => {
+    playNight({ laundry: false });
+    expect(taughtTrace().length).toBeGreaterThan(0);
+    newRun(1, null);
+    expect(taughtTrace()).toEqual([]);
+    expect(taughtMeasure()).toEqual(emptyMeasure());
+  });
+});
+
+describe('the debrief "you saw it at" lines (learning-4, D10)', () => {
+  it('names each term key by its bold debrief name', () => {
+    expect(TERM_NAMES.headroom).toBe('Headroom');
+    expect(TERM_NAMES.loadBalancer).toBe('Load balancer');
+    expect(TERM_NAMES.redundancy).toBe('Redundancy, N+1');
+    expect(new Set(Object.values(TERM_NAMES)).size).toBe(TERM_KEYS.length);
+  });
+
+  it('prints one grey line per term with an entry (its first sighting) in the debrief order, none for the rest', () => {
+    let t = seeLine(EMPTY_TRACE, 'C4.triage.03', 310, '23:56:40');
+    t = seeMoment(t, 'estimateSet', 20, '23:51:50', 30);
+    t = seeMoment(t, 'retriesRising', 312, '23:56:42');
+    const lines = seenLines(t);
+    expect(lines.map((l) => l.term)).toEqual(['requirements', 'requestsPerSecond', 'estimate', 'retryStorm']);
+    expect(lines[0]).toEqual({
+      term: 'requirements',
+      group: 'sizing',
+      name: 'Requirements',
+      text: 'you saw it at 23:51:50: you set the dial to 30 a second',
+    });
+    expect(lines[3].text).toBe(`you saw it at 23:56:40: “${LINES['C4.triage.03'].text}”`);
+    expect(seenLines(EMPTY_TRACE)).toEqual([]);
+  });
+
+  it('gives every moment draft words, free of the debrief terms themselves', () => {
+    for (const m of MOMENT_KINDS) {
+      const words = MOMENT_WORDS[m](4);
+      expect(words.length, m).toBeGreaterThan(0);
+      expect(termsIn(words), m).toEqual([]);
+      const e = { term: MOMENT_TEACHES[m][0], group: 'sizing', line: null, moment: m, value: 4, at: 1 };
+      expect(seenText({ ...e, group: 'sizing', clock: '23:51:31' })).toBe(`you saw it at 23:51:31: ${words}`);
+    }
+  });
+
+  it('on best play gives the debrief a grey line in every column', () => {
+    const { beforeDebrief } = playNight({ laundry: false });
+    const lines = seenLines(beforeDebrief);
+    expect(lines).toHaveLength(TERM_KEYS.length - 1);
+    expect(new Set(lines.map((l) => l.group))).toEqual(new Set(['sizing', 'scaling', 'failure']));
+    for (const l of lines) expect(l.text, l.term).toMatch(/^you saw it at \d\d:\d\d:\d\d: .+/);
   });
 });
