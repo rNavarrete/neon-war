@@ -45,3 +45,37 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
   });
   expect(second.errors).toEqual([]);
 });
+
+// gauges-4: the room-left bar in the deck goes red within one sim second of the district surge.
+test('the room-left bar: red within one sim second of the district surge at speed 5, in crew words', async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  const { errors } = await openBoard(page, { speed: 5, autopilot: true });
+  await reach(page, 'c1');
+  await expect
+    .poll(async () => (await hud(page)).headroom?.wiredCapacity ?? 0, { timeout: 10_000 })
+    .toBeGreaterThan(0);
+  let h = await hud(page);
+  expect(h.headroom!.label).toMatch(/^ROOM LEFT -?\d+% · \d+ of \d+$|^ROOM LEFT · (OVER \+\d+\/s|NO BOX)$/);
+
+  await reach(page, 'surge', { timeout: 110_000 });
+  const surgeAt = 300;
+  await expect
+    .poll(async () => (await hud(page)).now, { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(surgeAt + 1);
+  h = await hud(page);
+  const room = h.headroom!;
+  expect(room.state).toBe('red');
+  expect(room.redSince).not.toBeNull();
+  expect(room.redSince!).toBeLessThanOrEqual(surgeAt + 1);
+  expect(room.wiredCapacity).toBeGreaterThan(0);
+  expect(room.pct).toBe(Math.round((1 - room.demand / room.wiredCapacity) * 100));
+  expect(room.lit).toBe(0);
+  expect(room.label).toMatch(/^ROOM LEFT · OVER \+\d+\/s$/);
+  expect(room.label).not.toMatch(/head\s*room/i);
+  expect(room.capacity).toBeCloseTo(h.sim.capacity, 0);
+  expect(room.right).toBeLessThanOrEqual(1232);
+  await shot(page, 'live-m2-deck');
+  expect(errors).toEqual([]);
+});

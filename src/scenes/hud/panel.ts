@@ -22,6 +22,12 @@ export function panel(
   return opts.centred ? s : s.setOrigin(0);
 }
 
+/**
+ * The depth the gauges lane's Live views draw at: above the HUD's own objects (depth 0), so a view
+ * covers the legacy piece it replaces until the HUD scene stops drawing it.
+ */
+export const GAUGES_DEPTH = 1;
+
 // ---- the gauges lane's sub-sections of the `hud` hook ----
 //
 // The gauges views (title, clock, deck, the dial card) add their own keys to the `hud` section of the

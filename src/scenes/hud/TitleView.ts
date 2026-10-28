@@ -14,7 +14,7 @@ import { settings } from '../../game/settings';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import { countdownText } from './format';
 import { COLORS, FONT } from './layout';
-import { provideHudPart } from './panel';
+import { GAUGES_DEPTH, provideHudPart } from './panel';
 import {
   type LiveDot,
   LIVE_WORDS,
@@ -48,9 +48,6 @@ declare module './hook' {
     title?: TitleTestState;
   }
 }
-
-/** Above the HUD's own objects (depth 0), so the lane's views cover what they replace. */
-export const GAUGES_DEPTH = 1;
 
 /** Lux's face until art3d-4's round avatar lands, and the square of it the title shows. */
 export const TITLE_FACE = {
