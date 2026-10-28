@@ -1,6 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { HudTestState } from '../../src/scenes/hud/hook';
-import type { ChatTraceTestState } from '../../src/scenes/hud/ChatFeedView';
+import { type ChatTraceTestState, chatArtOf } from '../../src/scenes/hud/ChatFeedView';
 import type { AudienceTestState, ChatTestState } from '../../src/scenes/live/views/chat';
 import { hud, openBoard, reach, shot } from './live/reach';
 
@@ -180,8 +180,17 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
   page,
 }) => {
   test.setTimeout(75_000);
+  // chat-6: the chat draws what the manifest says has landed (today nothing, so the code fallbacks),
+  // with no texture warning in the console all night.
+  const warnings: string[] = [];
+  page.on('console', (m) => {
+    if ((m.type() === 'warning' || m.type() === 'error') && /texture/i.test(m.text()))
+      warnings.push(m.text());
+  });
   const { errors } = await openBoard(page);
   const log = new ChatLog();
+  const art = await page.evaluate(() => window.__neonTest!.state.hud?.chatArt ?? null);
+  expect(art).toEqual(chatArtOf());
 
   // C1: the autopilot places the first server; a stream reaction to it posts within 6 s, and the
   // first served packets post C1.chat.01 and C1.chat.02.
@@ -240,10 +249,12 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
   expect(spell!.to, 'the surge spell ended').not.toBeNull();
   expect(spell!.to!).toBeLessThanOrEqual(thanks.at);
 
-  // Across the surge the chat never posts more than 10 rows (one of tolerance) in any 30 s.
-  expect(log.maxInWindow(30, surgeClock - 30), log.ids()).toBeLessThanOrEqual(11);
   test.info().annotations.push({ type: 'rows', description: log.ids() });
+  expect(warnings).toEqual([]);
   expect(errors).toEqual([]);
+  // Across the surge the chat never posts more than 10 rows (one of tolerance) in any 30 s of chat
+  // clock, scripted rows included. Last, so every check above has run when it fails.
+  expect(log.maxInWindow(30, surgeClock - 30), log.ids()).toBeLessThanOrEqual(11);
 });
 
 test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers', async ({ page }) => {

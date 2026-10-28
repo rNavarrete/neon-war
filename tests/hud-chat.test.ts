@@ -23,7 +23,20 @@ import type Phaser from 'phaser';
 import { Bus } from '../src/game/bus';
 import type { Frame } from '../src/game/frame';
 import type { Occurrence } from '../src/game/occurrences';
-import { CHAT_TEXT, ChatFeed, ChatFeedView } from '../src/scenes/hud/ChatFeedView';
+import {
+  CHAT_PLATE_WIDE,
+  CHAT_TEXT,
+  ChatFeed,
+  ChatFeedView,
+  SYSTEM_GLYPH,
+  chatArtOf,
+  lookWithArt,
+  streamAvatarFor,
+} from '../src/scenes/hud/ChatFeedView';
+import { artRequest, isPicked } from '../src/game/artManifest';
+import { isSfxKey } from '../src/game/audio';
+import { STREAM_AVATARS } from '../src/scenes/avatars';
+import { artTexture } from '../src/scenes/plates';
 import {
   ARRIVAL_FADE,
   CHAT_BODY,
@@ -627,5 +640,200 @@ describe('the LIVE CHAT panel (chat-4)', () => {
     expect(reads).toBe(240);
     expect(chatRead().posts).toBeGreaterThan(10);
     view.shutdown();
+  });
+});
+
+// ---- chat-6: the art drop-in (wide plate, stream avatars, system glyph); chat-pop stays off ----
+
+/** Every texture key a stub scene was asked to load or draw, by call. */
+interface ArtCalls {
+  load: string[];
+  image: string[];
+  nineslice: string[];
+  setTexture: string[];
+}
+
+/**
+ * A stub scene whose texture manager holds `present` (and every texture baked on it), and which
+ * records each texture key it is asked to load or draw, so a test can say what drew and that
+ * nothing asked to draw a texture that is not there (Phaser's missing-texture warning).
+ */
+function artScene(present: (key: string) => boolean): { scene: Phaser.Scene; calls: ArtCalls } {
+  const calls: ArtCalls = { load: [], image: [], nineslice: [], setTexture: [] };
+  const baked = new Set<string>();
+  const chain: unknown = new Proxy(function () {}, {
+    get: (_t, k) => {
+      if (k === 'then' || typeof k === 'symbol') return undefined;
+      if (k === 'width' || k === 'height') return 0;
+      if (k === 'image' || k === 'nineslice' || k === 'setTexture')
+        return (...args: unknown[]) => {
+          calls[k].push(String(k === 'setTexture' ? args[0] : args[2]));
+          return chain;
+        };
+      return chain;
+    },
+    apply: () => chain,
+  });
+  const textures = new Proxy(
+    {},
+    {
+      get: (_t, k) => {
+        if (k === 'exists') return (key: string) => baked.has(key) || present(key);
+        if (k === 'addDynamicTexture')
+          return (key: string) => {
+            baked.add(key);
+            return chain;
+          };
+        return chain;
+      },
+    },
+  );
+  const scene = {
+    add: chain,
+    make: chain,
+    textures,
+    load: {
+      image: (key: string) => {
+        calls.load.push(key);
+        return chain;
+      },
+    },
+    tweens: chain,
+    input: { on: () => undefined, off: () => undefined },
+    game: { canvas: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 1920, height: 1080 }) } },
+  };
+  return { scene: scene as unknown as Phaser.Scene, calls };
+}
+
+/** The view on an art scene, with a stream row (C1.chat.02) and a system row (C4.chat.03) posted. */
+function artView(picked: (key: string) => boolean, present: (key: string) => boolean) {
+  const b = new Bus();
+  const s = artScene(present);
+  const view = new ChatFeedView(picked);
+  view.preload(s.scene);
+  view.create(s.scene, hostOn(s.scene, b));
+  b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 1 });
+  b.emit('cue', { id: 'C4.chat.03', kind: 'chat', at: 1.5 });
+  for (let c = 1; c < 3; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
+  return { view, ...s };
+}
+
+/** The chat's requested keys (docs/ART-REQUESTS.md), as the texture keys they load and draw as. */
+const CHAT_ART_KEYS = [CHAT_PLATE_WIDE, SYSTEM_GLYPH, ...STREAM_AVATARS];
+const CHAT_ART_TEXTURES = CHAT_ART_KEYS.map((k) => artTexture(k));
+
+describe('the chat art drop-in (chat-6)', () => {
+  it('reads what has landed from the manifest: every chat key falls back to code until its cut is set', () => {
+    const picked = (key: string) => {
+      const r = artRequest(key);
+      return r !== undefined && isPicked(r);
+    };
+    expect(chatArtOf()).toEqual({
+      plate: picked(CHAT_PLATE_WIDE) ? 'wide' : 'portrait',
+      streamAvatars: STREAM_AVATARS.every(picked),
+      systemGlyph: picked(SYSTEM_GLYPH),
+    });
+    expect(chatArtOf(() => false)).toEqual({ plate: 'portrait', streamAvatars: false, systemGlyph: false });
+    expect(chatArtOf(() => true)).toEqual({ plate: 'wide', streamAvatars: true, systemGlyph: true });
+    // One stream avatar short of the set keeps the rings: the rows never mix rings and faces.
+    expect(chatArtOf((k) => k !== STREAM_AVATARS[3]).streamAvatars).toBe(false);
+    for (const key of CHAT_ART_KEYS) {
+      const r = artRequest(key);
+      expect(r?.lane, key).toBe('chat');
+      expect(r?.fallback, key).toBeDefined();
+    }
+  });
+
+  it('gives a viewer the same painted avatar every time, and swaps the ring and the rule only once the art is in', () => {
+    for (const handle of VIEWER_HANDLES) {
+      expect(STREAM_AVATARS).toContain(streamAvatarFor(handle));
+      expect(streamAvatarFor(handle)).toBe(streamAvatarFor(handle));
+    }
+    const base = { cause: 'served' as const, at: 0, complaint: false, thanks: false };
+    const stream = rowLook(
+      { ...chatEntry('C1.chat.02'), chat: 'stream', ...base, system: false },
+      BLOCK_AVATARS,
+    );
+    const system = rowLook(
+      { ...chatEntry('C4.chat.03'), chat: 'block', ...base, system: true },
+      BLOCK_AVATARS,
+    );
+    const block = rowLook(
+      { ...chatEntry('C1.chat.01'), chat: 'block', ...base, system: false },
+      BLOCK_AVATARS,
+    );
+    const none = chatArtOf(() => false);
+    const all = chatArtOf(() => true);
+    for (const look of [stream, system, block]) expect(lookWithArt(look, none)).toBe(look);
+    expect(lookWithArt(block, all)).toBe(block);
+    expect(lookWithArt(stream, all)).toMatchObject({
+      avatar: streamAvatarFor(stream.name),
+      ring: null,
+      nameColor: 'cyan',
+      name: stream.name,
+    });
+    expect(lookWithArt(system, all)).toMatchObject({ avatar: SYSTEM_GLYPH, rule: false, name: system.name });
+  });
+
+  it('with the art present, the plate is the wide one and stream rows show painted avatars', () => {
+    const { view, calls } = artView(
+      () => true,
+      () => true,
+    );
+    expect(hudRead().chatArt).toEqual({ plate: 'wide', streamAvatars: true, systemGlyph: true });
+    expect(calls.image).toContain(artTexture(CHAT_PLATE_WIDE));
+    expect(calls.nineslice).not.toContain('hud:chat-panel');
+    const rows = chatRead().rows;
+    const stream = rows.filter((r) => r.chat === 'stream');
+    expect(stream.length).toBeGreaterThan(0);
+    for (const r of stream) {
+      expect(r.avatar).toMatch(/^chars\/avatars\/stream-[1-4]$/);
+      expect(r).toMatchObject({ ring: null, nameColor: 'cyan' });
+    }
+    expect(rows.find((r) => r.id === 'C4.chat.03')).toMatchObject({
+      avatar: SYSTEM_GLYPH,
+      rule: false,
+      ring: null,
+    });
+    expect(calls.setTexture).toContain(artTexture(SYSTEM_GLYPH));
+    view.shutdown();
+  });
+
+  it('without the art, the code fallbacks draw and nothing loads or draws a texture that is not there', () => {
+    const present = (key: string) => !CHAT_ART_TEXTURES.includes(key);
+    const { view, calls } = artView(() => false, present);
+    expect(hudRead().chatArt).toEqual({ plate: 'portrait', streamAvatars: false, systemGlyph: false });
+    expect(calls.nineslice).toContain('hud:chat-panel');
+    for (const key of CHAT_ART_TEXTURES) {
+      expect(calls.load, key).not.toContain(key);
+      expect(calls.image, key).not.toContain(key);
+      expect(calls.setTexture, key).not.toContain(key);
+    }
+    const rows = chatRead().rows;
+    for (const r of rows.filter((x) => x.chat === 'stream'))
+      expect(r).toMatchObject({ avatar: null, ring: 'cyan' });
+    expect(rows.find((r) => r.id === 'C4.chat.03')).toMatchObject({ avatar: null, rule: true });
+    view.shutdown();
+  });
+
+  it('falls back the same way when a picked file did not load, so a missing texture is never drawn', () => {
+    const present = (key: string) => !CHAT_ART_TEXTURES.includes(key);
+    const { view, calls } = artView(() => true, present);
+    // Queued (the manifest says picked), then not drawn because the texture is not in.
+    expect(calls.load).toContain(artTexture(CHAT_PLATE_WIDE));
+    expect(hudRead().chatArt).toEqual({ plate: 'portrait', streamAvatars: false, systemGlyph: false });
+    for (const key of CHAT_ART_TEXTURES) {
+      expect(calls.image, key).not.toContain(key);
+      expect(calls.setTexture, key).not.toContain(key);
+    }
+    view.shutdown();
+  });
+
+  it('keeps chat-pop off: no chat sound key, and the chat files play no sound', () => {
+    expect(isSfxKey('chat-pop')).toBe(false);
+    for (const [name, src] of Object.entries(CHAT_SOURCES)) {
+      expect(src, name).not.toMatch(/chat-pop/);
+      expect(src, name).not.toMatch(/\.sound\.|playSfx|emit\(\s*'sfx'/);
+    }
   });
 });

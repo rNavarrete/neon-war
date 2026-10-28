@@ -17,6 +17,11 @@
 // changes; the newest row fades in over 150 ms of HUD clock, at once under reduce flicker; rows sit
 // back to alpha 0.4 while the chat is silent.
 //
+// chat-6 drops the requested art in through the manifest: the wide plate, the four stream avatars
+// and the system glyph each draw once picked and their texture is in, and the code fallbacks (the
+// portrait panel nine-sliced, the cyan ring, the amber rule) until then; nothing loads a file that
+// has not landed. The chat plays no sound: its post tick stays off (05-comms, D5).
+//
 // Phaser is a type here only, so the registry and its node tests can import this file.
 
 import type Phaser from 'phaser';
@@ -25,7 +30,9 @@ import type { Frame } from '../../game/frame';
 import type { Occurrence } from '../../game/occurrences';
 import { settings } from '../../game/settings';
 import type { LineId } from '../../strings';
-import { type AvatarScene, BLOCK_AVATARS, preloadAvatars, roundAvatar } from '../avatars';
+import { artRequest, isPicked, requestFile } from '../../game/artManifest';
+import { type AvatarScene, BLOCK_AVATARS, STREAM_AVATARS, preloadAvatars, roundAvatar } from '../avatars';
+import { artTexture } from '../plates';
 import { type Rect, pagePoint } from '../live/layout';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import { type ChatDrawnRow, type ChatTestState, chatSection, provideChatHook } from '../live/views/chat';
@@ -36,6 +43,7 @@ import {
   ROW_GAP,
   ROW_NAME_H,
   ROW_TEXT_X,
+  type RowLook,
   SILENCED_ALPHA,
   type TickColor,
   arrivalAlpha,
@@ -80,6 +88,62 @@ export const CHAT_TEXT = Object.freeze({
 export const headerTag = (filter: ChatFilter): string =>
   filter === 'block' ? CHAT_TEXT.block : CHAT_TEXT.all;
 
+// ---- the art drop-in (chat-6): the wide plate, the stream avatars and the system glyph ----
+
+/** The landscape LIVE CHAT plate (docs/ART-REQUESTS.md), drawn the size of the zone once picked. */
+export const CHAT_PLATE_WIDE = 'hud/chat-plate-wide';
+/** The system row's glyph, drawn in place of the amber rule once picked. */
+export const SYSTEM_GLYPH = 'hud/icons/system';
+/** The system glyph's size on a row, in game pixels (its request's display size). */
+export const SYSTEM_GLYPH_SIZE = 20;
+
+/** Whether a requested key's picked file has landed (the manifest carries its cut size). */
+export function chatArtPicked(key: string): boolean {
+  const r = artRequest(key);
+  return r !== undefined && isPicked(r);
+}
+
+/** Which of the chat's requested art draws: each falls back to code until its file is picked. */
+export interface ChatArt {
+  /** 'wide' once hud/chat-plate-wide is picked; the portrait chat panel nine-sliced until then. */
+  plate: 'wide' | 'portrait';
+  /** Stream rows show painted avatars (all four chars/avatars/stream-N picked); a cyan ring until then. */
+  streamAvatars: boolean;
+  /** System rows show the glyph (hud/icons/system picked); the amber rule until then. */
+  systemGlyph: boolean;
+}
+
+/** The chat's art from the manifest (or `picked`, which tests use to stand for a landed drop). Pure. */
+export function chatArtOf(picked: (key: string) => boolean = chatArtPicked): ChatArt {
+  return {
+    plate: picked(CHAT_PLATE_WIDE) ? 'wide' : 'portrait',
+    streamAvatars: STREAM_AVATARS.every((k) => picked(k)),
+    systemGlyph: picked(SYSTEM_GLYPH),
+  };
+}
+
+/** A viewer's painted avatar, the same one for the same handle every time. Pure. */
+export function streamAvatarFor(handle: string): string {
+  let h = 0;
+  for (let i = 0; i < handle.length; i++) h = (h * 31 + handle.charCodeAt(i)) >>> 0;
+  return STREAM_AVATARS[h % STREAM_AVATARS.length];
+}
+
+/**
+ * A row's look with the landed art: a stream row's cyan ring becomes the viewer's painted avatar,
+ * a system row's rule becomes the glyph (as `avatar`, the glyph's key). Returns `look` itself when
+ * no art applies. Pure.
+ */
+export function lookWithArt(look: RowLook, art: ChatArt): RowLook {
+  if (look.rule && art.systemGlyph) return { ...look, avatar: SYSTEM_GLYPH, rule: false };
+  if (look.ring === 'cyan' && look.nameColor === 'cyan' && art.streamAvatars)
+    return { ...look, avatar: streamAvatarFor(look.name), ring: null, initial: '' };
+  return look;
+}
+
+/** hud.chatArt: which of the chat's requested art draws now (a test mirror). */
+export type ChatArtTestState = ChatArt;
+
 // ---- the trace (chat-5): what the chat stepped on, as edges, for the browser spec ----
 
 /** One spell of errors as the chat saw it (Frame.errorShare > 0), on the HUD clock. */
@@ -111,6 +175,8 @@ declare module './hook' {
   interface HudTestState {
     /** The chat's trace (chat-5). */
     chatTrace?: ChatTraceTestState;
+    /** The chat's art, landed or falling back (chat-6). */
+    chatArt?: ChatArtTestState;
   }
 }
 
@@ -317,7 +383,9 @@ export class ChatFeedView implements LiveView {
   readonly feed = new ChatFeed();
   private scene: Phaser.Scene | null = null;
   private root: Phaser.GameObjects.Container | null = null;
-  private plate: Phaser.GameObjects.NineSlice | null = null;
+  private plate: Phaser.GameObjects.NineSlice | Phaser.GameObjects.Image | null = null;
+  /** The art that draws: what the manifest says has landed, less anything whose texture is not in. */
+  private art: ChatArt;
   private tagText: Phaser.GameObjects.Text | null = null;
   private chrome: Phaser.GameObjects.Graphics | null = null;
   /** The pooled row slots, oldest on top; never more than VISIBLE_ROWS. */
@@ -337,8 +405,24 @@ export class ChatFeedView implements LiveView {
   private newestAt = 0;
   private newestAlpha = 1;
 
+  /** `picked` stands for the manifest in tests (a landed drop); the game uses the manifest. */
+  constructor(private readonly picked: (key: string) => boolean = chatArtPicked) {
+    this.art = chatArtOf(picked);
+  }
+
+  /**
+   * Queue the block's avatars, and the chat's requested art only once picked: a file that has not
+   * landed is never requested, so the fallbacks draw without a load error or texture warning.
+   */
   preload(scene: Phaser.Scene): void {
-    preloadAvatars(scene as unknown as AvatarScene, Object.values(BLOCK_AVATARS));
+    const art = chatArtOf(this.picked);
+    const keys = Object.values(BLOCK_AVATARS);
+    preloadAvatars(scene as unknown as AvatarScene, art.streamAvatars ? [...keys, ...STREAM_AVATARS] : keys);
+    for (const key of [CHAT_PLATE_WIDE, SYSTEM_GLYPH]) {
+      const want = key === CHAT_PLATE_WIDE ? art.plate === 'wide' : art.systemGlyph;
+      if (want && !scene.textures.exists(artTexture(key)))
+        scene.load.image(artTexture(key), requestFile(key));
+    }
   }
 
   create(scene: Phaser.Scene, host: LiveHost): void {
@@ -347,7 +431,20 @@ export class ChatFeedView implements LiveView {
     const add = scene.add;
     const r = host.rect;
 
-    this.plate = panel(scene, 'hud:chat-panel', r.x, r.y, r.w, r.h, { k: 0.55, slice: [70, 70, 70, 70] });
+    // What the manifest says has landed, less anything whose texture did not load (the code fallback
+    // draws then, and nothing asks Phaser for a missing texture).
+    const has = (key: string): boolean => scene.textures.exists(key) === true;
+    const want = chatArtOf(this.picked);
+    this.art = {
+      plate: want.plate === 'wide' && has(artTexture(CHAT_PLATE_WIDE)) ? 'wide' : 'portrait',
+      streamAvatars: want.streamAvatars && STREAM_AVATARS.every((k) => has(artTexture(k))),
+      systemGlyph: want.systemGlyph && has(artTexture(SYSTEM_GLYPH)),
+    };
+
+    this.plate =
+      this.art.plate === 'wide'
+        ? add.image(r.x, r.y, artTexture(CHAT_PLATE_WIDE)).setOrigin(0).setDisplaySize(r.w, r.h)
+        : panel(scene, 'hud:chat-panel', r.x, r.y, r.w, r.h, { k: 0.55, slice: [70, 70, 70, 70] });
     const title = add.text(TITLE_AT.x, TITLE_AT.y, CHAT_TEXT.title, {
       fontFamily: FONT,
       fontSize: '15px',
@@ -364,6 +461,11 @@ export class ChatFeedView implements LiveView {
     for (const key of Object.values(BLOCK_AVATARS)) {
       this.avatarTextures[key] = roundAvatar(avatarScene, key, ROW_AVATAR).texture;
     }
+    if (this.art.streamAvatars) {
+      for (const key of STREAM_AVATARS)
+        this.avatarTextures[key] = roundAvatar(avatarScene, key, ROW_AVATAR).texture;
+    }
+    if (this.art.systemGlyph) this.avatarTextures[SYSTEM_GLYPH] = artTexture(SYSTEM_GLYPH);
 
     this.slots = [];
     const textW = CHAT_BODY.w - ROW_TEXT_X;
@@ -401,6 +503,7 @@ export class ChatFeedView implements LiveView {
         () => this.snapshot(),
         () => ({ watching: this.feed.watching }),
       ),
+      provideHudSection('chatArt', () => ({ ...this.art })),
       provideHudSection('chatTrace', () => ({
         errors: this.feed.trace.errors.map((e) => ({ ...e })),
         retries: this.feed.trace.retries.map((r) => ({ ...r })),
@@ -411,7 +514,7 @@ export class ChatFeedView implements LiveView {
   }
 
   /** The panel, for the HUD's bounds check; null once shut down. */
-  get panel(): Phaser.GameObjects.NineSlice | null {
+  get panel(): Phaser.GameObjects.NineSlice | Phaser.GameObjects.Image | null {
     return this.plate;
   }
 
@@ -496,7 +599,7 @@ export class ChatFeedView implements LiveView {
   }
 
   private drawRow(slot: RowSlot, row: ChatRow, top: number, h: number, alpha: number): ChatDrawnRow {
-    const look = rowLook(row, BLOCK_AVATARS);
+    const look = lookWithArt(rowLook(row, BLOCK_AVATARS), this.art);
     const x0 = CHAT_BODY.x;
     const cx = x0 + 8 + ROW_AVATAR / 2;
     const cy = top + ROW_AVATAR / 2;
@@ -505,7 +608,14 @@ export class ChatFeedView implements LiveView {
     // The 2 px cause tick down the row's left edge.
     g.fillStyle(TICK[look.tick], look.tick === 'cyan' ? 0.45 : 1);
     g.fillRect(x0, top + 2, 2, h - ROW_GAP - 4);
-    if (look.avatar) {
+    if (look.avatar === SYSTEM_GLYPH) {
+      // The system glyph, unringed, at its own size where the rule would be.
+      slot.avatar
+        .setTexture(this.avatarTextures[SYSTEM_GLYPH])
+        .setPosition(cx, cy)
+        .setDisplaySize(SYSTEM_GLYPH_SIZE, SYSTEM_GLYPH_SIZE)
+        .setVisible(true);
+    } else if (look.avatar) {
       slot.avatar
         .setTexture(this.avatarTextures[look.avatar])
         .setPosition(cx, cy)
