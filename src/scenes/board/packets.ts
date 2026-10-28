@@ -29,6 +29,29 @@ export function maxInFlight(rate: number, travel: number): number {
   return pps > 0 ? Math.floor(travel * pps) + 1 : 0;
 }
 
+/** Each inbound lane's share of the block's demand, scaled up so the incoming stream reads as busy. */
+export const INBOUND_STAGGER: readonly number[] = [1.7, 2.1, 1.9];
+
+/**
+ * Refill `out` with this frame's packet rates and return it: every wire's req/s from the routing,
+ * plus the inbound lanes (`inboundKeys`, one per lane) sharing the block's demand a little out of
+ * step so the crowd never marches. A key no longer carrying anything is set to 0 rather than
+ * deleted, which the pool reads the same as missing; nothing is allocated once the keys exist.
+ */
+export function fillPacketRates(
+  out: Record<string, number>,
+  wires: Readonly<Record<string, number>>,
+  demand: number,
+  inboundKeys: readonly string[],
+): Record<string, number> {
+  for (const key in out) out[key] = 0;
+  for (const key in wires) out[key] = wires[key];
+  const n = inboundKeys.length;
+  for (let i = 0; i < n; i++)
+    out[inboundKeys[i]] = (demand * INBOUND_STAGGER[i % INBOUND_STAGGER.length]) / n;
+  return out;
+}
+
 export interface Packet {
   active: boolean;
   /** Wire key ("from>to") the packet is on. */

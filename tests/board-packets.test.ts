@@ -1,5 +1,7 @@
 import {
+  INBOUND_STAGGER,
   MAX_PACKETS_PER_SECOND,
+  fillPacketRates,
   PACKETS_PER_REQUEST,
   PacketPool,
   maxInFlight,
@@ -108,5 +110,42 @@ describe('PacketPool', () => {
     pool.clear();
     expect(pool.active).toBe(0);
     expect(pool.size).toBe(size);
+  });
+});
+
+describe('packet rates refilled in place (board-3)', () => {
+  const lanes = ['inbound0', 'inbound1', 'inbound2'];
+
+  it('refills the same object with the wires and the inbound lanes', () => {
+    const out: Record<string, number> = {};
+    const a = fillPacketRates(out, { 'gateway>s': 30 }, 60, lanes);
+    expect(a).toBe(out);
+    expect(a['gateway>s']).toBe(30);
+    // The lanes share the demand, each a little out of step.
+    for (let i = 0; i < lanes.length; i++) expect(a[lanes[i]]).toBeCloseTo((60 * INBOUND_STAGGER[i]) / 3);
+    // A wire that stopped carrying reads 0, which the pool treats as missing.
+    const b = fillPacketRates(out, { 's>database': 20 }, 0, lanes);
+    expect(b).toBe(out);
+    expect(b['gateway>s']).toBe(0);
+    expect(b['s>database']).toBe(20);
+    expect(b.inbound1).toBe(0);
+  });
+
+  it('drops a zeroed wire’s packets exactly as a missing one, and the pool stops growing', () => {
+    const travel = () => 1;
+    const zeroed = new PacketPool();
+    const missing = new PacketPool();
+    const rates: Record<string, number> = {};
+    for (let i = 0; i < 120; i++) {
+      zeroed.step(1 / 60, fillPacketRates(rates, { w: 100 }, 0, []), travel);
+      missing.step(1 / 60, { w: 100 }, travel);
+    }
+    const size = zeroed.size;
+    zeroed.step(1 / 60, fillPacketRates(rates, {}, 0, []), travel);
+    missing.step(1 / 60, {}, travel);
+    expect(zeroed.active).toBe(0);
+    expect(missing.active).toBe(0);
+    for (let i = 0; i < 120; i++) zeroed.step(1 / 60, fillPacketRates(rates, { w: 100 }, 0, []), travel);
+    expect(zeroed.size).toBe(size);
   });
 });

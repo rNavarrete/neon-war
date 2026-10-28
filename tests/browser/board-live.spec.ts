@@ -163,3 +163,30 @@ test('the inventory row: cards with prices and counts in the inventory zone, the
 
   await page.screenshot({ path: 'test-results/screens/board-live-inventory.png' });
 });
+
+test('one read of the run per frame: the board draws from the shared Frame it read this frame', async ({
+  page,
+}) => {
+  await openBoard(page);
+  const id = await placeServer(page, 's1');
+  const before = await board(page);
+  const gateway = before.parts.find((p) => p.kind === 'gateway')!;
+  const server = before.parts.find((p) => p.id === id)!;
+  await drag(page, gateway, server);
+  await expect.poll(async () => (await board(page)).wires.length).toBe(1);
+
+  // On every hook read the snapshot was taken on the board's latest frame, and frames keep coming.
+  const first = await board(page);
+  expect(first.snapshotFrame).toBe(first.frame);
+  await expect.poll(async () => (await board(page)).frame).toBeGreaterThan(first.frame + 5);
+  for (let i = 0; i < 5; i++) {
+    const b = await board(page);
+    expect(b.snapshotFrame).toBe(b.frame);
+    // The sim moved under the board (a part placed, a wire laid), so the Frame changed, but never
+    // more than once a frame.
+    expect(b.snapshotChanges).toBeGreaterThan(1);
+    expect(b.snapshotChanges).toBeLessThanOrEqual(b.frame);
+  }
+  // Between frames the board's Frame is the very object frame() hands every other view.
+  await expect.poll(async () => (await board(page)).snapshotCurrent).toBe(true);
+});

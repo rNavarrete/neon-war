@@ -61,6 +61,17 @@ export interface BoardTestState {
   refusal: string | null;
   /** What the pointer is dragging: a tray card id, 'wire', or null. */
   dragging: string | null;
+  /** Board frames synced so far. */
+  frame: number;
+  /**
+   * The board frame on which the board last read the run's Frame (src/game/frame.ts). It reads it
+   * once at the top of every sync, so this equals `frame`; every field above comes from that read.
+   */
+  snapshotFrame: number;
+  /** How many times the Frame the board read was a new object (the sim changed under it). */
+  snapshotChanges: number;
+  /** The Frame the board drew last is frame()'s current one: the board and the HUD share one read. */
+  snapshotCurrent: boolean;
 }
 
 declare module '../../testHook' {

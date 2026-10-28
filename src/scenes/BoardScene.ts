@@ -4,7 +4,8 @@ import { Director } from '../game/director';
 import { run } from '../game/run';
 import { type Part, wireKey } from '../sim/board';
 import { provideTestState } from '../testHook';
-import { balancerGiven, placeBalancer } from './board/crew';
+import { type Frame, frame } from '../game/frame';
+import { balancerGiven, balancerGivenIn, placeBalancer } from './board/crew';
 import type { BoardTestState } from './board/hook';
 import {
   type Box,
@@ -35,7 +36,8 @@ import {
   wirePath,
 } from './board/layout';
 import { ZONES, pageRect } from './live/layout';
-import { PacketPool, progress, travelSeconds } from './board/packets';
+import { PacketPool, fillPacketRates, progress, travelSeconds } from './board/packets';
+import { BoardSnapshot } from './board/snapshot';
 import { InventoryView } from './board/InventoryView';
 import {
   type InventoryCounts,
@@ -45,7 +47,15 @@ import {
   lockedReason,
   trayCards,
 } from './board/tray';
-import { type PartLook, loadColour, loadLabel, partLook } from './board/view';
+import {
+  LabelCache,
+  type MutablePartLook,
+  artFor,
+  emptyLook,
+  loadLabel,
+  partLook,
+  partLookInto,
+} from './board/view';
 import { SCENES } from './keys';
 
 // Desktop only, 16:9: built at 1920x1080 and scaled to fit the window.
@@ -87,8 +97,10 @@ interface PartView {
   shadow: Phaser.GameObjects.Ellipse;
   label: Phaser.GameObjects.Text;
   art: string;
-  text: string;
-  colour: string;
+  /** The part's look, refilled in place every frame. */
+  look: MutablePartLook;
+  /** The readout's text and colour, rebuilt only when what they show changes. */
+  readout: LabelCache;
   /** Frame the part was last seen on the board, to sweep views of removed parts. */
   seen: number;
 }
@@ -120,9 +132,9 @@ const INBOUND = INBOUND_LANES.map((path, i): WireGeom => {
 });
 /** The inbound lanes by key, so the packet loop finds one without allocating a closure. */
 const INBOUND_BY_KEY: ReadonlyMap<string, WireGeom> = new Map(INBOUND.map((w) => [w.key, w]));
+/** The inbound lanes' packet keys, in lane order. */
+const INBOUND_KEYS: readonly string[] = INBOUND.map((w) => w.key);
 const RED = 0xff4d5e;
-/** Each inbound lane's share of the block's demand, scaled up so the incoming stream reads as busy. */
-const INBOUND_STAGGER = [1.7, 2.1, 1.9] as const;
 /** strokePoints reads only x and y, so a plain point list will do. */
 const asVectors = (path: Point[]) => path as unknown as Phaser.Math.Vector2[];
 /** How much the skyline above the table is dimmed, so the board reads first but the city still shows. */
@@ -143,8 +155,15 @@ export class BoardScene extends Phaser.Scene {
   ready = false;
 
   private views = new Map<string, PartView>();
-  private frame = 0;
+  /** The one Frame read per board frame, and the board's frame count. */
+  private snap = new BoardSnapshot();
   private pads = new Map<string, Phaser.GameObjects.Image>();
+  /** The server pads in a plain list, so the per-frame loop needs no Map iterator. */
+  private padList: { slot: string; pad: Phaser.GameObjects.Image }[] = [];
+  /** Each wire's drawn state (live, skipped, selected) last time the traces were drawn. */
+  private wireState: number[] = [];
+  private wiresDirty = true;
+  private previewShown = false;
   private lbPad!: Phaser.GameObjects.Image;
   private wiresG!: Phaser.GameObjects.Graphics;
   private previewG!: Phaser.GameObjects.Graphics;
@@ -179,8 +198,17 @@ export class BoardScene extends Phaser.Scene {
   private offBus: (() => void) | null = null;
   private director: Director | null = null;
   private sky!: Phaser.GameObjects.Image;
+  /** Created once with the scene: the pool calls it per wire per frame without a new closure. */
   private readonly travelOf = (wire: string): number =>
     (this.wireByKey.get(wire) ?? INBOUND_BY_KEY.get(wire))?.travel ?? 1;
+  /** Bound once: drops the sprites of a part no longer on the board (Map.forEach, no iterator). */
+  private readonly sweepView = (v: PartView, id: string): void => {
+    if (v.seen === this.snap.count) return;
+    v.img.destroy();
+    v.shadow.destroy();
+    v.label.destroy();
+    this.views.delete(id);
+  };
 
   constructor() {
     super(SCENES.board);
@@ -194,7 +222,12 @@ export class BoardScene extends Phaser.Scene {
   create(): void {
     this.ready = false;
     this.views = new Map();
+    this.snap.reset();
     this.pads = new Map();
+    this.padList = [];
+    this.wireState = [];
+    this.wiresDirty = true;
+    this.previewShown = false;
     this.wireList = [];
     this.wireByKey = new Map();
     this.lastWires = null;
@@ -218,6 +251,7 @@ export class BoardScene extends Phaser.Scene {
       const pad = this.add.image(p.x, p.y, 'slot-empty');
       pad.setScale((PAD_SIZE.w * slotScale(id)) / pad.width).setAlpha(0.8);
       this.pads.set(id, pad);
+      this.padList.push({ slot: id, pad });
     }
     this.lbPad = this.add.image(LB_SLOT.x, LB_SLOT.y + 10, 'slot-locked');
     this.lbPad.setScale(PAD_SIZE.w / this.lbPad.width);
@@ -278,8 +312,7 @@ export class BoardScene extends Phaser.Scene {
     const r = run();
     r.tick(seconds);
     this.director?.flush(this);
-    // Packets move in real time (slowed by Regroup), not test speed, so their density reads the same.
-    this.syncBoard(r.paused ? 0 : Math.min(seconds, 0.25) * r.timeScale);
+    this.syncBoard(seconds);
   }
 
   // ---- drawing -------------------------------------------------------------------------------
@@ -377,110 +410,114 @@ export class BoardScene extends Phaser.Scene {
     return this.add.container(0, 0, [bg, img]).setDepth(35).setVisible(false);
   }
 
-  /** Bring every sprite in line with the run this frame. `dt` is how far packets move (seconds). */
-  private syncBoard(dt: number): void {
-    const r = run();
-    const board = r.session.board;
-    this.frame++;
+  /**
+   * Bring every sprite in line with the run this frame. `seconds` is the frame's real length.
+   * Everything below reads the one Frame taken here (frame() memoises per sim change), never
+   * run().flow or run().offline, and the steady path allocates nothing: looks, labels, rates and
+   * pads are reused, and the loops take no closures.
+   */
+  private syncBoard(seconds: number): void {
+    const f = this.snap.next(run());
+    const count = this.snap.count;
+    const parts = f.parts;
+    const flow = f.flow;
+    // Packets move in real time (slowed by Regroup), not test speed, so their density reads the same.
+    const dt = f.paused ? 0 : Math.min(seconds, 0.25) * f.timeScale;
 
-    const unlocked = balancerGiven(r);
+    const unlocked = balancerGivenIn(f.rescued, parts);
     if (unlocked !== this.balancerUnlocked) {
       this.balancerUnlocked = unlocked;
       this.cards = trayCards(unlocked);
       this.inventory.setLocks(this.cards);
     }
-    this.syncCounts(board.credits, board.parts, unlocked);
-    this.inventory.setInFlight(this.drag?.kind === 'card' ? this.drag.id : null);
+    this.syncCounts(f.credits, parts, unlocked);
+    const d = this.drag;
+    this.inventory.setInFlight(d?.kind === 'card' ? d.id : null);
 
-    if (board.wires !== this.lastWires || board.parts !== this.lastParts) this.rebuildWires();
+    if (f.wires !== this.lastWires || parts !== this.lastParts) this.rebuildWires(f);
 
-    // Parts.
-    const offline = r.offline;
-    const hasBalancer = board.parts.some((p) => p.kind === 'balancer');
-    this.lbPad.setTexture(unlocked || hasBalancer ? 'slot-empty' : 'slot-locked');
-    for (const [slot, pad] of this.pads) {
-      const empty = !board.parts.some((p) => p.slot === slot);
-      const target = this.drag?.kind === 'card' && this.drag.id === 'server' && empty;
+    // Parts. `unlocked` is already true once a balancer is racked.
+    this.lbPad.setTexture(unlocked ? 'slot-empty' : 'slot-locked');
+    const placingServer = d?.kind === 'card' && d.id === 'server';
+    for (let i = 0; i < this.padList.length; i++) {
+      const { slot, pad } = this.padList[i];
+      const target = placingServer && partInSlot(parts, slot) === null;
       pad.setAlpha(target ? 1 : 0.8);
       if (target) pad.setTint(0x9ffcff);
       else pad.clearTint();
     }
     const pulse = 0.55 + 0.25 * Math.sin(this.time.now / 120);
     this.hotParts.clear();
-    for (const part of board.parts) {
-      const look = partLook(part, r.flow.load[part.id] ?? 0, offline, r.session.offlineUntil, r.now);
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const v = this.viewFor(part);
+      if (!v) continue;
+      const look = partLookInto(v.look, part, flow.load[part.id] ?? 0, f.offline, f.offlineUntil, f.now);
       // Traffic is being dropped here: the packets heading in turn red.
       if (look.dark || (look.share !== null && look.share > 1)) this.hotParts.add(part.id);
-      const v = this.viewFor(part, look);
-      if (!v) continue;
-      v.seen = this.frame;
+      v.seen = count;
+      if (v.art !== look.art) {
+        v.art = look.art;
+        v.img.setTexture(look.art);
+        v.img.setScale(this.artScale(part, v.img));
+      }
       if (look.dark) v.img.setTint(DARK_TINT);
       else v.img.clearTint();
       v.img.setAlpha(look.status === 'booting' || look.status === 'rebooting' ? pulse + 0.2 : 1);
-      const text = loadLabel(look);
-      if (text !== v.text) {
-        v.text = text;
-        v.label.setText(text);
-      }
-      const colour = loadColour(look);
-      if (colour !== v.colour) {
-        v.colour = colour;
-        v.label.setColor(colour);
-      }
+      if (v.readout.update(look)) v.label.setText(v.readout.text).setColor(v.readout.colour);
     }
-    for (const [id, v] of this.views) {
-      if (v.seen === this.frame) continue;
-      v.img.destroy();
-      v.shadow.destroy();
-      v.label.destroy();
-      this.views.delete(id);
-    }
+    this.views.forEach(this.sweepView);
 
     // Selection can outlive what it pointed at (a cut, a decommission, a new run).
-    if (this.selectedPart && !board.parts.some((p) => p.id === this.selectedPart && p.slot !== null)) {
-      this.selectedPart = null;
+    if (this.selectedPart) {
+      const sel = partById(parts, this.selectedPart);
+      if (!sel || sel.slot === null) this.selectedPart = null;
     }
     if (this.selectedWire && !this.wireByKey.has(this.selectedWire)) this.selectedWire = null;
 
-    this.drawWires(r.flow.wires, r.flow.skipped);
-    this.drawInbound(r.demand, dt);
-    this.stepPackets(dt, r.flow.wires, r.demand);
-    this.placeButtons();
+    this.drawWires(flow.wires, flow.skipped);
+    this.drawPreview(parts);
+    this.drawInbound(f.demand, dt);
+    this.stepPackets(dt, flow.wires, f.demand);
+    this.placeButtons(parts);
 
     if (this.refusalText.visible && this.time.now > this.refusalUntil) this.refusalText.setVisible(false);
   }
 
-  private viewFor(part: Part, look: PartLook): PartView | null {
-    let v = this.views.get(part.id);
+  /** The part's sprites, made the first time it is seen (a part never moves once placed). */
+  private viewFor(part: Part): PartView | null {
+    const known = this.views.get(part.id);
+    if (known) return known;
     const c = partCentre(part);
     if (!c) return null;
-    if (!v) {
-      const size = partSize(part);
-      const s = slotScale(part.slot);
-      const shadow = this.add
-        .ellipse(c.x + 8 * s, c.y + size.h / 2 - 6 * s, size.w * 1.05, 26 * s, 0x000000, 0.55)
-        .setDepth(1.5);
-      // Nearer parts (lower on screen) draw over farther ones.
-      const img = this.add.image(c.x, c.y, look.art).setDepth(3 + c.y / 1000);
-      const label = this.add
-        .text(c.x, c.y - size.h / 2 - 6, '', {
-          fontFamily: 'monospace',
-          fontSize: `${Math.round(18 * s)}px`,
-          fontStyle: 'bold',
-          color: '#2de2e6',
-          stroke: '#05070f',
-          strokeThickness: 5,
-        })
-        .setOrigin(0.5, 1)
-        .setDepth(5);
-      v = { img, shadow, label, art: '', text: '', colour: '', seen: 0 };
-      this.views.set(part.id, v);
-    }
-    if (v.art !== look.art) {
-      v.art = look.art;
-      v.img.setTexture(look.art);
-      v.img.setScale(this.artScale(part, v.img));
-    }
+    const size = partSize(part);
+    const s = slotScale(part.slot);
+    const shadow = this.add
+      .ellipse(c.x + 8 * s, c.y + size.h / 2 - 6 * s, size.w * 1.05, 26 * s, 0x000000, 0.55)
+      .setDepth(1.5);
+    // Nearer parts (lower on screen) draw over farther ones. The sync sets the right art next.
+    const img = this.add.image(c.x, c.y, artFor(part, false)).setDepth(3 + c.y / 1000);
+    const label = this.add
+      .text(c.x, c.y - size.h / 2 - 6, '', {
+        fontFamily: 'monospace',
+        fontSize: `${Math.round(18 * s)}px`,
+        fontStyle: 'bold',
+        color: '#2de2e6',
+        stroke: '#05070f',
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(5);
+    const v: PartView = {
+      img,
+      shadow,
+      label,
+      art: '',
+      look: emptyLook(),
+      readout: new LabelCache(),
+      seen: 0,
+    };
+    this.views.set(part.id, v);
     return v;
   }
 
@@ -490,15 +527,16 @@ export class BoardScene extends Phaser.Scene {
     return Math.min(size.w / img.width, size.h / img.height);
   }
 
-  private rebuildWires(): void {
-    const board = run().session.board;
-    this.lastWires = board.wires;
-    this.lastParts = board.parts;
+  /** Lay the traces out again: only when the wires or parts change, never on a steady frame. */
+  private rebuildWires(f: Frame): void {
+    this.lastWires = f.wires;
+    this.lastParts = f.parts;
     this.wireList = [];
     this.wireByKey = new Map();
-    for (const w of board.wires) {
-      const a = board.parts.find((p) => p.id === w.from);
-      const b = board.parts.find((p) => p.id === w.to);
+    this.wiresDirty = true;
+    for (const w of f.wires) {
+      const a = partById(f.parts, w.from);
+      const b = partById(f.parts, w.to);
       const path = a && b ? wirePath(a, b) : null;
       if (!path) continue;
       const length = pathLength(path);
@@ -516,14 +554,36 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Redraw the traces only when one changes how it looks (live, skipped or selected) or the wires
+   * were laid out again; on a steady frame the graphics keep last frame's drawing.
+   */
   private drawWires(rates: Readonly<Record<string, number>>, skipped: readonly string[]): void {
+    const list = this.wireList;
+    const state = this.wireState;
+    let dirty = this.wiresDirty || state.length !== list.length;
+    for (let i = 0; i < list.length; i++) {
+      const key = list[i].key;
+      const s =
+        (skipped.includes(key) ? 1 : 0) |
+        ((rates[key] ?? 0) > 0 ? 2 : 0) |
+        (key === this.selectedWire ? 4 : 0);
+      if (state[i] !== s) {
+        state[i] = s;
+        dirty = true;
+      }
+    }
+    state.length = list.length;
+    if (!dirty) return;
+    this.wiresDirty = false;
     const g = this.wiresG;
     g.clear();
     let tags = 0;
-    for (const w of this.wireList) {
-      const isSkipped = skipped.includes(w.key);
-      const live = (rates[w.key] ?? 0) > 0;
-      const selected = w.key === this.selectedWire;
+    for (let i = 0; i < list.length; i++) {
+      const w = list[i];
+      const isSkipped = (state[i] & 1) !== 0;
+      const live = (state[i] & 2) !== 0;
+      const selected = (state[i] & 4) !== 0;
       const colour = isSkipped ? GREY : selected ? 0xffffff : CYAN;
       // A trace: a wide soft glow, a dark groove, then a bright core.
       g.lineStyle(18, colour, isSkipped ? 0.05 : live ? 0.16 : 0.08).strokePoints(asVectors(w.path));
@@ -542,18 +602,24 @@ export class BoardScene extends Phaser.Scene {
       }
     }
     for (let i = tags; i < this.skipTags.length; i++) this.skipTags[i].setVisible(false);
+  }
 
+  /** The wire being dragged out of a part, following the pointer; cleared once when the drag ends. */
+  private drawPreview(parts: readonly Part[]): void {
     const p = this.previewG;
-    p.clear();
     const d = this.drag;
-    if (d?.kind === 'wire' && d.moved) {
-      const from = run().session.board.parts.find((x) => x.id === d.from);
-      const b = from ? partBox(from) : null;
-      if (b) {
-        p.lineStyle(4, CYAN, 0.6).lineBetween(b.x + b.w / 2 - 6, b.y, this.pointer.x, this.pointer.y);
-        p.fillStyle(CYAN, 0.9).fillCircle(this.pointer.x, this.pointer.y, 7);
-      }
+    const from = d?.kind === 'wire' && d.moved ? partById(parts, d.from) : null;
+    const c = from ? partCentre(from) : null;
+    if (!from || !c) {
+      if (this.previewShown) p.clear();
+      this.previewShown = false;
+      return;
     }
+    p.clear();
+    this.previewShown = true;
+    const w = partSize(from).w;
+    p.lineStyle(4, CYAN, 0.6).lineBetween(c.x + w / 2 - 6, c.y, this.pointer.x, this.pointer.y);
+    p.fillStyle(CYAN, 0.9).fillCircle(this.pointer.x, this.pointer.y, 7);
   }
 
   private skipTag(i: number): Phaser.GameObjects.Text {
@@ -591,13 +657,8 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private stepPackets(dt: number, rates: Readonly<Record<string, number>>, demand: number): void {
-    // Every wire on the board, plus the inbound lanes sharing the block's demand.
-    const all = this.packetRates;
-    for (const key in all) delete all[key];
-    for (const key in rates) all[key] = rates[key];
-    // The incoming crowd: denser than a wire, and the lanes a little out of step so it never marches.
-    for (let i = 0; i < INBOUND.length; i++)
-      all[INBOUND[i].key] = (demand * INBOUND_STAGGER[i]) / INBOUND.length;
+    // Every wire on the board, plus the inbound lanes sharing the block's demand, refilled in place.
+    const all = fillPacketRates(this.packetRates, rates, demand, INBOUND_KEYS);
     this.pool.step(dt, all, this.travelOf);
     const items = this.pool.items;
     while (this.packetSprites.length < items.length) {
@@ -617,19 +678,21 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
-  private placeButtons(): void {
+  private placeButtons(parts: readonly Part[]): void {
     const w = this.selectedWire ? this.wireByKey.get(this.selectedWire) : undefined;
     if (w) {
       this.cutBtn.setPosition(w.mid.x, w.mid.y - 40).setVisible(true);
     } else {
       this.cutBtn.setVisible(false);
     }
-    const part = this.selectedPart
-      ? run().session.board.parts.find((p) => p.id === this.selectedPart)
-      : undefined;
-    const b = part ? partBox(part) : null;
-    if (b) this.binBtn.setPosition(b.x + b.w / 2 + 10, b.y - b.h / 2 + 10).setVisible(true);
-    else this.binBtn.setVisible(false);
+    const part = this.selectedPart ? partById(parts, this.selectedPart) : null;
+    const c = part ? partCentre(part) : null;
+    if (part && c) {
+      const size = partSize(part);
+      this.binBtn.setPosition(c.x + size.w / 2 + 10, c.y - size.h / 2 + 10).setVisible(true);
+    } else {
+      this.binBtn.setVisible(false);
+    }
   }
 
   private showRefusal(reason: string): void {
@@ -760,12 +823,12 @@ export class BoardScene extends Phaser.Scene {
   // ---- test hook -----------------------------------------------------------------------------
 
   private testState(): BoardTestState {
-    const r = run();
-    const board = r.session.board;
+    const f = this.snap.current ?? frame(run());
+    const board = { parts: f.parts, credits: f.credits };
     const rect = this.game.canvas.getBoundingClientRect();
     const page = (x: number, y: number) => toPage({ x, y }, rect, { width: GAME_WIDTH, height: GAME_HEIGHT });
     const pageBox = (b: Box) => pageRect({ x: b.x - b.w / 2, y: b.y - b.h / 2, w: b.w, h: b.h }, rect);
-    const offline = r.offline;
+    const offline = [...f.offline];
     const slots = [
       {
         id: LB_SLOT_ID,
@@ -797,11 +860,11 @@ export class BoardScene extends Phaser.Scene {
           this.textures.exists('goggles') ||
           this.children.list.some((o) => (o as Phaser.GameObjects.Image).texture?.key === 'goggles'),
       },
-      now: round(r.now),
-      speed: r.speed,
-      paused: r.paused,
+      now: round(f.now),
+      speed: f.speed,
+      paused: f.paused,
       credits: round(board.credits),
-      demand: round(r.demand),
+      demand: round(f.demand),
       slots,
       tray: this.cards.map((c) => ({
         id: c.id,
@@ -815,7 +878,7 @@ export class BoardScene extends Phaser.Scene {
       parts: board.parts.flatMap((part) => {
         const c = partCentre(part);
         if (!c) return [];
-        const look = partLook(part, r.flow.load[part.id] ?? 0, offline, r.session.offlineUntil, r.now);
+        const look = partLook(part, f.flow.load[part.id] ?? 0, offline, f.offlineUntil, f.now);
         return [
           {
             id: part.id,
@@ -840,21 +903,37 @@ export class BoardScene extends Phaser.Scene {
         from: w.from,
         to: w.to,
         ...page(w.mid.x, w.mid.y),
-        rate: round(r.flow.wires[w.key] ?? 0),
-        skipped: r.flow.skipped.includes(w.key),
+        rate: round(f.flow.wires[w.key] ?? 0),
+        skipped: f.flow.skipped.includes(w.key),
       })),
       offline,
-      skipped: [...r.flow.skipped],
+      skipped: [...f.flow.skipped],
       packets: { pool: this.pool.size, active: this.pool.active },
-      rewinds: r.play.rewinds.map((w) => ({ at: round(w.at), to: w.to })),
+      rewinds: f.rewinds.map((w) => ({ at: round(w.at), to: w.to })),
       selectedPart: this.selectedPart,
       selectedWire: this.selectedWire,
       cutButton: this.cutBtn.visible ? page(this.cutBtn.x, this.cutBtn.y) : null,
       binButton: this.binBtn.visible ? page(this.binBtn.x, this.binBtn.y) : null,
       refusal: this.refusalText.visible ? this.refusalText.text : null,
       dragging: this.drag ? (this.drag.kind === 'card' ? this.drag.id : 'wire') : null,
+      frame: this.snap.count,
+      snapshotFrame: this.snap.readAt,
+      snapshotChanges: this.snap.changes,
+      snapshotCurrent: this.snap.current !== null && this.snap.current === frame(run()),
     };
   }
+}
+
+/** The part with this id, found with a plain loop (no closure) since the board asks every frame. */
+function partById(parts: readonly Part[], id: string): Part | null {
+  for (let i = 0; i < parts.length; i++) if (parts[i].id === id) return parts[i];
+  return null;
+}
+
+/** The part standing in this slot, or null when the slot is empty. */
+function partInSlot(parts: readonly Part[], slot: string): Part | null {
+  for (let i = 0; i < parts.length; i++) if (parts[i].slot === slot) return parts[i];
+  return null;
 }
 
 // ---- the table ---------------------------------------------------------------------------------

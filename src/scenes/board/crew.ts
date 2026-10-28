@@ -2,10 +2,18 @@
 // the gateway and every server), so the tray card unlocks once the crew has arrived.
 
 import type { ActionResult, Run } from '../../game/run';
+import type { Part } from '../../sim/board';
 
 /** Whether the crew has given Lux the load balancer yet. */
 export function balancerGiven(run: Run): boolean {
-  return run.rescued || run.session.board.parts.some((p) => p.kind === 'balancer');
+  return balancerGivenIn(run.rescued, run.session.board.parts);
+}
+
+/** balancerGiven from a frame's fields, without a closure: the board asks it every frame. */
+export function balancerGivenIn(rescued: boolean, parts: readonly Part[]): boolean {
+  if (rescued) return true;
+  for (let i = 0; i < parts.length; i++) if (parts[i].kind === 'balancer') return true;
+  return false;
 }
 
 /** The crew rack their balancer at the rescue, so there is never a second one to place. */
