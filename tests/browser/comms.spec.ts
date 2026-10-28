@@ -362,3 +362,102 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
   await shot(page, 'live-m3-comms');
   expect(errors).toEqual([]);
 });
+
+// ---- comms-5/6/7/8: voices and the leader line ----
+
+type HookState = Record<string, unknown> & {
+  scene: string | null;
+  ready: boolean;
+  shell?: { buttons: Record<string, { x: number; y: number }>; settings: { volume: number } };
+  settingsScreen?: {
+    open: boolean;
+    voices: string;
+    voiceVolume: number;
+    labels: { voices: string; voiceVolume: string } | null;
+  };
+};
+const hook = (page: Page): Promise<HookState> =>
+  page.evaluate(() => window.__neonTest!.state as unknown as HookState);
+
+/** Click a shell button by id once the hook lists it. */
+async function press(page: Page, id: string): Promise<void> {
+  await expect
+    .poll(async () => (await hook(page)).shell?.buttons[id] ?? null, { timeout: 10_000 })
+    .not.toBeNull();
+  const { x, y } = (await hook(page)).shell!.buttons[id];
+  await page.mouse.click(x, y);
+}
+
+async function waitScene(page: Page, scene: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const s = await page.evaluate(() => window.__neonTest?.state);
+        return s && s.ready ? s.scene : null;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(scene);
+}
+
+// comms-7 (and comms-5's settings): the Voices and Voice volume rows sit beside the old rows, two
+// presses of Voices turn them off, one press of − takes the voice volume to 90%, the old rows still
+// work, and both survive a reload. About 6 s.
+test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both survive a reload', async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.goto('/?test');
+  await waitScene(page, 'title');
+  await press(page, 'settings');
+  await waitScene(page, 'settings');
+
+  let s = await hook(page);
+  expect(Object.keys(s.shell!.buttons)).toEqual(
+    expect.arrayContaining([
+      'volumeDown',
+      'volumeUp',
+      'textSpeed',
+      'reduceFlicker',
+      'fullscreen',
+      'voices',
+      'voiceDown',
+      'voiceUp',
+      'back',
+    ]),
+  );
+  expect(s.settingsScreen).toEqual({
+    open: true,
+    voices: 'ja',
+    voiceVolume: 1,
+    labels: { voices: 'JA', voiceVolume: '100%' },
+  });
+
+  await press(page, 'voices');
+  await expect.poll(async () => (await hook(page)).settingsScreen!.voices).toBe('en');
+  await press(page, 'voices');
+  await expect.poll(async () => (await hook(page)).settingsScreen!.voices).toBe('off');
+  await press(page, 'voiceDown');
+  await expect.poll(async () => (await hook(page)).settingsScreen!.voiceVolume).toBe(0.9);
+  // The old rows keep working beside the new ones.
+  await press(page, 'volumeDown');
+  await expect.poll(async () => (await hook(page)).shell!.settings.volume).toBe(0.7);
+  s = await hook(page);
+  expect(s.settingsScreen!.labels).toEqual({ voices: 'OFF', voiceVolume: '90%' });
+  const stored = await page.evaluate(() =>
+    JSON.parse(window.localStorage.getItem('neon-war.settings') ?? '{}'),
+  );
+  expect(stored).toMatchObject({ voices: 'off', voiceVolume: 0.9, volume: 0.7 });
+  await shot(page, 'comms-settings-voices');
+
+  await press(page, 'back');
+  await waitScene(page, 'title');
+  await page.reload();
+  await waitScene(page, 'title');
+  s = await hook(page);
+  expect(s.settingsScreen).toMatchObject({ open: false, voices: 'off', voiceVolume: 0.9 });
+  expect(s.shell!.settings.volume).toBe(0.7);
+  expect(errors).toEqual([]);
+});
