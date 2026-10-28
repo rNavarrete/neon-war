@@ -58,7 +58,7 @@ describe('drag carries the legality of the spot under the card', () => {
     const bus = new Bus();
     const seen: GameEvents['drag'][] = [];
     bus.on('drag', (e) => seen.push(e));
-    bus.emit('drag', { kind: 'card', card: 'server', over: 'pad', ...dragVerdict('poor') });
+    bus.emit('drag', { kind: 'card', card: 'server', over: 'cell', ...dragVerdict('poor') });
     bus.emit('drag', { kind: 'card', card: 'server', over: null });
     bus.emit('drag', { kind: null, card: null, over: null, state: null, legal: null });
     expect(seen.map((e) => [e.state ?? null, e.legal ?? null])).toEqual([

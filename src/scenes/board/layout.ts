@@ -217,8 +217,10 @@ export function padState(slot: string, board: PadBoard, card: string, prices: Pa
     if (on !== null && on.kind === 'server' && dead) return board.credits >= prices.server ? 'dead' : 'poor';
     if (on !== null) return on.kind === 'gateway' || on.kind === 'database' ? 'wrong' : 'taken';
     if (!fits(BOARD_CELLS, board.parts, 'server', slot).ok) {
-      const { bad } = previewCells('server', slot, board.parts);
-      return bad.every((c) => BOARD_CELL_SET.has(c)) ? 'taken' : 'wrong';
+      // Blocked only by parts: taken. Hanging off the table or over a fixed part's bay: wrong.
+      const { cells, bad } = previewCells('server', slot, board.parts);
+      const whole = cells.length === FOOTPRINT.server.w * FOOTPRINT.server.h;
+      return whole && bad.every((c) => BOARD_CELL_SET.has(c)) ? 'taken' : 'wrong';
     }
     return board.credits >= prices.server ? 'legal' : 'poor';
   }

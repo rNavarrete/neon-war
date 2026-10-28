@@ -1,4 +1,5 @@
 import { bestPlay } from '../src/game/autopilot';
+import { SERVER_SLOTS } from '../src/sim/tick';
 import { type Frame, frame, resetFrame } from '../src/game/frame';
 import {
   NO_OCCURRENCES,
@@ -72,7 +73,7 @@ describe('detectOccurrences', () => {
     const r = new Run();
     r.now = C.c1;
     const empty = frame(r);
-    expect(r.placeServer('s1').ok).toBe(true);
+    expect(r.placeServer(SERVER_SLOTS[0]).ok).toBe(true);
     const id = r.session.board.parts[r.session.board.parts.length - 1].id;
     const placed = frame(r);
     expect(detectOccurrences(empty, placed)).toEqual([{ kind: 'placed', id, at: C.c1 }]);

@@ -225,11 +225,11 @@ export function portNode(part: Pick<Part, 'kind' | 'slot'>, side: 'in' | 'out'):
  */
 export function roomFor(
   slots: readonly string[],
-  parts: readonly Pick<Part, 'id' | 'kind' | 'slot'>[],
+  parts: readonly Pick<Part, 'kind' | 'slot'>[],
   kind: PartKind,
 ): number {
   const free = new Set(slots);
-  for (const c of occupancy(parts).keys()) free.delete(c);
+  for (const p of parts) for (const c of partCells(p)) free.delete(c);
   let n = 0;
   for (const id of ALL_CELLS) {
     const cells = footprintCells(kind, id);

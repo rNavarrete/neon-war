@@ -105,7 +105,7 @@ function databaseOf(board: GhostBoard): string | null {
 export interface GhostInfo {
   /** The tray card dragged. */
   readonly card: string;
-  /** What it is over: a slot id ('s1'..'s6', 'lb') or a part id. */
+  /** What it is over: the anchor cell of the footprint or part under the card, or a part id. */
   readonly over: string;
   /** The drop would do something (dropLegal). */
   readonly legal: boolean;

@@ -4,6 +4,7 @@ import { BROWNOUT, BROWNOUT_RULES } from '../src/sim/brownout';
 import { GHOST_ID, freeFeed, ghostCapacity, ghostInfo } from '../src/scenes/board/ghost';
 import { padState } from '../src/scenes/board/layout';
 import { DEMAND_SCALE_MAX } from '../src/scenes/hud/thresholds';
+import { SERVER_SLOTS } from '../src/sim/tick';
 
 // The what-if ghost (board-8, LRN-6): the room the wired boxes would have after the drop, told
 // truthfully about the feed.
@@ -84,7 +85,7 @@ describe('ghostCapacity (board-8)', () => {
 
   it('a server card on a dead box: the replacement on the same wires brings its 60 back', () => {
     const board = {
-      parts: [gw, db, lb, srv('a', 's1'), srv('dead', 's2')],
+      parts: [gw, db, lb, srv('a', SERVER_SLOTS[0]), srv('dead', SERVER_SLOTS[1])],
       wires: [
         w('gateway', 'balancer'),
         w('balancer', 'a'),
@@ -95,11 +96,11 @@ describe('ghostCapacity (board-8)', () => {
     };
     const offline = ['dead'];
     expect(wiredCapacity(board.parts, board.wires, offline)).toBe(60);
-    expect(padState('s2', { parts: board.parts, credits: 400, dead: offline }, 'server', prices)).toBe(
-      'dead',
-    );
-    expect(ghostCapacity(board, BROWNOUT_RULES, offline, 'server', 's2')).toBe(120);
-    const g = ghostInfo(board, BROWNOUT_RULES, offline, 'server', 's2', 's2', 'dead', true)!;
+    // The dead box's footprint is anchored on a cell of the grid now (the pads are gone).
+    const s2 = SERVER_SLOTS[1];
+    expect(padState(s2, { parts: board.parts, credits: 400, dead: offline }, 'server', prices)).toBe('dead');
+    expect(ghostCapacity(board, BROWNOUT_RULES, offline, 'server', s2)).toBe(120);
+    const g = ghostInfo(board, BROWNOUT_RULES, offline, 'server', s2, s2, 'dead', true)!;
     expect(g).toMatchObject({ legal: true, adds: 60, tick: 'ROOM +60' });
   });
 

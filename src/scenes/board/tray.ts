@@ -152,7 +152,7 @@ export interface InventoryCounts {
  */
 export function inventoryCounts(
   credits: number,
-  parts: readonly Pick<Part, 'id' | 'kind' | 'slot' | 'boost'>[],
+  parts: readonly Pick<Part, 'kind' | 'slot' | 'boost'>[],
   balancerGiven: boolean,
 ): InventoryCounts {
   let unkitted = 0;

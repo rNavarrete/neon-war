@@ -962,7 +962,7 @@ describe('LuxCamView: the bus facts (luxcam-3)', () => {
     step(0.1);
     expect(v.mood).toBe('leaning');
     step(1);
-    bus.emit('drag', { kind: 'card', card: 'server', over: 'pad' });
+    bus.emit('drag', { kind: 'card', card: 'server', over: 'cell' });
     step(0.5);
     expect(v.mood).toBe('leaning');
     bus.emit('drag', { kind: null, card: null, over: null });
