@@ -72,7 +72,8 @@ A lane draws its zone as a `LiveView` (`src/scenes/live/view.ts`): `zone`, a dec
 `budget: {objects, texts}`, optional `preload(scene)`, `create(scene, host)`, `update(frame, clock,
 occurrences)` and `shutdown()`. The host (`LiveHost`) is the HUD scene, the bus, the zone's rect, a
 live `flags` getter and `pressSet()`. `update` runs every frame and must not allocate: it reads the shared `Frame`,
-the HUD clock `{now, dt}` (real seconds times the test speed, stopped while the board is held) and
+the HUD clock `{now, dt}` (real seconds times the test speed, stopped while the board is held; each
+frame's raw length capped at 0.25 s as `run().tick` caps it, so it keeps step with the sim) and
 this frame's occurrences, and moves only what changed.
 
 `src/scenes/live/registry.ts` has one line per zone naming the view class that draws it. A lane

@@ -253,14 +253,12 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
   page,
 }) => {
   test.setTimeout(90_000);
-  // Voices off: this test samples who speaks on the band, not the voices. With the recorded clips
-  // on disk a voiced line holds the band for its clip (comms-6), and at the reach speed no line by
-  // another speaker showed before the rescue; tests/browser/voice.spec.ts and comms-6 cover the
-  // voices themselves.
+  // Voices on (the default): each voiced line holds the band for its clip (comms-6) on the HUD
+  // clock, which keeps step with the sim at the reach speed, as it does for a player at speed 1.
   await page.addInitScript(() => {
     window.localStorage.setItem(
       'neon-war.settings',
-      JSON.stringify({ volume: 0, textSpeed: 'fast', reduceFlicker: true, voices: 'off' }),
+      JSON.stringify({ volume: 0, textSpeed: 'fast', reduceFlicker: true }),
     );
   });
   const { errors } = await openBoard(page);
@@ -589,7 +587,10 @@ test('comms-6: each band line asks for its voice once, in order; voiceStart hold
   page,
 }) => {
   test.setTimeout(40_000);
-  const { errors } = await openBoard(page, { speed: 20, autopilot: true });
+  // Speed 4: the HUD clock keeps step with the sim, so at speed 20 a 5 s line is a quarter of a real
+  // second, one or two frames of a slow headless browser, too short for the sampler to send the
+  // voiceStart and then read the line back. At speed 4 it shows for over a real second.
+  const { errors } = await openBoard(page, { speed: 4, autopilot: true });
   // In the page: the first time C1.triage.02 is current, report a 3 s clip for it, then record what
   // the band reports for that line.
   await page.evaluate(() => {
@@ -663,11 +664,8 @@ test('comms-8: the leader points at the idle box for C3.triage.02; null without 
   page,
 }) => {
   test.setTimeout(60_000);
-  // Voices off: the leader is about the band's line and the part, not the voice. A voiced line holds
-  // the band for its clip (comms-6), which at speed 20 changes which C3 lines show in time.
-  await page.addInitScript(() => {
-    window.localStorage.setItem('neon-war.settings', JSON.stringify({ voices: 'off' }));
-  });
+  // Voices on (the default): C3.triage.02 waits behind the voiced C3 lines on the HUD clock, which
+  // keeps step with the sim at speed 20.
   const { errors } = await openBoard(page, { speed: 20, autopilot: true });
   await page.evaluate(() => {
     const w = window as unknown as { __leader: unknown[] };

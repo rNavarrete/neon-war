@@ -4,7 +4,7 @@ import { bus } from '../game/bus';
 import { type Frame, frame } from '../game/frame';
 import { type Occurrence, detectOccurrences } from '../game/occurrences';
 import { allPortraits } from '../game/portraits';
-import { type Run, run } from '../game/run';
+import { MAX_FRAME_SECONDS, type Run, run } from '../game/run';
 import { settings } from '../game/settings';
 import { BROWNOUT } from '../sim/brownout';
 import type { BannerChoice } from '../sim/economy';
@@ -270,7 +270,12 @@ export class HudScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     const r = run();
     if (r !== this.runRef) this.resetForRun(r);
-    const step = r.paused ? 0 : (delta / 1000) * r.speed;
+    // The frame's real length, capped as run().tick caps it, so the HUD clock keeps step with the
+    // sim. Phaser's smoothed delta falls back to an old frame's length on a frame over 200 ms, which
+    // in a slow headless browser at test speed 20 left this clock (the band, the cue delays, a voice
+    // clip's hold) running several times slower than the sim it narrates.
+    const real = Math.min(this.game.loop.rawDelta / 1000, MAX_FRAME_SECONDS);
+    const step = r.paused ? 0 : real * r.speed;
     this.clock += step;
     const now = r.now;
     const f = this.readFrame(r);

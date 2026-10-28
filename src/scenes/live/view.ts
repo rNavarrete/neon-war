@@ -16,7 +16,10 @@ import { COLORS, FONT } from '../hud/layout';
 import type { LiveFlags } from './flags';
 import type { Rect, ZoneId } from './layout';
 
-/** The HUD clock: real seconds times the test speed, stopped while the board is held; `dt` is this frame's step. */
+/**
+ * The HUD clock: real seconds times the test speed (each frame's raw length capped as run().tick caps
+ * it, so it keeps step with the sim), stopped while the board is held; `dt` is this frame's step.
+ */
 export interface LiveClock {
   readonly now: number;
   readonly dt: number;

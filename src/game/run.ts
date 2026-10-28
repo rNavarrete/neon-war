@@ -36,7 +36,7 @@ export interface RunNotes {
 }
 
 /** Longest step one frame may take, so a stalled tab doesn't jump the sim forward. */
-const MAX_FRAME_SECONDS = 0.25;
+export const MAX_FRAME_SECONDS = 0.25;
 
 /** Longest slice of a frame stepped at once (see tick). */
 const MAX_SLICE_SECONDS = 0.5;
