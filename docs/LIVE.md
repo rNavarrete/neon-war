@@ -127,9 +127,7 @@ no view reads them.
 - `live.zones[zone]`: `pageRect(ZONES[zone], canvasRect)` for all twelve zones, in page CSS pixels.
 - `live.placeholders`: the registry zones still drawn by a `PlaceholderView`, in registry order.
 - `live.layoutVersion`: `LAYOUT_VERSION`.
-- `perf.objects.{board, hud}`: objects on each scene's display list; `perf.texts` and
-  `perf.graphics`: Text and Graphics objects on both together; `perf.fps.avg`: the frame rate;
-  `perf.lite`: the lite flag.
+- `perf.*`: what is on the display lists, measured by `PerfMeter` (see "Perf budget" below).
 
 The `hud` section is one public snapshot. `HudScene` provides it once, as its own keys with every
 key a view file adds laid over them (`hudSection` in `src/scenes/hud/hook.ts`). A view adds
@@ -137,6 +135,79 @@ key a view file adds laid over them (`hudSection` in `src/scenes/hud/hook.ts`). 
 or `src/testHook.ts`: it declares the key on `HudTestState` by module augmentation, calls
 `provideHudSection` in `create` and the remover it returns in `shutdown`. `provideHudPart` in
 `src/scenes/hud/panel.ts` is the same call under the gauges views' older name.
+
+## Perf budget
+
+`PerfMeter` in `src/scenes/live/hook.ts` (tech-7) measures the `perf` section. Once a second of real
+time, `HudScene` walks both scenes' display lists into every container. It also takes a sample
+when the HUD is built and when a story scene pauses the HUD, since no samples come while it is
+paused. Between samples the section does not change. `perf.samples` counts the samples, and
+`perf.at` is the sim's now at the last one. Each sample also goes out on the bus as `perfSample`.
+The fields are:
+
+- `perf.objects.{board, hud}`: every object on each scene's list, container children included.
+- `perf.texts`, `perf.textsBy.{board, hud}` and `perf.graphics`: Text and Graphics objects among
+  them, hidden ones included.
+- `perf.drawn.{objects, texts}`: what the renderer draws now, meaning visible objects inside
+  visible containers.
+- `perf.zones[zone]`: `{budget, actual}` for every registered view. `budget` is the view's
+  declared `budget`, and `actual` counts the objects (and texts) that view made. An object is
+  credited to the view whose `create` or `update` was running when the object was added (the HUD
+  listens for `ADDED_TO_SCENE`), and a container's children go with it.
+- `perf.host`: the HUD objects that no view made (the cards, the dial, the legacy pieces).
+- `perf.pools[name]`: the size of each pool registered with `registerPool(name, size)`.
+  `pools.packets` is the board's packet sprites, made once and reused.
+- `perf.filters`: live Glow and GradientMap filters on objects and cameras (art3d-6's probe).
+- `perf.fps.avg` and `perf.frameMs`: the frame rate and the mean real milliseconds per frame
+  since the sample before.
+- `perf.lite`: the lite flag.
+
+No view reads the meter, and it allocates nothing per object.
+
+### Budgets
+
+The global budget is 750 objects and 110 texts across board and HUD. `live-perf.spec.ts` checks it
+at the C4 surge and at midnight: all objects against 750, and the drawn texts against 110 (all
+texts are over 110 today; see below). It also checks three more things:
+
+- Every registered view's `actual` stays within its `budget`.
+- `pools.packets` stays at or below 160.
+- The pool stops growing: two reads 5 s apart after the rescue are equal.
+
+Per zone, the text budgets sum to 110. A registered view's budget is the one it declares in code.
+The rows for `cam` and `chat` are the share their lanes have to declare when their views land:
+
+| Zone / owner                                         | Texts | Objects (declared) |
+| ---------------------------------------------------- | ----: | -----------------: |
+| `title` (TitleView)                                  |     5 |                 11 |
+| `alert` (AlertView)                                  |     4 |                 10 |
+| `clock` (ClockView)                                  |     2 |                  4 |
+| `map` (MapView)                                      |     3 |                 10 |
+| `cam` (luxcam, placeholder today)                    |     2 |                  2 |
+| `gauge` (GaugeView)                                  |    10 |                 12 |
+| `scope` (ChartView)                                  |     5 |                  7 |
+| `comms` (CommsView)                                  |    13 |                 24 |
+| `deck` (DeckView with HeadroomView)                  |     8 |                 21 |
+| `chat` (chat, placeholder today)                     |    10 |                  2 |
+| `feed` and `inventory` (BoardScene)                  |    28 |                  - |
+| Cards (HUD host: job card, banner, dial, sizing, dip) |    20 |                  - |
+| **Total**                                             | **110** |                  |
+
+Measured on 28 Oct 2026 (speed 20 with autopilot, headless):
+
+- **Objects.** 414 to 421 at the surge and 427 to 440 at midnight, well inside 750.
+- **Every view.** Each registered view is at or under its declared budget.
+- **Drawn texts.** 86 to 87 at the surge and 77 to 84 at midnight. That is what
+  `live-perf.spec.ts` asserts against 110.
+- **All texts, hidden ones included.** 119 to 121 at the surge and 124 to 128 at midnight. That is
+  over 110, for two reasons:
+  - The board counts 29 to 38 texts against its 28.
+  - The host counts 38 against its 20. Its cards are 19 texts, and the other 19 are legacy pieces
+    that stay until their lanes retire them: the legacy chat column (11, replaced when chat-5's
+    view lands), the HUD's own deck digits and words (6, which DeckView duplicates) and the legacy
+    alert line and number (2, which AlertView duplicates).
+
+tech-8 asserts the total including hidden texts once those pieces are gone.
 
 ### Script anchors
 
@@ -218,19 +289,20 @@ Per lane, for its spec file at M3 (one spec file per lane):
 | comms: `comms.spec.ts`                                               |         90 |
 | chat: `chat.spec.ts`                                                 |         90 |
 | luxcam: `luxcam.spec.ts`                                             |         60 |
-| tech: `live-skeleton` 75, `live-perf` 30, `voice` 20, `live-tour` 30 |        155 |
+| tech: `live-skeleton` 75, `live-perf` 45, `voice` 15, `live-tour` 30 |        165 |
 | art3d: `art.spec.ts`                                                 |         30 |
 | learning: `teaching.spec.ts`                                         |        150 |
-| **Live total**                                                       |    **875** |
+| **Live total**                                                       |    **885** |
 | Existing suite                                                       |        616 |
-| **All**                                                              |   **1491** |
+| **All**                                                              |   **1501** |
 
 - **Under the 900 s cap in force today**, only the M1 specs fit: 616 + 75 (`live-skeleton`) + 30
   (`art.spec`) = 721 s, which leaves a **179 s reserve**. No M3 spec can merge until the cap is
   raised.
-- **Under decision D9's 1800 s** (tech-9), the full table is 1491 s, which leaves a **309 s
-  reserve**. Measured, `live-skeleton` costs 75 s, not the 10 s the plan drafted. That makes the
-  tech row 155 s rather than 90 s, and the reserve 309 s rather than 374 s. tech-8 folds the
+- **Under decision D9's 1800 s** (tech-9), the full table is 1501 s, which leaves a **299 s
+  reserve**. Measured, `live-skeleton` costs 75 s, not the 10 s the plan drafted, `live-perf`
+  41 s (one page to midnight, the rescue clicked through) and `voice` 13 s. That makes the tech row
+  165 s rather than 90 s, and the reserve 299 s rather than 374 s. tech-8 folds the
   moment tests, these two reach tests among them, into one `live-tour` at M5, and brings the suite
   under 1500 s.
 - **Raising the cap is a control change.** `scripts/check.mjs` and `.github/workflows/ci.yml` are

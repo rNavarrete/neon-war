@@ -61,8 +61,8 @@ import { GAME_HEIGHT, GAME_WIDTH } from './BoardScene';
 import { storyEnd } from '../story/state';
 import { SCENES } from './keys';
 import { type LiveFlags, PLAY_FLAGS, flagsFrom } from './live/flags';
-import { liveTestState, perfTestState } from './live/hook';
-import { CARDS, ZONES, centreOf, pagePoint, pageRect } from './live/layout';
+import { type CountedObject, type Filtered, PerfMeter, liveTestState } from './live/hook';
+import { CARDS, ZONES, type ZoneId, centreOf, pagePoint, pageRect } from './live/layout';
 import { createViews } from './live/registry';
 import type { LiveHost, LiveView } from './live/view';
 
@@ -129,6 +129,11 @@ export class HudScene extends Phaser.Scene {
   /** The HUD clock as views see it, one object reused every update. */
   private readonly liveClock: { now: number; dt: number } = { now: 0, dt: 0 };
   private flags: LiveFlags = PLAY_FLAGS;
+  /** The perf hook's meter (tech-7): display-list walks once a second, and which view made each object. */
+  private perf = new PerfMeter(false);
+  private readonly madeBy = new WeakMap<object, ZoneId>();
+  /** The zone whose view is creating or updating now, so the objects it adds are counted as its. */
+  private building: ZoneId | null = null;
   /** Bark and filler clock: real seconds times the test speed, stopped while the board is held. */
   private clock = 0;
   private cardOpen = false;
@@ -227,15 +232,8 @@ export class HudScene extends Phaser.Scene {
     this.views = createViews();
     this.comms = (this.views.find((v) => v instanceof CommsView) as CommsView | undefined) ?? null;
     provideTestState('live', () => liveTestState(this.game.canvas.getBoundingClientRect(), this.views));
-    provideTestState('perf', () => {
-      const board = this.scene.get(SCENES.board) as Phaser.Scene | null;
-      return perfTestState(
-        board?.children?.list ?? [],
-        this.children.list,
-        this.game.loop.actualFps,
-        this.flags.lite,
-      );
-    });
+    this.perf = new PerfMeter(this.flags.lite);
+    provideTestState('perf', () => this.perf.state);
   }
 
   preload(): void {
@@ -250,7 +248,23 @@ export class HudScene extends Phaser.Scene {
   create(): void {
     this.resetForRun(run());
     // The Live screen's views go first, so their placeholders sit under everything drawn below.
-    for (const v of this.views) v.create(this, this.hostFor(v));
+    // Each object a view adds is remembered as its own, for the perf hook's per-zone counts.
+    const onAdded = (o: object): void => {
+      if (this.building) this.madeBy.set(o, this.building);
+    };
+    this.events.on(Phaser.Scenes.Events.ADDED_TO_SCENE, onAdded);
+    this.unsubscribe.push(() => this.events.off(Phaser.Scenes.Events.ADDED_TO_SCENE, onAdded));
+    // A scene over the board pauses the HUD, and with it the samples: take one as it stops.
+    const onPause = (): void => {
+      this.samplePerf();
+    };
+    this.events.on(Phaser.Scenes.Events.PAUSE, onPause);
+    this.unsubscribe.push(() => this.events.off(Phaser.Scenes.Events.PAUSE, onPause));
+    for (const v of this.views) {
+      this.building = v.zone;
+      v.create(this, this.hostFor(v));
+    }
+    this.building = null;
     this.buildAlert();
     this.chart = scopeViewOf(this.views);
     this.dial = new DialView(this, {
@@ -283,6 +297,7 @@ export class HudScene extends Phaser.Scene {
     this.earlyClick?.();
     this.earlyClick = null;
     if (this.cardOpen && this.cardClickedEarly) this.closeJobCard();
+    this.samplePerf();
     this.ready = true;
   }
 
@@ -295,7 +310,11 @@ export class HudScene extends Phaser.Scene {
     const f = this.readFrame(r);
     this.liveClock.now = this.clock;
     this.liveClock.dt = step;
-    for (let i = 0; i < this.views.length; i++) this.views[i].update(f, this.liveClock, this.occurrences);
+    for (let i = 0; i < this.views.length; i++) {
+      this.building = this.views[i].zone;
+      this.views[i].update(f, this.liveClock, this.occurrences);
+    }
+    this.building = null;
 
     const estimate = r.notes.estimate;
     const sizing = r.notes.sizing;
@@ -316,6 +335,23 @@ export class HudScene extends Phaser.Scene {
 
     this.runDirector(f, sizingOpen);
     this.updateFiller(r);
+    if (this.perf.frame(delta)) this.samplePerf();
+  }
+
+  /** One perf sample: walk both display lists (tech-7), and send it out as bus `perfSample`. */
+  private samplePerf(): PerfMeter['state'] {
+    const board = this.scene.get(SCENES.board) as Phaser.Scene | null;
+    const s = this.perf.sample({
+      now: run().now,
+      board: board?.children?.list ?? [],
+      hud: this.children.list,
+      cameras: [...(board?.cameras?.cameras ?? []), ...this.cameras.cameras] as unknown as Filtered[],
+      views: this.views,
+      ownerOf: (o: CountedObject) => this.madeBy.get(o),
+    });
+    const objects = s.objects.board + s.objects.hud;
+    bus.emit('perfSample', { at: this.clock, fps: s.fps.avg, objects, texts: s.texts, graphics: s.graphics });
+    return s;
   }
 
   // ---- the frame and its occurrences ----
