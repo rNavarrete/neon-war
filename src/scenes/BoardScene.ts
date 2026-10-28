@@ -43,6 +43,7 @@ import {
   padState,
   targetState,
 } from './board/layout';
+import { register as registerLocate } from './hud/locate';
 import { registerPool } from './live/hook';
 import { ZONES, pageRect } from './live/layout';
 import {
@@ -678,7 +679,14 @@ export class BoardScene extends Phaser.Scene {
     this.offAction = bus.on('action', (a) => this.onAction(a));
     this.director?.destroy();
     this.director = new Director();
+    // Where the comms band's leader line may point on the board (game px, made once): the
+    // inventory's SERVER card and the channel's mouth.
+    const serverCard = trayCards(false).find((c) => c.id === 'server');
+    const cardAt = serverCard ? { x: serverCard.x, y: serverCard.y } : null;
+    const mouthAt = { x: CHANNEL.mouth.x, y: (CHANNEL.mouth.top + CHANNEL.mouth.bottom) / 2 };
+    const offLocate = [registerLocate('inventory', () => cardAt), registerLocate('channel', () => mouthAt)];
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      for (const off of offLocate) off();
       kb?.off('keydown-ESC', this.onEscape, this);
       kb?.off('keydown-DELETE', this.onDelete, this);
       kb?.off('keydown-BACKSPACE', this.onDelete, this);

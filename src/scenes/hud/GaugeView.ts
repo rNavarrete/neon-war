@@ -25,6 +25,7 @@ import {
 import { LABELS } from './labels';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
+import { register as registerLocate } from './locate';
 import { GAUGES_DEPTH } from './panel';
 
 /** What the hook mirrors as hud.gauge. */
@@ -166,6 +167,9 @@ export class GaugeView implements LiveView {
     this.shownRoomX = NaN;
     this.drawn = { needle: NaN, capacity: NaN, booting: NaN, served: NaN, dropped: NaN, est: NaN, size: NaN };
     this.off.push(provideHudSection('gauge', () => this.snapshot()));
+    // The leader line ends at the needle's hub (game px; one point, made once).
+    const hub = { x: L.centre.x, y: L.centre.y };
+    this.off.push(registerLocate('gauge', () => hub));
   }
 
   update(frame: Frame, clock: LiveClock): void {

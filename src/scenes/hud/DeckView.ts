@@ -50,6 +50,7 @@ import { jobCardDue } from './jobCard';
 import { COLORS, FONT } from './layout';
 import { cutLaundry } from './pending503';
 import { type PagePoint, provideHudSection } from './hook';
+import { register as registerLocate } from './locate';
 import { GAUGES_DEPTH } from './panel';
 
 /** What the hook mirrors as hud.headroom. */
@@ -282,6 +283,12 @@ export class DeckView implements LiveView {
       }
     }
 
+    // The leader line ends at a key's middle (game px, made once): key:one, key:two, key:three.
+    for (const name of KEY_NAMES) {
+      const r = rects[name];
+      const mid = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+      this.off.push(registerLocate(`key:${name}`, () => mid));
+    }
     this.off.push(provideHudSection('headroom', () => this.headroomSnapshot()));
     this.off.push(provideHudSection('deck', () => this.snapshot()));
     this.off.push(provideHudSection('regroup', () => this.regroupHook()));

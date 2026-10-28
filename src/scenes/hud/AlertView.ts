@@ -31,6 +31,7 @@ import {
 } from './alerts';
 import { COLORS, FONT, FONT_SANS } from './layout';
 import { provideHudSection } from './hook';
+import { register as registerLocate } from './locate';
 import { GAUGES_DEPTH, panel } from './panel';
 
 /** One entry of hud.alert.history: a kind or number the band showed, and when (sim seconds). */
@@ -211,6 +212,9 @@ export class AlertView implements LiveView {
     this.shownStripes = false;
     this.shownLit = true;
     this.off.push(provideHudSection('alert', () => this.snapshot()));
+    // The leader line ends under the plate's middle, while an alert is up (game px, made once).
+    const under = { x: L.plate.x + L.plate.w / 2, y: L.plate.y + L.plate.h };
+    this.off.push(registerLocate('alert', () => (this.visible ? under : null)));
   }
 
   update(frame: Frame, clock: LiveClock): void {

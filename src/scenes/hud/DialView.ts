@@ -11,6 +11,7 @@ import { bus } from '../../game/bus';
 import { type DialMode, dialDimmed, dialFraction, dialLabel, dialValueAt, turnDial } from './dial';
 import { COLORS, FONT, RIGHT } from './layout';
 import { provideHudSection } from './hook';
+import { register as registerLocate } from './locate';
 
 /** The dial card's look, mirrored as hud.dialCard. */
 export interface DialCardTestState {
@@ -107,9 +108,13 @@ export class DialView {
       dimmed: this.dimmed,
       label: this.shownLabel,
     }));
+    // The leader line ends at the dial's face while its card is up (game px, made once).
+    const face0 = { x: d.x, y: d.y };
+    const offLocate = registerLocate('dial', () => (this.root.visible ? face0 : null));
     scene.events.once('shutdown', () => {
       offWired();
       offHook();
+      offLocate();
     });
   }
 
