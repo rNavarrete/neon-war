@@ -13,6 +13,18 @@ export type LineTag = 'HINT' | 'WARNING' | 'CREW' | 'LUX' | 'HOUSE';
 /** The two chats on the Live screen. */
 export type ChatName = 'block' | 'stream';
 
+/**
+ * Where a dragged card would land, in the board's words: the same five values as PadState in
+ * src/scenes/board/layout.ts (legal, taken, a dead box, too poor, the wrong kind of spot). Spelled
+ * out here so the bus imports nothing from a scene.
+ */
+export type DragState = 'legal' | 'taken' | 'dead' | 'poor' | 'wrong';
+
+/** The drag event's verdict fields from the pad state under the card (null over nothing). Pure. */
+export function dragVerdict(state: DragState | null): { state: DragState | null; legal: boolean | null } {
+  return { state, legal: state === null ? null : state === 'legal' };
+}
+
 export interface GameEvents {
   /** Something the player did on the board that worked. */
   action:
@@ -58,6 +70,14 @@ export interface GameEvents {
     kind: 'card' | 'wire' | null;
     card: 'server' | 'overclock' | 'balancer' | null;
     over: 'pad' | 'part' | null;
+    /**
+     * What the card in hand may do where it is: the board's padState for the pad or part under it
+     * (src/scenes/board/layout.ts PadState), null while it is over nothing, on a wire drag and when
+     * the drag ends. Optional until the board's emit sends it (absent reads as null).
+     */
+    state?: DragState | null;
+    /** `state === 'legal'`, or null where `state` is null (dragVerdict builds both). */
+    legal?: boolean | null;
   };
   /**
    * A comms band line started (the comms lane emits it); `since` is the HUD clock it started at.

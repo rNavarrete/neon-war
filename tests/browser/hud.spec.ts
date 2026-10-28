@@ -61,9 +61,14 @@ type Story = {
   skip: { visible: boolean; x: number; y: number };
 };
 
+/** The story section of the hook. */
+async function storyOf(page: Page): Promise<Story> {
+  return page.evaluate(() => window.__neonTest!.state.story as unknown as Story);
+}
+
 /** Wait for a story scene over the board (the rescue), then click through it to the end. */
 async function playThroughScene(page: Page, scriptId: string): Promise<void> {
-  const story = () => page.evaluate(() => window.__neonTest!.state.story as unknown as Story);
+  const story = () => storyOf(page);
   await expect
     .poll(async () => (await story()).scriptId, { timeout: 60_000, intervals: [50] })
     .toBe(scriptId);
@@ -226,9 +231,18 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the sizing prompt an
     expect(after.sim.block).toBe(210);
     // Taken as the surge lands, so the warning (it lingers a few seconds) and the cut both show.
     await page.screenshot({ path: 'test-results/screens/hud-c4.png' });
+    // Lux's line about the cut waits in the comms band's queue behind TRIAGE's surge lines. Taken a
+    // few sim seconds late (305 or after), it is still queued when the crew break in at about 310,
+    // and the rescue scene pauses the HUD with it there, so it cannot show until the scene is
+    // clicked through (tech follow-up 5). Wait for whichever comes first; the line itself is
+    // asserted in bark.history below, after the scene if it came first.
     await expect
-      .poll(async () => (await hud(page)).bark.history, { timeout: 60_000 })
-      .toContain('C4.lux.cut');
+      .poll(
+        async () =>
+          (await hud(page)).bark.history.includes('C4.lux.cut') || (await storyOf(page)).scriptId === 'C5',
+        { timeout: 60_000, intervals: [50] },
+      )
+      .toBe(true);
   });
 
   await test.step('a flicker warning shows on the overclocked server 2 s before its power dip', async () => {
@@ -239,7 +253,17 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the sizing prompt an
   });
 
   await test.step('the crew arrive, and Regroup runs quarter speed for 10 s once, then greys out', async () => {
+    // Tech follow-up 4: while the rescue scene is up the HUD is paused, and the title's dot says HELD.
+    await expect
+      .poll(async () => (await storyOf(page)).scriptId, { timeout: 60_000, intervals: [50] })
+      .toBe('C5');
+    expect((await hud(page)).title?.live).toBe('held');
     await playThroughScene(page, 'C5');
+    await expect.poll(async () => (await hud(page)).title?.live, { timeout: 10_000 }).not.toBe('held');
+    // Lux answered the laundry cut, before the scene or right after it (see the laundry step).
+    await expect
+      .poll(async () => (await hud(page)).bark.history, { timeout: 60_000 })
+      .toContain('C4.lux.cut');
     await expect.poll(async () => (await hud(page)).regroup.visible, { timeout: 30_000 }).toBe(true);
     const h = await hud(page);
     expect(h.timeScale).toBe(1);
@@ -291,4 +315,37 @@ test('Regroup stays hidden until the crew hands it over', async ({ page }) => {
   const h = await hud(page);
   expect(h.regroup.visible).toBe(false);
   expect(h.timeScale).toBe(1);
+});
+
+// Tech follow-up 4: the title's round avatar, and the LIVE dot reads HELD while the pause menu is up
+// (it pauses the HUD scene, so no update runs; the title hears the scene's pause and resume).
+test('the title shows the round avatar and reads HELD under the pause menu, LIVE after resume', async ({
+  page,
+}) => {
+  test.setTimeout(45_000);
+  await openBoard(page, 20, true);
+  await dismissJobCard(page);
+  await expect.poll(async () => (await hud(page)).title?.live, { timeout: 10_000 }).toBe('live');
+  const h = await hud(page);
+  expect(h.title!.avatar).toBe('avatar:hud/live/avatar-luxnet@72');
+  const baked = await page.evaluate(
+    () => (window.__neonTest!.state as unknown as { avatars: { baked: string[] } }).avatars.baked,
+  );
+  expect(baked).toContain(h.title!.avatar);
+
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => (await hud(page)).title?.live, { timeout: 5_000 }).toBe('held');
+  expect((await hud(page)).title!.scenePaused).toBe(true);
+  await page.screenshot({ path: 'test-results/screens/hud-title-held.png' });
+  const resume = await page.evaluate(
+    () =>
+      (
+        window.__neonTest!.state as unknown as {
+          shell: { buttons: Record<string, { x: number; y: number }> };
+        }
+      ).shell.buttons.resume,
+  );
+  await page.mouse.click(resume.x, resume.y);
+  await expect.poll(async () => (await hud(page)).title?.live, { timeout: 5_000 }).toBe('live');
+  expect((await hud(page)).title!.scenePaused).toBe(false);
 });
