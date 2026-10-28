@@ -6,6 +6,7 @@ import type Phaser from 'phaser';
 import type { LineTag } from '../../../game/bus';
 import type { LineId } from '../../../strings';
 import type { CommsSlot } from '../../hud/comms';
+import type { CommsLeaderState } from '../../hud/CommsView';
 import type { PagePoint } from '../../hud/hook';
 import { provideHudSection } from '../../hud/hook';
 import type { Rect } from '../layout';
@@ -65,8 +66,8 @@ export interface CommsTestState {
   /** Lines dropped stale, never shown (last 12). */
   dropped: LineId[];
   log: CommsLogState;
-  /** The leader line (comms-8); null until it lands. */
-  leader: null;
+  /** The leader line (comms-8) while the line points at something on screen, else null. */
+  leader: CommsLeaderState | null;
   /** TRIAGE's mood while she speaks, else null. */
   triage: { mood: string } | null;
   /** The line's opacity (it fades over 250 ms when the band goes idle). */

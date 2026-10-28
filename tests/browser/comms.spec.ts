@@ -368,7 +368,11 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
 type HookState = Record<string, unknown> & {
   scene: string | null;
   ready: boolean;
-  shell?: { buttons: Record<string, { x: number; y: number }>; settings: { volume: number } };
+  shell?: {
+    buttons: Record<string, { x: number; y: number }>;
+    settings: { volume: number; voices?: string; voiceVolume?: number };
+    voice?: { lang: string; volume: number };
+  };
   settingsScreen?: {
     open: boolean;
     voices: string;
@@ -446,6 +450,10 @@ test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both
   await expect.poll(async () => (await hook(page)).shell!.settings.volume).toBe(0.7);
   s = await hook(page);
   expect(s.settingsScreen!.labels).toEqual({ voices: 'OFF', voiceVolume: '90%' });
+  // The shell section mirrors both settings, and the mixer's hook reads them too.
+  expect(s.shell!.settings.voices).toBe('off');
+  expect(s.shell!.settings.voiceVolume).toBe(0.9);
+  expect(s.shell!.voice).toMatchObject({ lang: 'off', volume: 0.9 });
   const stored = await page.evaluate(() =>
     JSON.parse(window.localStorage.getItem('neon-war.settings') ?? '{}'),
   );
@@ -462,7 +470,14 @@ test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both
   expect(errors).toEqual([]);
 });
 
-type VoiceHook = { recentVoice: string[]; missing: string[]; playing: string | null; started: string[] };
+type VoiceHook = {
+  recentVoice: string[];
+  missing: string[];
+  playing: string | null;
+  started: string[];
+  requested: string[];
+  lastVoice: string | null;
+};
 type StoryHook = {
   scriptId: string | null;
   lineId: string | null;
@@ -533,6 +548,10 @@ test('comms-6: scene lines ask for their voice in order; a click past a line cut
   expect(s.voiceStops).toEqual(shown);
   const v = await voiceOf(page);
   expect(v.recentVoice).toEqual(shown);
+  // Each request is on record in the language the (default, Japanese) voices setting gave it.
+  expect(v.requested).toEqual(shown.map((id) => `ja:${id}`));
+  for (const r of v.requested) expect(r).toMatch(/^ja:C0\./);
+  expect(v.lastVoice).toBe(shown.at(-1));
   for (const id of shown) expect(v.missing).toContain(id);
   expect(v.playing).toBeNull();
   expect(v.started).toEqual([]);

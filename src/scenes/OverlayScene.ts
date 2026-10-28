@@ -2,9 +2,10 @@ import Phaser from 'phaser';
 import { MUSIC_FILES, MUSIC_KEY, SFX_KEYS, audio, musicWanted, sfxPath } from '../game/audio';
 import { bus } from '../game/bus';
 import { frame } from '../game/frame';
-import { type SoundPort, type VoiceTestState, bundledLiveSfx, mixer } from '../game/mixer';
+import { type SoundPort, VOICE_CUT_FADE_MS, type VoiceTestState, bundledLiveSfx, mixer } from '../game/mixer';
 import { run } from '../game/run';
 import { onSettingsChange, settings } from '../game/settings';
+import { type VoiceHookFields, voiceHookFields } from '../game/voice';
 import { provideTestState, testHookEnabled } from '../testHook';
 import { SCENES } from './keys';
 import { openPause } from './PauseScene';
@@ -20,11 +21,25 @@ export interface ShellTestState {
   lastSfx: string | null;
   /** The last 20 effect keys asked for, oldest first. */
   recentSfx: string[];
-  /** The mixer's voice channel (src/game/mixer.ts): ids asked for, ids the manifest lacks, the duck. */
-  voice: VoiceTestState;
+  /**
+   * The mixer's voice channel (src/game/mixer.ts): ids asked for, ids the manifest lacks, the duck;
+   * plus voice.ts's hook fields: the voices setting (lang), the voice volume, the last id asked for
+   * and whether music or sfx are ducked. `requested` is the mixer's own record ('lang:id' in the
+   * language the setting gave each request when it was made).
+   */
+  voice: VoiceTestState & Pick<VoiceHookFields, 'lang' | 'volume' | 'lastVoice' | 'ducked'>;
   /** True while the board music loop is playing (or queued to start once audio unlocks). */
   musicPlaying: boolean;
-  settings: { volume: number; textSpeed: string; reduceFlicker: boolean; fullscreen: boolean };
+  settings: {
+    volume: number;
+    textSpeed: string;
+    reduceFlicker: boolean;
+    fullscreen: boolean;
+    /** The voices setting: 'ja', 'en' or 'off'. */
+    voices: string;
+    /** The voice volume, 0 to 1. */
+    voiceVolume: number;
+  };
   /** True while the pause menu is open. */
   paused: boolean;
   /** The sim clock, run().now. */
@@ -70,6 +85,8 @@ export class OverlayScene extends Phaser.Scene {
   private sfxGain = 1;
   /** The voice clip playing, if any. */
   private voiceSound: Phaser.Sound.BaseSound | null = null;
+  /** Cut clips still fading out (VOICE_CUT_FADE_MS); the duck leaves them alone. */
+  private readonly fadingVoices = new Set<Phaser.Sound.BaseSound>();
 
   constructor() {
     super({ key: SCENES.overlay, active: true });
@@ -110,6 +127,8 @@ export class OverlayScene extends Phaser.Scene {
       offSettings();
       audio.attach(null);
       mixer.attach(null);
+      for (const s of this.fadingVoices) s.destroy();
+      this.fadingVoices.clear();
     });
     this.ready = true;
   }
@@ -173,8 +192,9 @@ export class OverlayScene extends Phaser.Scene {
         return Number.isFinite(s.duration) ? s.duration : 0;
       },
       stopVoice: () => {
-        this.voiceSound?.destroy();
+        const s = this.voiceSound;
         this.voiceSound = null;
+        if (s) this.fadeOutVoice(s);
       },
       setGain: (channel, gain) => {
         if (channel === 'music') {
@@ -184,10 +204,29 @@ export class OverlayScene extends Phaser.Scene {
         this.sfxGain = gain;
         // Effects already sounding (the rain loop) follow the duck too; the music and the voice do not.
         for (const s of this.sound.getAllPlaying()) {
-          if (s !== this.music && s !== this.voiceSound) (s as Phaser.Sound.WebAudioSound).setVolume?.(gain);
+          if (s !== this.music && s !== this.voiceSound && !this.fadingVoices.has(s))
+            (s as Phaser.Sound.WebAudioSound).setVolume?.(gain);
         }
       },
     };
+  }
+
+  /**
+   * Cut a voice clip with a VOICE_CUT_FADE_MS fade to 0, then destroy it (not at once: a hard stop
+   * clicks). Its COMPLETE listener goes first, so a cut clip never reports a natural end.
+   */
+  private fadeOutVoice(s: Phaser.Sound.BaseSound): void {
+    s.off(Phaser.Sound.Events.COMPLETE);
+    const done = (): void => {
+      this.fadingVoices.delete(s);
+      s.destroy();
+    };
+    if (!s.isPlaying) {
+      done();
+      return;
+    }
+    this.fadingVoices.add(s);
+    this.tweens.add({ targets: s, volume: 0, duration: VOICE_CUT_FADE_MS, onComplete: done });
   }
 
   private onEscape(): void {
@@ -217,16 +256,20 @@ export class OverlayScene extends Phaser.Scene {
     const s = settings();
     const rect = this.game.canvas?.getBoundingClientRect();
     const title = this.scene.get(SCENES.title) as { creditsOpen?: boolean } | null;
+    const v = mixer.snapshot();
+    // voice.ts's fields join the mixer's; the mixer's requested (made at request time) is kept.
     return {
       lastSfx: audio.lastSfx,
       recentSfx: [...audio.recentSfx],
-      voice: mixer.snapshot(),
+      voice: { ...v, ...voiceHookFields(v, s), requested: v.requested },
       musicPlaying: this.musicOn && this.music !== null,
       settings: {
         volume: s.volume,
         textSpeed: s.textSpeed,
         reduceFlicker: s.reduceFlicker,
         fullscreen: this.scale.isFullscreen,
+        voices: s.voices,
+        voiceVolume: s.voiceVolume,
       },
       paused: this.scene.isActive(SCENES.pause) || this.scene.isPaused(SCENES.pause),
       simNow: run().now,

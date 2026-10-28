@@ -30,6 +30,7 @@ import {
 import { LABELS } from './labels';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
+import { register as registerLocate } from './locate';
 import { GAUGES_DEPTH, panel } from './panel';
 
 const DASH = 10;
@@ -138,6 +139,9 @@ export class ChartView implements LiveView {
     this.shownRacked = null;
     this.shownAhead = null;
     this.off.push(provideHudSection('chart', () => this.snapshot()));
+    // The leader line ends at the plot's middle (game px, made once).
+    const mid = { x: (L.plot.left + L.plot.right) / 2, y: (L.plot.top + L.plot.bottom) / 2 };
+    this.off.push(registerLocate('scope', () => mid));
   }
 
   update(frame: Frame): void {

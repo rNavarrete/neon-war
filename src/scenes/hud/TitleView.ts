@@ -18,6 +18,7 @@ import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import { countdownText } from './format';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
+import { register as registerLocate } from './locate';
 import { GAUGES_DEPTH } from './panel';
 import {
   type LiveDot,
@@ -261,6 +262,9 @@ export class TitleView implements LiveView {
       });
     }
     this.off.push(provideHudSection('title', () => this.snapshot()));
+    // The leader line ends at the credits chip's middle (game px, made once).
+    const chipAt = { x: L.credits.x + L.credits.w / 2, y: L.credits.y + L.credits.h / 2 };
+    this.off.push(registerLocate('credits', () => chipAt));
   }
 
   update(frame: Frame, clock: LiveClock): void {
