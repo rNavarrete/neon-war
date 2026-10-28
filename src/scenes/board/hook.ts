@@ -89,12 +89,33 @@ export interface BoardTestState {
   clock: number;
   /** settings().reduceFlicker as the board read it this frame: nothing blinks while it is true. */
   reduceFlicker: boolean;
-  wires: (Point & { key: string; from: string; to: string; rate: number; skipped: boolean })[];
+  /** Every wire at its midpoint; `speed` is how fast its packets move (0.5 into a part over 100%, board-7). */
+  wires: (Point & { key: string; from: string; to: string; rate: number; skipped: boolean; speed: number })[];
   offline: string[];
   /** Wire keys the load balancer skipped, each drawn with a grey "skipped" tag. */
   skipped: string[];
-  /** Packet sprites in the pool, how many are on a wire right now, and the cubes tumbling off a waiting port. */
-  packets: { pool: number; active: number; tumbled: number };
+  /**
+   * Packet sprites in the pool, how many are on a wire right now, and the cubes tumbling off a
+   * waiting port. Board-7: `red` the retry cubes on the board now (going back or re-entering),
+   * `returning` those on their way back to the mouth, `born` the retries born at a dropping part so
+   * far and `reentered` how many reached the mouth and came in again (a red cube is only ever born
+   * at a part: nothing red is spawned at the mouth), `need` the most slots the flow has needed (the
+   * pool never passes it), `retryFrom` the parts retries are born at now (the parts dropping) and
+   * `sparking` the hot or dark parts throwing sparks (the sparks themselves are decorative, off in
+   * ?test lite mode and under reduce flicker; this list is not).
+   */
+  packets: {
+    pool: number;
+    active: number;
+    tumbled: number;
+    red: number;
+    returning: number;
+    born: number;
+    reentered: number;
+    need: number;
+    retryFrom: string[];
+    sparking: string[];
+  };
   /**
    * The board's waits (board-6): `first` while C1 holds the clock for the first build, `crew` while
    * the clock waits after the rescue for the boxes behind the balancer to cover `need` (120; they

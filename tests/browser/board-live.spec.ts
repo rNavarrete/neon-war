@@ -3,6 +3,7 @@ import type { BoardTestState } from '../../src/scenes/board/hook';
 import type { LiveTestState } from '../../src/scenes/live/hook';
 import type { Rect } from '../../src/scenes/live/layout';
 import { inboundLaneRates } from '../../src/scenes/board/channel';
+import { openBoard as liveOpen, reach as liveReach } from './live/reach';
 
 // The board on the Live screen (board lane, M1): the feed's tilted table, its parts and slots inside
 // the feed zone, the skyline above it and no goggles overlay. Positions come from the test hook in
@@ -523,3 +524,90 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
 });
 
 const b0 = (b: BoardTestState, id: string) => b.tray.find((t) => t.id === id)!;
+
+// ---- M3: packets v2 (board-7) -----------------------------------------------------------------
+
+test('the surge (board-7): packets crawl into the hot box, red retries are born at the dropping part and come back to the mouth, the pool stays bounded', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  // Best play to the district surge at speed 20: one box, overclocked, on the gateway.
+  await reachSurge(page);
+  type Seen = { b: BoardTestState };
+  let slow: Seen | null = null;
+  let red: Seen | null = null;
+  let maxPool = 0;
+  let firstPool = -1;
+  const deadline = Date.now() + 10_000;
+  // Ten seconds from the surge on (a scene may hold the board on the way; it is clicked through).
+  while (Date.now() < deadline) {
+    const b = await board(page);
+    if (firstPool < 0) firstPool = b.packets.pool;
+    maxPool = Math.max(maxPool, b.packets.pool);
+    expect(b.packets.pool, 'the pool never passes what the flow needs').toBeLessThanOrEqual(b.packets.need);
+    const hot = b.parts
+      .filter((p) => p.share !== null && p.share > 1 && p.status === 'online')
+      .map((p) => p.id);
+    if (!slow && hot.length > 0 && b.wires.some((w) => hot.includes(w.to))) slow = { b };
+    if (!red && b.channel.retryShare > 0 && b.packets.red > 0) red = { b };
+    await clickStoryOn(page);
+    await page.waitForTimeout(25);
+  }
+
+  // Half speed on every wire into an overloaded box, full speed elsewhere.
+  expect(slow, 'a box over 100% with a wire into it').not.toBeNull();
+  const s = slow!.b;
+  for (const w of s.wires) {
+    const to = s.parts.find((p) => p.id === w.to)!;
+    const over = to.status === 'online' && to.share !== null && to.share > 1;
+    expect(w.speed, `${w.key} speed`).toBe(over ? 0.5 : 1);
+  }
+
+  // Retries: red cubes on the board, every one born at a part that is dropping (hot or dark), and
+  // never spawned at the mouth: the red ones coming in again are only ever those that went back.
+  expect(red, 'retryShare > 0 and packets.red > 0 at the surge').not.toBeNull();
+  const r = red!.b;
+  expect(r.channel.retryShare).toBeGreaterThan(0);
+  expect(r.packets.red).toBeGreaterThan(0);
+  expect(r.packets.born).toBeGreaterThan(0);
+  expect(r.packets.retryFrom.length).toBeGreaterThan(0);
+  for (const id of r.packets.retryFrom) {
+    const p = r.parts.find((x) => x.id === id)!;
+    expect(p, `retries born at ${id}`).toBeDefined();
+    const dropping = p.status !== 'online' || (p.share !== null && p.share > 1) || p.kind === 'gateway';
+    expect(dropping, `${id} drops what it gets`).toBe(true);
+  }
+  expect(r.packets.red).toBeLessThanOrEqual(r.packets.returning + r.packets.reentered);
+  // Retry cubes reach the mouth and come in again (they move in real time, a few seconds back;
+  // a scene holding the board stops them, so it is clicked through).
+  const back = Date.now() + 40_000;
+  for (;;) {
+    const b = await board(page);
+    expect(b.packets.pool).toBeLessThanOrEqual(b.packets.need);
+    if (b.packets.reentered > 0) break;
+    if (Date.now() > back) throw new Error(`no retry re-entered: ${JSON.stringify(b.packets)}`);
+    await clickStoryOn(page);
+    await page.waitForTimeout(80);
+  }
+
+  // Bounded: over the ten seconds the pool never passed the flow's need, and stays modest.
+  expect(maxPool).toBeLessThan(600);
+  expect(firstPool).toBeGreaterThan(0);
+});
+
+/** Open with autopilot at speed 20 and run to the district surge (tests/browser/live/reach.ts). */
+async function reachSurge(page: Page): Promise<void> {
+  await liveOpen(page);
+  await liveReach(page, 'surge');
+}
+
+/** If a story scene holds the board, click it on (Skip when shown). */
+async function clickStoryOn(page: Page): Promise<void> {
+  type StoryHook = { active: boolean; skip: { visible: boolean; x: number; y: number }; click: Pt | null };
+  const s = await page.evaluate(
+    () => (window.__neonTest!.state as unknown as { story?: StoryHook }).story ?? null,
+  );
+  if (!s?.active) return;
+  const p = s.skip.visible ? s.skip : s.click;
+  if (p) await page.mouse.click(p.x, p.y);
+}

@@ -368,6 +368,39 @@ export const INBOUND_LANES: readonly (readonly Point[])[] = [-LANE_SPREAD, 0, LA
     : [{ x: INBOUND_FROM, y: GATEWAY.y + dy }, { x: CHANNEL.mouth.x + 30, y: GATEWAY.y + dy }, end];
 });
 
+/** Where a part takes its wires in: its left edge, high on a server (the end wirePath draws to). */
+export function inPort(part: Pick<Part, 'kind' | 'slot'>): Point | null {
+  const c = partCentre(part);
+  if (!c) return null;
+  return {
+    x: c.x - partSize(part).w / 2 + 6,
+    y: c.y - (part.kind === 'server' ? SERVER_PORT * slotScale(part.slot) : 0),
+  };
+}
+
+/** The far rim the retries run back along, just inside the table's far edge (above OVER's traces). */
+export const RETURN_RIM = TABLE.far.y + 4;
+/** How far left of a port a returning retry steps before it turns. */
+const RETURN_STEP = 14;
+
+/**
+ * The way a retry goes back (board-7): from the in-port of the part that dropped it, a step left,
+ * up to the far rim, along it to just left of the gateway, down into the channel and out along its
+ * upper wall to the mouth, where it comes in again. From the gateway itself it runs straight back
+ * along the channel. Every point stays inside the feed.
+ */
+export function returnPath(part: Pick<Part, 'kind' | 'slot'>): Point[] | null {
+  const from = inPort(part);
+  if (!from) return null;
+  const { mouth, port } = CHANNEL;
+  const end = { x: mouth.x + 2, y: mouth.top + 14 };
+  const x = port.x - RETURN_STEP;
+  const down = { x, y: channelAt(x).top + 12 };
+  if (part.kind === 'gateway') return [{ x: from.x, y: port.top + 12 }, down, end];
+  const out = from.x - RETURN_STEP;
+  return tidy([from, { x: out, y: from.y }, { x: out, y: RETURN_RIM }, { x, y: RETURN_RIM }, down, end]);
+}
+
 export function midpoint(e: { ax: number; ay: number; bx: number; by: number }): Point {
   return { x: (e.ax + e.bx) / 2, y: (e.ay + e.by) / 2 };
 }

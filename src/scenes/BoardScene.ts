@@ -37,9 +37,27 @@ import {
   pointAlong,
   toPage,
   wirePath,
+  inPort,
+  returnPath,
 } from './board/layout';
 import { ZONES, pageRect } from './live/layout';
-import { PacketPool, fillPacketRates, progress, travelSeconds } from './board/packets';
+import {
+  HOT_SPEED,
+  PACKETS_PER_REQUEST,
+  PacketPool,
+  RETURN_PREFIX,
+  SPARK_LIFE,
+  SparkPool,
+  dropsInto,
+  fillPacketRates,
+  progress,
+  retryBirthsInto,
+  sparkRate,
+  travelSeconds,
+  wireSpeed,
+} from './board/packets';
+import { flagsFrom } from './live/flags';
+import { BROWNOUT_RULES } from '../sim/brownout';
 import { BoardSnapshot } from './board/snapshot';
 import { InventoryView } from './board/InventoryView';
 import {
@@ -248,6 +266,29 @@ export class BoardScene extends Phaser.Scene {
   private lastParts: readonly unknown[] | null = null;
   private pool = new PacketPool();
   private packetSprites: Phaser.GameObjects.Image[] = [];
+  /** Each part's return path (board-7), keyed RETURN_PREFIX + id, rebuilt with the wires. */
+  private backByKey = new Map<string, WireGeom>();
+  /** RETURN_PREFIX + id for every part seen, built once per id so the frame loop builds no string. */
+  private backKeys = new Map<string, string>();
+  /** Req/s each part drops this frame, and the retry cubes a second born there, refilled in place. */
+  private drops: Record<string, number> = {};
+  private births: Record<string, number> = {};
+  /** Parts over 100% this frame: packets crawl into them at half speed. */
+  private slowParts = new Set<string>();
+  /** Sparks off the in-ports of parts that drop (decorative: off in lite mode and under reduce flicker). */
+  private sparks = new SparkPool();
+  private sparkSprites: Phaser.GameObjects.Image[] = [];
+  private sparkOwed: Record<string, number> = {};
+  /** ?test lite mode: decorative particles off, no hook value changed. */
+  private lite = false;
+  /** The packet step's options, made once: each wire's speed, and the lanes a retry re-enters on. */
+  private readonly stepOpts = {
+    speedOf: (wire: string): number => {
+      const w = this.wireByKey.get(wire);
+      return w && this.slowParts.has(w.to) ? HOT_SPEED : 1;
+    },
+    reenter: INBOUND_KEYS,
+  };
   /** The channel this frame (board-4), refilled in place, and what its graphics last drew. */
   private chan: ChannelState = emptyChannel();
   private fillG!: Phaser.GameObjects.Graphics;
@@ -289,8 +330,7 @@ export class BoardScene extends Phaser.Scene {
   private director: Director | null = null;
   private sky!: Phaser.GameObjects.Image;
   /** Created once with the scene: the pool calls it per wire per frame without a new closure. */
-  private readonly travelOf = (wire: string): number =>
-    (this.wireByKey.get(wire) ?? INBOUND_BY_KEY.get(wire))?.travel ?? 1;
+  private readonly travelOf = (wire: string): number => this.geomOf(wire)?.travel ?? 1;
   /** Bound once: drops the sprites of a part no longer on the board (Map.forEach, no iterator). */
   private readonly sweepView = (v: PartView, id: string): void => {
     if (v.seen === this.snap.count) return;
@@ -326,6 +366,14 @@ export class BoardScene extends Phaser.Scene {
     this.lastWires = null;
     this.lastParts = null;
     this.pool = new PacketPool();
+    this.backByKey = new Map();
+    this.drops = {};
+    this.births = {};
+    this.slowParts.clear();
+    this.sparks = new SparkPool();
+    this.sparkSprites = [];
+    this.sparkOwed = {};
+    this.lite = flagsFrom(window.location.search).lite;
     this.wait = emptyWait();
     this.pulsingPads = [];
     this.crewShown = '';
@@ -368,6 +416,9 @@ export class BoardScene extends Phaser.Scene {
     this.drawTray();
 
     this.drawWaits();
+    for (let i = 0; i < this.sparks.items.length; i++) {
+      this.sparkSprites.push(this.add.image(0, 0, 'packet').setDepth(2.6).setScale(0.3).setVisible(false));
+    }
 
     this.ghost = this.add.image(0, 0, 'server').setVisible(false).setAlpha(0.75).setDepth(30);
     this.cutBtn = this.makeButton('icon-cut', 0xff4d5e);
@@ -698,6 +749,7 @@ export class BoardScene extends Phaser.Scene {
     }
     const pulse = reduce ? 0.55 : 0.55 + 0.25 * Math.sin(this.time.now / 120);
     this.hotParts.clear();
+    this.slowParts.clear();
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       const v = this.viewFor(part);
@@ -713,6 +765,8 @@ export class BoardScene extends Phaser.Scene {
       );
       // Traffic is being dropped here: the packets heading in turn red.
       if (look.dark || (look.share !== null && look.share > 1)) this.hotParts.add(part.id);
+      // Over 100%: the packets heading in crawl at half speed (board-7).
+      if (!look.dark && wireSpeed(look.share) < 1) this.slowParts.add(part.id);
       v.seen = count;
       if (v.art !== look.art) {
         v.art = look.art;
@@ -739,7 +793,8 @@ export class BoardScene extends Phaser.Scene {
     this.drawWires(flow.wires, flow.skipped);
     this.drawPreview(parts);
     this.drawChannel(channelInto(this.chan, f));
-    this.stepPackets(dt, flow.wires, f.demand);
+    this.stepPackets(dt, f);
+    this.stepSparks(dt, parts);
     this.drawWait(wait, f.paused ? 0 : Math.min(seconds, 0.25));
     this.placeButtons(parts);
 
@@ -979,6 +1034,38 @@ export class BoardScene extends Phaser.Scene {
       this.wireList.push(g);
       this.wireByKey.set(g.key, g);
     }
+    // Each part's return path, the way its retries go back to the mouth (board-7).
+    this.backByKey = new Map();
+    for (const part of f.parts) {
+      const path = returnPath(part);
+      if (!path) continue;
+      const key = this.backKey(part.id);
+      const length = pathLength(path);
+      this.backByKey.set(key, {
+        key,
+        from: part.id,
+        to: 'mouth',
+        path,
+        length,
+        mid: pointAlong(path, length, 0.5, { x: 0, y: 0 }),
+        travel: travelSeconds(length),
+      });
+    }
+  }
+
+  /** RETURN_PREFIX + id, built the first time a part is seen. */
+  private backKey(id: string): string {
+    let k = this.backKeys.get(id);
+    if (k === undefined) {
+      k = RETURN_PREFIX + id;
+      this.backKeys.set(id, k);
+    }
+    return k;
+  }
+
+  /** A packet key's geometry: a wire, an inbound lane or a return path. */
+  private geomOf(key: string): WireGeom | undefined {
+    return this.wireByKey.get(key) ?? INBOUND_BY_KEY.get(key) ?? this.backByKey.get(key);
   }
 
   /**
@@ -1067,14 +1154,27 @@ export class BoardScene extends Phaser.Scene {
     return t;
   }
 
-  private stepPackets(dt: number, rates: Readonly<Record<string, number>>, demand: number): void {
-    // Every wire on the board, plus the inbound lanes sharing the block's demand, refilled in place.
+  /**
+   * The packets (board-7): every wire's req/s and the inbound lanes as before, the lanes carrying
+   * only the fresh share of what comes in, and the retries born at each dropping part on its return
+   * path (they re-enter on the lanes once back at the mouth). Rates are refilled in place.
+   */
+  private stepPackets(dt: number, f: Frame): void {
+    const demand = f.demand;
     const all = fillInboundRates(
-      fillPacketRates(this.packetRates, rates, demand, INBOUND_KEYS),
+      fillPacketRates(this.packetRates, f.flow.wires, demand, INBOUND_KEYS),
       demand,
       INBOUND_KEYS,
     );
-    this.pool.step(dt, all, this.travelOf);
+    const share = this.chan.retryShare;
+    if (share > 0) for (let i = 0; i < INBOUND_KEYS.length; i++) all[INBOUND_KEYS[i]] *= 1 - share;
+    dropsInto(this.drops, f.parts, f.wires, f.flow.load, f.offline, BROWNOUT_RULES);
+    retryBirthsInto(this.births, this.drops, share, this.chan.lanePps);
+    for (const id in this.births) {
+      const key = this.backKey(id);
+      if (this.backByKey.has(key)) all[key] = this.births[id] / PACKETS_PER_REQUEST;
+    }
+    this.pool.step(dt, all, this.travelOf, this.stepOpts);
     const items = this.pool.items;
     while (this.packetSprites.length < items.length) {
       this.packetSprites.push(this.add.image(0, 0, 'packet').setDepth(2));
@@ -1082,14 +1182,56 @@ export class BoardScene extends Phaser.Scene {
     for (let i = 0; i < this.packetSprites.length; i++) {
       const s = this.packetSprites[i];
       const p = items[i];
-      const w = p?.active ? (this.wireByKey.get(p.wire) ?? INBOUND_BY_KEY.get(p.wire)) : undefined;
+      const w = p?.active ? this.geomOf(p.wire) : undefined;
       if (!p || !w) {
         s.setVisible(false);
         continue;
       }
       pointAlong(w.path, w.length, progress(p), this.at);
       s.setPosition(this.at.x, this.at.y).setVisible(true);
-      s.setTint(this.hotParts.has(w.to) ? RED : AMBER);
+      s.setTint(p.red || this.hotParts.has(w.to) ? RED : AMBER);
+    }
+  }
+
+  /**
+   * Sparks off the in-port of every hot or dark part that drops, at sparkRate of what it drops
+   * (board-7). Decorative: nothing is thrown in ?test lite mode or under reduce flicker.
+   */
+  private stepSparks(dt: number, parts: readonly Part[]): void {
+    const off = this.lite || this.reduceFlicker;
+    if (!off) {
+      for (let i = 0; i < parts.length; i++) {
+        const id = parts[i].id;
+        const drop = this.drops[id] ?? 0;
+        if (!(drop > 0) || !this.hotParts.has(id)) {
+          this.sparkOwed[id] = 0;
+          continue;
+        }
+        let owed = (this.sparkOwed[id] ?? 0) + sparkRate(drop) * dt;
+        const n = Math.floor(owed);
+        owed -= n;
+        this.sparkOwed[id] = owed;
+        if (n > 0) {
+          const port = inPort(parts[i]);
+          if (port) this.sparks.emit(port.x, port.y, n);
+        }
+      }
+    }
+    this.sparks.step(dt);
+    const items = this.sparks.items;
+    for (let i = 0; i < items.length; i++) {
+      const sp = items[i];
+      const img = this.sparkSprites[i];
+      if (!img) continue;
+      if (off || !sp.active) {
+        img.setVisible(false);
+        continue;
+      }
+      img
+        .setPosition(sp.x, sp.y)
+        .setAlpha(1 - sp.age / SPARK_LIFE)
+        .setTint(sp.age < SPARK_LIFE / 3 ? 0xfff1c4 : AMBER)
+        .setVisible(true);
     }
   }
 
@@ -1115,6 +1257,7 @@ export class BoardScene extends Phaser.Scene {
     let n = 0;
     for (const p of this.pool.items) {
       if (!p.active) continue;
+      if (p.returning) continue;
       const w = this.wireByKey.get(p.wire);
       if (w && w.to === id) n++;
     }
@@ -1387,6 +1530,7 @@ export class BoardScene extends Phaser.Scene {
         ...page(w.mid.x, w.mid.y),
         rate: round(f.flow.wires[w.key] ?? 0),
         skipped: f.flow.skipped.includes(w.key),
+        speed: this.stepOpts.speedOf(w.key),
       })),
       offline,
       channel: {
@@ -1406,7 +1550,20 @@ export class BoardScene extends Phaser.Scene {
         levelY: page(CHANNEL.mouth.x, levelY(this.chan.level, CHANNEL.mouth.x)).y,
       },
       skipped: [...f.flow.skipped],
-      packets: { pool: this.pool.size, active: this.pool.active, tumbled: this.tumbles.active },
+      packets: {
+        pool: this.pool.size,
+        active: this.pool.active,
+        tumbled: this.tumbles.active,
+        red: this.pool.red,
+        returning: this.pool.returning,
+        born: this.pool.born,
+        reentered: this.pool.reentered,
+        need: this.pool.need,
+        retryFrom: Object.keys(this.births).filter((id) => this.births[id] > 0),
+        sparking: f.parts
+          .filter((p) => (this.drops[p.id] ?? 0) > 0 && this.hotParts.has(p.id))
+          .map((p) => p.id),
+      },
       waiting: {
         first: this.wait.first,
         crew: this.wait.crew,
