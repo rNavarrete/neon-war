@@ -99,6 +99,20 @@ function clockRight(): number | null {
   return right;
 }
 
+/** The right-most game x anything of the clock view is drawn at, by the pause button's rule. */
+const CLOCK_MAX_RIGHT = 1796;
+
+/**
+ * Shrinks a text so its right edge stays at or left of maxRight. Glyph widths depend on which
+ * monospace font the machine has, so a word that fits here can overflow elsewhere; this keeps the
+ * zone rule true on every machine. Runs only when the text changes (no per-frame cost).
+ */
+function fitRight(text: Phaser.GameObjects.Text, maxRight: number): void {
+  text.setScale(1);
+  const room = maxRight - text.x;
+  if (text.width > room && text.width > 0) text.setScale(room / text.width);
+}
+
 export class TitleView implements LiveView {
   readonly zone = 'title' as const;
   readonly budget: LiveBudget = { objects: 11, texts: 5 };
@@ -110,6 +124,10 @@ export class TitleView implements LiveView {
   private creditsText: Phaser.GameObjects.Text | null = null;
   private host: LiveHost | null = null;
   private off: (() => void)[] = [];
+  /** Right limits for the texts: the zone's edge and each chip's inner edge. */
+  private maxRight = 0;
+  private trustRight = 0;
+  private creditsRight = 0;
 
   /** The last bus audience value, null before the first. */
   watching: number | null = null;
@@ -129,6 +147,9 @@ export class TitleView implements LiveView {
     this.host = host;
     const L = titleLayout(host.rect);
     const add = scene.add;
+    this.maxRight = host.rect.x + host.rect.w - 6;
+    this.trustRight = L.trust.x + L.trust.w - 6;
+    this.creditsRight = L.credits.x + L.credits.w - 6;
 
     const plate = add.graphics();
     plate.fillStyle(COLORS.ink, 0.96);
@@ -158,6 +179,7 @@ export class TitleView implements LiveView {
       fontSize: '24px',
       color: COLORS.white,
     });
+    fitRight(name, L.dot.x - L.dot.r - 4);
     this.dot = add.circle(L.dot.x, L.dot.y, L.dot.r, DOT_COLOR.held, 1);
     this.liveWord = add
       .text(L.liveWord.x, L.liveWord.y, '', { fontFamily: FONT, fontSize: '15px', color: COLORS.dim })
@@ -219,6 +241,7 @@ export class TitleView implements LiveView {
       this.shownLive = live;
       this.dot.setFillStyle(DOT_COLOR[live], 1);
       this.liveWord?.setText(LIVE_WORDS[live]).setColor(WORD_COLOR[live]);
+      if (this.liveWord) fitRight(this.liveWord, this.maxRight);
     }
     const steady = settings().reduceFlicker || (this.host?.flags.lite ?? false);
     this.dot.setAlpha(liveDotAlpha(live, clock.now, steady));
@@ -227,12 +250,14 @@ export class TitleView implements LiveView {
       this.shownWatching = this.watching;
       this.watchingWord?.setText(watchingText(this.watching));
       this.watchingWord?.setColor(this.watching === null ? COLORS.dim : COLORS.white);
+      if (this.watchingWord) fitRight(this.watchingWord, this.maxRight);
     }
 
     const trust = shownTrust(frame.trust);
     if (trust !== this.shownTrust) {
       this.shownTrust = trust;
       this.trustText?.setText(String(trust)).setColor(trustRed(trust) ? COLORS.redText : COLORS.white);
+      if (this.trustText) fitRight(this.trustText, this.trustRight);
     }
     const credits = shownCredits(frame.credits);
     if (credits !== this.shownCredits) {
@@ -240,6 +265,7 @@ export class TitleView implements LiveView {
       this.creditsText
         ?.setText(String(credits))
         .setColor(creditsRed(credits) ? COLORS.redText : COLORS.white);
+      if (this.creditsText) fitRight(this.creditsText, this.creditsRight);
     }
   }
 
@@ -313,6 +339,8 @@ export class ClockView implements LiveView {
       this.shownSecond = second;
       this.clockText.setText(frame.clock);
       this.countdown.setText(`midnight in ${countdownText(frame.now)}`);
+      fitRight(this.clockText, CLOCK_MAX_RIGHT);
+      fitRight(this.countdown, CLOCK_MAX_RIGHT);
     }
     const red = countdownRed(frame.now);
     if (red !== this.shownRed) {
