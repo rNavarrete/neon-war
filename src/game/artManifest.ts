@@ -110,7 +110,7 @@ const size = (w: number, h: number): Size => ({ w, h });
  * - hud/live/topbar-strip is 1536x33 against a 1920x100 bar. Stretching it would blur its
  *   hairline, so the view draws it 1:1 (centred, or repeated at scale 1 along the bar) and fills
  *   the rest of the bar in code.
- * - hud/comms-plate is 1450x144 in the 1455x150 band: CommsView centres it on whole pixels.
+ * - hud/comms-plate is 1455x149 in the 1455x150 band: CommsView centres it on whole pixels.
  * - board/table-plate is 1228x416 under a 1441 px feed: the board centres it (tablePlatePlace).
  */
 const PICKED_CUTS: Readonly<Record<string, Size>> = {
@@ -118,12 +118,12 @@ const PICKED_CUTS: Readonly<Record<string, Size>> = {
   'board/server-dark': size(425, 638),
   'board/server-booting-a': size(427, 638),
   'board/server-booting-b': size(420, 638),
-  'board/server-overclocked-dark': size(405, 626),
+  'board/server-overclocked-dark': size(466, 629),
   'board/balancer-ping-a': size(480, 337),
   'board/balancer-ping-b': size(480, 336),
-  'board/channel-plate': size(300, 356),
+  'board/channel-plate': size(300, 233),
   'hud/city-grid': size(816, 620),
-  'hud/comms-plate': size(1450, 144),
+  'hud/comms-plate': size(1455, 149),
   'chars/comms/triage': size(244, 256),
   'chars/comms/rei': size(240, 256),
   'chars/comms/mika': size(236, 256),
@@ -131,7 +131,7 @@ const PICKED_CUTS: Readonly<Record<string, Size>> = {
   'hud/live/avatar-luxnet': size(243, 256),
   'hud/icons/door': size(128, 120),
   'hud/icons/tv': size(128, 120),
-  'hud/icons/system': size(64, 64),
+  'hud/icons/system': size(41, 64),
   'hud/icons/play': size(128, 123),
   'hud/icons/ping': size(128, 123),
   'hud/icons/skipped': size(128, 124),
@@ -149,18 +149,26 @@ const PICKED_CUTS: Readonly<Record<string, Size>> = {
   'hud/live/tag-chip': size(216, 72),
   'hud/live/rec-badge': size(121, 48),
   'hud/live/live-pill': size(189, 56),
-  'hud/live/corner-marks': size(59, 59),
+  'hud/live/corner-marks': size(96, 96),
   'hud/live/divider': size(8, 160),
   'hud/live/keycap-idle': size(160, 128),
   'hud/live/keycap-ready': size(160, 128),
   'hud/live/keycap-pressed': size(160, 128),
-  'hud/live/card-frame-idle': size(192, 171),
-  'hud/live/card-frame-ready': size(200, 171),
-  'hud/live/card-frame-locked': size(188, 219),
+  'hud/live/card-frame-idle': size(240, 280),
+  'hud/live/card-frame-ready': size(240, 280),
+  'hud/live/card-frame-locked': size(240, 280),
   'hud/live/count-badge': size(49, 56),
   'hud/live/topbar-strip': size(1536, 33),
   'hud/live/alert-plate': size(1040, 168),
   'hud/live/alert-endcap': size(135, 168),
+  'hud/gauge-face': size(480, 269),
+  'hud/gauge-needle': size(24, 162),
+  'chars/lux/cam/cheer': size(924, 548),
+  'hud/cam-frame': size(408, 243),
+  'board/table-plate-midnight': size(1061, 416),
+  'hud/city-grid-lit': size(816, 620),
+  'board/packet-cube': size(59, 48),
+  'hud/live/night-shift-sticker': size(320, 136),
 };
 
 /** A request's cut: the picked file's real size, or null while its fallback draws. */
@@ -771,7 +779,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 2,
     lane: 'comms',
     zone: 'comms',
-    display: size(1450, 144),
+    display: size(1455, 149),
     target: size(1455, 150),
     cut: picked('hud/comms-plate'),
     states: 'one; the WARNING border is code',
@@ -1192,7 +1200,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 5,
     lane: 'luxcam',
     zone: 'cam',
-    display: size(408, 270),
+    display: size(408, 243),
     target: size(408, 270),
     cut: picked('hud/cam-frame'),
     states: 'one; amber or red rim by tint',
@@ -1205,7 +1213,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 5,
     lane: 'board',
     zone: 'feed',
-    display: size(1441, 390),
+    display: size(1061, 416),
     target: size(1536, 416),
     cut: picked('board/table-plate-midnight'),
     states: 'one',
@@ -1254,7 +1262,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
 ];
 
 /** The requests the owner runs now (batches 1 to 4) and the deferred ones (batch 5). */
-export const BATCHES_NOW: readonly ArtBatch[] = [1, 2, 3, 4];
+export const BATCHES_NOW: readonly ArtBatch[] = [1, 2, 3, 4, 5];
 
 /** A picked file's entry by its path under public/. */
 export function pickedArt(file: string): PickedArt | undefined {
