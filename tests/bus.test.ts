@@ -1,5 +1,6 @@
 import titleSource from '../src/scenes/hud/title.ts?raw';
-import { Bus, type GameEvents } from '../src/game/bus';
+import { Bus, type DragState, type GameEvents, dragVerdict } from '../src/game/bus';
+import type { PadState } from '../src/scenes/board/layout';
 import { readFrame } from '../src/game/frame';
 import { Run } from '../src/game/run';
 import { CommsView } from '../src/scenes/hud/CommsView';
@@ -37,6 +38,34 @@ describe('the bus catalogue', () => {
   it('has no lane file augmenting GameEvents: title.ts no longer declares audience', () => {
     expect(titleSource).not.toMatch(/declare module '..\/..\/game\/bus'/);
     expect(titleSource).not.toMatch(/audience: \{ watching: number \}/);
+  });
+});
+
+describe('drag carries the legality of the spot under the card', () => {
+  // Type-level: the bus's DragState is exactly the board's PadState, both ways.
+  const toBus: DragState = 'legal' as PadState;
+  const toBoard: PadState = 'wrong' as DragState;
+
+  it('dragVerdict: legal only on a legal pad, null over nothing', () => {
+    expect([toBus, toBoard]).toEqual(['legal', 'wrong']);
+    expect(dragVerdict('legal')).toEqual({ state: 'legal', legal: true });
+    for (const s of ['taken', 'dead', 'poor', 'wrong'] as const)
+      expect(dragVerdict(s)).toEqual({ state: s, legal: false });
+    expect(dragVerdict(null)).toEqual({ state: null, legal: null });
+  });
+
+  it('declares state and legal on GameEvents drag, and an old emit without them still types', () => {
+    const bus = new Bus();
+    const seen: GameEvents['drag'][] = [];
+    bus.on('drag', (e) => seen.push(e));
+    bus.emit('drag', { kind: 'card', card: 'server', over: 'pad', ...dragVerdict('poor') });
+    bus.emit('drag', { kind: 'card', card: 'server', over: null });
+    bus.emit('drag', { kind: null, card: null, over: null, state: null, legal: null });
+    expect(seen.map((e) => [e.state ?? null, e.legal ?? null])).toEqual([
+      ['poor', false],
+      [null, null],
+      [null, null],
+    ]);
   });
 });
 
