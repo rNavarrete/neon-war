@@ -20,10 +20,10 @@ async function hud(page: Page): Promise<Hud> {
  * Open the board at `speed`. With `autopilot` the test-only scripted best play builds what GAME.md's
  * best-play path builds (src/game/autopilot.ts), so a test can reach the surge and midnight.
  */
-async function openBoard(page: Page, speed = 1, autopilot = false): Promise<void> {
+async function openBoard(page: Page, speed = 1, autopilot = false, params = ''): Promise<void> {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
-  await page.goto(`/?test&scene=board&speed=${speed}${autopilot ? '&autopilot' : ''}`);
+  await page.goto(`/?test&scene=board&speed=${speed}${autopilot ? '&autopilot' : ''}${params}`);
   await expect
     .poll(() => page.evaluate(() => window.__neonTest?.state.hud?.ready ?? false), { timeout: 15_000 })
     .toBe(true);
@@ -145,7 +145,9 @@ test('C1: Lux and TRIAGE do the sum once a box is live, and the chart, trust and
 for (const choice of ['pay', 'ignore', 'bin'] as const) {
   test(`the Solace banner records ${choice}`, async ({ page }) => {
     test.setTimeout(180_000);
-    await openBoard(page, 20, true);
+    // The autopilot stops at C2: on the shorter night its kit (C3 - 20) would otherwise land between
+    // the two credit reads below at speed 20.
+    await openBoard(page, 20, true, `&idle=${C.c2}`);
     await dismissJobCard(page);
     await expect.poll(async () => (await hud(page)).banner.open, { timeout: 60_000 }).toBe(true);
     // Let the slide-in finish so the buttons are where the hook says.
