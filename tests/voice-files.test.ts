@@ -28,10 +28,14 @@ const manifest = JSON.parse(
 ) as Record<string, string[]>;
 
 /**
- * Voiced lines with no clip in a language, written out so a gap is a decision, not an accident.
- * Empty: the owner's drop has all 85 lines in both languages.
+ * Voiced lines with no clip in a language, written out so a gap is a decision, not an accident:
+ * the lines docs/VOICE.md lists under "Not recorded yet" (the tutorial coach's nudges, 29 Oct 2026),
+ * missing in both languages. The owner's drop had all 85 older lines in both.
  */
-const KNOWN_GAPS: Record<(typeof LANGS)[number], ReadonlySet<string>> = { ja: new Set(), en: new Set() };
+const knownGaps = (): Record<(typeof LANGS)[number], ReadonlySet<string>> => {
+  const notRecorded = new Set(idsUnder('Not recorded yet'));
+  return { ja: notRecorded, en: notRecorded };
+};
 
 /** One clip may not outweigh this (the longest take today is about 115 kB). */
 const MAX_BYTES = 1024 * 1024;
@@ -89,7 +93,9 @@ describe('voice manifest', () => {
   });
 
   it('lists every spoken line in each language, apart from the known gaps', () => {
-    expect(voicedLines()).toHaveLength(85);
+    expect(voicedLines()).toHaveLength(103);
+    const KNOWN_GAPS = knownGaps();
+    expect(KNOWN_GAPS.ja.size).toBe(18);
     for (const lang of LANGS) {
       const listed = new Set(manifest[lang]);
       const gaps = voicedLines().filter((id) => !listed.has(id));
@@ -138,17 +144,23 @@ describe('voice files', () => {
 describe('recorded wording', () => {
   const byId = new Map(RECORDED.map((r) => [r[0], r]));
 
-  it('covers every spoken line once, and nothing else', () => {
-    expect(RECORDED.map((r) => r[0]).sort()).toEqual([...voicedLines()].sort());
+  /** Spoken lines that have been recorded: every one but those listed as not recorded yet. */
+  const recordedLines = (): LineId[] => {
+    const notRecorded = new Set(idsUnder('Not recorded yet'));
+    return voicedLines().filter((id) => !notRecorded.has(id));
+  };
+
+  it('covers every recorded spoken line once, and nothing else', () => {
+    expect(RECORDED.map((r) => r[0]).sort()).toEqual([...recordedLines()].sort());
     expect(byId.size).toBe(RECORDED.length);
   });
 
   it('was recorded by the speaker the script names now (a changed speaker would mean a wrong voice)', () => {
-    for (const id of voicedLines()) expect(byId.get(id)![1], id).toBe(characterOf(LINES[id].speaker));
+    for (const id of recordedLines()) expect(byId.get(id)![1], id).toBe(characterOf(LINES[id].speaker));
   });
 
   it('docs/VOICE.md lists exactly the lines whose words changed since recording', () => {
-    const changed = voicedLines().filter((id: LineId) => words(byId.get(id)![2]) !== words(LINES[id].text));
+    const changed = recordedLines().filter((id: LineId) => words(byId.get(id)![2]) !== words(LINES[id].text));
     expect(idsUnder('Stale takes').sort()).toEqual(changed.sort());
   });
 

@@ -57,9 +57,41 @@ the performance tags, the stage directions in brackets and quotes.
 
 - `C1.triage.01`: "Ooh, a dial!" became "Ooh, a card!" when the estimate dial was removed. The
   old take still plays until it is re-recorded.
+- `C0.tv.01`: "ten minutes from midnight" became "five minutes" when the countdown was shortened
+  (29 Oct 2026).
+- `C3.triage.01`: "The kit makes a box bigger..." became "A bigger box, or a second box..." when
+  the overclock kit became the bigger box (29 Oct 2026).
+- `C3.triage.03`: "Rebooting..." became "Swapping in the big one..." (same change).
+- `C4.grandma.01`: "Three minutes, love!" became "Two minutes, love!" (shorter countdown).
+- `C5.triage.02`: "The big box fried. It's a normal box again." became "The big box cooked. The
+  crew put a normal one back." (bigger box).
 
 Two lines differ only in stage directions written into the text (`C5.rei.cut` has "(beat)",
 `C5.rei.04` has "(to Lux)"); the spoken words match the takes.
+
+## Not recorded yet
+
+Spoken lines added since the last recording session. They show as text with no voice (the mixer
+lists them in `shell.voice.missing`) until they are recorded and added to the manifest.
+
+- `C1.triage.nudge.place.1`
+- `C1.triage.nudge.place.2`
+- `C1.lux.nudge.place`
+- `C1.triage.nudge.feed.1`
+- `C1.triage.nudge.feed.2`
+- `C1.lux.nudge.feed`
+- `C1.triage.nudge.store.1`
+- `C1.triage.nudge.store.2`
+- `C1.lux.nudge.store`
+- `C3.triage.nudge.choose.1`
+- `C3.triage.nudge.choose.2`
+- `C5.triage.nudge.splitter`
+- `C5.lux.nudge.splitter`
+- `C5.triage.nudge.behind.1`
+- `C5.triage.nudge.behind.2`
+- `C5.lux.nudge.behind`
+- `C5.triage.nudge.replace.1`
+- `C5.lux.nudge.replace`
 
 ## Speaker changed
 
