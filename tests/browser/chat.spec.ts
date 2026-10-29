@@ -299,7 +299,7 @@ test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers',
     if (!l) return null;
     return log.rows.find((r) => r.at > l.at && (r.thanks || r.id === 'fill.block.rejoin.01')) ?? null;
   };
-  // The jump lands a C1 board in the surge, so a box can overheat before 320 and a rewind screen
+  // The jump lands a C1 board in the surge, so a box can overheat before C4 + 20 and a rewind screen
   // hold the run (seen on CI). Click any such screen on, as play would; never the crew's C5.
   const deadline = Date.now() + 30_000;
   while (leave() === null) {

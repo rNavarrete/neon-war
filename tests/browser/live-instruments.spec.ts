@@ -2,6 +2,7 @@ import { type Page, expect, test } from '@playwright/test';
 import type { GaugeTestState } from '../../src/scenes/hud/GaugeView';
 import type { ScopeTestState } from '../../src/scenes/hud/ChartView';
 import type { HudTestState } from '../../src/scenes/hud/hook';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { forecastAt } from '../../src/sim/demand';
 import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 
@@ -158,12 +159,12 @@ test('the scope: wired room, a forecast region exactly while a rise is forecast'
         shotTaken = true;
       }
     } else quietReads++;
-    if (c.now >= 182) break;
+    if (c.now >= BROWNOUT.challenges.c3 + 2) break;
     await page.waitForTimeout(20);
   }
   expect(forecastReads).toBeGreaterThan(0);
   expect(quietReads).toBeGreaterThan(0);
-  expect(c.now).toBeGreaterThanOrEqual(182);
+  expect(c.now).toBeGreaterThanOrEqual(BROWNOUT.challenges.c3 + 2);
   expect(c.forecast).toBeNull();
   expect(errors).toEqual([]);
 });
