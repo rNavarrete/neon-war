@@ -89,7 +89,7 @@ const RESCUE: SceneScript = {
     { lineId: 'C5.mika.03', face: 'mika/faces/focused' },
     { lineId: 'C5.ozzie.03', face: 'ozzie/faces/sceptical' },
     { lineId: 'C5.rei.04', face: 'rei/faces/stern' },
-    { lineId: 'C5.mika.04', face: 'mika/faces/reassure', cue: 'regroup' },
+    // C5.mika.04 (Mika hands over Regroup) is not in Session 0: BROWNOUT.regroup.inSession.
   ],
 };
 

@@ -141,7 +141,7 @@ test('the Live tour: every zone, the channel and the voice, at the C4 surge and 
     m.hud.comms.slots.every((x) => x.present),
     'midnight: every hud.comms slot present',
   ).toBe(true);
-  expect(m.hud.deck.regroup, 'midnight: hud.deck.regroup was handed over').not.toBe('hidden');
+  expect(m.hud.deck.regroup, 'midnight: no Regroup in Session 0 (BROWNOUT.regroup.inSession)').toBe('hidden');
   expect(
     m.shell.voice.recentVoice.some((id) => /^C[56]\./.test(id)),
     'midnight: shell.voice.recentVoice has a C5 or C6 line',

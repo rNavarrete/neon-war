@@ -89,7 +89,7 @@ describe('ac1: one constants object', () => {
     expect(BROWNOUT.overheat.overloadSeconds).toBe(8);
     expect(BROWNOUT.retries.maxDemandRise).toBe(0.5);
     expect(BROWNOUT.powerDip).toEqual({ warningSeconds: 2, darkSeconds: 20, beforeMidnightSeconds: 10 });
-    expect(BROWNOUT.regroup).toEqual({ speed: 0.25, seconds: 10, charges: 1 });
+    expect(BROWNOUT.regroup).toEqual({ speed: 0.25, seconds: 10, charges: 1, inSession: false });
     expect(BROWNOUT.rescue).toEqual({ trustBelow: 30, surgeSeconds: 40 });
     expect(BROWNOUT.finalSizing).toEqual({ holds: 4, holdsWithFastReplacement: 3, drops: 2, waste: 5 });
   });

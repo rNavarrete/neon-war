@@ -614,16 +614,30 @@ describe('ac7: after the rescue', () => {
 });
 
 describe('ac8: Regroup', () => {
+  // Session 0 never hands Regroup over (BROWNOUT.regroup.inSession is false); a later session that
+  // does gives the play this charge at the rescue. The mechanic is tested on that state.
+  const withRegroup = (p: Play): Play => ({
+    ...p,
+    regroup: { charges: BROWNOUT.regroup.charges, handedOver: true, left: 0 },
+  });
+
+  it('is never handed over in Session 0', () => {
+    const after = untilRescue(stepTo(throughC3(), C.c4 + 1));
+    expect(after.rescue).not.toBeNull();
+    expect(after.regroup).toEqual({ charges: 0, handedOver: false, left: 0 });
+    expect(useRegroup(after).ok).toBe(false);
+  });
+
   it('is only available after the rescue', () => {
     const before = stepTo(throughC3(), C.c4 + 1);
-    expect(useRegroup(before).ok).toBe(false);
-    const after = untilRescue(before);
+    expect(useRegroup(withRegroup(before)).ok).toBe(false);
+    const after = withRegroup(untilRescue(before));
     expect(after.regroup.charges).toBe(1);
     expect(useRegroup(after).ok).toBe(true);
   });
 
   it('runs the sim at quarter speed for 10 s', () => {
-    let p = ok(rackServer(ok(rackServer(untilRescue(throughC3()), 's2')), 's3'));
+    let p = ok(rackServer(ok(rackServer(withRegroup(untilRescue(throughC3())), 's2')), 's3'));
     const t0 = p.t;
     p = ok(useRegroup(p));
     p = step(p, 1);
@@ -641,7 +655,7 @@ describe('ac8: Regroup', () => {
   });
 
   it('has one charge per session, kept across rewinds', () => {
-    let p = untilRescue(throughC3());
+    let p = withRegroup(untilRescue(throughC3()));
     p = ok(useRegroup(p));
     p = step(p, 10);
     expect(useRegroup(p).ok).toBe(false);
@@ -1081,7 +1095,18 @@ describe('ac12: pure functions', () => {
     expectSame(big, stepTo(p, 145));
 
     // Regroup: a 12 s step slows exactly the 10 s that Regroup lasts.
-    let q = ok(rackServer(ok(rackServer(untilRescue(throughC3()), 's2')), 's3'));
+    // A session that hands Regroup over (Session 0 does not: BROWNOUT.regroup.inSession).
+    let q = ok(
+      rackServer(
+        ok(
+          rackServer(
+            { ...untilRescue(throughC3()), regroup: { charges: 1, handedOver: true, left: 0 } },
+            's2',
+          ),
+        ),
+        's3',
+      ),
+    );
     q = ok(useRegroup(q));
     let slow = q;
     for (let i = 0; i < 120; i++) slow = step(slow, 0.1);

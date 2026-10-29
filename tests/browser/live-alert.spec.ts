@@ -193,14 +193,14 @@ test('deck keys: 1 and 2 on the keyboard act like the keys, and wait for the car
     expect((await presses(page)).filter((p) => p.acted && p.key === 'one')).toHaveLength(0);
     expect((await hud(page)).deck!.pressed).toBe(before);
     await reach(page, 'rescue', { timeout: 60_000 });
-    await expect.poll(async () => (await hud(page)).deck?.regroup, { timeout: 10_000 }).toBe('ready');
+    // Session 0 hands over no Regroup (BROWNOUT.regroup.inSession), so key 1 stays empty.
+    expect((await hud(page)).deck?.regroup).toBe('hidden');
   });
 
-  await test.step('after the scene, 1 runs Regroup once', async () => {
+  await test.step('after the scene, 1 does nothing: no Regroup in Session 0', async () => {
     const p = await pressDigit(page, '1');
-    expect(p).toMatchObject({ key: 'one', via: 'key', acted: true });
-    await expect.poll(async () => (await hud(page)).regroup.spent, { timeout: 30_000 }).toBe(true);
-    expect((await pressDigit(page, '1')).acted).toBe(false);
+    expect(p).toMatchObject({ key: 'one', via: 'key', acted: false });
+    expect((await hud(page)).regroup.spent).toBe(false);
   });
 
   await test.step('paused at the midnight forecast, the keys wait', async () => {

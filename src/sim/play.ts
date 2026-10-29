@@ -222,7 +222,8 @@ function failed(play: Play, cause: FailureCause, by: RewindBy): Play {
 /**
  * The crew break in: the load balancer goes between the gateway and every server, the overclocked
  * server's kit fries (back to stock, revived if it cooked), the surge's power dip ends, the retry
- * pile settles, Ozzie fronts his credits and Mika hands over Regroup (once per session).
+ * pile settles, Ozzie fronts his credits and Mika hands over Regroup (once per session, where the
+ * session has it: Session 0 does not).
  */
 export function applyRescue(play: Play, now: number, by: RescueCause): Play {
   let board = play.session.board;
@@ -254,7 +255,10 @@ export function applyRescue(play: Play, now: number, by: RescueCause): Play {
     dips: play.dips.map((d) => (d.darkAt <= now && d.endsAt > now ? { ...d, endsAt: now } : d)),
     rescue: { at: now, by },
     crewMet: true,
-    regroup: play.regroup.handedOver ? play.regroup : { charges: REGROUP.charges, handedOver: true, left: 0 },
+    regroup:
+      play.regroup.handedOver || !REGROUP.inSession
+        ? play.regroup
+        : { charges: REGROUP.charges, handedOver: true, left: 0 },
   };
 }
 

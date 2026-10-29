@@ -66,7 +66,7 @@ gives the number, the crew argue numbers in C5, and C6 is the player alone.
 | C2  | 23:55:10 (0:45)    | Board  | **Solace banner**: "Priority service, 200 credits." Pay, Ignore or Bin. The chart shows 30 against 60: nothing to protect against. | overprovisioning                              |
 | C3  | 23:55:55 (1:30)    | Board  | **Bigger or more?** Forecast: demand climbing to 90. The tray offers a **bigger box** (scale up: swap the server for one twice its size) beside a second server. A second server racked now sits idle, because the gateway feeds one part only. Doing nothing: the server overheats and dies, and TRIAGE offers its stream replay. | scale up, scale out, headroom |
 | C4  | 23:57:10 (2:45)    | Board  | **District surge**, a scripted near-loss: 250 req/s warned 10 s ahead; the big box pegs, a power dip takes it dark, retries climb toward 375, the database times out. Optional: **cut the laundry floor loose** (about 40 req/s). | single point of failure, cascading failure, retry storm, load shedding |
-| C5  | 23:58:00 (3:35)    | Scene, then board | **Rescue.** The crew break into her goggles (the one full-immersive moment), drop a load balancer, Ozzie opens his tab, Mika hands over Regroup. The big box cooked; the crew put a stock 60 back in its place. Surge settles to 120: 3 servers behind the balancer. Mika says two, Ozzie says six, Rei says count it yourself. | load balancer, horizontal scaling, health check |
+| C5  | 23:58:00 (3:35)    | Scene, then board | **Rescue.** The crew break into her goggles (the one full-immersive moment), drop a load balancer, Ozzie opens his tab. The big box cooked; the crew put a stock 60 back in its place. Surge settles to 120: 3 servers behind the balancer. Mika says two, Ozzie says six, Rei says count it yourself. | load balancer, horizontal scaling, health check |
 | C6  | 23:59:00 (4:35)    | Board  | **Midnight, your call.** Forecast 150 req/s, one rack loses power about 10 s before midnight for 20 s. No sizing question: the player builds the count, and the debrief grades the servers actually running at midnight. 150 ÷ 60 = 2.5, so 3 hold the peak and **4** ride out the dip. | capacity planning, peak vs average, redundancy, N+1 |
 | C7  | 00:00:00 (5:35)    | Board  | **Scale down** (optional, 30 s): fireworks; demand falls to 40 within 20 s while upkeep keeps ticking. Decommission down to 2. | scale down, elasticity, cost   |
 | C8  | 00:00:30 (6:05)    | Scene  | **Debrief.** Goggles up. Rei grades the night; terms named in three groups (sizing, scaling, failure); Night Book page 1, "Demand decides the design"; the interview-version card. | everything above            |
@@ -141,7 +141,7 @@ behind it and **health-checks** them: a server that is dark, dead or still booti
 | Overheating             | a server over 100% load for 8 s dies                                                        |
 | Retries                 | failed requests come back: demand rises by up to 50% while errors last                      |
 | Power dips              | 2 s flicker warning, then the part is dark for 20 s; scripted in the surge, one seeded dip 10 s before midnight |
-| Regroup                 | quarter speed for 10 s, once per session, handed over at the rescue                         |
+| Regroup                 | not in Session 0 (Rolando, 29 Oct 2026: not a tutorial mechanic); the code keeps it for a later session (quarter speed for 10 s, once, `BROWNOUT.regroup.inSession`) |
 | Rescue trigger          | trust under 30, or 40 s into the district surge                                             |
 | Final sizing            | 4 servers ride out the dip; 3 hold only with a fast replacement; 2 drop requests; 5 or more hold but are graded as waste |
 | Debrief grade           | dropped requests, wasted credits, trust left, banner choice, Ozzie's tab, whether the player scaled down |
@@ -183,7 +183,7 @@ Desktop only, 16:9, built at 1920x1080 and scaled to fit.
 
 **Board HUD:** the job card at the start; midnight countdown and in-world clock; demand-versus-capacity chart
 (the main readout); trust
-and credits; parts tray with locked slots; Regroup button and its one charge; surge forecast warning with its
+and credits; parts tray with locked slots; surge forecast warning with its
 number; power-dip flicker warning on the part about to go dark; block chat and Lux's stream chat; crew and
 TRIAGE barks; packet and part load readouts; the Solace banner with Pay, Ignore and Bin; the midnight forecast
 before the final surge; the start-of-C1 hint on the alert band until the first server is placed.

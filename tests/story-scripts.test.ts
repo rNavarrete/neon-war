@@ -32,9 +32,14 @@ describe('story scripts', () => {
     const c5 = SCRIPTS.C5;
     const sceneIds = Object.keys(LINES).filter(
       (id) =>
-        id.startsWith('C5.') && LINES[id as keyof typeof LINES].kind === 'scene' && id !== 'C5.rei.rewind',
+        id.startsWith('C5.') &&
+        LINES[id as keyof typeof LINES].kind === 'scene' &&
+        id !== 'C5.rei.rewind' &&
+        id !== 'C5.mika.04',
     );
     expect(c5.steps.map((s) => s.lineId)).toEqual(sceneIds);
+    // Mika's Regroup hand-over is not in Session 0 (BROWNOUT.regroup.inSession).
+    expect(c5.steps.map((s) => s.lineId)).not.toContain('C5.mika.04');
     expect(c5.backdrop).toBe('art/bg/immersive.webp');
     expect(c5.steps.every((s) => !Object.keys(s).includes('at'))).toBe(true);
   });

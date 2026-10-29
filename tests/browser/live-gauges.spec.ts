@@ -428,44 +428,30 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expectCrewWordsOnly([a.headline, a.sub, a.chip, g.strip, g.sub, room.label]);
   });
 
-  await test.step('after the rescue: Regroup is ready, a click slows the night to a quarter, then it is spent', async () => {
+  await test.step('after the rescue: no Regroup in Session 0, key 1 stays empty and the night runs at full speed', async () => {
     // The C5 scene holds the board.
     await expect
       .poll(async () => (await snap(page)).story?.scriptId ?? null, { timeout: 15_000, intervals: [25] })
       .toBe('C5');
     expect((await lane(page)).paused).toBe(true);
     await reach(page, 'rescue');
-    await expect
-      .poll(async () => (await lane(page)).deck.regroup, { timeout: 10_000, intervals: [25] })
-      .toBe('ready');
-    let h = await lane(page);
-    expect(h.deck.keys.one.lit).toBe(true);
-    expect(h.deck.pulse).toBeGreaterThanOrEqual(0.75);
-    expect(h.deck.pulse).toBeLessThanOrEqual(1);
-    await clickKey(page, 'one');
-    // Regroup lasts about half a wall second at speed 20, so assert on the very snapshot that first
-    // shows it active rather than reading the hook a second time.
-    await expect
-      .poll(
-        async () => {
-          h = await lane(page);
-          return h.deck.regroup;
-        },
-        { timeout: 3_000, intervals: [10] },
-      )
-      .toBe('active');
-    expect(h.deck.presses.at(-1)).toMatchObject({ key: 'one', via: 'click', acted: true });
-    expect(h.timeScale).toBe(0.25);
-    expect(h.deck.ring).toBeGreaterThan(0);
-    expect(h.deck.ring).toBeLessThanOrEqual(1);
+    const h = await lane(page);
+    // Regroup is kept for a later session (BROWNOUT.regroup.inSession).
+    expect(h.deck.regroup).toBe('hidden');
     expect(h.deck.keys.one.lit).toBe(false);
-    await shot(page, 'live-gauges-regroup');
-    await expect
-      .poll(async () => (await lane(page)).deck.regroup, { timeout: 15_000, intervals: [50] })
-      .toBe('spent');
-    h = await lane(page);
     expect(h.timeScale).toBe(1);
     expect(h.deck.ring).toBe(0);
+    // A click on the empty key is counted and does nothing.
+    await clickKey(page, 'one');
+    await expect
+      .poll(async () => (await lane(page)).deck.presses.at(-1)?.key ?? null, {
+        timeout: 3_000,
+        intervals: [10],
+      })
+      .toBe('one');
+    const after = await lane(page);
+    expect(after.deck.presses.at(-1)).toMatchObject({ key: 'one', via: 'click', acted: false });
+    expect(after.timeScale).toBe(1);
   });
 
   await test.step('C6: the midnight forecast asks nothing; Rei and TRIAGE come on the forecast', async () => {
@@ -488,7 +474,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(h.alert.history.some((e) => e.kind === 'held' && e.at >= MIDNIGHT)).toBe(true);
     expect(h.alert.history.some((e) => e.kind === 'dark')).toBe(false);
     expect(h.title.watching).toBe(h.audience?.watching ?? null);
-    expect(h.deck.regroup).toBe('spent');
+    expect(h.deck.regroup).toBe('hidden');
     await shot(page, 'live-gauges-midnight');
   });
 

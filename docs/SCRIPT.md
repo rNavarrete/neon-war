@@ -152,7 +152,7 @@ while the sim is frozen; the lines after it are barks.
 | C5.mika.03 | scene | Mika | | "Six is a waste. Two will do." |
 | C5.ozzie.03 | scene | Ozzie | | "Two is how you end up here again." |
 | C5.rei.04 | scene | Rei | | "Stop. She can count." (to Lux) "So count." |
-| C5.mika.04 | scene | Mika | Regroup handed over | "One more thing. When it gets fast, hit this. Time slows down. You get it once." |
+| C5.mika.04 | scene | Mika | not played in Session 0 (Regroup is kept for a later session) | "One more thing. When it gets fast, hit this. Time slows down. You get it once." |
 
 ### Back on the board
 

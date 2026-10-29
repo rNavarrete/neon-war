@@ -65,7 +65,11 @@ export const BROWNOUT = {
    */
   retries: { maxDemandRise: 0.5, risePerSecond: 0.05, fallPerSecond: 0.1 },
   powerDip: { warningSeconds: 2, darkSeconds: 20, beforeMidnightSeconds: 10 },
-  regroup: { speed: 0.25, seconds: 10, charges: 1 },
+  /**
+   * Regroup: quarter speed for 10 s, once. Kept for a later session but not handed over in Session 0
+   * (Rolando, 29 Oct 2026: "cool but maybe not a mechanic for the tutorial stage").
+   */
+  regroup: { speed: 0.25, seconds: 10, charges: 1, inSession: false },
   rescue: { trustBelow: 30, surgeSeconds: 40 },
   finalSizing: { holds: 4, holdsWithFastReplacement: 3, drops: 2, waste: 5 },
   /** The C4 script: the power dip takes the overclocked server dark this long into the surge (a draft). */

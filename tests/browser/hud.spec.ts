@@ -170,7 +170,7 @@ for (const choice of ['pay', 'ignore', 'bin'] as const) {
   });
 }
 
-test('the surge, the laundry cut, the dip flicker, Regroup, the midnight forecast and midnight', async ({
+test('the surge, the laundry cut, the dip flicker, the rescue, the midnight forecast and midnight', async ({
   page,
 }) => {
   test.setTimeout(300_000);
@@ -242,7 +242,7 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the midnight forecas
     expect(h!.now).toBeLessThan(C.c4 + 5);
   });
 
-  await test.step('the crew arrive, and Regroup runs quarter speed for 10 s once, then greys out', async () => {
+  await test.step('the crew arrive, and no Regroup is handed over in Session 0', async () => {
     // Tech follow-up 4: while the rescue scene is up the HUD is paused, and the title's dot says HELD.
     await expect
       .poll(async () => (await storyOf(page)).scriptId, { timeout: 60_000, intervals: [50] })
@@ -254,13 +254,11 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the midnight forecas
     await expect
       .poll(async () => (await hud(page)).bark.history, { timeout: 60_000 })
       .toContain('C4.lux.cut');
-    await expect.poll(async () => (await hud(page)).regroup.visible, { timeout: 30_000 }).toBe(true);
+    // Regroup is kept for a later session (BROWNOUT.regroup.inSession): after the crew it stays
+    // hidden and the night runs at full speed.
     const h = await hud(page);
+    expect(h.regroup.visible).toBe(false);
     expect(h.timeScale).toBe(1);
-    await page.mouse.click(h.regroup.button.x, h.regroup.button.y);
-    await expect.poll(async () => (await hud(page)).timeScale, { intervals: [25] }).toBe(0.25);
-    await expect.poll(async () => (await hud(page)).regroup.spent, { timeout: 30_000 }).toBe(true);
-    await expect.poll(async () => (await hud(page)).timeScale).toBe(1);
   });
 
   await waitForNow(page, C.c6 - 20);
@@ -293,7 +291,7 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the midnight forecas
   });
 });
 
-test('Regroup stays hidden until the crew hands it over', async ({ page }) => {
+test('Regroup is hidden at the start of the night', async ({ page }) => {
   await openBoard(page);
   await dismissJobCard(page);
   const h = await hud(page);
