@@ -103,6 +103,37 @@ async function placeServer(page: Page, slotId: string): Promise<string> {
   return (await board(page)).parts.find((p) => p.slot === slotId)!.id;
 }
 
+/**
+ * Drag the BIGGER BOX kit onto `id`, as placeServer places: if the drop did not take (at speed 20 the
+ * C2 banner can open over the table in that instant), answer the banner if it is up and drag again,
+ * at most twice more.
+ */
+async function fitBiggerBox(page: Page, id: string): Promise<void> {
+  const boosted = async () => (await part(page, id))?.boosted === true;
+  for (let i = 0; i < 3 && !(await boosted()); i++) {
+    const banner = await page.evaluate(
+      () =>
+        (window.__neonTest!.state as unknown as { hud?: { banner: { open: boolean; ignore: Pt } } }).hud
+          ?.banner,
+    );
+    if (banner?.open) {
+      await page.waitForTimeout(600);
+      await page.mouse.click(banner.ignore.x, banner.ignore.y);
+      await page.waitForTimeout(200);
+    }
+    await drag(
+      page,
+      (await board(page)).tray.find((t) => t.id === 'overclock')!,
+      (await part(page, id))!,
+    );
+    await expect
+      .poll(boosted, { timeout: 3_000 })
+      .toBe(true)
+      .catch(() => undefined);
+  }
+  await expect.poll(boosted).toBe(true);
+}
+
 /** Page pixels are rounded to a tenth, so allow a tenth on each edge. */
 function expectInside(r: Rect, outer: Rect, what: string): void {
   expect(r.x, `${what} left`).toBeGreaterThanOrEqual(outer.x - 0.1);
@@ -729,11 +760,12 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   await openBoard(page, '&speed=20');
   await recordAnims(page);
   // GAME.md's best play before the crew: one box wired, the kit on it.
+  // The kit goes on before the wires: the clock holds in C1 until the first box is wired, and on the
+  // shorter night C3's climb is under 4 s of real time after that at speed 20.
   const s1 = await placeServer(page, S1);
+  await fitBiggerBox(page, s1);
   await wire(page, 'gateway', s1);
   await wire(page, s1, 'database');
-  await drag(page, b0(await board(page), 'overclock'), (await part(page, s1))!);
-  await expect.poll(async () => (await part(page, s1))?.boosted).toBe(true);
 
   type StoryHook = {
     active: boolean;

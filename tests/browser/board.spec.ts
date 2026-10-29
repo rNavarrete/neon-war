@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { BROWNOUT } from '../../src/sim/brownout';
 import type { BoardTestState } from '../../src/scenes/board/hook';
 import { SERVER_SLOTS } from '../../src/sim/tick';
 
@@ -259,6 +260,8 @@ test('?test&speed=N runs the board N times faster: C3 in under 30 s', async ({ p
   // About 20 sim seconds per real second (frames and the evaluate round trip blur it a little).
   expect(rate).toBeGreaterThan(10);
   expect(rate).toBeLessThan(22);
-  await expect.poll(async () => (await board(page)).now, { timeout: 25_000 }).toBeGreaterThanOrEqual(180);
+  await expect
+    .poll(async () => (await board(page)).now, { timeout: 25_000 })
+    .toBeGreaterThanOrEqual(BROWNOUT.challenges.c3);
   expect(Date.now() - t0).toBeLessThan(30_000);
 });
