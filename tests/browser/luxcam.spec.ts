@@ -1,9 +1,12 @@
 import { type Page, expect, test } from '@playwright/test';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { SERVER_SLOTS } from '../../src/sim/tick';
 import type { LuxCamTestState } from '../../src/scenes/hud/luxcam';
 import type { Rect } from '../../src/scenes/live/layout';
 import { LINES, type LineId } from '../../src/strings';
 import { dismissJobCard, openBoard, reach, shot, snap } from './live/reach';
+
+const C = BROWNOUT.challenges;
 
 // Lux's cam (luxcam-2, luxcam-3), asserted on window.__neonTest.state.hud.luxCam: it draws inside
 // ZONES.cam with the face and the backdrop only inside the 388x230 lens, its art is the texture on
@@ -128,7 +131,7 @@ test('the talk bars: speaking is true exactly while Lux’s line is on the band'
 // ---- luxcam-4: the autopilot night, read as history, with three screenshots ----
 //
 // Two more page loads: the autopilot night to midnight and the goggles (about 49 s, the midnight
-// floor), and a C3 failure staged as story.spec does, with the clock jumped to 170 (about 12 s).
+// floor), and a C3 failure staged as story.spec does, with the clock jumped to 10 s before C3 (about 12 s).
 // exhausted only follows a rewind, and C7 and C8 never fail (src/sim/play.ts), so it cannot sit
 // between cheer and gogglesUp on one night: the night run checks calm or focused, panicking,
 // relieved, cheer and gogglesUp in that order, and the C3 run checks exhausted after its rewind.
@@ -218,7 +221,7 @@ test('the autopilot night on the cam: calm, panicking at the dip, relieved after
   expect(c.frame).toBe('amber');
   await shot(page, 'luxcam-calm');
 
-  // C4: the district surge and the power dip at 305 send her into a panic, with the red frame.
+  // C4: the district surge and the power dip 5 s in send her into a panic, with the red frame.
   await log.during(page, reach(page, 'surge'));
   c = await log.until(page, 'mood panicking', (x) => x.mood === 'panicking');
   expect(c.frame).toBe('red');
@@ -230,7 +233,7 @@ test('the autopilot night on the cam: calm, panicking at the dip, relieved after
   expect(c.frame).toBe('amber');
   await shot(page, 'luxcam-held');
 
-  // 3 s before the debrief (sim 537) the goggles go up and stay up.
+  // 3 s before the debrief (C8) the goggles go up and stay up.
   await log.until(page, 'mood gogglesUp', (x) => x.mood === 'gogglesUp');
 
   // In order: calm or focused, then panicking, then relieved, then cheer, then gogglesUp.
@@ -262,9 +265,9 @@ test('a failure in C3 rewinds the night and the cam shows her exhausted, then le
   expect(id).not.toBeNull();
   await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
   await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);
-  // Skip the quiet C1 and C2 stretch (seconds of wall clock even at speed 20): the run jumps to 23:54:20,
-  // ten seconds before C3, and its checkpoint at 180 is still taken on the way.
-  await page.evaluate(() => window.__neonStory!.setNow(170));
+  // Skip the quiet C1 and C2 stretch (seconds of wall clock even at speed 20): the run jumps to 23:55:45,
+  // ten seconds before C3, and its checkpoint at C3 is still taken on the way.
+  await page.evaluate((t) => window.__neonStory!.setNow(t), C.c3 - 10);
 
   // TRIAGE's replay comes up; click it through (Skip when shown) until the cam has been exhausted.
   const log = new CamLog();
@@ -402,20 +405,20 @@ test.describe('luxcam-5 at 1920x1080', () => {
     expect(errors).toEqual([]);
   });
 
-  test('past midnight: the cheer, then goggles up from 537 s on the tallest pose at its file size', async ({
+  test('past midnight: the cheer, then goggles up from 3 s before the debrief on the tallest pose at its file size', async ({
     page,
   }) => {
     test.setTimeout(45_000);
     const { errors } = await openBoard(page, { speed: 1, autopilot: false });
     await dismissJobCard(page);
     // One wired box so the cam is quiet, then jump the clock past midnight to 4 s before the goggles
-    // go up: the held midnight cheers her, then the goggles go up before the debrief at 540.
+    // go up: the held midnight cheers her, then the goggles go up before the debrief at C8.
     const id = await page.evaluate((cell) => window.__neonShell!.place(cell), SERVER_SLOTS[0]);
     await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
     await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);
-    await page.evaluate(() => window.__neonStory!.setNow(533));
+    await page.evaluate((t) => window.__neonStory!.setNow(t), C.c8 - 7);
     // Software rendering at 1920x1080 runs few frames, so the 220 ms crossfade can take a while on
-    // the HUD clock: the goggles are shot once settled, or from 537.8 on, before the debrief at 540.
+    // the HUD clock: the goggles are shot once settled, or from 2.2 s before the debrief at C8.
     const deadline = Date.now() + 20_000;
     let cheered = false;
     for (;;) {
@@ -446,7 +449,7 @@ test.describe('luxcam-5 at 1920x1080', () => {
             .toEqual([1, 1]);
           await page.screenshot({ path: 'test-results/screens/batch5-midnight.png' });
         }
-        if (c.mood === 'gogglesUp' && (!c.fading || now >= 537.8)) break;
+        if (c.mood === 'gogglesUp' && (!c.fading || now >= C.c8 - 2.2)) break;
       }
       if (Date.now() > deadline) throw new Error(`no gogglesUp on the board; last mood ${c?.mood} at ${now}`);
       await page.waitForTimeout(40);

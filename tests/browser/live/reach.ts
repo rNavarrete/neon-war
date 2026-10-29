@@ -1,6 +1,9 @@
 import { type Page, expect } from '@playwright/test';
 import type { HudTestState } from '../../../src/scenes/hud/hook';
+import { BROWNOUT } from '../../../src/sim/brownout';
 import type { StoryTestState } from '../../../src/story/state';
+
+const C = BROWNOUT.challenges;
 
 // Shared helpers for the Live screen's browser specs (tech-6). Every lane's spec opens the board,
 // clicks the job card away, reaches a moment of the night and saves a screenshot
@@ -98,10 +101,10 @@ export type Moment = 'c1' | 'c3' | 'surge' | 'rescue' | 'midnight';
 
 /** What the helper has seen on the way, for moments that are an event rather than a time. */
 export interface Seen {
-  /** Every distinct hud.surge.startsAt seen, in order (the C3 climb warns for 180, C4 for 300). */
+  /** Every distinct hud.surge.startsAt seen, in order (the C3 climb warns for C3's start, C4 for C4's). */
   surgeStartsAt: number[];
-  /** The surge warning with startsAt 300 was seen on some read. */
-  surgeAt300: boolean;
+  /** The district surge warning (startsAt C4) was seen on some read. */
+  surgeAtC4: boolean;
   /** The C5 rescue scene (story.scriptId 'C5') was seen. */
   rescue: boolean;
 }
@@ -119,18 +122,18 @@ interface MomentSpec {
 const MOMENTS: Record<Moment, MomentSpec> = {
   c1: {
     timeout: 10_000,
-    waitsOn: 'hud.jobCard.open === false, hud.paused === false and hud.now >= 15',
-    done: (s) => !!s.hud && !s.hud.jobCard.open && !s.hud.paused && s.hud.now >= 15,
+    waitsOn: `hud.jobCard.open === false, hud.paused === false and hud.now >= ${C.c1}`,
+    done: (s) => !!s.hud && !s.hud.jobCard.open && !s.hud.paused && s.hud.now >= C.c1,
   },
   c3: {
     timeout: 20_000,
-    waitsOn: 'hud.now >= 180',
-    done: (s) => !!s.hud && s.hud.now >= 180,
+    waitsOn: `hud.now >= ${C.c3}`,
+    done: (s) => !!s.hud && s.hud.now >= C.c3,
   },
   surge: {
     timeout: 25_000,
-    waitsOn: 'hud.surge.startsAt === 300 (observed) and hud.now >= 300',
-    done: (s, seen) => seen.surgeAt300 && !!s.hud && s.hud.now >= 300,
+    waitsOn: `hud.surge.startsAt === ${C.c4} (observed) and hud.now >= ${C.c4}`,
+    done: (s, seen) => seen.surgeAtC4 && !!s.hud && s.hud.now >= C.c4,
   },
   rescue: {
     timeout: 40_000,
@@ -169,8 +172,8 @@ export interface ReachOptions {
  * - If the page has not been opened yet, opens the board at speed 20 with autopilot first.
  * - Clicks the job card away, and clicks through every story scene that comes up on the way (the
  *   C5 rescue, a rewind), using Skip when it shows, since a scene holds the run.
- * - 'c1' the board is running at 15 s or later; 'c3' the clock is at 180 s or later; 'surge' the
- *   district surge warning was seen with startsAt 300 and the clock is at 300 or later; 'rescue'
+ * - 'c1' the board is running at C1 or later; 'c3' the clock is at C3 or later; 'surge' the
+ *   district surge warning was seen with startsAt C4 and the clock is at C4 or later; 'rescue'
  *   the C5 scene came up and has been clicked through, back on the board; 'midnight' the in-world
  *   clock reads 00:00.
  *
@@ -183,14 +186,14 @@ export async function reach(page: Page, moment: Moment, opts: ReachOptions = {})
   if (page.url() === 'about:blank') await openBoard(page);
   const started = Date.now();
   const deadline = started + timeout;
-  const seen: Seen = { surgeStartsAt: [], surgeAt300: false, rescue: false };
+  const seen: Seen = { surgeStartsAt: [], surgeAtC4: false, rescue: false };
   const scenes: string[] = [];
   let lastClickAt = 0;
   for (;;) {
     const s = await snap(page);
     const surge = s.hud?.surge;
     if (surge && !seen.surgeStartsAt.includes(surge.startsAt)) seen.surgeStartsAt.push(surge.startsAt);
-    if (surge?.startsAt === 300) seen.surgeAt300 = true;
+    if (surge?.startsAt === C.c4) seen.surgeAtC4 = true;
     if (s.story?.scriptId === 'C5') seen.rescue = true;
     if (spec.done(s, seen)) {
       return { moment, snap: s, hud: s.hud!, seconds: (Date.now() - started) / 1000, scenes, seen };

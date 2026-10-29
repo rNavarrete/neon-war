@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { BROWNOUT } from '../../src/sim/brownout';
 import type { HudTestState } from '../../src/scenes/hud/hook';
 import { type ChatTraceTestState, chatArtOf } from '../../src/scenes/hud/ChatFeedView';
 import type { AudienceTestState, ChatTestState } from '../../src/scenes/live/views/chat';
@@ -283,14 +284,14 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
 
 test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers', async ({ page }) => {
   test.setTimeout(60_000);
-  // At speed 20 one slow frame (about 2 s of sim) can step from before 320 straight to the crew's
-  // arrival at about 322.5, skipping the leave's window: speed 4 gives the window several frames.
+  // At speed 20 one slow frame (about 2 s of sim) can step from before C4 + 20 straight to the crew's
+  // arrival soon after, skipping the leave's window: speed 4 gives the window several frames.
   const { errors } = await openBoard(page, { speed: 4 });
   await reach(page, 'c1');
   // Enter the district surge 18 s in with trust still full, so Lux is alone (no rescue yet) when the
-  // surge-window lines play from 320. The leave needs the crew to be late, which the autopilot's
-  // night never lets happen (its rescue comes at about 309).
-  await page.evaluate(() => window.__neonStory!.setNow(318));
+  // surge-window lines play from C4 + 20. The leave needs the crew to be late, which the autopilot's
+  // night never lets happen (its rescue comes about 10 s into the surge).
+  await page.evaluate((t) => window.__neonStory!.setNow(t), BROWNOUT.challenges.c4 + 18);
   const log = new ChatLog();
   const leave = () => log.rows.find((r) => r.id === 'C4.chat.03') ?? null;
   const recovery = () => {

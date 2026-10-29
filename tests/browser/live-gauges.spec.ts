@@ -2,7 +2,11 @@ import { type Page, expect, test } from '@playwright/test';
 import type { ScopeTestState } from '../../src/scenes/hud/ChartView';
 import type { KeyName } from '../../src/scenes/hud/deck';
 import type { HudTestState } from '../../src/scenes/hud/hook';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { dismissJobCard, hud, openBoard, reach, shot, snap } from './live/reach';
+
+const C = BROWNOUT.challenges;
+const MIDNIGHT = BROWNOUT.clock.midnight;
 
 // The gauges lane's Live views (docs/LIVE.md), asserted on window.__neonTest.state.hud: the title
 // cluster and the clock (gauges-1), and the clear top right of the feed now the dial card is gone.
@@ -75,7 +79,7 @@ test('the room-left bar: red within one sim second of the district surge at spee
   expect(h.headroom!.label).toMatch(/^ROOM LEFT -?\d+% · \d+ of \d+$|^ROOM LEFT · (OVER \+\d+\/s|NO BOX)$/);
 
   await reach(page, 'surge', { timeout: 110_000 });
-  const surgeAt = 300;
+  const surgeAt = C.c4;
   await expect
     .poll(async () => (await hud(page)).now, { timeout: 10_000 })
     .toBeGreaterThanOrEqual(surgeAt + 1);
@@ -249,12 +253,12 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       .toBeGreaterThan(before);
     const last = (await lane(page)).deck.presses.at(-1)!;
     expect(last).toMatchObject({ key: 'two', via: 'key', acted: false });
-    expect(last.at).toBeGreaterThanOrEqual(90);
+    expect(last.at).toBeGreaterThanOrEqual(C.c2);
   });
 
   await test.step('C3: the climb is forecast number first, the map walks its pooled dots', async () => {
     const r = await reach(page, 'c3');
-    expect(r.hud.now).toBeGreaterThanOrEqual(180);
+    expect(r.hud.now).toBeGreaterThanOrEqual(C.c3);
     const h = await lane(page);
     expect(h.deck.bannerOpen).toBe(false);
     expect(h.alert.history.some((e) => e.kind === 'forecast' && e.number === 90)).toBe(true);
@@ -269,7 +273,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     // here on (window.__liveGauges9, a test-only global the game never reads), the key is clicked on
     // the first frame the deck offers the cut, and the asserts run on the frames it kept.
     const key = (await lane(page)).deck.keys.two;
-    await page.evaluate(() => {
+    await page.evaluate((c4) => {
       type H = {
         now: number;
         paused: boolean;
@@ -293,7 +297,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       const look = (): void => {
         const st = window.__neonTest!.state as unknown as { hud: H; story?: { active: boolean } };
         const h = st.hud;
-        if (h.now >= 295 && rec.trail.length < 400)
+        if (h.now >= c4 - 5 && rec.trail.length < 400)
           rec.trail.push(
             `${h.now.toFixed(1)} ${h.paused ? 'held' : 'run'} ${h.alert?.kind} ${h.gauge?.strip} ` +
               `${Math.round(h.gauge?.dropped ?? 0)} ${h.headroom?.state} ${h.deck?.cut}`,
@@ -310,11 +314,11 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
         )
           rec.over = h;
         if (!rec.cut && h.laundry.cut && h.deck?.cut === 'done' && h.map?.laundryDark) rec.cut = h;
-        if (h.now >= 300 && st.story?.active) rec.scene = true;
+        if (h.now >= c4 && st.story?.active) rec.scene = true;
         if (!rec.scene && performance.now() < end) requestAnimationFrame(look);
       };
       look();
-    });
+    }, C.c4);
     // reach runs the night on to the surge moment alongside; the click does not wait for its polling.
     const reaching = reach(page, 'surge');
     // The first frame the deck offers the cut: click it at once.
@@ -334,7 +338,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     await page.mouse.click(key.x, key.y);
     await shot(page, 'live-gauges-surge');
     const reached = await reaching;
-    expect(reached.hud.now).toBeGreaterThanOrEqual(300);
+    expect(reached.hud.now).toBeGreaterThanOrEqual(C.c4);
     type Rec = {
       ready: unknown;
       raid: unknown;
@@ -397,7 +401,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(a.headline).toMatch(/^\d+\/s · NEIGHBOURS REROUTED HERE$/);
     expect(a.headline).not.toContain('RAID');
     expect(a.shownAt).not.toBeNull();
-    expect(a.shownAt!).toBeGreaterThanOrEqual(290);
+    expect(a.shownAt!).toBeGreaterThanOrEqual(C.c4 - 10);
     expect(a.retry).toBeGreaterThanOrEqual(0);
     expect(a.offset).toBeLessThanOrEqual(0);
     // ?test runs the lite flag: the band holds still, as under reduce flicker.
@@ -469,7 +473,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       .poll(async () => (await lane(page)).cues.fired, { timeout: 20_000, intervals: [25] })
       .toEqual(expect.arrayContaining(['C6.rei.01', 'C6.triage.01']));
     const h = await lane(page);
-    expect(h.now).toBeLessThan(510);
+    expect(h.now).toBeLessThan(MIDNIGHT);
     const ids = h.bounds.map((b) => b.id);
     expect(ids).not.toContain('dial');
     expect(ids).not.toContain('sizing');
@@ -481,7 +485,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       .poll(async () => (await lane(page)).map.midnight, { timeout: 5_000, intervals: [25] })
       .toBe(true);
     const h = await lane(page);
-    expect(h.alert.history.some((e) => e.kind === 'held' && e.at >= 510)).toBe(true);
+    expect(h.alert.history.some((e) => e.kind === 'held' && e.at >= MIDNIGHT)).toBe(true);
     expect(h.alert.history.some((e) => e.kind === 'dark')).toBe(false);
     expect(h.title.watching).toBe(h.audience?.watching ?? null);
     expect(h.deck.regroup).toBe('spent');

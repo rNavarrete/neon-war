@@ -111,7 +111,7 @@ test('the Live tour: every zone, the channel and the voice, at the C4 surge and 
   const surge = await reach(page, 'surge');
   const s = await tour(page);
   expectEveryZone(s, 'surge');
-  expect(surge.seen.surgeAt300, 'the district surge warning (startsAt 300) was seen').toBe(true);
+  expect(surge.seen.surgeAtC4, 'the district surge warning (startsAt C4) was seen').toBe(true);
   expect(s.hud.clock, 'surge: hud.clock is before midnight').toMatch(/^23:5\d:\d\d$/);
   expect(s.hud.comms.history, 'surge: hud.comms.history').toContain('C1.triage.01');
   expect(s.hud.map.raid, 'surge: hud.map.raid').toBe(true);

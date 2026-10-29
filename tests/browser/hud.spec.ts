@@ -1,5 +1,9 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { HudTestState } from '../../src/scenes/hud/hook';
+import { BROWNOUT } from '../../src/sim/brownout';
+
+const C = BROWNOUT.challenges;
+const MIDNIGHT = BROWNOUT.clock.midnight;
 
 // The board HUD, driven with the mouse at positions the test hook gives, asserting on
 // window.__neonTest.state.hud. `speed` runs the sim faster (1 to 20) to reach later challenges.
@@ -78,9 +82,9 @@ test('the session opens on the job card, and clicking it away starts C1', async 
   expect(h.paused).toBe(true);
   // Under the job card the band asks nothing yet.
   expect(h.alert?.hint ?? null).toBeNull();
-  // The in-world clock opens at 23:51:30, eight and a half minutes before midnight.
-  expect(h.clock).toBe('23:51:30');
-  expect(h.countdown).toBe('8:30');
+  // The in-world clock opens at 23:54:25, five minutes 35 before midnight.
+  expect(h.clock).toBe('23:54:25');
+  expect(h.countdown).toBe('5:35');
   await page.screenshot({ path: 'test-results/screens/hud-job-card.png' });
 
   await dismissJobCard(page);
@@ -147,7 +151,7 @@ for (const choice of ['pay', 'ignore', 'bin'] as const) {
     // Let the slide-in finish so the buttons are where the hook says.
     await page.waitForTimeout(600);
     const before = await hud(page);
-    expect(before.now).toBeGreaterThanOrEqual(90);
+    expect(before.now).toBeGreaterThanOrEqual(C.c2);
     const p = before.banner[choice];
     await page.mouse.click(p.x, p.y);
     await expect.poll(async () => (await hud(page)).banner.choice).toBe(choice);
@@ -171,15 +175,15 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the midnight forecas
   // Speed 5: the laundry cut is only offered for the few seconds between the surge and the crew.
   await openBoard(page, 5, true);
   await dismissJobCard(page);
-  await waitForNow(page, 280);
+  await waitForNow(page, C.c4 - 20);
 
   await test.step('C4: the district surge is warned with its number at least 10 s ahead', async () => {
     await expect
       .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
-      .toBe(300);
+      .toBe(C.c4);
     const h = await hud(page);
     expect(h.surge?.demand).toBe(250);
-    expect(300 - h.surge!.shownAt!).toBeGreaterThanOrEqual(10);
+    expect(C.c4 - h.surge!.shownAt!).toBeGreaterThanOrEqual(10);
     expect(h.surge?.line).toBe('C4.warn.01');
   });
 
@@ -216,7 +220,7 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the midnight forecas
     // Taken as the surge lands, so the warning (it lingers a few seconds) and the cut both show.
     await page.screenshot({ path: 'test-results/screens/hud-c4.png' });
     // Lux's line about the cut waits in the comms band's queue behind TRIAGE's surge lines. Taken a
-    // few sim seconds late (305 or after), it is still queued when the crew break in at about 310,
+    // few sim seconds late (C4 + 5 or after), it is still queued when the crew break in soon after,
     // and the rescue scene pauses the HUD with it there, so it cannot show until the scene is
     // clicked through (tech follow-up 5). Wait for whichever comes first; the line itself is
     // asserted in bark.history below, after the scene if it came first.
@@ -233,7 +237,7 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the midnight forecas
     const h = await dipSeen;
     expect(h).not.toBeNull();
     expect(h!.dip!.partId).toMatch(/^server-/);
-    expect(h!.now).toBeLessThan(305);
+    expect(h!.now).toBeLessThan(C.c4 + 5);
   });
 
   await test.step('the crew arrive, and Regroup runs quarter speed for 10 s once, then greys out', async () => {
@@ -257,30 +261,30 @@ test('the surge, the laundry cut, the dip flicker, Regroup, the midnight forecas
     await expect.poll(async () => (await hud(page)).timeScale).toBe(1);
   });
 
-  await waitForNow(page, 430);
+  await waitForNow(page, C.c6 - 20);
 
   await test.step('C6: the midnight surge is warned, with no sizing question', async () => {
     await expect
       .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
-      .toBe(450);
+      .toBe(C.c6);
     let h = await hud(page);
-    expect(450 - h.surge!.shownAt!).toBeGreaterThanOrEqual(10);
+    expect(C.c6 - h.surge!.shownAt!).toBeGreaterThanOrEqual(10);
     expect(h.surge?.demand).toBe(150);
     h = await hud(page);
-    expect(h.now).toBeLessThan(510);
+    expect(h.now).toBeLessThan(MIDNIGHT);
     await page.screenshot({ path: 'test-results/screens/hud-c6.png' });
   });
 
   await test.step('the countdown reaches 0:00 at midnight, not before', async () => {
-    await waitForNow(page, 500);
+    await waitForNow(page, MIDNIGHT - 10);
     let h = await hud(page);
-    if (h.now < 509) expect(h.countdown).not.toBe('0:00');
+    if (h.now < MIDNIGHT - 1) expect(h.countdown).not.toBe('0:00');
     await expect
       .poll(async () => (await hud(page)).countdown, { timeout: 60_000, intervals: [25] })
       .toBe('0:00');
     h = await hud(page);
-    expect(h.now).toBeGreaterThanOrEqual(509);
-    await waitForNow(page, 510);
+    expect(h.now).toBeGreaterThanOrEqual(MIDNIGHT - 1);
+    await waitForNow(page, MIDNIGHT);
     h = await hud(page);
     expect(h.clock.startsWith('00:00')).toBe(true);
     expect(h.countdown).toBe('0:00');

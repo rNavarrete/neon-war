@@ -1,5 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { AlertHistoryEntry } from '../../src/scenes/hud/AlertView';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { dismissJobCard, hud, openBoard, reach, shot, snap } from './live/reach';
 
 // The gauges lane's alert band (gauges-3), asserted on window.__neonTest.state.hud.alert: one alert at
@@ -7,6 +8,7 @@ import { dismissJobCard, hud, openBoard, reach, shot, snap } from './live/reach'
 // climbing with the retries.
 
 const RAIDING = ['raid', 'refresh', 'flicker'];
+const C = BROWNOUT.challenges;
 
 test('the alert band: number first, RAID only as a tag, and the raid number climbs past 250 with retries (speed 5)', async ({
   page,
@@ -204,7 +206,7 @@ test('deck keys: 1 and 2 on the keyboard act like the keys, and wait for the car
   await test.step('paused at the midnight forecast, the keys wait', async () => {
     await expect
       .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
-      .toBe(450);
+      .toBe(C.c6);
     await page.keyboard.press('Escape');
     await expect.poll(async () => (await hud(page)).paused, { timeout: 5_000 }).toBe(true);
     const before = (await hud(page)).deck!.pressed;

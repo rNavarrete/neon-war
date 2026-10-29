@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { SERVER_SLOTS } from '../../src/sim/tick';
 import type { TestState } from '../../src/testHook';
 
@@ -7,6 +8,8 @@ import type { TestState } from '../../src/testHook';
 // with `?test&autopilot` playing GAME.md's best-play build (src/game/autopilot.ts).
 
 type Story = NonNullable<TestState['story']>;
+
+const C = BROWNOUT.challenges;
 
 const state = (page: Page) => page.evaluate(() => window.__neonTest!.state);
 const story = async (page: Page): Promise<Story> => (await state(page)).story!;
@@ -92,7 +95,7 @@ test('the cold open waits for a click on every line, then hands over to the boar
   expect(s.sfx).toContain('goggles-on');
   expect((await state(page)).scene).toBe('story');
 
-  // The last click brings the goggles down and hands over to the board at 23:51:45. Even a
+  // The last click brings the goggles down and hands over to the board at 23:54:40. Even a
   // double-click there leaves the job card up to be read.
   // Wait for the short line to finish typing on its own: a click to finish it can land just after
   // it finished and end the scene before the double-click.
@@ -206,8 +209,8 @@ test('the sim triggers the rescue and the board returns with the load balancer u
     .poll(async () => (await story(page)).scriptId, { timeout: 90_000, intervals: [50] })
     .toBe('C5');
   const now = (await state(page)).hud as unknown as { now: number };
-  expect(now.now).toBeGreaterThan(300);
-  expect(now.now).toBeLessThan(345.1);
+  expect(now.now).toBeGreaterThan(C.c4);
+  expect(now.now).toBeLessThan(C.c4 + BROWNOUT.rescue.surgeSeconds + 0.1);
   expect((await story(page)).backdrop).toMatch(/immersive/);
   await page.screenshot({ path: 'test-results/screens/rescue-live.png' });
   await playThrough(page);
@@ -217,7 +220,7 @@ test('the sim triggers the rescue and the board returns with the load balancer u
   expect(b.parts.some((p) => p.kind === 'balancer')).toBe(true);
 });
 
-test("a real overheat in C3 plays TRIAGE's replay and rewinds credits, parts and trust to 23:54:30", async ({
+test("a real overheat in C3 plays TRIAGE's replay and rewinds credits, parts and trust to 23:55:55", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -238,11 +241,11 @@ test("a real overheat in C3 plays TRIAGE's replay and rewinds credits, parts and
   // Speed 20 runs on as soon as the board is back, so the rewind target comes from the sim's record.
   const b = (await state(page)).board as unknown as Board & { rewinds: { at: number; to: number }[] };
   expect(b.rewinds).toHaveLength(1);
-  expect(b.rewinds[0].to).toBe(180);
-  expect(b.rewinds[0].at).toBeGreaterThan(180);
+  expect(b.rewinds[0].to).toBe(C.c3);
+  expect(b.rewinds[0].at).toBeGreaterThan(C.c3);
   // Back as it was at the start of C3: the one server and full trust.
   const h = (await state(page)).hud as unknown as { now: number; sim: { trust: number } };
-  expect(h.now).toBeGreaterThanOrEqual(180);
+  expect(h.now).toBeGreaterThanOrEqual(C.c3);
   expect(h.sim.trust).toBe(100);
   expect(b.parts.filter((p) => p.kind === 'server')).toHaveLength(1);
 });
@@ -307,9 +310,9 @@ test('one test plays the whole session from the title to Night Book page 1 with 
 });
 
 const REWINDS = [
-  { kind: 'replay', now: 200, target: 180, lines: ['C3.triage.rewind', 'C3.lux.rewind'], look: 'vhs' },
-  { kind: 'rei-surge', now: 380, target: 300, lines: ['C5.rei.rewind'], look: 'crew' },
-  { kind: 'rei-midnight', now: 500, target: 450, lines: ['C6.rei.fail'], look: 'crew' },
+  { kind: 'replay', now: C.c3 + 20, target: C.c3, lines: ['C3.triage.rewind', 'C3.lux.rewind'], look: 'vhs' },
+  { kind: 'rei-surge', now: C.c5 + 20, target: C.c4, lines: ['C5.rei.rewind'], look: 'crew' },
+  { kind: 'rei-midnight', now: C.c7 - 10, target: C.c6, lines: ['C6.rei.fail'], look: 'crew' },
 ] as const;
 
 for (const r of REWINDS) {

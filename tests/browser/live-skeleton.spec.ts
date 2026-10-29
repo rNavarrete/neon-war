@@ -1,7 +1,10 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { LiveTestState, PerfSection, PerfTestState } from '../../src/scenes/live/hook';
 import { CARDS, LAYOUT_VERSION, ZONES, ZONE_IDS, pageRect } from '../../src/scenes/live/layout';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { dismissJobCard, openBoard, reach, shot } from './live/reach';
+
+const C = BROWNOUT.challenges;
 
 // The Live screen's skeleton (tech-3): the twelve zones reported on the page, the placeholders the
 // registry still draws, and the perf section, asserted on window.__neonTest.state.live and .perf.
@@ -73,7 +76,7 @@ test('the Live skeleton: zones on the page, ten placeholders, perf numbers and l
 // with autopilot inside their budgets. Each test records its wall-clock seconds as annotations
 // ('boot' and 'reach'); docs/LIVE.md ("Browser test budget") lists the measured floors.
 
-test('reach surge at speed 20 with autopilot: surge.startsAt 300 seen and now >= 300 within 25 s', async ({
+test('reach surge at speed 20 with autopilot: surge.startsAt C4 seen and now >= C4 within 25 s', async ({
   page,
 }, testInfo) => {
   test.setTimeout(60_000);
@@ -88,9 +91,9 @@ test('reach surge at speed 20 with autopilot: surge.startsAt 300 seen and now >=
       description: `reach('surge') ${r.seconds.toFixed(1)} s (hud.now ${r.hud.now.toFixed(1)})`,
     },
   );
-  expect(r.seen.surgeAt300).toBe(true);
-  expect(r.seen.surgeStartsAt).toContain(300);
-  expect(r.hud.now).toBeGreaterThanOrEqual(300);
+  expect(r.seen.surgeAtC4).toBe(true);
+  expect(r.seen.surgeStartsAt).toContain(C.c4);
+  expect(r.hud.now).toBeGreaterThanOrEqual(C.c4);
   expect(r.seconds).toBeLessThan(25);
   await shot(page, 'live-reach-surge');
   expect(errors).toEqual([]);
@@ -271,7 +274,7 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
       .poll(
         async () => {
           const n = await hudState(page);
-          const shown = n.surge?.startsAt === 300 && n.bounds.some((b) => b.id === 'alert' && b.visible);
+          const shown = n.surge?.startsAt === C.c4 && n.bounds.some((b) => b.id === 'alert' && b.visible);
           if (shown) h = n;
           return shown;
         },
@@ -290,7 +293,7 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
   await test.step('C6: the midnight forecast, with no sizing prompt and no dial card', async () => {
     await expect
       .poll(async () => (await hudState(page)).surge?.startsAt ?? null, { timeout: 120_000, intervals: [25] })
-      .toBe(450);
+      .toBe(C.c6);
     const ids = (await expectRestaged(page, 'C6')).map((b) => b.id);
     expect(ids).not.toContain('sizing');
     expect(ids).not.toContain('dial');
@@ -325,7 +328,7 @@ test('the power-dip mark sits on its part: |hud.dipMark - board.parts[id]| <= 2 
   expect(before.dipMark).toBeNull();
   await expect
     .poll(async () => (await hudState(page)).now, { timeout: 90_000, intervals: [100] })
-    .toBeGreaterThanOrEqual(290);
+    .toBeGreaterThanOrEqual(C.c4 - 10);
   // The warning is up for 2 sim seconds: watch for it from inside the page, every frame.
   const read = await page.evaluate(
     () =>

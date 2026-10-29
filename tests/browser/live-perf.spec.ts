@@ -1,6 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { PerfSection } from '../../src/scenes/live/hook';
 import { ZONE_IDS } from '../../src/scenes/live/layout';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { openBoard, reach, shot } from './live/reach';
 
 // The perf hook (tech-7): perf.* is measured from walks of both scenes' display lists once a second.
@@ -80,7 +81,7 @@ test('perf: every view within its budget, the totals within 750 / 110 and the pa
   expect(first.samples).toBeGreaterThan(0);
 
   await reach(page, 'surge');
-  const surge = await sampleFrom(page, 300);
+  const surge = await sampleFrom(page, BROWNOUT.challenges.c4);
   expectWithinBudgets(surge, 'surge');
   testInfo.annotations.push({ type: 'surge', description: describe(surge) });
 

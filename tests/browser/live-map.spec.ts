@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import type { HudTestState } from '../../src/scenes/hud/hook';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { hud, openBoard, reach, shot } from './live/reach';
+
+const C = BROWNOUT.challenges;
 
 // The CITY GRID map (gauges-7), asserted on window.__neonTest.state.hud.map: pooled dots that stop
 // growing at steady demand, more of them in the district surge than at the evening climb, the raid
@@ -33,7 +36,7 @@ test('the city map: pooled dots, more in the surge, the raid, the laundry cut an
   await test.step('steady at the climb (90/s): the pool does not grow over 3 s', async () => {
     await expect
       .poll(async () => (await hud(page)).now, { timeout: 70_000, intervals: [100] })
-      .toBeGreaterThanOrEqual(245);
+      .toBeGreaterThanOrEqual(C.c3 + BROWNOUT.demand.climbRampSeconds + 5);
     let h = await hud(page);
     expect(h.sim.block).toBe(90);
     const pool = h.map!.dots.pool;
@@ -57,7 +60,7 @@ test('the city map: pooled dots, more in the surge, the raid, the laundry cut an
   await test.step('the district surge: raid outlines, then 1.6x the dots at 250', async () => {
     await expect
       .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
-      .toBe(300);
+      .toBe(C.c4);
     await expect.poll(async () => (await map(page)).raid, { timeout: 5_000, intervals: [25] }).toBe(true);
     m = await map(page);
     expect(m.neighboursCut).toBe(true);

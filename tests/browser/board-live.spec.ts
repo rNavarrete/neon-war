@@ -6,6 +6,9 @@ import { inboundLaneRates } from '../../src/scenes/board/channel';
 import { openBoard as liveOpen, reach as liveReach, shot } from './live/reach';
 import { BALANCER_SPOT, FIXED_ANCHOR, parseCell } from '../../src/sim/grid';
 import { SERVER_SLOTS } from '../../src/sim/tick';
+import { BROWNOUT } from '../../src/sim/brownout';
+
+const C = BROWNOUT.challenges;
 
 // The board on the Live screen (board lane, M1): the feed's tilted table, its parts and slots inside
 // the feed zone, the skyline above it and no goggles overlay. Positions come from the test hook in
@@ -602,16 +605,16 @@ test('C3 (board-5, board-6): an idle second box reads UNFED with no packets; the
 
   // A second box racked long before the climb: nothing can feed it (the gateway feeds one part
   // only). It goes down right after the first is wired, before the C2 banner can open over the
-  // table, so it is long online by C3 (racked at board.now 150 it could still be booting when the
+  // table, so it is long online by C3 (racked just before C3 it could still be booting when the
   // hot box died at speed 20).
   const s2 = await placeServer(page, S4);
   const idle = await watch(page, 'the second box online in C3', (b) => {
     const p = b.parts.find((x) => x.id === s2);
-    return b.now >= 180 && p?.status === 'online';
+    return b.now >= C.c3 && p?.status === 'online';
   });
   for (let i = 0; i < 4; i++) {
     const b = i === 0 ? idle : await board(page);
-    if (b.now >= 210) break;
+    if (b.now >= C.c3 + 30) break;
     const p = b.parts.find((x) => x.id === s2)!;
     expect(p.unfed, 'the idle box is UNFED').toBe(true);
     expect(p.tags).toEqual(['UNFED']);
@@ -1289,14 +1292,14 @@ test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behi
   page,
 }) => {
   test.setTimeout(120_000);
-  // Best play at speed 12 to the midnight forecast (440, the surge at 450): no sizing prompt holds
+  // Best play at speed 12 to the midnight forecast (10 s before C6): no sizing prompt holds
   // the ghost back.
   await liveOpen(page, { speed: 12 });
   await liveReach(page, 'c1');
   const deadline = Date.now() + 90_000;
   for (;;) {
     const h = await hudBits(page);
-    if (h?.surge?.startsAt === 450) break;
+    if (h?.surge?.startsAt === C.c6) break;
     if (Date.now() > deadline) throw new Error('the midnight forecast never came');
     await clickStoryOn(page);
     await page.waitForTimeout(40);
