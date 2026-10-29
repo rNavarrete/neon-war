@@ -90,11 +90,11 @@ describe('ac1: one constants object', () => {
     expect(BROWNOUT.retries.maxDemandRise).toBe(0.5);
     expect(BROWNOUT.powerDip).toEqual({ warningSeconds: 2, darkSeconds: 20, beforeMidnightSeconds: 10 });
     expect(BROWNOUT.regroup).toEqual({ speed: 0.25, seconds: 10, charges: 1 });
-    expect(BROWNOUT.rescue).toEqual({ trustBelow: 30, surgeSeconds: 45 });
+    expect(BROWNOUT.rescue).toEqual({ trustBelow: 30, surgeSeconds: 40 });
     expect(BROWNOUT.finalSizing).toEqual({ holds: 4, holdsWithFastReplacement: 3, drops: 2, waste: 5 });
   });
 
-  it('puts midnight 8:30 after the clock opens at 23:51:30', () => {
+  it('puts midnight 5:35 after the clock opens at 23:54:25', () => {
     const [h, m, s] = BROWNOUT.clock.opensAt.split(':').map(Number);
     expect(h * 3600 + m * 60 + s + BROWNOUT.clock.midnight).toBe(24 * 3600);
     expect(BROWNOUT.challenges.c7).toBe(BROWNOUT.clock.midnight);
@@ -150,63 +150,63 @@ describe('ac2: base demand', () => {
 
 describe('ac3: demandAt', () => {
   it('C1: 30 req/s', () => {
-    for (const t of [15, 45, 89.9]) expect(demandAt(t)).toBe(30);
+    for (const t of [15, 30, 44.9]) expect(demandAt(t)).toBe(30);
   });
 
   it('C2: 30 req/s', () => {
-    for (const t of [90, 120, 179.9]) expect(demandAt(t)).toBe(30);
+    for (const t of [45, 60, 89.9]) expect(demandAt(t)).toBe(30);
   });
 
-  it('C3: ramps from 30 up to 90 and holds there', () => {
-    expect(demandAt(180)).toBe(30);
-    expect(demandAt(210)).toBe(60);
-    expect(demandAt(240)).toBe(90);
-    expect(demandAt(299.9)).toBe(90);
-    for (let t = 180; t < 240; t += 5) expect(demandAt(t + 5)).toBeGreaterThan(demandAt(t));
+  it('C3: ramps from 30 up to 90 over 45 s and holds there', () => {
+    expect(demandAt(90)).toBe(30);
+    expect(demandAt(112.5)).toBe(60);
+    expect(demandAt(135)).toBe(90);
+    expect(demandAt(164.9)).toBe(90);
+    for (let t = 90; t < 135; t += 5) expect(demandAt(t + 5)).toBeGreaterThan(demandAt(t));
   });
 
   it('C4: the district surge is 250, warned 10 s ahead', () => {
-    expect(demandAt(299.9)).toBe(90);
-    for (const t of [300, 330, 359.9]) expect(demandAt(t)).toBe(250);
-    expect(forecastAt(290)).toEqual({ startsAt: 300, demand: 250 });
+    expect(demandAt(164.9)).toBe(90);
+    for (const t of [165, 190, 214.9]) expect(demandAt(t)).toBe(250);
+    expect(forecastAt(155)).toEqual({ startsAt: 165, demand: 250 });
   });
 
   it('C5: the surge tail settles to 120', () => {
-    for (const t of [360, 400, 449.9]) expect(demandAt(t)).toBe(120);
+    for (const t of [215, 245, 274.9]) expect(demandAt(t)).toBe(120);
   });
 
-  it('C6: climbs to 150, peaking at midnight (t = 510)', () => {
-    expect(demandAt(510)).toBe(150);
+  it('C6: climbs to 150, peaking at midnight (t = 335)', () => {
+    expect(demandAt(335)).toBe(150);
     let peak = 0;
-    for (let t = 450; t <= 510; t += 0.5) {
+    for (let t = 275; t <= 335; t += 0.5) {
       expect(demandAt(t)).toBeLessThanOrEqual(150);
       peak = Math.max(peak, demandAt(t));
     }
     expect(peak).toBe(150);
-    expect(demandAt(480)).toBeLessThan(150);
-    expect(demandAt(511)).toBeLessThan(150);
+    expect(demandAt(305)).toBe(135);
+    expect(demandAt(336)).toBe(144.5);
   });
 
   it('C7: falls from 150 to 40 within 20 s after midnight', () => {
-    expect(demandAt(510)).toBe(150);
-    expect(demandAt(520)).toBe(95);
-    expect(demandAt(530)).toBe(40);
-    expect(demandAt(560)).toBe(40);
-    for (let t = 510; t < 530; t += 2) expect(demandAt(t + 2)).toBeLessThan(demandAt(t));
+    expect(demandAt(335)).toBe(150);
+    expect(demandAt(345)).toBe(95);
+    expect(demandAt(355)).toBe(40);
+    expect(demandAt(385)).toBe(40);
+    for (let t = 335; t < 355; t += 2) expect(demandAt(t + 2)).toBeLessThan(demandAt(t));
   });
 });
 
 describe('ac4: forecastAt', () => {
   it('reports the C4 surge at least 10 s before it starts', () => {
-    expect(forecastAt(289)).toBeNull();
-    for (const t of [290, 295, 299.9]) expect(forecastAt(t)).toEqual({ startsAt: 300, demand: 250 });
-    expect(forecastAt(300)?.demand).not.toBe(250);
+    expect(forecastAt(154)).toBeNull();
+    for (const t of [155, 160, 164.9]) expect(forecastAt(t)).toEqual({ startsAt: 165, demand: 250 });
+    expect(forecastAt(165)?.demand).not.toBe(250);
   });
 
   it('reports the C6 final surge at least 10 s before it starts', () => {
-    expect(forecastAt(439)).toBeNull();
-    for (const t of [440, 445, 449.9]) expect(forecastAt(t)).toEqual({ startsAt: 450, demand: 150 });
-    expect(forecastAt(450)).toBeNull();
+    expect(forecastAt(264)).toBeNull();
+    for (const t of [265, 270, 274.9]) expect(forecastAt(t)).toEqual({ startsAt: 275, demand: 150 });
+    expect(forecastAt(275)).toBeNull();
   });
 
   it('every surge is forecast before demand reaches it', () => {
