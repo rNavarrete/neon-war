@@ -6,6 +6,7 @@ import { run } from '../game/run';
 import type { LineId } from '../strings';
 import { provideTestState } from '../testHook';
 import type { DebriefResults } from './debrief';
+import type { Box } from './rain';
 import type { RewindKind } from './rewind';
 import { seenScenes } from './seen';
 import { isVoiced } from '../game/voice';
@@ -65,6 +66,8 @@ export interface StoryTestState {
     title: string | null;
   } | null;
   fireworks: { bursts: number; flashes: number };
+  /** Lux's room only: the window glass and the box round the rain drawn this frame (null otherwise). */
+  rain: { glass: Box; drawn: { x: number; y: number; w: number; h: number } | null } | null;
   runNow: number;
   runHeld: boolean;
 }
@@ -98,6 +101,7 @@ export const storyState: Omit<StoryTestState, 'runNow' | 'runHeld' | 'seen'> = {
   finished: [],
   debrief: null,
   fireworks: { bursts: 0, flashes: 0 },
+  rain: null,
 };
 
 declare module '../testHook' {

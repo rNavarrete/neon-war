@@ -437,3 +437,24 @@ test('reduce flicker keeps the debrief fireworks without flashes', async ({ page
   expect(s.debrief?.results.banner).toBeNull();
   expect(s.debrief?.results.trustLeft).toBe(100);
 });
+
+test("the rain in Lux's room falls only on the window glass, never over the room", async ({ page }) => {
+  await boot(page, '/?test&scene=story');
+  await expect.poll(async () => (await story(page))?.scriptId, { timeout: 15_000 }).toBe('C0');
+  const boxes: { glass: { x: number; y: number; w: number; h: number }; drawn: unknown }[] = [];
+  for (let i = 0; i < 10; i++) {
+    const s = await story(page);
+    expect(s.rain).not.toBeNull();
+    boxes.push(s.rain!);
+    await page.waitForTimeout(150);
+  }
+  for (const { glass, drawn } of boxes) {
+    expect(drawn).not.toBeNull();
+    const d = drawn as { x: number; y: number; w: number; h: number };
+    expect(d.x).toBeGreaterThanOrEqual(glass.x - 0.5);
+    expect(d.y).toBeGreaterThanOrEqual(glass.y - 0.5);
+    expect(d.x + d.w).toBeLessThanOrEqual(glass.x + glass.w + 0.5);
+    expect(d.y + d.h).toBeLessThanOrEqual(glass.y + glass.h + 0.5);
+  }
+  await page.screenshot({ path: 'test-results/screens/story-room-rain.png' });
+});

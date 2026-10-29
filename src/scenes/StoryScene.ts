@@ -15,6 +15,7 @@ import { LABELS } from '../story/labels';
 import { SCRIPTS, type SceneScript, type ScriptStep, chatText, isChat, stepsFor } from '../story/scripts';
 import { markSeen, wasSeen } from '../story/seen';
 import { playSfx, playVoice, setLiveView, stopSfx, storyEnd, storyState } from '../story/state';
+import { type Drop, ROOM_GLASS, STREAK, type Segment, clipToGlass, fall, seedDrops } from '../story/rain';
 import type { RewindKind } from '../story/rewind';
 import { FrameClock, H, VnView, W, cover, fileKey, preloadView } from '../story/view';
 import { testHookEnabled } from '../testHook';
@@ -30,7 +31,10 @@ const EXTRA = {
 
 /** Seconds the rewind animation runs after the last line. */
 const REWIND_SECONDS = 1.4;
-const RAIN_DROPS = 90;
+const RAIN_DROPS = 60;
+/** Slow drops running down the pane. */
+const TRICKLES = 9;
+const TRICKLE_TRAIL = 46;
 
 /**
  * Visual-novel scene player: the cold open, the rescue and the rewind screens. Lines play from the
@@ -50,7 +54,10 @@ export class StoryScene extends Phaser.Scene {
   private clock: Phaser.GameObjects.Text | null = null;
   private tracking: Phaser.GameObjects.Rectangle[] = [];
   private rain: Phaser.GameObjects.Graphics | null = null;
-  private drops: { x: number; y: number; v: number }[] = [];
+  private drops: Drop[] = [];
+  private trickles: Drop[] = [];
+  private readonly seg: Segment = { x1: 0, y1: 0, x2: 0, y2: 0 };
+  private readonly drawn: Segment = { x1: 0, y1: 0, x2: 0, y2: 0 };
   private flickerPending = false;
   private frames = new FrameClock();
 
@@ -86,6 +93,7 @@ export class StoryScene extends Phaser.Scene {
     this.clock = null;
     this.tracking = [];
     this.rain = null;
+    storyState.rain = null;
 
     if (s.backdrop) cover(this, fileKey(s.backdrop));
     if (s.look === 'vhs') this.drawReplay();
@@ -209,12 +217,11 @@ export class StoryScene extends Phaser.Scene {
 
   private drawRoom(): void {
     this.add.rectangle(0, 0, W, H, 0x05070f, 0.25).setOrigin(0);
+    // Rain falls outside: it shows only on the window glass, never over the room (src/story/rain.ts).
     this.rain = this.add.graphics().setDepth(2);
-    this.drops = Array.from({ length: RAIN_DROPS }, () => ({
-      x: Math.random() * W,
-      y: Math.random() * H,
-      v: 900 + Math.random() * 600,
-    }));
+    this.drops = seedDrops(RAIN_DROPS, ROOM_GLASS, 900, 1500, Math.random);
+    this.trickles = seedDrops(TRICKLES, ROOM_GLASS, 18, 60, Math.random);
+    storyState.rain = { glass: { ...ROOM_GLASS }, drawn: null };
     if (this.script.photo) {
       this.add.image(1180, 560, fileKey(EXTRA.photo)).setScale(0.42).setAngle(-6).setDepth(8);
       this.clock = this.add
@@ -231,15 +238,52 @@ export class StoryScene extends Phaser.Scene {
     const g = this.rain;
     if (!g) return;
     g.clear();
+    const glass = ROOM_GLASS;
+    const seg = this.seg;
+    const b = this.drawn;
+    b.x1 = b.y1 = Infinity;
+    b.x2 = b.y2 = -Infinity;
+    // Rain falling past the window.
     g.lineStyle(2, 0x9fb8ff, 0.25);
     for (const d of this.drops) {
-      d.y += d.v * dt;
-      if (d.y > H) {
-        d.y -= H + 40;
-        d.x = Math.random() * W;
-      }
-      g.lineBetween(d.x, d.y, d.x - 6, d.y + 28);
+      fall(d, dt, glass, STREAK.dy, Math.random);
+      if (!clipToGlass(d.x, d.y, STREAK.dx, STREAK.dy, glass, seg)) continue;
+      g.lineBetween(seg.x1, seg.y1, seg.x2, seg.y2);
+      this.extendDrawn();
     }
+    // Drops running down the pane: a faint wet trail and a bright bead at the front.
+    for (const d of this.trickles) {
+      fall(d, dt, glass, TRICKLE_TRAIL, Math.random);
+      if (!clipToGlass(d.x, d.y, 0, TRICKLE_TRAIL, glass, seg)) continue;
+      g.lineStyle(1, 0xc8d8ff, 0.18);
+      g.lineBetween(seg.x1, seg.y1, seg.x2, seg.y2);
+      this.extendDrawn();
+      if (d.y >= glass.y && d.y <= glass.y + glass.h) {
+        g.fillStyle(0xe4ecff, 0.55);
+        g.fillCircle(d.x, d.y, 2);
+      }
+    }
+    const rain = storyState.rain;
+    if (!rain) return;
+    if (b.x1 > b.x2) {
+      rain.drawn = null;
+      return;
+    }
+    const d = (rain.drawn ??= { x: 0, y: 0, w: 0, h: 0 });
+    d.x = b.x1;
+    d.y = b.y1;
+    d.w = b.x2 - b.x1;
+    d.h = b.y2 - b.y1;
+  }
+
+  /** Grows this frame's box round the drawn rain (for the test hook) by the segment just drawn. */
+  private extendDrawn(): void {
+    const s = this.seg;
+    const b = this.drawn;
+    b.x1 = Math.min(b.x1, s.x1, s.x2);
+    b.x2 = Math.max(b.x2, s.x1, s.x2);
+    b.y1 = Math.min(b.y1, s.y1, s.y2);
+    b.y2 = Math.max(b.y2, s.y1, s.y2);
   }
 
   private updateRoomClock(): void {
