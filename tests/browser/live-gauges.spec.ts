@@ -66,7 +66,7 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
 });
 
 // gauges-4: the room-left bar in the deck goes red within one sim second of the district surge.
-test('the room-left bar: red within one sim second of the district surge at speed 5, in crew words', async ({
+test('the headroom bar: red within one sim second of the district surge at speed 5, in the real terms', async ({
   page,
 }) => {
   test.setTimeout(150_000);
@@ -76,7 +76,9 @@ test('the room-left bar: red within one sim second of the district surge at spee
     .poll(async () => (await hud(page)).headroom?.wiredCapacity ?? 0, { timeout: 10_000 })
     .toBeGreaterThan(0);
   let h = await hud(page);
-  expect(h.headroom!.label).toMatch(/^ROOM LEFT -?\d+% · \d+ of \d+$|^ROOM LEFT · (OVER \+\d+\/s|NO BOX)$/);
+  expect(h.headroom!.label).toMatch(
+    /^HEADROOM -?\d+% · \d+ of \d+$|^HEADROOM · (OVER \+\d+ req\/s|NO SERVER)$/,
+  );
 
   await reach(page, 'surge', { timeout: 110_000 });
   const surgeAt = C.c4;
@@ -91,8 +93,8 @@ test('the room-left bar: red within one sim second of the district surge at spee
   expect(room.wiredCapacity).toBeGreaterThan(0);
   expect(room.pct).toBe(Math.round((1 - room.demand / room.wiredCapacity) * 100));
   expect(room.lit).toBe(0);
-  expect(room.label).toMatch(/^ROOM LEFT · OVER \+\d+\/s$/);
-  expect(room.label).not.toMatch(/head\s*room/i);
+  expect(room.label).toMatch(/^HEADROOM · OVER \+\d+ req\/s$/);
+  expect(room.label).not.toMatch(/room left|\bbox\b/i);
   expect(room.capacity).toBeCloseTo(h.sim.capacity, 0);
   expect(room.right).toBeLessThanOrEqual(1232);
   await shot(page, 'live-m2-deck');
@@ -108,7 +110,8 @@ test('the room-left bar: red within one sim second of the district surge at spee
 // the spec needs no second page at speed 5.
 
 /** Words the player must not see before the debrief (docs/SCRIPT.md C8.terms). */
-const NOT_BEFORE_DEBRIEF = /head\s*room|throughput|capacity|load\s*balanc|requests per second/i;
+// Real terms on screen (Rolando, 29 Oct 2026): the old crew words must not come back.
+const NOT_BEFORE_DEBRIEF = /\bcoming\b|\broom\b|no box|\bsplitter\b/i;
 
 type LaneHud = HudTestState &
   Required<Pick<HudTestState, 'title' | 'gauge' | 'alert' | 'map' | 'headroom' | 'deck'>> & {
@@ -172,11 +175,11 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
 
     const g = h.gauge;
     expect(g.visible).toBe(true);
-    expect(g.title).toBe('COMING /s');
+    expect(g.title).toBe('DEMAND req/s');
     expect(g.max).toBe(400);
     expect(g.ticks).toEqual(['0', '100', '200', '300', '400']);
     expect(g.readout).toBe(`${Math.round(g.demand)}/s`);
-    expect(g.sub).toBe(`room ${Math.round(g.capacity)}/s`);
+    expect(g.sub).toBe(`capacity ${Math.round(g.capacity)} req/s`);
     expect(g.strip).toBeNull();
     expect(g.dropped).toBe(0);
     expect(g.served).toBeGreaterThan(0);
@@ -194,7 +197,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(room.redSince).toBeNull();
     expect(room.lit).toBeGreaterThan(0);
     expect(room.lit).toBeLessThanOrEqual(30);
-    expect(room.label).toMatch(/^ROOM LEFT -?\d+% · \d+ of \d+$/);
+    expect(room.label).toMatch(/^HEADROOM -?\d+% · \d+ of \d+$/);
     expect(room.right).toBeLessThanOrEqual(1232);
 
     expect(h.chart.wiredCapacity).toBeGreaterThan(0);
@@ -423,7 +426,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(room.redSince).not.toBeNull();
     expect(room.redSince!).toBeLessThanOrEqual(o.now);
     expect(room.lit).toBe(0);
-    expect(room.label).toMatch(/^ROOM LEFT · OVER \+\d+\/s$/);
+    expect(room.label).toMatch(/^HEADROOM · OVER \+\d+ req\/s$/);
     expect(room.load!).toBeGreaterThan(1);
     expectCrewWordsOnly([a.headline, a.sub, a.chip, g.strip, g.sub, room.label]);
   });

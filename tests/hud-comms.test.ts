@@ -156,13 +156,14 @@ describe('comms dwell', () => {
   });
 
   it('dwells an unvoiced line max(4, 1 + chars/cps + 1.5) with no 8 s clamp', () => {
-    // A 60-character line.
+    // A line of about 60 characters (the first bark of 58 to 62).
     const id = (Object.keys(LINES) as LineId[]).find(
-      (k) => LINES[k].kind === 'bark' && LINES[k].text.length === 60,
+      (k) => LINES[k].kind === 'bark' && LINES[k].text.length >= 58 && LINES[k].text.length <= 62,
     );
     expect(id).toBeDefined();
-    expect(dwellFor(id!, CPS)).toBeCloseTo(Math.max(4, 1 + 60 / CPS + 1.5), 9);
-    expect(dwellFor(id!, TEXT_CPS.slow)).toBeCloseTo(1 + 60 / TEXT_CPS.slow + 1.5, 9);
+    const n = LINES[id!].text.length;
+    expect(dwellFor(id!, CPS)).toBeCloseTo(Math.max(4, 1 + n / CPS + 1.5), 9);
+    expect(dwellFor(id!, TEXT_CPS.slow)).toBeCloseTo(1 + n / TEXT_CPS.slow + 1.5, 9);
     // Long lines at the slowest speed run past 8 s: nothing clamps them.
     const longest = (Object.keys(LINES) as LineId[])
       .filter((k) => LINES[k].kind === 'bark')

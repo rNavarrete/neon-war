@@ -102,17 +102,17 @@ export const TERM_NAMES: Readonly<Record<TermKey, string>> = (() => {
  * the grey line under its term. `n` is the number the moment carries (the boxes).
  */
 export const MOMENT_WORDS: Readonly<Record<MomentKind, (n: number | null) => string>> = {
-  firstLive: () => 'your first box went live',
-  kitFitted: () => 'you swapped in a bigger box',
-  secondBox: () => 'a second box went on the rack',
-  splitterRacked: () => 'the crew racked the splitter',
-  firstSkipped: () => 'the splitter stepped over a dark box',
-  bigBoxDark: () => 'the big box went dark',
+  firstLive: () => 'your first server went live',
+  kitFitted: () => 'you scaled up: a bigger server',
+  secondBox: () => 'a second server went on the rack',
+  splitterRacked: () => 'the crew racked the load balancer',
+  firstSkipped: () => "the load balancer's health check skipped a dark server",
+  bigBoxDark: () => 'the big server went dark',
   retriesRising: () => 'refreshes piled on top',
   laundryCut: () => 'you cut the laundry floor loose',
-  diesInAtMidnight: () => 'a box read DIES IN at midnight',
-  heldWithSpare: (n) => `midnight held on ${n ?? '?'} boxes, one of them dark`,
-  decommission: () => 'you switched a box off',
+  diesInAtMidnight: () => 'a server read DIES IN at midnight',
+  heldWithSpare: (n) => `midnight held on ${n ?? '?'} servers, one of them dark`,
+  decommission: () => 'you switched a server off',
 };
 
 /** One grey line in the debrief, printed under `name` (the bold term) in its group's column. */

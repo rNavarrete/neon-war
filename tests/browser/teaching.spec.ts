@@ -14,7 +14,7 @@ const LANE_SECONDS = 150;
 
 const C = BROWNOUT.challenges;
 
-/** Where the four reads sit: the gauge (COMING against ROOM), the scope and the deck's ROOM LEFT bar. */
+/** Where the four reads sit: the gauge (DEMAND against CAPACITY), the scope and the deck's HEADROOM bar. */
 const READOUT = [ZONES.gauge, ZONES.scope, ZONES.deck] as const;
 
 /**
@@ -102,7 +102,7 @@ test('1. demand against room is readable in C1, C3, C4, C6 and C7, nothing over 
       const s = await until(page, `the readout agreeing with hud.sim after now ${at}`, readable, 20_000);
       const h = s.hud!;
       expect(h.gauge!.readout.length, 'the gauge prints its number').toBeGreaterThan(0);
-      expect(h.headroom!.label.length, 'the ROOM LEFT bar prints its words').toBeGreaterThan(0);
+      expect(h.headroom!.label.length, 'the HEADROOM bar prints its words').toBeGreaterThan(0);
       // No modal card open on this frame sits over the gauge, the scope or the deck.
       for (const m of openModals(s)) {
         for (const z of READOUT)

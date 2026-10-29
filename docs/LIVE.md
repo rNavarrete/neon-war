@@ -267,7 +267,7 @@ The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard
 | `hud.bark` | the host, from CommsView | `{current, text, history}`, the band's shown lines (the older name) |
 | `hud.luxCam` | LuxCamView | the mood, the art, `history` of moods, REC, the frame, `speaking`, `motion` |
 | `hud.alert` | AlertView | the alert up now and its kind, line, tag and text; `hint` and `hintText`, the start-of-C1 hint ("drag a SERVER card onto the grid") while no alert is up |
-| `hud.gauge`, `hud.chart` | GaugeView, ChartView | the COMING /s gauge; the scope's series over the host's `chart` |
+| `hud.gauge`, `hud.chart` | GaugeView, ChartView | the DEMAND req/s gauge; the scope's series over the host's `chart` |
 | `hud.map` | MapView | the city map's dots, raid outlines and midnight |
 | `hud.deck`, `hud.headroom`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, the room-left bar, Regroup and the laundry cut |
 | `hud.chatArt`, `hud.chatTrace` | ChatFeedView | which chat art loaded or fell back; the trace of rows posted, with their cause |

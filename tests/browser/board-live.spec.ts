@@ -104,7 +104,7 @@ async function placeServer(page: Page, slotId: string): Promise<string> {
 }
 
 /**
- * Drag the BIGGER BOX kit onto `id`, as placeServer places: if the drop did not take (at speed 20 the
+ * Drag the SCALE UP kit onto `id`, as placeServer places: if the drop did not take (at speed 20 the
  * C2 banner can open over the table in that instant), answer the banner if it is up and drag again,
  * at most twice more.
  */
@@ -1178,7 +1178,8 @@ async function hold(page: Page, from: Pt, to: Pt): Promise<void> {
 }
 
 /** The debrief's words a plate must never print (docs/SCRIPT.md C8.terms, the four the ticket names). */
-const DEBRIEF_WORDS = ['capacity', 'headroom', 'health check', 'load balancer'];
+/** The made-up crew words the plates used before Rolando asked for real terms (29 Oct 2026). */
+const CREW_WORDS = ['splitter', ' box', 'room left', 'a second'];
 
 test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the feed, plates, Esc and Delete, keys 1/2 left alone', async ({
   page,
@@ -1230,7 +1231,7 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   expect(b.grid.preview).toBeNull();
   expect((await shell(page))?.paused, 'Esc during a drag does not open the pause menu').toBe(false);
 
-  // The ghost again: over s1 with the gateway free it adds 60, the what-if tick reads ROOM +60,
+  // The ghost again: over s1 with the gateway free it adds 60, the what-if tick reads CAPACITY +60,
   // and no credits are spent while it hovers.
   await hold(page, card, s1Pad);
   b = await expectGhost(page, S1);
@@ -1239,10 +1240,10 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
     over: S1,
     legal: true,
     adds: 60,
-    tick: 'ROOM +60',
+    tick: 'CAPACITY +60',
     plateShown: true,
   });
-  expect(b.ghost!.plate).toBe('+60 room · boots 3 s · -80 cr');
+  expect(b.ghost!.plate).toBe('+60 capacity · boots 3 s · -80 cr');
   expect(b.channel.whatIf).toBeCloseTo(0.15, 3);
   expect(b.credits).toBeGreaterThan(credits - 1);
   await page.screenshot({ path: 'test-results/screens/live-m3-board-ghost-c1.png' });
@@ -1260,7 +1261,7 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   await hold(page, card, s2Pad);
   b = await expectGhost(page, S2);
   expect(b.ghost).toMatchObject({ legal: true, adds: 0, capacity: 60, wired: 60, tick: null });
-  expect(b.ghost!.plate).toBe('+0 room · nothing feeds it');
+  expect(b.ghost!.plate).toBe('+0 capacity · nothing feeds it');
   expect(b.channel.whatIf).toBeCloseTo(b.channel.capacityLevel, 3);
   // Let go back over the tray: nothing placed.
   await page.mouse.move(card.x, card.y, { steps: 3 });
@@ -1274,14 +1275,15 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
     await page.mouse.move(p.x, p.y, { steps: 2 });
     await expect.poll(async () => (await board(page)).hover.target).toBe(id);
     const text = (await board(page)).hover.text!;
-    expect(text).toMatch(/a second/);
-    for (const word of DEBRIEF_WORDS) expect(text.toLowerCase()).not.toContain(word);
+    expect(text).toMatch(/req\/s/);
+    expect(text).toMatch(/capacity \d+ req\/s/);
+    for (const word of CREW_WORDS) expect(text.toLowerCase()).not.toContain(word);
   }
   const hovered = (await board(page)).hover;
   expect(hovered.pinned).toBe(false);
   const sp = (await part(page, s1))!;
   await page.mouse.move(sp.x, sp.y, { steps: 2 });
-  await expect.poll(async () => (await board(page)).hover.text).toMatch(/^SERVER · \d+\/60 a second · \d+%/);
+  await expect.poll(async () => (await board(page)).hover.text).toMatch(/^SERVER · \d+\/60 req\/s · \d+%/);
 
   // Click pins the plate; it stays when the pointer leaves; Esc clears the selection (no pause).
   await page.mouse.click(sp.x, sp.y);
@@ -1302,7 +1304,7 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   await page.mouse.click(gw.x, gw.y);
   await expect.poll(async () => (await board(page)).selectedWire).toBe(gw.key);
   await expect.poll(async () => (await board(page)).hover.pinned).toBe(true);
-  expect((await board(page)).hover.text).toMatch(/^WIRE · \d+ a second\nGATEWAY to SERVER/);
+  expect((await board(page)).hover.text).toMatch(/^WIRE · \d+ req\/s\nGATEWAY to SERVER/);
   await page.keyboard.press('Delete');
   await expect.poll(async () => (await board(page)).wires.some((x) => x.key === gw.key)).toBe(false);
   expect((await board(page)).selectedWire).toBeNull();
@@ -1320,7 +1322,7 @@ async function expectGhost(page: Page, over: string): Promise<BoardTestState> {
   return board(page);
 }
 
-test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behind the crew splitter', async ({
+test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behind the crew load balancer', async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -1349,8 +1351,8 @@ test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behi
 
   // The ghost comes, wired behind the crew's splitter, adding 60.
   b = await expectGhost(page, pad.id);
-  expect(b.ghost).toMatchObject({ adds: 60, tick: 'ROOM +60' });
-  expect(b.ghost!.plate).toMatch(/^\+60 room · boots 3 s · -80 cr$/);
+  expect(b.ghost).toMatchObject({ adds: 60, tick: 'CAPACITY +60' });
+  expect(b.ghost!.plate).toMatch(/^\+60 capacity · boots 3 s · -80 cr$/);
   expect(b.ghost!.capacity).toBe(b.ghost!.wired + 60);
   expect(b.channel.whatIf).toBeCloseTo(b.ghost!.capacity / 400, 3);
   await page.screenshot({ path: 'test-results/screens/live-m3-board.png' });

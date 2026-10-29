@@ -1,6 +1,6 @@
 // The room-left bar in the deck: a pulse icon, 30 segments of room left draining from the right as
 // load grows (green, amber, all red when over), a marker where 30% is left, and the words above them
-// in the crew's terms ("ROOM LEFT 25% · 90 of 120", "ROOM LEFT · OVER +130/s", "ROOM LEFT · NO BOX").
+// in real terms ("HEADROOM 25% · 90 of 120", "HEADROOM · OVER +130 req/s", "HEADROOM · NO SERVER").
 // It draws only this frame's value: one bar, one series, nothing kept from earlier frames.
 // The rules are pure in headroom.ts; this file draws them and plays the red sound (at most once per
 // 10 s, and only once the mixer knows the key).

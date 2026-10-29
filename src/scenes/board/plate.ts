@@ -18,15 +18,15 @@ export const REPLACE_LABEL: string = LABELS.plates.replace;
 
 const r = (n: number) => Math.round(n);
 
-/** The first line: the part's name and its numbers, "SERVER · 45/60 a second · 75%". */
+/** The first line: the part's name and its numbers, "SERVER · 45/60 req/s · 75%". */
 function numbersLine(part: Pick<Part, 'kind'>, look: PartLook): string {
   const name = PLATE_NAMES[part.kind];
   if (look.capacity === null || look.share === null) {
     const what = part.kind === 'gateway' ? 'coming in' : 'passing through';
-    return `${name} · ${r(look.load)} a second ${what}`;
+    return `${name} · ${r(look.load)} req/s ${what}`;
   }
-  if (look.status !== 'online') return `${name} · answers ${look.capacity} a second when up`;
-  return `${name} · ${r(look.load)}/${look.capacity} a second · ${r(look.share * 100)}%`;
+  if (look.status !== 'online') return `${name} · capacity ${look.capacity} req/s when up`;
+  return `${name} · ${r(look.load)}/${look.capacity} req/s · ${r(look.share * 100)}%`;
 }
 
 /** The second line: the state, in the tags' words with their seconds. */
@@ -143,5 +143,5 @@ export class PlateCache {
 
 /** A wire's plate: what it carries, from where to where, and how to cut it. */
 export function wirePlate(from: Pick<Part, 'kind'>, to: Pick<Part, 'kind'>, rate: number): string {
-  return `WIRE · ${r(rate)} a second\n${PLATE_NAMES[from.kind]} to ${PLATE_NAMES[to.kind]}\nclick it, then the cut button or Delete`;
+  return `WIRE · ${r(rate)} req/s\n${PLATE_NAMES[from.kind]} to ${PLATE_NAMES[to.kind]}\nclick it, then the cut button or Delete`;
 }

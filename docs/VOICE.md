@@ -66,6 +66,26 @@ the performance tags, the stage directions in brackets and quotes.
 - `C5.triage.02`: "The big box fried. It's a normal box again." became "The big box cooked. The
   crew put a normal one back." (bigger box).
 
+Real system-design terms (Rolando, 29 Oct 2026: "keep all the terminology and system design jargon
+intact"): "box" became "server", "splitter" became "load balancer", "room" became "capacity" or
+"headroom", and "coming" became "requests a second" or "demand". `C1.triage.01`, `C3.triage.01` and
+`C5.triage.02` above changed again in the same pass. These need new takes too:
+
+- `C1.triage.05`
+- `C1.triage.06`
+- `C2.triage.after`
+- `C3.lux.01`
+- `C4.triage.02`
+- `C4.triage.cut`
+- `C5.rei.03`
+- `C5.ozzie.02`
+- `C5.triage.03`
+- `C5.mika.05`
+- `C6.triage.01`
+- `C7.ozzie.01`
+- `C7.triage.01`
+- `C8.rei.waste`
+
 Two lines differ only in stage directions written into the text (`C5.rei.cut` has "(beat)",
 `C5.rei.04` has "(to Lux)"); the spoken words match the takes.
 

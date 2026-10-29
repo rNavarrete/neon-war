@@ -10,7 +10,8 @@ import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 // (gauges-5) and the scope in ZONES.scope (gauges-6), asserted on window.__neonTest.state.hud.
 
 /** Words the player must not see before the debrief (docs/SCRIPT.md C8.terms, and the mockup's). */
-const BANNED_ON_SCREEN = /head\s*room|throughput|est\.|capacity|requests per second/i;
+// Real terms on screen (Rolando, 29 Oct 2026): the old crew words must not come back.
+const BANNED_ON_SCREEN = /\bcoming\b|\broom\b|no box|\bsplitter\b|est\./i;
 
 type Hud = HudTestState & { gauge: GaugeTestState };
 
@@ -39,16 +40,16 @@ function expectGaugeMatchesSim(h: Hud): void {
   expect(h.headroom!.wiredCapacity).toBeLessThanOrEqual(h.sim.capacity + 1);
 }
 
-test('the COMING /s gauge: NO ROOM YET before the first build, in crew words', async ({ page }) => {
+test('the DEMAND gauge: NO CAPACITY YET before the first build, in the real terms', async ({ page }) => {
   test.setTimeout(60_000);
   const { errors } = await openBoard(page, { speed: 20, autopilot: false });
   await dismissJobCard(page);
   const h = await gaugeHud(page);
-  expect(h.gauge.title).toBe('COMING /s');
+  expect(h.gauge.title).toBe('DEMAND req/s');
   expect(h.gauge.max).toBe(400);
   expect(h.gauge.ticks).toEqual(['0', '100', '200', '300', '400']);
   expect(h.gauge.capacity).toBe(0);
-  expect(h.gauge.strip).toBe('NO ROOM YET');
+  expect(h.gauge.strip).toBe('NO CAPACITY YET');
   // Batch 5: the painted face is baked into the plate and the painted needle turns, both at half.
   expect(h.gauge.face).toBe('hud/gauge-face');
   expect(h.gauge.needleArt).toEqual({ key: 'hud/gauge-needle', scale: 0.5 });
@@ -58,7 +59,7 @@ test('the COMING /s gauge: NO ROOM YET before the first build, in crew words', a
   expect(errors).toEqual([]);
 });
 
-test('the COMING /s gauge at speed 5: needle on demand, OVER BY in the raid', async ({ page }) => {
+test('the DEMAND gauge at speed 5: needle on demand, OVER BY in the raid', async ({ page }) => {
   test.setTimeout(150_000);
   const { errors } = await openBoard(page, { speed: 5, autopilot: true });
   await reach(page, 'c1');
@@ -83,7 +84,7 @@ test('the COMING /s gauge at speed 5: needle on demand, OVER BY in the raid', as
       .toBe(true);
     const h = settled as unknown as Hud;
     expectGaugeMatchesSim(h);
-    expect(h.gauge.sub).toBe(`room ${Math.round(h.gauge.capacity)}/s`);
+    expect(h.gauge.sub).toBe(`capacity ${Math.round(h.gauge.capacity)} req/s`);
     expect(h.gauge.strip).toBeNull();
     expectCrewWords(h.gauge);
   });

@@ -217,9 +217,10 @@ describe('the scope’s hook', () => {
     expect(c.plot).toEqual({ w: 354, h: 145 });
     expect(c.ceiling).toBeLessThanOrEqual(400);
     expect(c.title).toBe('LAST 60 s');
-    expect(c.legend).toBe(`coming ${Math.round(f.demand)}/s   room 60/s`);
+    expect(c.legend).toBe(`demand ${Math.round(f.demand)}/s   capacity 60/s`);
     expect(texts.some((t) => t.text === 'racked, not fed' && t.visible)).toBe(true);
-    for (const t of texts) expect(t.text).not.toMatch(/head\s*room|throughput|capacity|requests per second/i);
+    // Real terms on screen (Rolando, 29 Oct 2026): the legend says demand and capacity.
+    for (const t of texts) expect(t.text).not.toMatch(/\bcoming\b|\broom\b|\bbox\b|splitter/i);
     view.shutdown();
     expect(view.made).toEqual({ objects: 0, texts: 0 });
   });

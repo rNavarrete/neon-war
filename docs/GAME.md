@@ -23,7 +23,7 @@ warm-up "How would you scale a web app from one server?" told as a story.
 
 - Requirements (a job card), then a back-of-the-envelope estimate (users times how often they call).
 - Throughput against capacity, and headroom (do not run at 100%).
-- Scaling up (a bigger box) before scaling out, and the limits of scaling up.
+- Scaling up (a bigger server) before scaling out, and the limits of scaling up.
 - Single point of failure.
 - Scaling out behind a load balancer, with health checks.
 - Redundancy: the peak plus one spare (N+1).
@@ -62,11 +62,11 @@ gives the number, the crew argue numbers in C5, and C6 is the player alone.
 | #   | Clock (real time)  | Layer  | What happens                                                                                     | Debrief names                                            |
 | --- | ------------------ | ------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
 | C0  | 23:54:25 (0:00)    | Scene  | Cold open: rain, test fireworks, Lux alone with her mum's photo; she pulls her goggles down. Each line waits for a click; the last one brings the goggles down and starts the board at 23:54:40. | nothing yet                              |
-| C1  | 23:54:40 (0:15)    | Board  | **Job card** (who: 120 flats; what must work; the bar: nobody goes dark at midnight; each flat calls about every 4 s). No estimate step: the card closes straight to the build, and until the first server is down the alert band says "drag a SERVER card onto the grid". The player places one scrap server and wires gateway → server → database. TRIAGE: "480 a second! I'm great at math."; Lux: "You multiplied. Divide."; once the first box is live TRIAGE owns up to 30, the number the gauge reads (30/s). | requirements, requests per second, capacity, estimate |
+| C1  | 23:54:40 (0:15)    | Board  | **Job card** (who: 120 flats; what must work; the bar: nobody goes dark at midnight; each flat calls about every 4 s). No estimate step: the card closes straight to the build, and until the first server is down the alert band says "drag a SERVER card onto the grid". The player places one scrap server and wires gateway → server → database. TRIAGE: "480 a second! I'm great at math."; Lux: "You multiplied. Divide."; once the first server is live TRIAGE owns up to 30, the number the gauge reads (30/s). | requirements, requests per second, capacity, estimate |
 | C2  | 23:55:10 (0:45)    | Board  | **Solace banner**: "Priority service, 200 credits." Pay, Ignore or Bin. The chart shows 30 against 60: nothing to protect against. | overprovisioning                              |
-| C3  | 23:55:55 (1:30)    | Board  | **Bigger or more?** Forecast: demand climbing to 90. The tray offers a **bigger box** (scale up: swap the server for one twice its size) beside a second server. A second server racked now sits idle, because the gateway feeds one part only. Doing nothing: the server overheats and dies, and TRIAGE offers its stream replay. | scale up, scale out, headroom |
-| C4  | 23:57:10 (2:45)    | Board  | **District surge**, a scripted near-loss: 250 req/s warned 10 s ahead; the big box pegs, a power dip takes it dark, retries climb toward 375, the database times out. Optional: **cut the laundry floor loose** (about 40 req/s). | single point of failure, cascading failure, retry storm, load shedding |
-| C5  | 23:58:00 (3:35)    | Scene, then board | **Rescue.** The crew break into her goggles (the one full-immersive moment), drop a load balancer, Ozzie opens his tab. The big box cooked; the crew put a stock 60 back in its place. Surge settles to 120: 3 servers behind the balancer. Mika says two, Ozzie says six, Rei says count it yourself. | load balancer, horizontal scaling, health check |
+| C3  | 23:55:55 (1:30)    | Board  | **Scale up or scale out?** Forecast: demand climbing to 90. The tray offers **SCALE UP** (vertical scaling: swap the server for one twice its size) beside a second server. A second server racked now sits idle, because the gateway feeds one part only. Doing nothing: the server overheats and dies, and TRIAGE offers its stream replay. | scale up, scale out, headroom |
+| C4  | 23:57:10 (2:45)    | Board  | **District surge**, a scripted near-loss: 250 req/s warned 10 s ahead; the big server pegs, a power dip takes it dark, retries climb toward 375, the database times out. Optional: **cut the laundry floor loose** (about 40 req/s). | single point of failure, cascading failure, retry storm, load shedding |
+| C5  | 23:58:00 (3:35)    | Scene, then board | **Rescue.** The crew break into her goggles (the one full-immersive moment), drop a load balancer, Ozzie opens his tab. The big server cooked; the crew put a stock 60 back in its place. Surge settles to 120: 3 servers behind the balancer. Mika says two, Ozzie says six, Rei says count it yourself. | load balancer, horizontal scaling, health check |
 | C6  | 23:59:00 (4:35)    | Board  | **Midnight, your call.** Forecast 150 req/s, one rack loses power about 10 s before midnight for 20 s. No sizing question: the player builds the count, and the debrief grades the servers actually running at midnight. 150 ÷ 60 = 2.5, so 3 hold the peak and **4** ride out the dip. | capacity planning, peak vs average, redundancy, N+1 |
 | C7  | 00:00:00 (5:35)    | Board  | **Scale down** (optional, 30 s): fireworks; demand falls to 40 within 20 s while upkeep keeps ticking. Decommission down to 2. | scale down, elasticity, cost   |
 | C8  | 00:00:30 (6:05)    | Scene  | **Debrief.** Goggles up. Rei grades the night; terms named in three groups (sizing, scaling, failure); Night Book page 1, "Demand decides the design"; the interview-version card. | everything above            |
@@ -86,12 +86,12 @@ first-timer gets stuck (`src/scenes/hud/coach.ts`) and helps more the longer it 
 | Stuck on                                          | What lights up                                   | Band says                                 |
 | ------------------------------------------------- | ------------------------------------------------ | ----------------------------------------- |
 | No server on the grid (C1)                        | the SERVER card                                  | drag a SERVER card onto the grid          |
-| The gateway feeds nothing                         | the box, and a ghost wire gateway → box          | drag from the GATEWAY onto your SERVER    |
-| A fed box has no wire to the database             | the box, and a ghost wire box → database         | drag from your SERVER onto the DATABASE   |
-| After the crew: the gateway doesn't feed the splitter | the splitter, and a ghost wire gateway → splitter | drag from the GATEWAY onto the SPLITTER |
-| After the crew: a box outside the splitter        | the box, and a ghost wire splitter → box         | drag from the SPLITTER onto each SERVER   |
-| After the crew: a dead box                        | the box and the SERVER card                      | click the dead box and press REPLACE      |
-| C3: the one box over its limit, dropping calls    | the BIGGER BOX and SERVER cards (never which)    | (nothing: the forecast is up)             |
+| The gateway feeds nothing                         | the server, and a ghost wire gateway → server    | drag from the GATEWAY onto your SERVER    |
+| A fed server has no wire to the database          | the server, and a ghost wire server → database   | drag from your SERVER onto the DATABASE   |
+| After the crew: the gateway doesn't feed the load balancer | the load balancer, and a ghost wire gateway → load balancer | drag from the GATEWAY onto the LOAD BALANCER |
+| After the crew: a server outside the load balancer | the server, and a ghost wire load balancer → server | drag from the LOAD BALANCER onto each SERVER |
+| After the crew: a dead server                     | the server and the SERVER card                   | click the dead server and press REPLACE   |
+| C3: the one server over capacity, dropping requests | the SCALE UP and SERVER cards (never which)    | (nothing: the forecast is up)             |
 
 The highlight comes after 3 s stuck (4 s for the first server), the first nudge after 6 s (8 s; 4 s in C3), then
 the next nudges 9 s and 12 s later, each a little more direct, from TRIAGE or Lux. After that only the most direct
@@ -121,8 +121,8 @@ behind it and **health-checks** them: a server that is dark, dead or still booti
 | The block               | 120 flats, each calling about every 4 s: 30 req/s                                           |
 | Scrap server            | 60 req/s; costs 80 credits; takes 3 s to boot before it serves                              |
 | Replacement server      | the same: 80 credits, 3 s boot (that boot is why 3 servers only hold at midnight with a fast replacement) |
-| Bigger box (scale up)   | 60 credits; swaps one server for one that does 120 req/s; it is down for 3 s while it swaps and drops traffic meanwhile; one size up only ("no bigger box in the slum"). Replaces the overclock kit (Rolando, 29 Oct 2026: overclocking is not real system design) |
-| Big box burns out       | the big box is the one that cooks in the surge; after the rescue the crew put a stock 60 in its place |
+| Scale up (vertical)     | 60 credits; swaps one server for one that does 120 req/s; it is down for 3 s while it swaps and drops traffic meanwhile; one size up only ("no bigger server in the slum"). Replaces the overclock kit (Rolando, 29 Oct 2026: overclocking is not real system design) |
+| Big server burns out    | the big server is the one that cooks in the surge; after the rescue the crew put a stock 60 in its place |
 | Residents' database     | 200 req/s; never the bottleneck in normal play, only the retry pile in the surge (about 375) pushes it over |
 | Evening climb (C3)      | ramps to 90 req/s over 45 s                                                                 |
 | District surge (C4)     | 250 req/s, warned 10 s ahead; with retries it climbs toward 375                             |
@@ -150,10 +150,10 @@ What the economy is meant to produce (approximate, upkeep included):
 
 | Path                                                   | Credits before midnight | Midnight with 4 servers | Debrief shows                          |
 | ------------------------------------------------------ | ----------------------- | ----------------------- | -------------------------------------- |
-| Best play (skip banner, bigger box early, 3 at rescue) | about 150               | about 60 left           | no debt                                |
+| Best play (skip banner, scale up early, 3 at rescue) | about 150               | about 60 left           | no debt                                |
 | Paid the banner                                        | about −50               | Ozzie covers about 130  | "You owe Ozzie 130", banner called out |
 | Racked an idle second server in C3                     | about 135               | about 55 left           | small upkeep cost only                 |
-| Overbuilt at the rescue (5 or 6 boxes)                 | about 0 to 70           | small debt              | wasted credits graded                  |
+| Overbuilt at the rescue (5 or 6 servers)                 | about 0 to 70           | small debt              | wasted credits graded                  |
 
 Not set yet: the debrief's grade thresholds. A ticket that needs them stops and asks.
 
@@ -194,8 +194,8 @@ Art is painted, not pixel art. It comes from the art pipeline (gpt-image-2, pick
 `public/art/` only through a PR Rolando approves. Workers never add or edit art. Wires, packets, particles,
 the chart, panels and text are drawn in code. `docs/ART.md` lists the picked files.
 
-The challenge design's extra art is in `public/art/` too: the big box (`board/server-overclocked` and
-`server-overclocked-hot`; it also stands on the BIGGER BOX tray card; `board/overclock-kit` is no longer drawn) and the job card frame (`hud/job-card`). The picked estimate
+The challenge design's extra art is in `public/art/` too: the big server (`board/server-overclocked` and
+`server-overclocked-hot`; it also stands on the SCALE UP tray card; `board/overclock-kit` is no longer drawn) and the job card frame (`hud/job-card`). The picked estimate
 dial (`hud/estimate-dial`) stays in `public/art/` but is no longer drawn. The "skipped" tag and the stream-replay rewind are drawn in code.
 
 Sound: one board music loop (Suno, "Cell Shaped Chaos") and a small set of effects (ElevenLabs), loaded from
@@ -204,7 +204,7 @@ Sound: one board music loop (Suno, "Cell Shaped Chaos") and a small set of effec
 ## Build order
 
 1. Groundwork (this file, the painted-art rules, the routing plumbing in `src/sim/board.ts`, including the
-   load balancer's health check and the bigger-box upgrade).
+   load balancer's health check and the scale-up upgrade).
 2. Art pass: picks cut out and added to `public/art/`.
 3. B1 rules: every number above as pure code, one unit test per number.
 4. B2 board and HUD: browser tests drive the mouse.

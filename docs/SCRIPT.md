@@ -48,24 +48,24 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C1.card.what | ui | Job card | | What must work: calls, streams, the lift, the heating alarms. |
 | C1.card.bar | ui | Job card | | The bar: nobody goes dark at midnight. |
 | C1.card.rate | ui | Job card | | Each flat pings the net about every 4 seconds. |
-| C1.triage.01 | bark | TRIAGE (eager) | card closes | "Ooh, a card! How many a second are coming? I'll guess first." |
+| C1.triage.01 | bark | TRIAGE (eager) | card closes | "Ooh, a card! How many requests a second? I'll guess first." |
 | C1.triage.02 | bark | TRIAGE (wrong-and-proud) | 2 s later | "480 a second! I'm great at math." |
 | C1.lux.01 | bark | Lux | 2 s after TRIAGE's 480 | "You multiplied. Divide." |
-| C1.triage.03 | bark | TRIAGE (sheepish) | first box live, 2 s or more after Lux | "...30. That's what I meant. Obviously." |
+| C1.triage.03 | bark | TRIAGE (sheepish) | first server live, 2 s or more after Lux | "...30. That's what I meant. Obviously." |
 | C1.triage.04 | bark | TRIAGE (thinking) | not played (the estimate step is gone; the take stays recorded) | "Hm. Let's watch the real line and see who's right." |
-| C1.triage.05 | bark | TRIAGE (eager) | 2 s after Lux, tray glows | "One scrap box does 60. Rack it and wire it: gateway, box, database." |
+| C1.triage.05 | bark | TRIAGE (eager) | 2 s after Lux, tray glows | "One scrap server does 60 req/s. Wire it: gateway, server, database." |
 | C1.chat.01 | chat | block: mrs okafor | server goes live | It's back! Bless you Lux |
 | C1.chat.02 | chat | stream: viewer | server goes live | first try lol |
-| C1.triage.06 | bark | TRIAGE (happy) | 10 s at 30 against 60 | "30 coming, 60 of room. Look at all that room." |
+| C1.triage.06 | bark | TRIAGE (happy) | 10 s at 30 against 60 | "30 requests a second, capacity 60. Look at all that headroom." |
 | C1.triage.nudge.place.1 | bark | TRIAGE (eager) | coach: no server on the grid 8 s after the card closes, SERVER card lit | "SERVER card, from the tray, onto the grid. Go on!" |
-| C1.triage.nudge.place.2 | bark | TRIAGE (thinking) | coach: still no server, 9 s later | "Lux? Still dark. A box goes on the grid first." |
+| C1.triage.nudge.place.2 | bark | TRIAGE (thinking) | coach: still no server, 9 s later | "Lux? Still dark. A server goes on the grid first." |
 | C1.lux.nudge.place | bark | Lux | coach: still no server, 12 s later (then again every 25 s while stuck) | "Right. Server card, onto the table." |
 | C1.triage.nudge.feed.1 | bark | TRIAGE (thinking) | coach: a server the gateway does not feed, ghost wire lit | "It's just sitting there. Is it even plugged in?" |
-| C1.triage.nudge.feed.2 | bark | TRIAGE (eager) | coach: still not fed, 9 s later | "Drag from the gateway onto the box. Calls get in!" |
-| C1.lux.nudge.feed | bark | Lux | coach: still not fed, 12 s later (then again every 25 s) | "Don't forget to connect it. Gateway first, then the box." |
-| C1.triage.nudge.store.1 | bark | TRIAGE (thinking) | coach: a fed server with no wire to the database, ghost wire lit | "Calls go in... and stop. Where do they go next?" |
-| C1.triage.nudge.store.2 | bark | TRIAGE (eager) | coach: still no database wire, 9 s later | "Drag from the box onto the database! Gateway, box, database!" |
-| C1.lux.nudge.store | bark | Lux | coach: still no database wire, 12 s later (then again every 25 s) | "Connect it. Box to the database." |
+| C1.triage.nudge.feed.2 | bark | TRIAGE (eager) | coach: still not fed, 9 s later | "Drag from the gateway onto the server. Requests get in!" |
+| C1.lux.nudge.feed | bark | Lux | coach: still not fed, 12 s later (then again every 25 s) | "Don't forget to connect it. Gateway first, then the server." |
+| C1.triage.nudge.store.1 | bark | TRIAGE (thinking) | coach: a fed server with no wire to the database, ghost wire lit | "Requests go in... and stop. Where do they go next?" |
+| C1.triage.nudge.store.2 | bark | TRIAGE (eager) | coach: still no database wire, 9 s later | "Drag from the server onto the database! Gateway, server, database!" |
+| C1.lux.nudge.store | bark | Lux | coach: still no database wire, 12 s later (then again every 25 s) | "Connect it. Server to the database." |
 
 ### C2 The Solace banner
 
@@ -79,7 +79,7 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C2.triage.pay | bark | TRIAGE (thinking) | 3 s after Pay | "The chart didn't move. Was it supposed to move?" |
 | C2.lux.ignore | bark | Lux | Ignore | "Not tonight." |
 | C2.lux.bin | bark | Lux | Bin | "Solace selling us our own power back." |
-| C2.triage.after | bark | TRIAGE (thinking) | any choice, 5 s later | "30 coming, 60 of room. Nothing to protect yet." |
+| C2.triage.after | bark | TRIAGE (thinking) | any choice, 5 s later | "30 requests a second, capacity 60. Nothing to protect yet." |
 
 ### C3 Bigger or more?
 
@@ -88,14 +88,14 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C3.warn.01 | ui | Forecast | 23:55:55 | Everyone's getting ready to film. Demand climbing to 90 a second. |
 | C3.chat.01 | chat | block: young father | forecast | video keeps buffering, my son's on in 5 |
 | C3.chat.02 | chat | block: kenji | forecast | heating alarm on 3rd floor beeping?? |
-| C3.triage.01 | bark | TRIAGE (eager) | tray shows the bigger box and a second server | "New toys! A bigger box, or a second box. Which one's more box?" |
+| C3.triage.01 | bark | TRIAGE (eager) | tray shows the bigger server and a second server | "New toys! Scale up to a bigger server, or scale out with two?" |
 | C3.triage.02 | bark | TRIAGE (thinking) | player racks a second server | "It's on! Why is it doing nothing? Is it shy?" |
-| C3.lux.01 | bark | Lux | 5 s after an idle second server | "The gateway only feeds one box." |
-| C3.triage.03 | bark | TRIAGE (eager) | player swaps in the bigger box | "Swapping in the big one... 3, 2, 1... it's huge now. 120!" |
+| C3.lux.01 | bark | Lux | 5 s after an idle second server | "The gateway only feeds one server." |
+| C3.triage.03 | bark | TRIAGE (eager) | player swaps in the bigger server | "Swapping in the big one... 3, 2, 1... it's huge now. 120!" |
 | C3.triage.04 | bark | TRIAGE (panicking) | server over 100% for 4 s | "It's getting hot. Like, smell-it hot." |
 | C3.chat.03 | chat | stream: viewer | server dies | F |
-| C3.triage.nudge.choose.1 | bark | TRIAGE (thinking) | coach: the one box over its limit and dropping calls, both tray cards lit | "Too much for one box! The tray has two ideas." |
-| C3.triage.nudge.choose.2 | bark | TRIAGE (thinking) | coach: still over, 9 s later (then again every 25 s) | "Bigger box, or more boxes? I'm not saying. I'm pointing." |
+| C3.triage.nudge.choose.1 | bark | TRIAGE (thinking) | coach: the one server over its limit and dropping calls, both tray cards lit | "Too much for one server! The tray has two ideas." |
+| C3.triage.nudge.choose.2 | bark | TRIAGE (thinking) | coach: still over, 9 s later (then again every 25 s) | "Scale up, or scale out? I'm not saying. I'm pointing." |
 | C3.triage.rewind | scene | TRIAGE (sheepish) | a failure in C1 to C3 | "I recorded the last minute. Want to try that again?" |
 | C3.lux.rewind | scene | Lux | rewind accepted | "Yeah. Rewind." |
 
@@ -112,7 +112,7 @@ neighbour at a time, and TRIAGE panics.
 | C4.triage.01 | bark | TRIAGE (panicking) | warning | "250? We're built for 120! I did that math right, I checked!" |
 | C4.lux.01 | bark | Lux | surge lands | "Hold. Hold. Hold." |
 | C4.flicker.01 | ui | Dip warning | 2 s before the dip | POWER FLICKER |
-| C4.triage.02 | bark | TRIAGE (panicking) | the big box goes dark | "Big box is down! Big box is DOWN!" |
+| C4.triage.02 | bark | TRIAGE (panicking) | the big server goes dark | "Big server is down! Big server is DOWN!" |
 | C4.chat.01 | chat | block: mrs okafor | 5 s into errors | it's gone again |
 | C4.chat.02 | chat | block: young father | retries climb | calling... calling... calling... |
 | C4.chat.seed | chat | block: unnamed neighbour | 15 s into the surge | wait isn't she the Takaha— |
@@ -121,7 +121,7 @@ neighbour at a time, and TRIAGE panics.
 | C4.cut.button | ui | Laundry cut | becomes available | Cut the laundry floor loose (about 40 a second) |
 | C4.lux.cut | bark | Lux | player cuts the laundry floor | "Sorry, laundry. Washers can wait till next year." |
 | C4.chat.cut | chat | block: kenji | after the cut | who turned off the arcade |
-| C4.triage.cut | bark | TRIAGE (thinking) | 3 s after the cut | "Less coming in. The database is breathing again. Barely." |
+| C4.triage.cut | bark | TRIAGE (thinking) | 3 s after the cut | "Less demand. The database is breathing again. Barely." |
 | C4.chat.03 | chat | block (system) | 20 s into the surge | Mrs Okafor left the chat |
 | C4.chat.04 | chat | stream: viewer | 25 s | is the stream frozen or is it just me |
 | C4.grandma.01 | bark | Grandma (through the door) | 30 s | "Two minutes, love! Come down!" |
@@ -144,11 +144,11 @@ while the sim is frozen; the lines after it are barks.
 | C5.rei.02 | scene | Rei | | "Night Shift. We've been watching your block. You were doing fine. Then you weren't." |
 | C5.mika.01 | scene | Mika | | "Breathe. Read the chart." |
 | C5.mika.02 | scene | Mika | | "The surge is settling. About 120 a second for the next minute." |
-| C5.rei.03 | scene | Rei | crew cable drops | "Here. It splits traffic across every box you wire behind it, and it skips any box that's dark." |
+| C5.rei.03 | scene | Rei | crew cable drops | "Here. A load balancer. It spreads traffic across every server behind it, and its health check skips any that's dark." |
 | C5.rei.cut | scene | Rei | only if the laundry floor was cut | "You cut the laundry loose." (beat) "...Who taught you that?" |
 | C5.lux.cut | scene | Lux | only after C5.rei.cut | "Nobody." |
 | C5.ozzie.01 | scene | Ozzie | | "I'll front you 100. It goes on my tab." |
-| C5.ozzie.02 | scene | Ozzie | | "Six boxes. Buy six, sleep tonight." |
+| C5.ozzie.02 | scene | Ozzie | | "Six servers. Buy six, sleep tonight." |
 | C5.mika.03 | scene | Mika | | "Six is a waste. Two will do." |
 | C5.ozzie.03 | scene | Ozzie | | "Two is how you end up here again." |
 | C5.rei.04 | scene | Rei | | "Stop. She can count." (to Lux) "So count." |
@@ -158,19 +158,19 @@ while the sim is frozen; the lines after it are barks.
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| C5.triage.02 | bark | TRIAGE (sheepish) | board returns | "The big box cooked. The crew put a normal one back. Sorry, big box." |
-| C5.triage.03 | bark | TRIAGE (thinking) | 10 s, if under 3 live servers | "120 coming. Each box does 60. I'm not saying the answer." |
+| C5.triage.02 | bark | TRIAGE (sheepish) | board returns | "The big server cooked. The crew put a normal one back. Sorry." |
+| C5.triage.03 | bark | TRIAGE (thinking) | 10 s, if under 3 live servers | "120 requests a second. Each server does 60. I'm not saying." |
 | C5.rei.05 | bark | Rei | 3 servers live behind the balancer | "There it is." |
 | C5.ozzie.04 | bark | Ozzie | 5 or more servers | "See? Six. Sleep tonight." |
-| C5.mika.05 | bark | Mika | 5 or more servers | "Look at the chart. Half of that is just heating your room." |
+| C5.mika.05 | bark | Mika | 5 or more servers | "Look at the chart. Half of that capacity is just heating your room." |
 | C5.chat.01 | chat | block: young father | errors stop | it's back!!! |
-| C5.triage.nudge.splitter | bark | TRIAGE (thinking) | coach: the gateway does not feed the splitter, ghost wire lit | "Gateway's not feeding the splitter. Drag one onto the other!" |
-| C5.lux.nudge.splitter | bark | Lux | coach: still not fed, 9 s later (then again every 25 s) | "Gateway into the splitter. Connect it." |
-| C5.triage.nudge.behind.1 | bark | TRIAGE (thinking) | coach: a server outside the splitter, ghost wire lit | "That box isn't behind the splitter. Nothing reaches it." |
-| C5.triage.nudge.behind.2 | bark | TRIAGE (eager) | coach: still outside, 9 s later | "Splitter onto the box. Then box onto the database!" |
-| C5.lux.nudge.behind | bark | Lux | coach: still outside, 12 s later (then again every 25 s) | "Wire it behind the splitter." |
-| C5.triage.nudge.replace.1 | bark | TRIAGE (sheepish) | coach: a dead box waiting to be swapped, the box lit | "That box cooked! Click it, then press REPLACE." |
-| C5.lux.nudge.replace | bark | Lux | coach: still dead, 9 s later (then again every 25 s) | "Swap the dead box." |
+| C5.triage.nudge.splitter | bark | TRIAGE (thinking) | coach: the gateway does not feed the load balancer, ghost wire lit | "The gateway isn't feeding the load balancer. Connect them!" |
+| C5.lux.nudge.splitter | bark | Lux | coach: still not fed, 9 s later (then again every 25 s) | "Gateway into the load balancer. Connect it." |
+| C5.triage.nudge.behind.1 | bark | TRIAGE (thinking) | coach: a server outside the load balancer, ghost wire lit | "That server isn't behind the load balancer. Nothing reaches it." |
+| C5.triage.nudge.behind.2 | bark | TRIAGE (eager) | coach: still outside, 9 s later | "Load balancer onto the server. Then server onto the database!" |
+| C5.lux.nudge.behind | bark | Lux | coach: still outside, 12 s later (then again every 25 s) | "Wire it behind the load balancer." |
+| C5.triage.nudge.replace.1 | bark | TRIAGE (sheepish) | coach: a dead server waiting to be swapped, the server lit | "That server cooked! Click it, then press REPLACE." |
+| C5.lux.nudge.replace | bark | Lux | coach: still dead, 9 s later (then again every 25 s) | "Swap the dead server." |
 
 ### Rewind after the crew arrives
 
@@ -188,7 +188,7 @@ The crew go quiet and the call is Lux's. The outcome lines branch on what holds 
 | --- | --- | --- | --- | --- |
 | C6.warn.01 | ui | Forecast | 23:59:00 | MIDNIGHT: everyone calls and streams at once. About 150 a second. |
 | C6.rei.01 | bark | Rei | the midnight forecast shows | "Your call. How many?" |
-| C6.triage.01 | bark | TRIAGE (thinking) | forecast up 8 s | "150 coming, 60 a box. That's two and a half boxes. You can't buy half a box." |
+| C6.triage.01 | bark | TRIAGE (thinking) | forecast up 8 s | "150 req/s, 60 per server. Two and a half. Can't buy half a server." |
 | C6.ozzie.01 | bark | Ozzie | forecast up, 5 or more boxes running | "Now you're talking." |
 | C6.mika.01 | bark | Mika | forecast up, 2 or fewer boxes running | "Brave." |
 | C6.tv.01 | bark | TV downstairs | 23:59:30 | "Thirty seconds, Halation!" |
@@ -209,8 +209,8 @@ The crew go quiet and the call is Lux's. The outcome lines branch on what holds 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C7.warn.01 | ui | Forecast | 00:00:05 | Everyone's watching fireworks. Demand falling to about 40 a second. |
-| C7.ozzie.01 | bark | Ozzie | 00:00:10 | "Every box still running is still costing. Just saying." |
-| C7.triage.01 | bark | TRIAGE (thinking) | 00:00:15 | "40 coming. That's... one box and a bit?" |
+| C7.ozzie.01 | bark | Ozzie | 00:00:10 | "Every server still running is still costing. Just saying." |
+| C7.triage.01 | bark | TRIAGE (thinking) | 00:00:15 | "40 requests a second. That's... one server and a bit?" |
 | C7.ozzie.down | bark | Ozzie | player decommissions to 2 | "Now that's a New Year's resolution." |
 | C7.ozzie.none | bark | Ozzie | 00:00:35, still 4 or more running | "Paying for fireworks we're not watching." |
 
@@ -231,7 +231,7 @@ dropped" are not set yet, so a ticket that needs exact numbers stops and asks.
 | C8.rei.banner.skip | scene | Rei | ignored or binned it | "You didn't take Solace's offer. Good." |
 | C8.rei.debt | scene | Rei | Ozzie's tab above 100 | "You owe Ozzie. He will remember." |
 | C8.ozzie.debt | scene | Ozzie | after C8.rei.debt | "I'll remember." |
-| C8.rei.waste | scene | Rei | 5 or more boxes at midnight | "Half those boxes did nothing but cost." |
+| C8.rei.waste | scene | Rei | 5 or more boxes at midnight | "Half those servers did nothing but cost." |
 | C8.rei.down | scene | Rei | scaled down in C7 | "And you turned them off after. That's rarer than it should be." |
 | C8.rei.close | scene | Rei | grades done | "Now the words for it. You'll need them." |
 
@@ -239,9 +239,9 @@ dropped" are not set yet, so a ticket that needs exact numbers stops and asks.
 
 | ID | Kind | Group | Line |
 | --- | --- | --- | --- |
-| C8.terms.sizing | ui | Sizing | **Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one box did 60). **Back-of-the-envelope estimate** (flats times calls, before you build). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening). |
-| C8.terms.scaling | ui | Scaling | **Scaling up** (the bigger box: quick, but it has a ceiling and goes dark while it swaps). **Scaling out** (more boxes). **Load balancer** with **health checks** (splits traffic, skips dark boxes). **Scaling down** (turning them off after). |
-| C8.terms.failure | ui | Failure | **Single point of failure** (one big box). **Cascading failure** (one part falls, the next follows). **Retry storm** (everyone hitting refresh). **Load shedding** (cutting the laundry loose). **Redundancy, N+1** (the peak plus one spare). |
+| C8.terms.sizing | ui | Sizing | **Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one server did 60). **Back-of-the-envelope estimate** (flats times calls, before you build). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening). |
+| C8.terms.scaling | ui | Scaling | **Scaling up** (the bigger server: quick, but it has a ceiling and goes dark while it swaps). **Scaling out** (more servers). **Load balancer** with **health checks** (splits traffic, skips dark servers). **Scaling down** (turning them off after). |
+| C8.terms.failure | ui | Failure | **Single point of failure** (one big server). **Cascading failure** (one part falls, the next follows). **Retry storm** (everyone hitting refresh). **Load shedding** (cutting the laundry loose). **Redundancy, N+1** (the peak plus one spare). |
 
 ### The interview version
 
@@ -334,15 +334,15 @@ header has no lines yet. UI micro-copy (labels, key caps) is not a line and stay
 | C1.alert.place | ui | Alert | C1 after the job card closes, until the first server is on the board | drag a SERVER card onto the grid |
 | C1.alert.feed | ui | Alert | coach: the gateway feeds no server | drag from the GATEWAY onto your SERVER |
 | C1.alert.store | ui | Alert | coach: a fed server has no wire to the database | drag from your SERVER onto the DATABASE |
-| C5.alert.splitter | ui | Alert | coach: the gateway does not feed the splitter | drag from the GATEWAY onto the SPLITTER |
-| C5.alert.behind | ui | Alert | coach: a server outside the splitter | drag from the SPLITTER onto each SERVER |
-| C5.alert.replace | ui | Alert | coach: a dead server waits | click the dead box and press REPLACE |
+| C5.alert.splitter | ui | Alert | coach: the gateway does not feed the load balancer | drag from the GATEWAY onto the LOAD BALANCER |
+| C5.alert.behind | ui | Alert | coach: a server outside the load balancer | drag from the LOAD BALANCER onto each SERVER |
+| C5.alert.replace | ui | Alert | coach: a dead server waits | click the dead server and press REPLACE |
 | C3.alert.title | ui | Alert | the C3 forecast headline, after the number | EVERYONE FILMING |
 | C3.alert.down | ui | Alert | a failure freezes the board, before the rewind | BLOCK DOWN |
 | C4.alert.title | ui | Alert | the C4 forecast and the surge, after the number | NEIGHBOURS REROUTED HERE |
 | C4.alert.refresh | ui | Alert | sub-line once retries push the surge up | Everyone's hitting refresh: each failed call comes straight back. |
 | C6.alert.title | ui | Alert | the C6 forecast headline, after the number | MIDNIGHT |
-| C6.alert.dip | ui | Alert | C6 forecast sub-line until the sizing is SET | Everyone calls and streams at once. One box loses power just before midnight. |
+| C6.alert.dip | ui | Alert | C6 forecast sub-line until the sizing is SET | Everyone calls and streams at once. One server loses power before midnight. |
 | C6.alert.held | ui | Alert | midnight, the block held | HELD |
 | C6.alert.dark | ui | Alert | midnight, the block went dark | BLOCK DARK |
 | C7.alert.title | ui | Alert | the after-midnight forecast headline, after the number | FIREWORKS |
@@ -360,14 +360,14 @@ band, with no number. Wording is a draft until the owner approves it (decision D
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| fill.stream.placed.01 | stream | stream | a part is placed on the board | ooh new box |
+| fill.stream.placed.01 | stream | stream | a part is placed on the board | ooh new server |
 | fill.stream.placed.02 | stream | stream | a part is placed on the board | she's building it live lol |
-| fill.stream.placed.03 | stream | stream | a part is placed on the board | box acquired |
+| fill.stream.placed.03 | stream | stream | a part is placed on the board | server acquired |
 | fill.stream.wired.01 | stream | stream | a wire is connected | cable management speedrun |
 | fill.stream.wired.02 | stream | stream | a wire is connected | is that thing plugged in now |
 | fill.stream.wired.03 | stream | stream | a wire is connected | click. nice. |
-| fill.stream.overclock.01 | stream | stream | the player swaps in the bigger box | she's going for the big box?? brave |
-| fill.stream.overclock.02 | stream | stream | the player swaps in the bigger box | big box energy |
+| fill.stream.overclock.01 | stream | stream | the player swaps in the bigger server | she's going for the big server?? brave |
+| fill.stream.overclock.02 | stream | stream | the player swaps in the bigger server | big server energy |
 | fill.stream.waiting.01 | stream | stream | the coach nudges about an empty grid | lux? you there? |
 | fill.stream.waiting.02 | stream | stream | the coach nudges about an empty grid | she's reading the manual lol |
 | fill.stream.waiting.03 | stream | stream | the coach nudges about an empty grid | chat is she ok |
@@ -395,9 +395,9 @@ band, with no number. Wording is a draft until the owner approves it (decision D
 | fill.stream.final.01 | stream | stream | ten seconds to midnight | TEN NINE EIGHT |
 | fill.stream.final.02 | stream | stream | ten seconds to midnight | here we gooo |
 | fill.stream.final.03 | stream | stream | ten seconds to midnight | don't blink |
-| fill.block.scaledown.01 | block | block | a box is turned off after midnight | old man noodles: quiet now. good night everyone |
-| fill.stream.scaledown.01 | stream | stream | a box is turned off after midnight | turning boxes off already? |
-| fill.stream.scaledown.02 | stream | stream | a box is turned off after midnight | eco mode lux |
+| fill.block.scaledown.01 | block | block | a server is turned off after midnight | old man noodles: quiet now. good night everyone |
+| fill.stream.scaledown.01 | stream | stream | a server is turned off after midnight | turning servers off already? |
+| fill.stream.scaledown.02 | stream | stream | a server is turned off after midnight | eco mode lux |
 | fill.stream.pay.01 | stream | stream | the player pays the Solace banner | she PAID solace?? lux no |
 | fill.stream.ignore.01 | stream | stream | the player ignores the Solace banner | solace ad skipped. respect |
 | fill.stream.bin.01 | stream | stream | the player bins the Solace banner | binned the solace ad lmao |
@@ -428,12 +428,12 @@ band, with no number. Wording is a draft until the owner approves it (decision D
 | fill.block.retries.02 | block | block | retries climb (a complaint) | old man noodles: pressing the button again and again |
 | fill.stream.retries.01 | stream | stream | retries climb | everyone spamming refresh rn |
 | fill.stream.retries.02 | stream | stream | retries climb | refresh refresh refresh |
-| fill.stream.hot.01 | stream | stream | a box starts to overheat | is that box smoking |
-| fill.stream.hot.02 | stream | stream | a box starts to overheat | smell-o-vision on, it's toasty |
-| fill.stream.hot.03 | stream | stream | a box starts to overheat | that box is cooking |
-| fill.stream.died.01 | stream | stream | a box dies from the heat | rip box |
-| fill.stream.died.02 | stream | stream | a box dies from the heat | it's gone. pour one out |
-| fill.stream.died.03 | stream | stream | a box dies from the heat | box down. BOX DOWN |
+| fill.stream.hot.01 | stream | stream | a server starts to overheat | is that server smoking |
+| fill.stream.hot.02 | stream | stream | a server starts to overheat | smell-o-vision on, it's toasty |
+| fill.stream.hot.03 | stream | stream | a server starts to overheat | that server is cooking |
+| fill.stream.died.01 | stream | stream | a server dies from the heat | rip server |
+| fill.stream.died.02 | stream | stream | a server dies from the heat | it's gone. pour one out |
+| fill.stream.died.03 | stream | stream | a server dies from the heat | server down. SERVER DOWN |
 | fill.stream.dip.01 | stream | stream | a power flicker warning starts | lights flickering on her side |
 | fill.stream.dip.02 | stream | stream | a power flicker warning starts | did her power just blink |
 | fill.stream.skipped.01 | stream | stream | calls go around a dark box, once a run | it just went around the dark one. neat |
@@ -471,12 +471,12 @@ until the owner approves it (decision D8).
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| C4.chat.dark | chat | block: kenji | the surge's power dip takes the big box dark | lights just blinked and the net went with them |
+| C4.chat.dark | chat | block: kenji | the surge's power dip takes the big server dark | lights just blinked and the net went with them |
 | C5.chat.lb | chat | stream: viewer | 3 s after the board returns from the rescue | what did they just plug in for her?? |
-| C6.chat.dark | chat | block: young father | 23:59:50, the dip takes a box dark | lights blinked. please. ten more seconds |
+| C6.chat.dark | chat | block: young father | 23:59:50, the dip takes a server dark | lights blinked. please. ten more seconds |
 | C7.chat.01 | chat | block: mrs okafor | 5 s after midnight held | Happy New Year Lux. Now get some sleep x |
-| fill.block.dark.01 | block | block | filler while a box is dark | kenji: everything just went out again |
-| fill.block.dark.02 | block | block | filler while a box is dark | old man noodles: the noodle cam is just my own face now |
+| fill.block.dark.01 | block | block | filler while a server is dark | kenji: everything just went out again |
+| fill.block.dark.02 | block | block | filler while a server is dark | old man noodles: the noodle cam is just my own face now |
 
 Wording is a draft until the owner approves it (decision D8).
 

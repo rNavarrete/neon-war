@@ -107,14 +107,17 @@ describe('inventory row', () => {
     expect(NOT_TONIGHT).toMatch(/not tonight/i);
   });
 
-  it('prints no debrief term on a card, a chip or the drawer before the debrief', () => {
+  it('names the cards in the real terms: SERVER, SCALE UP, LOAD BALANCER (Rolando, 29 Oct 2026)', () => {
     expect(TERMS).toContain('load balancer');
-    expect(TERMS).toContain('headroom');
+    const names = trayCards(true)
+      .filter((c) => c.main)
+      .map((c) => c.name);
+    expect(names).toEqual(expect.arrayContaining(['SERVER', 'SCALE UP', 'LOAD BALANCER']));
     const shown = [
       ...trayCards(true).flatMap((c) => [c.name ?? '', c.price === null ? '' : priceChip(c.price)]),
       NOT_TONIGHT,
     ].map((s) => s.toLowerCase());
-    for (const s of shown) for (const term of TERMS) expect(s).not.toContain(term);
+    for (const s of shown) expect(s).not.toMatch(/\bsplitter\b|\bbox\b/);
   });
 });
 
@@ -253,7 +256,7 @@ describe('InventoryView', () => {
     const texts = drawn.filter((o) => o.kind === 'text').map((o) => o.text.toLowerCase());
     for (const kind of LOCKED_KINDS) for (const t of texts) expect(t).not.toContain(kind.replace(/-/g, ' '));
     expect(texts).toEqual(
-      expect.arrayContaining(['server', 'bigger box', 'splitter', '80 cr', '60 cr', 'gift']),
+      expect.arrayContaining(['server', 'scale up', 'load balancer', '80 cr', '60 cr', 'gift']),
     );
   });
 

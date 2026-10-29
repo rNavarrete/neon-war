@@ -119,7 +119,7 @@ export interface GaugeState {
   max: number;
   /** NO ROOM YET with nothing wired, OVER BY n/s when more comes than the room takes, else null. */
   strip: string | null;
-  /** The line under the big number: "room N/s", "dropping N/s" or "no box yet". */
+  /** The line under the big number: "capacity N req/s", "dropping N req/s" or "no server yet". */
   sub: string;
 }
 
@@ -137,7 +137,7 @@ export function emptyGauge(): GaugeState {
   };
 }
 
-/** The strip's words: NO ROOM YET before anything is wired, OVER BY n/s when over, else null. */
+/** The strip's words: NO CAPACITY YET before anything is wired, OVER BY n/s when over, else null. */
 export function gaugeStrip(demand: number, wired: number): string | null {
   if (wired <= 0) return LABELS.gauge.noRoom;
   return overBy(demand, wired);

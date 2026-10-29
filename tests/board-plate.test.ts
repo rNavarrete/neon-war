@@ -64,7 +64,7 @@ function everyPlate(): string[] {
 describe('hover plates (board-8)', () => {
   it('a server shows its numbers and its state', () => {
     const p = partPlate(s1, partLook(s1, 45, [], {}, 10, none), false);
-    expect(p).toMatch(/^SERVER · 45\/60 a second · 75%/);
+    expect(p).toMatch(/^SERVER · 45\/60 req\/s · 75%/);
     expect(p).toMatch(/running/);
     expect(p.split('\n')).toHaveLength(3);
   });
@@ -72,7 +72,7 @@ describe('hover plates (board-8)', () => {
   it('says what is wrong in the tags’ words: DIES IN, UNFED, BOOTING, DARK, DEAD, SKIPPED', () => {
     const hot = partPlate(s1, partLook(s1, 90, [], {}, 10, { ...none, overload: { s: 3 } }), false);
     expect(hot).toMatch(/DIES IN 5 s/);
-    expect(hot).toMatch(/90\/60 a second · 150%/);
+    expect(hot).toMatch(/90\/60 req\/s · 150%/);
     expect(partPlate(s1, partLook(s1, 0, [], {}, 10, none), false)).toMatch(/UNFED · nothing feeds it/);
     expect(partPlate(s1, partLook(s1, 0, ['s'], { s: 12 }, 10, none), false)).toMatch(/BOOTING 2\.0 s/);
     const dark = partLook(s1, 50, ['s'], {}, 10, {
@@ -87,29 +87,26 @@ describe('hover plates (board-8)', () => {
     expect(partPlate(s1, partLook(s1, 30, [], {}, 10, none), true)).toMatch(/SKIPPED/);
   });
 
-  it('a kitted box and the other parts say what they are from labels.ts', () => {
-    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/30\/120 a second/);
-    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/BIGGER BOX/);
+  it('a scaled-up server and the other parts say what they are from labels.ts', () => {
+    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/30\/120 req\/s/);
+    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/SCALE UP/);
     expect(partPlate(gw, partLook(gw, 30, [], {}, 10, none), false)).toMatch(
-      /^GATEWAY · 30 a second coming in/,
+      /^GATEWAY · 30 req\/s coming in/,
     );
     expect(partPlate(db, partLook(db, 30, [], {}, 10, none), false)).toMatch(
-      new RegExp(`^DATABASE · 30/${BROWNOUT.database.capacity} a second`),
+      new RegExp(`^DATABASE · 30/${BROWNOUT.database.capacity} req/s`),
     );
-    expect(partPlate(lb, partLook(lb, 30, [], {}, 10, none), false)).toMatch(/^SPLITTER/);
-    expect(wirePlate(gw, s1, 29.6)).toMatch(/^WIRE · 30 a second\nGATEWAY to SERVER/);
+    expect(partPlate(lb, partLook(lb, 30, [], {}, 10, none), false)).toMatch(/^LOAD BALANCER/);
+    expect(wirePlate(gw, s1, 29.6)).toMatch(/^WIRE · 30 req\/s\nGATEWAY to SERVER/);
   });
 
-  it('never prints capacity, headroom, health check, load balancer or any other debrief term', () => {
-    const terms = debriefTerms();
-    expect(terms.length).toBeGreaterThan(10);
-    for (const banned of ['capacity', 'headroom', 'health check', 'load balancer']) {
-      expect(terms.map((t) => t.toLowerCase()).some((t) => t.includes(banned))).toBe(true);
-    }
-    for (const plate of everyPlate()) {
-      const lower = plate.toLowerCase();
-      for (const t of terms) expect(lower, plate).not.toContain(t.toLowerCase());
-    }
+  it('names the parts and their numbers in the real terms, never the old crew words', () => {
+    // Rolando, 29 Oct 2026: keep the system-design terms intact on screen.
+    expect(debriefTerms().length).toBeGreaterThan(10);
+    const plates = everyPlate();
+    for (const plate of plates) expect(plate, plate).not.toMatch(/\bsplitter\b|\bbox\b|a second|bigger box/i);
+    const all = plates.join('\n');
+    for (const term of ['LOAD BALANCER', 'capacity', 'req/s', 'health check']) expect(all).toContain(term);
   });
 
   it('the cache re-sets the text only when what the plate shows changes', () => {

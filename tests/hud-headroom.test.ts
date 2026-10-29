@@ -88,10 +88,10 @@ describe('room left', () => {
     expect(headroomLayout(ZONES.deck).marker).toBe(9);
   });
 
-  it('is labelled in the crew’s words with the absolute numbers, never HEADROOM', () => {
-    expect(headroomLabel(90, 120)).toBe('ROOM LEFT 25% · 90 of 120');
-    expect(headroomLabel(250, 120)).toBe('ROOM LEFT · OVER +130/s');
-    expect(headroomLabel(30, 0)).toBe('ROOM LEFT · NO BOX');
+  it('is labelled HEADROOM, the real term, with the absolute numbers', () => {
+    expect(headroomLabel(90, 120)).toBe('HEADROOM 25% · 90 of 120');
+    expect(headroomLabel(250, 120)).toBe('HEADROOM · OVER +130 req/s');
+    expect(headroomLabel(30, 0)).toBe('HEADROOM · NO SERVER');
     expect(overBy(120.2, 120)).toBe(1);
     expect(overBy(120, 120)).toBe(0);
     for (const [d, w] of [
@@ -100,7 +100,7 @@ describe('room left', () => {
       [30, 0],
       [0, 60],
     ]) {
-      expect(headroomLabel(d, w)).not.toMatch(/head\s*room|capacity|throughput/i);
+      expect(headroomLabel(d, w)).toMatch(/^HEADROOM/);
     }
   });
 });
@@ -276,7 +276,7 @@ describe('DeckView', () => {
     });
     expect(texts[0].text).toBe(headroomLabel(f.demand, f.wiredCapacity));
     expect(hud.headroom.label).toBe(texts[0].text);
-    expect(texts[0].text.startsWith('ROOM LEFT')).toBe(true);
+    expect(texts[0].text.startsWith('HEADROOM')).toBe(true);
     view.shutdown();
   });
 });

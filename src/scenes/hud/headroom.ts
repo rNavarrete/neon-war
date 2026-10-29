@@ -55,12 +55,12 @@ export function overBy(demand: number, wired: number): number {
   return demand > wired ? Math.ceil(demand - wired - 1e-9) : 0;
 }
 
-/** The bar's words: "ROOM LEFT 25% · 90 of 120", or the over and no-box cases. */
+/** The bar's words: "HEADROOM 25% · 90 of 120", or the over and no-server cases. */
 export function headroomLabel(demand: number, wired: number): string {
-  if (wired <= 0) return 'ROOM LEFT · NO BOX';
+  if (wired <= 0) return 'HEADROOM · NO SERVER';
   const over = overBy(demand, wired);
-  if (over > 0) return `ROOM LEFT · OVER +${over}/s`;
-  return `ROOM LEFT ${headroomPct(demand, wired)}% · ${Math.round(demand)} of ${Math.round(wired)}`;
+  if (over > 0) return `HEADROOM · OVER +${over} req/s`;
+  return `HEADROOM ${headroomPct(demand, wired)}% · ${Math.round(demand)} of ${Math.round(wired)}`;
 }
 
 /** What the hook mirrors as hud.headroom; also the view's per-frame state, refilled in place. */

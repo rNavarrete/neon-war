@@ -295,9 +295,9 @@ describe('the nudges themselves', () => {
   });
 
   it('never give a number in C3: TRIAGE points, the player picks', () => {
-    expect(LINES['C3.triage.nudge.choose.1'].text).toBe('Too much for one box! The tray has two ideas.');
+    expect(LINES['C3.triage.nudge.choose.1'].text).toBe('Too much for one server! The tray has two ideas.');
     expect(LINES['C3.triage.nudge.choose.2'].text).toBe(
-      "Bigger box, or more boxes? I'm not saying. I'm pointing.",
+      "Scale up, or scale out? I'm not saying. I'm pointing.",
     );
   });
 });
