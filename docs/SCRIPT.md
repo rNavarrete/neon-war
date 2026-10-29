@@ -279,18 +279,38 @@ errors (50% or more). Neighbours use the four chat avatars: kenji, mrs okafor, y
 | fill.block.ok.02 | block | all fine | kenji: lux can you make the wifi faster for the countdown |
 | fill.block.ok.03 | block | all fine | mrs okafor: Happy almost new year everyone x |
 | fill.block.ok.04 | block | all fine | young father: practising my midnight call face |
+| fill.block.ok.05 | block | all fine | old man noodles: noodles are on. midnight noodles |
+| fill.block.ok.06 | block | all fine | kenji: who's on the roof for fireworks |
+| fill.block.ok.07 | block | all fine | young father: my son says hi to everyone |
+| fill.block.ok.08 | block | all fine | mrs okafor: Has anyone seen my cat. Grey. Judgemental. |
+| fill.block.ok.09 | block | all fine | kenji: lux ur famous on the stairs group chat |
+| fill.block.ok.10 | block | all fine | old man noodles: the rain is stopping i think |
 | fill.block.slow.01 | block | some errors | kenji: lagging |
 | fill.block.slow.02 | block | some errors | old man noodles: the picture is doing the stairs thing |
 | fill.block.slow.03 | block | some errors | mrs okafor: Lift's stuck again. |
+| fill.block.slow.04 | block | some errors | young father: video keeps freezing on his face |
+| fill.block.slow.05 | block | some errors | mrs okafor: The heating alarm is beeping again. |
 | fill.block.down.01 | block | heavy errors | young father: anyone else? |
 | fill.block.down.02 | block | heavy errors | kenji: LUX |
+| fill.block.down.03 | block | heavy errors | old man noodles: hello? anyone? |
+| fill.block.down.04 | block | heavy errors | mrs okafor: Lux, love, it's all gone. |
 | fill.stream.ok.01 | stream | all fine | ok the drone cam is actually sick |
 | fill.stream.ok.02 | stream | all fine | lux fixing the net on NYE is so lux |
 | fill.stream.ok.03 | stream | all fine | what's that chart |
+| fill.stream.ok.04 | stream | all fine | first time catching a live one |
+| fill.stream.ok.05 | stream | all fine | the rain sounds on this stream are elite |
+| fill.stream.ok.06 | stream | all fine | triage say hi |
+| fill.stream.ok.07 | stream | all fine | is that her room? cozy |
+| fill.stream.ok.08 | stream | all fine | chat be nice it's NYE |
+| fill.stream.ok.09 | stream | all fine | lux drop the playlist |
 | fill.stream.slow.01 | stream | some errors | number go up?? |
 | fill.stream.slow.02 | stream | some errors | triage is panicking again lol |
+| fill.stream.slow.03 | stream | some errors | the chart is doing something |
+| fill.stream.slow.04 | stream | some errors | lag on my end too |
 | fill.stream.down.01 | stream | heavy errors | stream lagging bad |
 | fill.stream.down.02 | stream | heavy errors | rip |
+| fill.stream.down.03 | stream | heavy errors | f in the chat |
+| fill.stream.down.04 | stream | heavy errors | we lost her |
 
 No filler line names a fix or a system-design term.
 
@@ -342,28 +362,67 @@ band, with no number. Wording is a draft until the owner approves it (decision D
 | --- | --- | --- | --- | --- |
 | fill.stream.placed.01 | stream | stream | a part is placed on the board | ooh new box |
 | fill.stream.placed.02 | stream | stream | a part is placed on the board | she's building it live lol |
+| fill.stream.placed.03 | stream | stream | a part is placed on the board | box acquired |
 | fill.stream.wired.01 | stream | stream | a wire is connected | cable management speedrun |
 | fill.stream.wired.02 | stream | stream | a wire is connected | is that thing plugged in now |
+| fill.stream.wired.03 | stream | stream | a wire is connected | click. nice. |
 | fill.stream.overclock.01 | stream | stream | the player swaps in the bigger box | she's going for the big box?? brave |
+| fill.stream.overclock.02 | stream | stream | the player swaps in the bigger box | big box energy |
+| fill.stream.waiting.01 | stream | stream | the coach nudges about an empty grid | lux? you there? |
+| fill.stream.waiting.02 | stream | stream | the coach nudges about an empty grid | she's reading the manual lol |
+| fill.stream.waiting.03 | stream | stream | the coach nudges about an empty grid | chat is she ok |
+| fill.block.waiting.01 | block | block | the coach nudges about an empty grid (a complaint) | kenji: lux is it on yet? |
+| fill.block.waiting.02 | block | block | the coach nudges about an empty grid (a complaint) | young father: still nothing on my end |
+| fill.block.waiting.03 | block | block | the coach nudges about an empty grid (a complaint) | old man noodles: noodle cam still dark |
+| fill.stream.unplugged.01 | stream | stream | the coach nudges about a wire | is it plugged in tho |
+| fill.stream.unplugged.02 | stream | stream | the coach nudges about a wire | chat she forgot a cable |
+| fill.stream.unplugged.03 | stream | stream | the coach nudges about a wire | plug it in plug it in plug it in |
+| fill.stream.unplugged.04 | stream | stream | the coach nudges about a wire | triage is trying its best |
+| fill.stream.math.01 | stream | stream | TRIAGE's 480 guess | triage pls |
+| fill.stream.math.02 | stream | stream | TRIAGE's 480 guess | triage can't math lmao |
+| fill.stream.banner.01 | stream | stream | the Solace banner slides in | ugh solace ads on NYE |
+| fill.stream.banner.02 | stream | stream | the Solace banner slides in | solace popup lmao |
+| fill.stream.banner.03 | stream | stream | the Solace banner slides in | solace really said 'deserves better' huh |
+| fill.block.banner.01 | block | block | the Solace banner slides in | mrs okafor: Solace sent me the same advert. |
+| fill.block.countdown.01 | block | block | one minute to midnight | mrs okafor: One minute everyone!! |
+| fill.block.countdown.02 | block | block | one minute to midnight | old man noodles: one minute. noodles ready |
+| fill.block.countdown.03 | block | block | one minute to midnight | young father: he's dialling in. come on come on |
+| fill.stream.countdown.01 | stream | stream | one minute to midnight | ONE MINUTE |
+| fill.stream.countdown.02 | stream | stream | one minute to midnight | chat it's almost time |
+| fill.stream.countdown.03 | stream | stream | one minute to midnight | lux you got this |
+| fill.block.final.01 | block | block | ten seconds to midnight | kenji: TEN |
+| fill.block.final.02 | block | block | ten seconds to midnight | mrs okafor: Hold hands everyone |
+| fill.stream.final.01 | stream | stream | ten seconds to midnight | TEN NINE EIGHT |
+| fill.stream.final.02 | stream | stream | ten seconds to midnight | here we gooo |
+| fill.stream.final.03 | stream | stream | ten seconds to midnight | don't blink |
+| fill.block.scaledown.01 | block | block | a box is turned off after midnight | old man noodles: quiet now. good night everyone |
+| fill.stream.scaledown.01 | stream | stream | a box is turned off after midnight | turning boxes off already? |
+| fill.stream.scaledown.02 | stream | stream | a box is turned off after midnight | eco mode lux |
 | fill.stream.pay.01 | stream | stream | the player pays the Solace banner | she PAID solace?? lux no |
 | fill.stream.ignore.01 | stream | stream | the player ignores the Solace banner | solace ad skipped. respect |
 | fill.stream.bin.01 | stream | stream | the player bins the Solace banner | binned the solace ad lmao |
 | fill.block.served.01 | block | block | the first serve, or a new box starts serving | kenji: oh it's moving again |
 | fill.block.served.02 | block | block | the first serve, or a new box starts serving | old man noodles: noodle cam is back |
+| fill.block.served.03 | block | block | the first serve, or a new box starts serving | young father: video's moving again |
 | fill.stream.served.01 | stream | stream | the first serve, or a new box starts serving | picture's back |
 | fill.stream.served.02 | stream | stream | the first serve, or a new box starts serving | smooth now |
 | fill.block.errors.01 | block | block | errors held 1 s (a complaint) | young father: my call just dropped |
 | fill.block.errors.02 | block | block | errors held 1 s (a complaint) | kenji: pages won't load |
+| fill.block.errors.03 | block | block | errors held 1 s (a complaint) | old man noodles: the noodle cam froze |
 | fill.stream.errors.01 | stream | stream | errors held 1 s | buffering... |
 | fill.stream.errors.02 | stream | stream | errors held 1 s | is it freezing for anyone else |
+| fill.stream.errors.03 | stream | stream | errors held 1 s | frozen for me |
 | fill.block.heavy.01 | block | block | heavy errors held 2 s (a complaint) | old man noodles: nothing is working at all |
 | fill.block.heavy.02 | block | block | heavy errors held 2 s (a complaint) | young father: lux please, my son is waiting |
 | fill.stream.heavy.01 | stream | stream | heavy errors held 2 s | stream's dying chat |
 | fill.stream.heavy.02 | stream | stream | heavy errors held 2 s | the picture is just one frame now |
+| fill.stream.heavy.03 | stream | stream | heavy errors held 2 s | it's all red chat |
 | fill.block.recovered.01 | block | block | calm 3 s after a spell of errors (thanks) | young father: it's working again. thank you |
 | fill.block.recovered.02 | block | block | calm 3 s after a spell of errors (thanks) | kenji: ok lux saved it |
+| fill.block.recovered.03 | block | block | calm 3 s after a spell of errors (thanks) | old man noodles: thank you lux |
 | fill.stream.recovered.01 | stream | stream | calm 3 s after a spell of errors | WE'RE BACK |
 | fill.stream.recovered.02 | stream | stream | calm 3 s after a spell of errors | she actually did it |
+| fill.stream.recovered.03 | stream | stream | calm 3 s after a spell of errors | lets gooo |
 | fill.block.rejoin.01 | block | block (system) | the recovery, if Mrs Okafor left | system: Mrs Okafor joined the chat |
 | fill.block.retries.01 | block | block | retries climb (a complaint) | kenji: i just keep hitting reload |
 | fill.block.retries.02 | block | block | retries climb (a complaint) | old man noodles: pressing the button again and again |
@@ -371,25 +430,33 @@ band, with no number. Wording is a draft until the owner approves it (decision D
 | fill.stream.retries.02 | stream | stream | retries climb | refresh refresh refresh |
 | fill.stream.hot.01 | stream | stream | a box starts to overheat | is that box smoking |
 | fill.stream.hot.02 | stream | stream | a box starts to overheat | smell-o-vision on, it's toasty |
+| fill.stream.hot.03 | stream | stream | a box starts to overheat | that box is cooking |
 | fill.stream.died.01 | stream | stream | a box dies from the heat | rip box |
 | fill.stream.died.02 | stream | stream | a box dies from the heat | it's gone. pour one out |
+| fill.stream.died.03 | stream | stream | a box dies from the heat | box down. BOX DOWN |
 | fill.stream.dip.01 | stream | stream | a power flicker warning starts | lights flickering on her side |
 | fill.stream.dip.02 | stream | stream | a power flicker warning starts | did her power just blink |
 | fill.stream.skipped.01 | stream | stream | calls go around a dark box, once a run | it just went around the dark one. neat |
 | fill.block.laundry.01 | block | block | the laundry floor is cut loose | old man noodles: my washing stopped halfway |
 | fill.stream.laundry.01 | stream | stream | the laundry floor is cut loose | she cut a whole floor off lol |
+| fill.stream.laundry.02 | stream | stream | the laundry floor is cut loose | rip laundry floor |
 | fill.stream.warning.01 | stream | stream | a surge warning goes up | something big is coming, look at that line |
 | fill.stream.warning.02 | stream | stream | a surge warning goes up | uh oh |
+| fill.stream.warning.03 | stream | stream | a surge warning goes up | line's going up chat |
 | fill.block.surge.01 | block | block | the surge lands | kenji: the whole street is online now |
 | fill.block.surge.02 | block | block | the surge lands | old man noodles: so many people on the wifi tonight |
 | fill.stream.surge.01 | stream | stream | the surge lands | here it comes |
 | fill.stream.surge.02 | stream | stream | the surge lands | the neighbours are all piling in |
+| fill.stream.surge.03 | stream | stream | the surge lands | OH NO |
 | fill.stream.rescue.01 | stream | stream | the crew arrive | WHO ARE THESE PEOPLE |
 | fill.stream.rescue.02 | stream | stream | the crew arrive | she has backup?? |
+| fill.stream.rescue.03 | stream | stream | the crew arrive | lux has FRIENDS?? |
 | fill.block.held.01 | block | block | midnight held | kenji: HAPPY NEW YEAR LUX |
 | fill.block.held.02 | block | block | midnight held | old man noodles: noodle cam saw the fireworks |
+| fill.block.held.03 | block | block | midnight held | mrs okafor: Happy new year, Lux x |
 | fill.stream.held.01 | stream | stream | midnight held | clean midnight. no lag |
 | fill.stream.held.02 | stream | stream | midnight held | best stream of the year |
+| fill.stream.held.03 | stream | stream | midnight held | HAPPY NEW YEAR CHAT |
 
 Reactions to what happens on the board (src/scenes/hud/chatEngine.ts REACTIONS), one pool per
 `fill.<chat>.<pool>.` prefix. None names a fix, a number or a system-design word. Wording is a draft

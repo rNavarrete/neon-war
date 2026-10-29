@@ -32,6 +32,7 @@ import type { Bus } from '../../game/bus';
 import type { Frame } from '../../game/frame';
 import type { Occurrence } from '../../game/occurrences';
 import { settings } from '../../game/settings';
+import { BROWNOUT } from '../../sim/brownout';
 import type { LineId } from '../../strings';
 import { artRequest, isPicked, requestFile } from '../../game/artManifest';
 import { type AvatarScene, BLOCK_AVATARS, STREAM_AVATARS, preloadAvatars, roundAvatar } from '../avatars';
@@ -344,8 +345,17 @@ export class ChatFeed {
       bus.on('line', (l) => {
         this.pending.push({ kind: 'line', id: l.id, lesson: isLesson(l.id) });
       }),
+      bus.on('coachNudge', (n) => {
+        this.pending.push({ kind: 'coach', step: n.step });
+      }),
       bus.on('action', (a) => {
         if (a.type === 'overclock') this.pending.push({ kind: 'action', type: 'overclock' });
+        else if (a.type === 'decommission')
+          this.pending.push({
+            kind: 'action',
+            type: 'decommission',
+            afterMidnight: this.inputs.now >= BROWNOUT.clock.midnight,
+          });
         else if (a.type === 'banner') this.pending.push({ kind: 'action', type: 'banner', choice: a.choice });
       }),
     );
@@ -436,6 +446,7 @@ export class ChatFeed {
 function describe(e: ChatEvent): string {
   if (e.kind === 'occurrence') return `occurrence:${e.occurrence.kind}`;
   if (e.kind === 'line') return `line:${e.id}`;
+  if (e.kind === 'coach') return `coach:${e.step}`;
   return `action:${e.type}`;
 }
 

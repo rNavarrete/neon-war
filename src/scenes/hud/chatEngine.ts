@@ -79,6 +79,10 @@ export type ChatCause =
   | 'surgeLanded'
   | 'overclock'
   | 'banner'
+  | 'coach'
+  | 'line'
+  | 'countdown'
+  | 'scaledDown'
   | 'seed'
   | 'cue'
   | 'filler';
@@ -112,7 +116,19 @@ export type ReactionKey =
   | 'surgeStream'
   | 'rescued'
   | 'heldBlock'
-  | 'heldStream';
+  | 'heldStream'
+  | 'waitingBlock'
+  | 'waitingStream'
+  | 'unplugged'
+  | 'math'
+  | 'bannerBlock'
+  | 'bannerStream'
+  | 'countdownBlock'
+  | 'countdownStream'
+  | 'finalBlock'
+  | 'finalStream'
+  | 'scaledDownBlock'
+  | 'scaledDownStream';
 
 export interface Reaction {
   /** The id prefix of its own lines (chat-2 writes them into the chat anchor). */
@@ -176,7 +192,42 @@ export const REACTIONS: Readonly<Record<ReactionKey, Reaction>> = Object.freeze(
   rescued: R('fill.stream.rescue.', SO, 60),
   heldBlock: R('fill.block.held.', BO, 60),
   heldStream: R('fill.stream.held.', SO, 60),
+  // The tutorial coach's nudges: the block waits on her, the stream ribs her about the cable.
+  waitingBlock: R('fill.block.waiting.', null, 20),
+  waitingStream: R('fill.stream.waiting.', null, 20),
+  unplugged: R('fill.stream.unplugged.', null, 15),
+  // Lines on the band the chat answers (LINE_REACTIONS).
+  math: R('fill.stream.math.', null, Infinity),
+  bannerBlock: R('fill.block.banner.', null, Infinity),
+  bannerStream: R('fill.stream.banner.', null, Infinity),
+  // The countdown: a minute out and ten seconds out (COUNTDOWN_MARKS).
+  countdownBlock: R('fill.block.countdown.', null, 30),
+  countdownStream: R('fill.stream.countdown.', null, 30),
+  finalBlock: R('fill.block.final.', null, 30),
+  finalStream: R('fill.stream.final.', null, 30),
+  scaledDownBlock: R('fill.block.scaledown.', null, 60),
+  scaledDownStream: R('fill.stream.scaledown.', null, 30),
 });
+
+/** Band lines the chat answers when they start: TRIAGE's 480 and the Solace banner. */
+export const LINE_REACTIONS: Readonly<Partial<Record<LineId, readonly ReactionKey[]>>> = Object.freeze({
+  'C1.triage.02': ['math'],
+  'C2.triage.01': ['bannerStream', 'bannerBlock'],
+});
+
+/** The coach's steps the chat answers, and with what (an empty grid, or a missing wire). */
+export const COACH_REACTIONS: Readonly<Record<string, readonly ReactionKey[]>> = Object.freeze({
+  place: ['waitingBlock', 'waitingStream'],
+  feed: ['unplugged', 'waitingBlock'],
+  store: ['unplugged'],
+  behind: ['unplugged'],
+});
+
+/** Sim seconds the countdown reactions come at: a minute out, then ten seconds out. */
+export const COUNTDOWN_MARKS: readonly { readonly at: number; readonly keys: readonly ReactionKey[] }[] = [
+  { at: BROWNOUT.clock.midnight - 60, keys: ['countdownBlock', 'countdownStream'] },
+  { at: BROWNOUT.clock.midnight - 10, keys: ['finalStream', 'finalBlock'] },
+];
 
 /**
  * Scripted chat ids the script lets go rather than wait when the window is full: none today (every
@@ -232,6 +283,18 @@ const CAUSE_OF: Readonly<Record<ReactionKey, ChatCause>> = {
   rescued: 'rescued',
   heldBlock: 'held',
   heldStream: 'held',
+  waitingBlock: 'coach',
+  waitingStream: 'coach',
+  unplugged: 'coach',
+  math: 'line',
+  bannerBlock: 'line',
+  bannerStream: 'line',
+  countdownBlock: 'countdown',
+  countdownStream: 'countdown',
+  finalBlock: 'countdown',
+  finalStream: 'countdown',
+  scaledDownBlock: 'scaledDown',
+  scaledDownStream: 'scaledDown',
 };
 
 /** Scripted lines in which a neighbour leaves the chat, and who. Filler never speaks for them. */
@@ -311,6 +374,8 @@ export type ChatEvent =
   | { readonly kind: 'occurrence'; readonly occurrence: Occurrence }
   | { readonly kind: 'line'; readonly id: LineId; readonly lesson?: boolean }
   | { readonly kind: 'action'; readonly type: 'overclock' }
+  | { readonly kind: 'action'; readonly type: 'decommission'; readonly afterMidnight: boolean }
+  | { readonly kind: 'coach'; readonly step: string }
   | { readonly kind: 'action'; readonly type: 'banner'; readonly choice: BannerChoice };
 
 export interface QueuedReaction {
@@ -360,6 +425,8 @@ export interface ChatState {
   readonly retryStep: number;
   readonly surgeAt: number | null;
   readonly surgeLanded: number | null;
+  /** How many of COUNTDOWN_MARKS the clock has passed. */
+  readonly countdown: number;
   readonly rewinds: number;
 }
 
@@ -399,6 +466,7 @@ export function initialChat(clock: number, rand: () => number, rewinds = 0): Cha
     retryStep: 0,
     surgeAt: null,
     surgeLanded: null,
+    countdown: 0,
     rewinds,
   };
 }
@@ -551,6 +619,7 @@ export function stepChat(
     x.retryStep = 0;
     x.surgeAt = null;
     x.surgeLanded = null;
+    x.countdown = 0;
     x.quietUntil = -Infinity;
   }
 
@@ -559,11 +628,21 @@ export function stepChat(
     const x = draft();
     if (e.kind === 'line') {
       if (e.lesson ?? isLesson(e.id)) x.quietUntil = Math.max(x.quietUntil, c + CHAT_PACE.lessonQuiet);
+      for (const key of LINE_REACTIONS[e.id] ?? []) enqueue(x, key, c);
+      continue;
+    }
+    if (e.kind === 'coach') {
+      for (const key of COACH_REACTIONS[e.step] ?? []) enqueue(x, key, c);
       continue;
     }
     if (e.kind === 'action') {
       if (e.type === 'overclock') enqueue(x, 'overclock', c);
-      else
+      else if (e.type === 'decommission') {
+        if (e.afterMidnight) {
+          enqueue(x, 'scaledDownStream', c);
+          enqueue(x, 'scaledDownBlock', c);
+        }
+      } else
         enqueue(
           x,
           e.choice === 'pay' ? 'bannerPay' : e.choice === 'ignore' ? 'bannerIgnore' : 'bannerBin',
@@ -675,6 +754,17 @@ export function stepChat(
     x.surgeLanded = sa;
     enqueue(x, 'surgeBlock', c);
     enqueue(x, 'surgeStream', c);
+  }
+
+  // The countdown: a minute out, then ten seconds out.
+  const mark = cur().countdown;
+  if (mark < COUNTDOWN_MARKS.length && inp.now >= COUNTDOWN_MARKS[mark].at - EPS) {
+    const x = draft();
+    let n = mark;
+    while (n < COUNTDOWN_MARKS.length && inp.now >= COUNTDOWN_MARKS[n].at - EPS) n++;
+    x.countdown = n;
+    // Only the mark just passed speaks: a clock jumped past both says the later one.
+    for (const key of COUNTDOWN_MARKS[n - 1].keys) enqueue(x, key, c);
   }
 
   // The audience.

@@ -17,8 +17,8 @@ export interface ChatEntry {
 }
 
 export const CHAT_ROWS = 6;
-export const FILLER_MIN_SECONDS = 6;
-export const FILLER_MAX_SECONDS = 10;
+export const FILLER_MIN_SECONDS = 3.5;
+export const FILLER_MAX_SECONDS = 6.5;
 
 /** A small seeded random generator (mulberry32), returning numbers in [0, 1). */
 export function seededRandom(seed: number): () => number {
