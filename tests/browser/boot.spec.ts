@@ -5,7 +5,7 @@ test('the game boots into the board scene and shows the art', async ({ page }) =
   page.on('pageerror', (err) => errors.push(err.message));
   page.on('requestfailed', (req) => errors.push(`failed to load ${req.url()}`));
 
-  await page.goto('/?test');
+  await page.goto('/?test&scene=board');
   await expect
     .poll(() => page.evaluate(() => window.__neonTest?.state.ready ?? false), { timeout: 15_000 })
     .toBe(true);

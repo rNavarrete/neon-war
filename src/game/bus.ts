@@ -1,0 +1,139 @@
+// One typed event bus between the game's parts, so the board, HUD, sound and story never import
+// each other. The board emits what the player did; sound and barks listen.
+
+import type { BannerChoice } from '../sim/economy';
+import type { RescueCause } from '../sim/failures';
+import type { Failure, Midnight } from '../sim/play';
+import type { LineId } from '../strings';
+import type { Occurrence } from './occurrences';
+
+/** The tag a comms band line carries (src/scenes/hud/lineMeta.ts says which line gets which). */
+export type LineTag = 'HINT' | 'WARNING' | 'CREW' | 'LUX' | 'HOUSE';
+
+/** The two chats on the Live screen. */
+export type ChatName = 'block' | 'stream';
+
+/**
+ * Where a dragged card would land, in the board's words: the same five values as PadState in
+ * src/scenes/board/layout.ts (legal, taken, a dead box, too poor, the wrong kind of spot). Spelled
+ * out here so the bus imports nothing from a scene.
+ */
+export type DragState = 'legal' | 'taken' | 'dead' | 'poor' | 'wrong';
+
+/** The drag event's verdict fields from the pad state under the card (null over nothing). Pure. */
+export function dragVerdict(state: DragState | null): { state: DragState | null; legal: boolean | null } {
+  return { state, legal: state === null ? null : state === 'legal' };
+}
+
+export interface GameEvents {
+  /** Something the player did on the board that worked. */
+  action:
+    | { type: 'place'; id: string }
+    | { type: 'wire'; from: string; to: string }
+    | { type: 'cut'; from: string; to: string }
+    | { type: 'decommission'; id: string; refund: number }
+    | { type: 'overclock'; id: string }
+    | { type: 'banner'; choice: BannerChoice }
+    | { type: 'laundryCut' };
+  /** The player tried something the rules refused, with the reason to show. */
+  refused: { reason: string };
+  /** Play one sound effect by its key (the file name in public/audio/sfx without .mp3). */
+  sfx: { key: string; loop?: boolean };
+  /** Stop a looping sound effect started with `sfx` and `loop` (e.g. rain-loop when a room scene ends). */
+  sfxStop: { key: string };
+  /** A server went over 100% load and started to overheat (ENG-503 emits it). */
+  overheat: { id: string };
+  /** A server died from overheating (ENG-503 emits it). */
+  serverDied: { id: string };
+  /** A power dip's warning ended and the part went dark (ENG-503 emits it). */
+  powerDip: { id: string };
+  /** The crew's cable drops at the rescue (ENG-503 / the story layer emits it). */
+  rescue: Record<string, never>;
+  /** The sim brought the crew in (trust under 30 or 45 s into the surge): the rescue scene plays. */
+  crewArrived: { by: RescueCause };
+  /** The board froze on a failure; the rewind screen plays, then the run rewinds. */
+  failure: Failure;
+  /** The stroke of twelve: whether the block held. */
+  midnight: Midnight;
+  /** The clock reached 00:01:00: the debrief plays. */
+  sessionEnd: Record<string, never>;
+  /** An edge between two frames of the sim (src/game/occurrences.ts), emitted by the HUD once each. */
+  occurrence: Occurrence;
+
+  // ---- the Live screen (docs/LIVE.md): one event per lane boundary ----
+
+  /**
+   * What the pointer drags on the board, on drag start, every hover change and drag end (the board
+   * emits it). `kind` null means the drag ended; `card` names a tray card; `over` what it is above.
+   */
+  drag: {
+    kind: 'card' | 'wire' | null;
+    card: 'server' | 'overclock' | 'balancer' | null;
+    over: 'cell' | 'part' | null;
+    /**
+     * What the card in hand may do where it is: the board's padState for the pad or part under it
+     * (src/scenes/board/layout.ts PadState), null while it is over nothing, on a wire drag and when
+     * the drag ends. Optional until the board's emit sends it (absent reads as null).
+     */
+    state?: DragState | null;
+    /** `state === 'legal'`, or null where `state` is null (dragVerdict builds both). */
+    legal?: boolean | null;
+  };
+  /**
+   * A comms band line started (the comms lane emits it); `since` is the HUD clock it started at.
+   * `lesson` is lineMeta's flag: one of the lesson lines (the chat goes quiet for it).
+   */
+  line: { id: LineId; speaker: string; tag: LineTag; lesson: boolean; since: number };
+  /** The band line ended (its dwell ran out or a warning pre-empted it). */
+  lineEnd: { id: LineId };
+  /** A chat line was posted, scripted (by id) or filler (id null); `at` is the HUD clock. */
+  chatLine: { chat: ChatName; id: LineId | null; who: string; text: string; at: number };
+  /**
+   * An alert went up on the band, one at a time (the gauges lane emits it; src/scenes/hud/alerts.ts
+   * narrows `kind`). `line` is the script line it shows, if one; `at` the HUD clock.
+   */
+  alert: { kind: string; line: LineId | null; text: string; at: number };
+  /** The alert of that kind came down. */
+  alertEnd: { kind: string };
+  /** A view asks the mixer for a line's voice clip. */
+  voice: { id: LineId };
+  /** The mixer started playing the clip, and how long it runs. */
+  voiceStart: { id: LineId; seconds: number };
+  /** Something asked the mixer to stop the clip early. */
+  voiceStop: { id: LineId };
+  /** The clip finished (or was stopped). */
+  voiceEnd: { id: LineId };
+  /**
+   * A line of the trigger table fired (src/scenes/hud/cues.ts), once per id, emitted by the HUD's
+   * host loop: `kind` says where it goes (bark ids to the comms band, chat ids to the chat); `at` is
+   * the HUD clock.
+   */
+  cue: { id: LineId; kind: 'bark' | 'chat'; at: number };
+  /**
+   * How many are watching Lux's stream now (0..4, from the chat lane's viewersOf), emitted by the
+   * chat view on every change. The title draws it as WATCHING; before the first one it shows no
+   * number.
+   */
+  audience: { watching: number };
+  /** One sample of the frame budget: the frame rate and what is on the display lists; `at` is the HUD clock. */
+  perfSample: { at: number; fps: number; objects: number; texts: number; graphics: number };
+}
+
+type Handler<T> = (payload: T) => void;
+
+export class Bus {
+  private handlers = new Map<keyof GameEvents, Set<Handler<never>>>();
+
+  on<K extends keyof GameEvents>(event: K, fn: Handler<GameEvents[K]>): () => void {
+    let set = this.handlers.get(event);
+    if (!set) this.handlers.set(event, (set = new Set()));
+    set.add(fn as Handler<never>);
+    return () => set.delete(fn as Handler<never>);
+  }
+
+  emit<K extends keyof GameEvents>(event: K, payload: GameEvents[K]): void {
+    for (const fn of this.handlers.get(event) ?? []) (fn as Handler<GameEvents[K]>)(payload);
+  }
+}
+
+export const bus = new Bus();

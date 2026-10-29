@@ -78,6 +78,8 @@ function writeEvent(file, title, body) {
 // event(file): writes a fake GitHub event to `file` (outside the repo copy) and
 // runs check.mjs with --contract-claim-from-event instead of --contract-digest.
 // claimError: check must exit nonzero even though every step passes.
+// shards: run the CI shard flow instead: `--e2e-shard i/n` for i in 1..runShards into a dir
+// outside the copy, then the check with `--e2e-from-shards <dir>`.
 const CASES = [
   { name: 'baseline', seed: () => {}, expectPass: true },
   {
@@ -155,6 +157,9 @@ const CASES = [
     ignore: ['contract'],
     claimError: true,
   },
+  { name: 'sharded e2e', seed: () => {}, expectPass: true, shards: { total: 1, run: 1 } },
+  // A shard set with one shard never run: e2e must fail even though no shard failed.
+  { name: 'missing shard', seed: () => {}, shards: { total: 2, run: 1 }, fail: ['e2e'] },
 ];
 
 function checkCase(c, files) {
@@ -178,12 +183,33 @@ function checkCase(c, files) {
       env.GITHUB_EVENT_PATH = eventFile;
       args = ['--contract-claim-from-event'];
     }
+    let shardDir = null;
+    if (c.shards) {
+      shardDir = path.join(dir, '..', `${path.basename(dir)}-shards`);
+      fs.mkdirSync(shardDir);
+      for (let i = 1; i <= c.shards.run; i++) {
+        const s = run(
+          process.execPath,
+          [
+            'scripts/check.mjs',
+            '--e2e-shard',
+            `${i}/${c.shards.total}`,
+            '--out',
+            path.join(shardDir, `${i}`, `check-evidence-e2e-shard-${i}.json`),
+          ],
+          { cwd: dir, timeout: CASE_TIMEOUT_MS, killSignal: 'SIGKILL', env },
+        );
+        if (s.status !== 0) problems.push(`shard ${i}/${c.shards.total} exit ${s.status}, expected 0`);
+      }
+      args = [...args, '--e2e-from-shards', shardDir];
+    }
     const r = run(process.execPath, ['scripts/check.mjs', '--out', out, ...args], {
       cwd: dir,
       timeout: CASE_TIMEOUT_MS,
       killSignal: 'SIGKILL',
       env,
     });
+    if (shardDir) fs.rmSync(shardDir, { recursive: true, force: true });
     if (eventFile) fs.rmSync(eventFile, { force: true });
     exitCode = r.status;
     if (r.error) problems.push(`check.mjs did not finish: ${r.error.message}`);
@@ -233,6 +259,9 @@ function checkCase(c, files) {
       }
       for (const name of REQUIRED) {
         if (!byName.has(name)) problems.push(`step ${name} missing`);
+      }
+      if (c.shards && !/merged from/.test(byName.get('e2e')?.command ?? '')) {
+        problems.push(`e2e step was not merged from shards: ${byName.get('e2e')?.command}`);
       }
       const fail = c.fail ?? [];
       const ignore = c.ignore ?? [];
@@ -296,7 +325,11 @@ function unitTests() {
 
 const t0 = Date.now();
 const results = [unitTests()];
-const files = listRepoFiles();
+// The cases test the check command, not the game: each copy keeps one browser test (boot) so the e2e
+// step still runs for real, and leaves out the rest of the suite, which plays whole sessions and
+// takes about 11 minutes. Ten full runs would not fit the job's 25 minutes.
+const KEPT_BROWSER_TEST = 'tests/browser/boot.spec.ts';
+const files = listRepoFiles().filter((f) => !f.startsWith('tests/browser/') || f === KEPT_BROWSER_TEST);
 for (const c of CASES) {
   process.stdout.write(`running case: ${c.name} ...\n`);
   results.push(checkCase(c, files));

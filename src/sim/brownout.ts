@@ -21,8 +21,8 @@ export const BROWNOUT = {
   overclock: { cost: 60, factor: 2, rebootSeconds: 3 },
   database: { capacity: 200 },
   loadBalancer: { cost: 0 },
-  /** Share of a part's price given back on decommission. GAME.md doesn't set it: none for now. */
-  decommissionRefund: 0,
+  /** Share of a part's price given back on decommission: half (Rolando, 27 Oct 2026). */
+  decommissionRefund: 0.5,
 
   demand: {
     /** Evening climb (C3): ramps from the block's base to this over climbRampSeconds, then holds. */
@@ -58,11 +58,46 @@ export const BROWNOUT = {
 
   // Failure rules below are B1b's; their numbers live here so the whole table is in one place.
   overheat: { overloadSeconds: 8 },
-  retries: { maxDemandRise: 0.5 },
+  /**
+   * Failed requests come back: demand rises toward the error share, capped at maxDemandRise, by
+   * risePerSecond while errors last, and falls back by fallPerSecond when they stop. The rates are
+   * drafts for Rolando: GAME.md only sets the cap.
+   */
+  retries: { maxDemandRise: 0.5, risePerSecond: 0.05, fallPerSecond: 0.1 },
   powerDip: { warningSeconds: 2, darkSeconds: 20, beforeMidnightSeconds: 10 },
   regroup: { speed: 0.25, seconds: 10, charges: 1 },
   rescue: { trustBelow: 30, surgeSeconds: 45 },
   finalSizing: { holds: 4, holdsWithFastReplacement: 3, drops: 2, waste: 5 },
+  /** The C4 script: the power dip takes the overclocked server dark this long into the surge (a draft). */
+  surgeScript: { dipAfterSeconds: 5 },
+  /**
+   * The table's grid (src/sim/grid.ts): the painted silkscreen's squares, the cells each kind
+   * covers, where the fixed parts stand on it (`fixed`: each one's anchor cell; the gateway near the
+   * left side, the database near the right, both on the first server spots' port row), the racks (bands of `rackColumns` columns, each on its own power feed), where the
+   * crew rack their splitter, and the suggested server spots (one per rack along each row in turn).
+   */
+  board: {
+    cols: 28,
+    rows: 19,
+    footprint: {
+      server: { w: 2, h: 2 },
+      balancer: { w: 2, h: 1 },
+      gateway: { w: 2, h: 2 },
+      database: { w: 3, h: 2 },
+    },
+    fixed: { gateway: { col: 0, row: 11 }, database: { col: 25, row: 11 } },
+    racks: ['A', 'B', 'C', 'D'],
+    rackColumns: 7,
+    balancerSpot: { col: 5, row: 12 },
+    serverSpots: { cols: [3, 9, 16, 22], rows: [11, 5, 15] },
+  },
+  /** C7: decommissioning down to this many servers counts as scaling down in the debrief. */
+  scaleDown: { to: 2 },
+  /**
+   * How `step` cuts time: no sim tick is longer than maxStepSeconds, so a big step plays out the same
+   * as many small ones; times closer than timeEpsilon count as equal (floating-point slack).
+   */
+  sim: { maxStepSeconds: 0.1, timeEpsilon: 1e-9 },
 } as const;
 
 /** The board's plumbing rules for Session 0, built from BROWNOUT. */

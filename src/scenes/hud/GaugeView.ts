@@ -1,0 +1,401 @@
+// The COMING /s gauge (ZONES.gauge) as a Live screen view: a fixed 0..400 arc with ticks every 100,
+// the cyan ROOM band to the wired capacity with a dashed extension for boxes still booting, the
+// amber needle easing toward demand, a red wedge from served to demand while calls drop, the big
+// number, and the crew's words
+// beside it ("room N/s", NO ROOM YET, OVER BY n/s). The rules are pure in gauge.ts; this file draws
+// them and mirrors hud.gauge for tests.
+//
+// Phaser is a type here only, so the registry and its node tests can import this file.
+
+import type Phaser from 'phaser';
+import type { Frame } from '../../game/frame';
+import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
+import {
+  GAUGE_ART_K,
+  GAUGE_FACE_KEY,
+  GAUGE_MAX,
+  GAUGE_NEEDLE_KEY,
+  GAUGE_TICKS,
+  NEEDLE_PIVOT,
+  type GaugeLayout,
+  type GaugeState,
+  arcPoint,
+  emptyGauge,
+  emptyGaugeMemo,
+  gaugeAngle,
+  gaugeFacePlace,
+  gaugeLayout,
+  needleRotation,
+  stepGauge,
+} from './gauge';
+import { LABELS } from './labels';
+import { COLORS, FONT } from './layout';
+import { provideHudSection } from './hook';
+import { register as registerLocate } from './locate';
+import { KIT } from './kit';
+import {
+  type BakedPanel,
+  GAUGES_DEPTH,
+  type PanelTestState,
+  bakePanel,
+  panelSnapshot,
+  releasePanel,
+} from './panel';
+import { preloadArt, resolveArt } from '../plates';
+
+/** What the hook mirrors as hud.gauge. */
+export interface GaugeTestState {
+  /** True once the gauge is drawn (it shows for the whole night). */
+  visible: boolean;
+  /** The sim's demand, req/s. */
+  demand: number;
+  served: number;
+  /** flow.dropped while over 0.5, else 0. */
+  dropped: number;
+  /** The ROOM band: the wired capacity, equal to hud.headroom.wiredCapacity. */
+  capacity: number;
+  /** The dashed extension: req/s the wired boxes still booting will add. */
+  booting: number;
+  /** The needle's eased value. */
+  needle: number;
+  max: number;
+  /** The words on screen. */
+  title: string;
+  readout: string;
+  sub: string;
+  strip: string | null;
+  /** Every tick number printed on the arc. */
+  ticks: string[];
+  /** The baked plate: which picked kit pieces it draws, at what largest scale (m4 panel kit). */
+  panel?: PanelTestState | null;
+  /**
+   * The picked dial (batch 5): the face's art key when the painted face is baked into the plate,
+   * else null (the vector track and ticks); the needle's art key and draw scale when the painted
+   * needle draws, else null (a code line).
+   */
+  face?: string | null;
+  needleArt?: { key: string; scale: number } | null;
+}
+
+declare module './hook' {
+  interface HudTestState {
+    /** The COMING /s gauge (gauges-5). */
+    gauge?: GaugeTestState;
+  }
+}
+
+/** The gauge's alpha while the board is held. */
+const HELD_ALPHA = 0.5;
+/** The label tab's height under the title, and the bracket corners' size (kit.ts). */
+const TAB_H = 26;
+const GAUGE_CORNERS = 26;
+
+export class GaugeView implements LiveView {
+  readonly zone = 'gauge' as const;
+  /**
+   * A plate, the moving parts, the painted needle, and title, readout, sub-line, strip, ROOM tag and
+   * five numbers.
+   */
+  readonly budget: LiveBudget = { objects: 13, texts: 10 };
+  readonly made = { objects: 0, texts: 0 };
+  readonly state: GaugeState = emptyGauge();
+  private readonly memo = emptyGaugeMemo();
+  private layout: GaugeLayout = gaugeLayout({ x: 0, y: 0, w: 0, h: 0 });
+  private plate: BakedPanel | null = null;
+  private dial: Phaser.GameObjects.Graphics | null = null;
+  /** The painted needle (hud/gauge-needle) when its file is loaded; the dial draws a line without it. */
+  private needle: Phaser.GameObjects.Image | null = null;
+  /** The painted face is baked into the plate (hud/gauge-face loaded). */
+  private face = false;
+  private shownNeedle = NaN;
+  private title: Phaser.GameObjects.Text | null = null;
+  private readout: Phaser.GameObjects.Text | null = null;
+  private sub: Phaser.GameObjects.Text | null = null;
+  private strip: Phaser.GameObjects.Text | null = null;
+  private roomTag: Phaser.GameObjects.Text | null = null;
+  private numbers: Phaser.GameObjects.Text[] = [];
+  private off: (() => void)[] = [];
+  private shownDemand = NaN;
+  private shownSub = '';
+  private shownStrip: string | null = '';
+  private shownAlpha = -1;
+  private shownRoomX = NaN;
+  /** What the moving parts were last drawn from, to redraw only on a change. */
+  private drawn = {
+    needle: NaN,
+    capacity: NaN,
+    booting: NaN,
+    served: NaN,
+    dropped: NaN,
+  };
+  /** How many times the moving parts were redrawn (for tests). */
+  draws = 0;
+
+  preload(scene: Phaser.Scene): void {
+    preloadArt(scene as never, [
+      KIT.frame,
+      KIT.corner,
+      KIT.tab,
+      KIT.divider,
+      GAUGE_FACE_KEY,
+      GAUGE_NEEDLE_KEY,
+    ]);
+  }
+
+  create(scene: Phaser.Scene, host: LiveHost): void {
+    const L = gaugeLayout(host.rect);
+    this.layout = L;
+    const add = scene.add;
+    Object.assign(this.state, emptyGauge());
+    Object.assign(this.memo, emptyGaugeMemo());
+
+    // The plate, baked once with the frame kit: the painted dial face (or, without it, the empty
+    // track and the ticks every 100), the label tab under the title, the divider before the right
+    // column and the four bracket corners.
+    const loaded = (key: string): string | null => {
+      const a = resolveArt(key);
+      return !a.fallback && (scene.textures?.exists?.(a.texture) ?? false) ? a.texture : null;
+    };
+    const face = loaded(GAUGE_FACE_KEY) !== null;
+    this.face = face;
+    const fp = gaugeFacePlace(L);
+    const plate = bakePanel(
+      scene,
+      'gauge',
+      L.plate,
+      {
+        frame: true,
+        corners: GAUGE_CORNERS,
+        tab: { x: L.title.x - 8, y: L.title.y - 4, h: TAB_H },
+        dividers: [{ x: L.readout.x - 16, y: L.plate.y + 16, h: L.plate.h - 32 }],
+        face: face ? { key: KIT.gaugeFace, x: fp.x, y: fp.y, h: fp.h } : undefined,
+      },
+      {
+        fill: { color: COLORS.ink, alpha: 0.92 },
+        draw: (g) => {
+          if (face) return;
+          g.lineStyle(L.outer - L.inner, COLORS.unlit, 0.35);
+          g.beginPath();
+          g.arc(L.centre.x, L.centre.y, (L.outer + L.inner) / 2, gaugeAngle(0), gaugeAngle(GAUGE_MAX), false);
+          g.strokePath();
+          g.lineStyle(2, 0xe8f1ff, 0.6);
+          for (const v of GAUGE_TICKS) {
+            const a = arcPoint(L, v, L.outer + 4);
+            const b = arcPoint(L, v, L.inner - 6);
+            g.lineBetween(a.x, a.y, b.x, b.y);
+          }
+        },
+      },
+    );
+    this.plate = plate;
+
+    this.dial = add.graphics();
+    // The painted needle at half its file, pivoting on its hub at the arc's centre.
+    const needleTex = loaded(GAUGE_NEEDLE_KEY);
+    this.needle =
+      needleTex !== null && typeof add.image === 'function'
+        ? add
+            .image(L.centre.x, L.centre.y, needleTex)
+            .setOrigin(NEEDLE_PIVOT.x, NEEDLE_PIVOT.y)
+            .setScale(GAUGE_ART_K)
+            .setRotation(needleRotation(0))
+        : null;
+    this.shownNeedle = NaN;
+
+    const text = (x: number, y: number, s: string, size: number, color: string): Phaser.GameObjects.Text =>
+      add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color });
+    this.title = text(L.title.x, L.title.y, LABELS.gauge.title, 15, COLORS.dim);
+    this.readout = text(L.readout.x, L.readout.y, '', 40, COLORS.amberText);
+    this.sub = text(L.sub.x, L.sub.y, '', 16, COLORS.cyanText);
+    this.strip = text(L.strip.x, L.strip.y, '', 15, COLORS.amberText);
+    this.roomTag = text(L.centre.x, L.centre.y, LABELS.gauge.room, 11, COLORS.cyanText);
+    this.roomTag.setOrigin(0.5, 0.5);
+    this.numbers = GAUGE_TICKS.map((v) => {
+      const p = arcPoint(L, v, L.numbers);
+      return text(p.x, p.y, String(v), 12, COLORS.dim).setOrigin(0.5, 0.5);
+    });
+
+    const all = [
+      plate.object,
+      this.dial,
+      ...(this.needle ? [this.needle] : []),
+      this.title,
+      this.readout,
+      this.sub,
+      this.strip,
+      this.roomTag,
+      ...this.numbers,
+    ];
+    for (const o of all) o.setDepth(GAUGES_DEPTH);
+    this.made.objects = all.length;
+    this.made.texts = all.length - (this.needle ? 3 : 2);
+
+    this.shownDemand = NaN;
+    this.shownSub = '';
+    this.shownStrip = '';
+    this.shownAlpha = -1;
+    this.shownRoomX = NaN;
+    this.drawn = { needle: NaN, capacity: NaN, booting: NaN, served: NaN, dropped: NaN };
+    this.off.push(provideHudSection('gauge', () => this.snapshot()));
+    // The leader line ends at the needle's hub (game px; one point, made once).
+    const hub = { x: L.centre.x, y: L.centre.y };
+    this.off.push(registerLocate('gauge', () => hub));
+  }
+
+  update(frame: Frame, clock: LiveClock): void {
+    if (!this.dial || !this.readout || !this.sub || !this.strip || !this.plate || !this.roomTag) return;
+    const st = stepGauge(this.state, this.memo, frame, clock.dt);
+
+    const d = this.drawn;
+    if (
+      st.needle !== d.needle ||
+      st.capacity !== d.capacity ||
+      st.booting !== d.booting ||
+      st.served !== d.served ||
+      st.dropped !== d.dropped
+    ) {
+      d.needle = st.needle;
+      d.capacity = st.capacity;
+      d.booting = st.booting;
+      d.served = st.served;
+      d.dropped = st.dropped;
+      this.drawDial();
+    }
+
+    const demand = Math.round(st.demand);
+    if (demand !== this.shownDemand) {
+      this.shownDemand = demand;
+      this.readout.setText(`${demand}/s`);
+    }
+    if (st.sub !== this.shownSub) {
+      this.shownSub = st.sub;
+      this.sub.setText(st.sub);
+      this.sub.setColor(st.dropped > 0 ? COLORS.redText : COLORS.cyanText);
+    }
+    if (st.strip !== this.shownStrip) {
+      this.shownStrip = st.strip;
+      this.strip.setText(st.strip ?? '');
+      this.strip.setColor(st.strip === LABELS.gauge.noRoom ? COLORS.amberText : COLORS.redText);
+    }
+    // The ROOM tag rides inside the band's end; hidden with nothing wired.
+    const roomX = st.capacity > 0 ? Math.round(st.capacity) : -1;
+    if (roomX !== this.shownRoomX) {
+      this.shownRoomX = roomX;
+      this.roomTag.setVisible(roomX > 0);
+      if (roomX > 0) {
+        const L = this.layout;
+        const p = arcPoint(L, Math.min(st.capacity, GAUGE_MAX), L.inner - 34);
+        this.roomTag.setPosition(p.x, p.y);
+      }
+    }
+
+    // The painted needle turns only when its eased value moves.
+    if (this.needle && st.needle !== this.shownNeedle) {
+      this.shownNeedle = st.needle;
+      this.needle.setRotation(needleRotation(st.needle));
+    }
+
+    const alpha = frame.paused ? HELD_ALPHA : 1;
+    if (alpha !== this.shownAlpha) {
+      this.shownAlpha = alpha;
+      this.dial.setAlpha(alpha);
+      this.needle?.setAlpha(alpha);
+      this.readout.setAlpha(alpha);
+    }
+  }
+
+  private drawDial(): void {
+    const g = this.dial;
+    if (!g) return;
+    this.draws++;
+    const L = this.layout;
+    const st = this.state;
+    const mid = (L.outer + L.inner) / 2;
+    const width = L.outer - L.inner;
+    g.clear();
+    // The ROOM band, 0 to the wired capacity.
+    if (st.capacity > 0) {
+      g.lineStyle(width, COLORS.cyan, 0.85);
+      g.beginPath();
+      g.arc(L.centre.x, L.centre.y, mid, gaugeAngle(0), gaugeAngle(st.capacity), false);
+      g.strokePath();
+    }
+    // The dashed extension for boxes still booting.
+    if (st.booting > 0) {
+      const from = st.capacity;
+      const to = Math.min(GAUGE_MAX, st.capacity + st.booting);
+      g.lineStyle(width - 6, COLORS.cyan, 0.45);
+      const step = 6;
+      for (let v = from; v < to; v += step * 2) {
+        g.beginPath();
+        g.arc(L.centre.x, L.centre.y, mid, gaugeAngle(v), gaugeAngle(Math.min(v + step, to)), false);
+        g.strokePath();
+      }
+    }
+    // The red wedge, served to demand, while calls drop.
+    if (st.dropped > 0 && st.demand > st.served) {
+      g.fillStyle(COLORS.red, 0.45);
+      g.slice(L.centre.x, L.centre.y, L.outer, gaugeAngle(st.served), gaugeAngle(st.demand), false);
+      g.fillPath();
+    }
+    // The needle and its hub: the painted needle turns on its own (update), else a code line.
+    if (this.needle) return;
+    const tip = arcPoint(L, st.needle, L.needle);
+    g.lineStyle(4, COLORS.amber, 1);
+    g.lineBetween(L.centre.x, L.centre.y, tip.x, tip.y);
+    g.fillStyle(COLORS.amber, 1);
+    g.fillCircle(L.centre.x, L.centre.y, 7);
+  }
+
+  /** hud.gauge, built only when the hook is read. */
+  snapshot(): GaugeTestState {
+    const s = this.state;
+    return {
+      visible: this.dial !== null,
+      demand: s.demand,
+      served: s.served,
+      dropped: s.dropped,
+      capacity: s.capacity,
+      booting: s.booting,
+      needle: s.needle,
+      max: s.max,
+      title: this.title?.text ?? '',
+      readout: this.readout?.text ?? '',
+      sub: this.sub?.text ?? '',
+      strip: this.strip?.text ? this.strip.text : null,
+      ticks: this.numbers.map((t) => t.text),
+      panel: panelSnapshot(this.plate),
+      face: this.face && this.plate?.state.pieces.includes(GAUGE_FACE_KEY) ? GAUGE_FACE_KEY : null,
+      needleArt: this.needle ? { key: GAUGE_NEEDLE_KEY, scale: GAUGE_ART_K } : null,
+    };
+  }
+
+  shutdown(): void {
+    for (const off of this.off) off();
+    this.off = [];
+    releasePanel(this.plate);
+    for (const o of [
+      this.dial,
+      this.needle,
+      this.title,
+      this.readout,
+      this.sub,
+      this.strip,
+      this.roomTag,
+      ...this.numbers,
+    ])
+      o?.destroy();
+    this.plate = null;
+    this.dial = null;
+    this.needle = null;
+    this.face = false;
+    this.title = null;
+    this.readout = null;
+    this.sub = null;
+    this.strip = null;
+    this.roomTag = null;
+    this.numbers = [];
+    this.made.objects = 0;
+    this.made.texts = 0;
+  }
+}

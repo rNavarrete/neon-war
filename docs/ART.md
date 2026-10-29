@@ -12,6 +12,7 @@ Notes:
 - `parts/` is the component catalog for the whole game: each part in four tiers (scrap, street, pro, solace). Brownout uses only the server, gateway, database and load balancer.
 - The overclock kit, job card and estimate dial were added later the same day (round 4, picks overclock-kit-b, job-card-a, estimate-dial-b). `board/overclock-kit` is the kit on its own for its tray card; `server-overclocked` is a server with the kit fitted, and `server-overclocked-hot` is the same server cooking in the surge. The job card and dial frames are empty: their text and numbers are drawn in code.
 - Sizes are the cut size in pixels. Scale sprites down rather than up where you can.
+- `src/game/artManifest.ts` lists every file here that the game loads, with its cut size, the size it is drawn at and where it shows. `tests/art-manifest.test.ts` re-measures each file and fails when the game loads a file the manifest lacks. The art the Live screen still needs is in `docs/ART-REQUESTS.md`.
 
 | Folder | Files (size) | From |
 | --- | --- | --- |
@@ -54,3 +55,39 @@ Notes:
 | `art/parts/search-index/` | scrap (276x343), street (291x413), pro (370x544), solace (437x756) | comp-search-index |
 | `art/parts/server/` | scrap (257x411), street (301x475), pro (326x636), solace (398x789) | comp-server |
 | `art/parts/worker/` | scrap (267x348), street (306x426), pro (373x573), solace (451x708) | comp-worker |
+
+## Live screen (M4 picks, 28 Oct 2026)
+
+Rolando picked these 55 pieces, every request of the Live screen's batches 1 to 5 (`docs/ART-REQUESTS.md`): batches 1 to 4 first, then round 2 (six of them recut) and batch 5. Each was downscaled to fit its cut, never upscaled; the sizes below are the files' real sizes, as `PICKED_CUTS` in `src/game/artManifest.ts` holds them.
+
+Notes:
+
+- Round 2 replaced `hud/comms-plate` (1455x149, a divider 520 px in), `hud/icons/system` (an antenna, 41x64), `board/channel-plate` (300x233, shorter than before), `board/server-overclocked-dark` (466x629), the three `hud/live/card-frame-*` (240x280 each, nine-sliced at k 0.5 into the 120x140 card) and `hud/live/corner-marks`.
+- `hud/live/corner-marks` is a 96x96 set of all four brackets, one per 48x48 quadrant: a panel draws each corner from its own quadrant, unturned, at 48 px or smaller (`cornerStamps` in `src/scenes/hud/kit.ts`).
+- `hud/live/topbar-strip` is 1536x33, short of the 1920x100 bar. It is drawn 1:1 (its request's display is the file size) and the rest of the bar is filled in code, so it is never stretched.
+- `hud/comms-plate` (1455x149) and `board/table-plate` (1228x416) are drawn at their file size, centred in the band and under the feed.
+- `board/table-plate-midnight` (1061x416) is narrower than the day plate: it is drawn at its own size, centred like the day plate, and cross-fades in at midnight.
+- The cam busts `chars/lux/cam/*` are 924x548 with transparent sides; cheer has the same framing as lean-in and relieved.
+- `hud/live/night-shift-sticker` is a blank plate: any words on it are drawn in code.
+
+| Folder | Files (size) | From |
+| --- | --- | --- |
+| `art/board/` | table-plate (1228x416), server-dark (425x638), server-booting-a (427x638), server-booting-b (420x638), server-overclocked-dark (466x629), balancer-ping-a (480x337), balancer-ping-b (480x336), channel-plate (300x233), table-plate-midnight (1061x416), packet-cube (59x48) | batch 1: table plate, sheet A, sheet B, channel plate; batch 5 midnight plate, packet cube |
+| `art/hud/` | city-grid (816x620), comms-plate (1455x149), chat-plate-wide (770x485), cam-backdrop (824x504), gauge-face (480x269), gauge-needle (24x162), cam-frame (408x243), city-grid-lit (816x620) | batch 1 city-grid; batch 2 comms-plate, chat-plate-wide; batch 3 backdrop; batch 5 gauge, cam frame, lit city grid |
+| `art/hud/icons/` | door (128x120), tv (128x120), system (41x64), play (128x123), ping (128x123), skipped (128x124) | batch 2 icons |
+| `art/hud/live/` | avatar-luxnet (243x256), panel-frame (192x192), label-tab (380x72), tag-chip (216x72), rec-badge (121x48), live-pill (189x56), corner-marks (96x96), divider (8x160), keycap-idle (160x128), keycap-ready (160x128), keycap-pressed (160x128), card-frame-idle (240x280), card-frame-ready (240x280), card-frame-locked (240x280), count-badge (49x56), topbar-strip (1536x33), alert-plate (1040x168), alert-endcap (135x168), night-shift-sticker (320x136) | batch 2 round avatars; batch 4 panel kit, keycaps and cards, topbar-strip, alert-plate; batch 5 sticker |
+| `art/chars/comms/` | triage (244x256), rei (240x256), mika (236x256), ozzie (221x256) | batch 2 round avatars |
+| `art/chars/avatars/` | stream-1 (244x256), stream-2 (243x256), stream-3 (244x256), stream-4 (243x256), unnamed-neighbour (243x256) | batch 2 stream avatars |
+| `art/chars/lux/cam/` | lean-in (924x548), relieved (924x548), cheer (924x548) | batch 3 lean-in, relieved; batch 5 cheer |
+
+## How a picked file lands
+
+The Live screen's new art is requested in `docs/ART-REQUESTS.md`. Until a piece is picked, the game draws its fallback, so nothing waits on a pick.
+
+1. The owner's pipeline draws the sheet on magenta, chroma-keys it, cuts each piece at the cut size in its request row and saves it as WebP with transparency at the key's path: `hud/city-grid` goes to `public/art/hud/city-grid.webp`.
+2. In the same PR, the owner adds the key to `PICKED_CUTS` in `src/game/artManifest.ts` with the file's real size (so that request's `cut` is no longer `null`), and adds the file to the tables above.
+3. That is the whole change. `tests/art-manifest.test.ts` fails if a request's file is on disk while its `cut` is still `null`, if the size is wrong, or if the file is smaller than the size it is drawn at (a nine-slice only needs its corners at k to fit).
+
+How the code picks it up: views ask `src/scenes/plates.ts` for a key. `preloadArt(scene, keys)` queues the picked file once `cut` is set, or the file the fallback reuses before that. `resolveArt(key)` and `ensureArt(scene, key)` return the texture, tint and alpha to draw, and `fallback: true` while a stand-in draws. A stand-in is a picked file reused with a tint, or a plate baked once in code at the key's display size and labelled with the key. Under `?test`, the `art` hook section lists the keys still on a fallback (`art.fallback`), the picked keys loaded (`art.loaded`), the plates baked so far (`art.baked`) and any object drawing Phaser's missing texture (`art.missing`).
+
+Workers never add, edit or resize files here. The views adopt `resolveArt` in their own tickets (board-12, comms-9, chat-6, luxcam-5), and art3d-5 checked batches 1 to 4 against the manifest once they landed (28 Oct 2026).

@@ -16,23 +16,24 @@ two differ, GAME.md wins on rules and numbers, and this file wins on wording.
 - Lux speaks only in short lines to TRIAGE and the crew. TRIAGE is the only voice before the crew arrives.
 - System-design words stay out of every line until the debrief (C8).
 
-## C0 Cold open (23:51:30, 15 s, no input)
+## C0 Cold open (23:51:30, click to advance)
 
 Rain, test fireworks, Lux alone on her bed with her mum's photo; the clock flickers to 02:14 for one frame; the
-phone lights up; the drone wakes; goggles down. No click needed: lines play on timers.
+phone lights up; the drone wakes; goggles down. Every line waits for a click, like every other scene; nothing
+plays on a timer. The run's clock holds at 23:51:30 until the goggles come down, then C1 starts at 23:51:45.
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| C0.tv.01 | scene | TV downstairs | 0:01, under the rain | "...and Halation, we are ten minutes from midnight!" |
-| C0.tv.02 | scene | TV downstairs | 0:04 | "Get your people close. Get your cameras ready!" |
-| C0.grandma.01 | scene | Grandma (through the door) | 0:06 | "Lux? Your show's starting, love." |
-| C0.lux.01 | scene | Lux | 0:08, still looking at the photo | "In a minute, Baachan." |
-| C0.chat.01 | chat | block: kenji | 0:09 | lux the net's doing the thing again |
-| C0.chat.02 | chat | block: young father | 0:10 | I need to call my son at midnight!! |
-| C0.chat.03 | chat | block: mrs okafor | 0:11 | Countdown stream keeps freezing. Is it you or the rain? |
-| C0.chat.04 | chat | block: kenji | 0:12 | lux pls |
-| C0.triage.01 | bark | TRIAGE (eager) | 0:13, drone iris lights up | "Recording! Oh. Oh, it's the net again, isn't it." |
-| C0.lux.02 | scene | Lux | 0:14, goggles down | "Yeah. Let's go look." |
+| C0.tv.01 | scene | TV downstairs | first line, under the rain | "...and Halation, we are ten minutes from midnight!" |
+| C0.tv.02 | scene | TV downstairs | click | "Get your people close. Get your cameras ready!" |
+| C0.grandma.01 | scene | Grandma (through the door) | click | "Lux? Your show's starting, love." |
+| C0.lux.01 | scene | Lux | click, still looking at the photo; the clock flickers to 02:14 | "In a minute, Baachan." |
+| C0.chat.01 | chat | block: kenji | click: the phone lights up, all four at once | lux the net's doing the thing again |
+| C0.chat.02 | chat | block: young father | with C0.chat.01 | I need to call my son at midnight!! |
+| C0.chat.03 | chat | block: mrs okafor | with C0.chat.01 | Countdown stream keeps freezing. Is it you or the rain? |
+| C0.chat.04 | chat | block: kenji | with C0.chat.01 | lux pls |
+| C0.triage.01 | bark | TRIAGE (eager) | same click, drone iris lights up | "Recording! Oh. Oh, it's the net again, isn't it." |
+| C0.lux.02 | scene | Lux | click, goggles down; the next click starts the board | "Yeah. Let's go look." |
 
 ## C1 to C3: the board, alone with TRIAGE (23:51:45 to 23:56:30)
 
@@ -47,12 +48,12 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C1.card.what | ui | Job card | | What must work: calls, streams, the lift, the heating alarms. |
 | C1.card.bar | ui | Job card | | The bar: nobody goes dark at midnight. |
 | C1.card.rate | ui | Job card | | Each flat pings the net about every 4 seconds. |
-| C1.triage.01 | bark | TRIAGE (eager) | card closes, dial appears | "Ooh, a dial! How many a second are coming? I'll guess first." |
+| C1.triage.01 | bark | TRIAGE (eager) | card closes | "Ooh, a card! How many a second are coming? I'll guess first." |
 | C1.triage.02 | bark | TRIAGE (wrong-and-proud) | 2 s later | "480 a second! I'm great at math." |
-| C1.lux.01 | bark | Lux | player touches the dial | "You multiplied. Divide." |
-| C1.triage.03 | bark | TRIAGE (sheepish) | player sets 25 to 35 | "...30. That's what I meant. Obviously." |
-| C1.triage.04 | bark | TRIAGE (thinking) | player sets any other number | "Hm. Let's watch the real line and see who's right." |
-| C1.triage.05 | bark | TRIAGE (eager) | dial set, tray glows | "One scrap box does 60. Rack it and wire it: gateway, box, database." |
+| C1.lux.01 | bark | Lux | 2 s after TRIAGE's 480 | "You multiplied. Divide." |
+| C1.triage.03 | bark | TRIAGE (sheepish) | first box live, 2 s or more after Lux | "...30. That's what I meant. Obviously." |
+| C1.triage.04 | bark | TRIAGE (thinking) | not played (the estimate step is gone; the take stays recorded) | "Hm. Let's watch the real line and see who's right." |
+| C1.triage.05 | bark | TRIAGE (eager) | 2 s after Lux, tray glows | "One scrap box does 60. Rack it and wire it: gateway, box, database." |
 | C1.chat.01 | chat | block: mrs okafor | server goes live | It's back! Bless you Lux |
 | C1.chat.02 | chat | stream: viewer | server goes live | first try lol |
 | C1.triage.06 | bark | TRIAGE (happy) | 10 s at 30 against 60 | "30 coming, 60 of room. Look at all that room." |
@@ -168,11 +169,10 @@ The crew go quiet and the call is Lux's. The outcome lines branch on what holds 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C6.warn.01 | ui | Forecast | 23:59:00 | MIDNIGHT: everyone calls and streams at once. About 150 a second. |
-| C6.rei.01 | bark | Rei | sizing prompt opens | "Your call. How many?" |
-| C6.prompt | ui | Sizing prompt | | How many boxes for midnight? |
-| C6.triage.01 | bark | TRIAGE (thinking) | prompt open 8 s | "150 coming, 60 a box. That's two and a half boxes. You can't buy half a box." |
-| C6.ozzie.01 | bark | Ozzie | player sets 5 or more | "Now you're talking." |
-| C6.mika.01 | bark | Mika | player sets 2 | "Brave." |
+| C6.rei.01 | bark | Rei | the midnight forecast shows | "Your call. How many?" |
+| C6.triage.01 | bark | TRIAGE (thinking) | forecast up 8 s | "150 coming, 60 a box. That's two and a half boxes. You can't buy half a box." |
+| C6.ozzie.01 | bark | Ozzie | forecast up, 5 or more boxes running | "Now you're talking." |
+| C6.mika.01 | bark | Mika | forecast up, 2 or fewer boxes running | "Brave." |
 | C6.tv.01 | bark | TV downstairs | 23:59:30 | "Thirty seconds, Halation!" |
 | C6.flicker.01 | ui | Dip warning | 23:59:48 | POWER FLICKER |
 | C6.triage.02 | bark | TRIAGE (panicking) | 23:59:50, a server goes dark | "Not now! Not NOW!" |
@@ -200,15 +200,15 @@ The crew go quiet and the call is Lux's. The outcome lines branch on what holds 
 
 Goggles up, back in the rainy room with fireworks outside. Rei grades the night over her earbuds, and the real
 terms are named for the first time. Grade lines branch on the raw results; the thresholds behind "some requests
-dropped" and "estimate close" are not set yet, so a ticket that needs exact numbers stops and asks.
+dropped" are not set yet, so a ticket that needs exact numbers stops and asks.
 
 ### Rei grades the night
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C8.rei.open | scene | Rei | debrief opens | "Right. Let's see what you did." |
-| C8.rei.sizing.good | scene | Rei | estimate close and midnight held | "You counted before you built. Most people don't." |
-| C8.rei.sizing.bad | scene | Rei | estimate far off or midnight failed | "You built first and counted later. Count first." |
+| C8.rei.sizing.good | scene | Rei | midnight held on fewer than 5 boxes | "You counted before you built. Most people don't." |
+| C8.rei.sizing.bad | scene | Rei | midnight failed, or 5 or more boxes ran | "You built first and counted later. Count first." |
 | C8.rei.banner.pay | scene | Rei | paid the banner | "And you paid Solace. For a minute of nothing." |
 | C8.rei.banner.skip | scene | Rei | ignored or binned it | "You didn't take Solace's offer. Good." |
 | C8.rei.debt | scene | Rei | Ozzie's tab above 100 | "You owe Ozzie. He will remember." |
@@ -221,7 +221,7 @@ dropped" and "estimate close" are not set yet, so a ticket that needs exact numb
 
 | ID | Kind | Group | Line |
 | --- | --- | --- | --- |
-| C8.terms.sizing | ui | Sizing | **Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one box did 60). **Back-of-the-envelope estimate** (the dial). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening). |
+| C8.terms.sizing | ui | Sizing | **Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one box did 60). **Back-of-the-envelope estimate** (flats times calls, before you build). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening). |
 | C8.terms.scaling | ui | Scaling | **Scaling up** (the overclock kit: quick, but it has a ceiling and a reboot). **Scaling out** (more boxes). **Load balancer** with **health checks** (splits traffic, skips dark boxes). **Scaling down** (turning them off after). |
 | C8.terms.failure | ui | Failure | **Single point of failure** (one big box). **Cascading failure** (one part falls, the next follows). **Retry storm** (everyone hitting refresh). **Load shedding** (cutting the laundry loose). **Redundancy, N+1** (the peak plus one spare). |
 
@@ -275,6 +275,120 @@ errors (50% or more). Neighbours use the four chat avatars: kenji, mrs okafor, y
 | fill.stream.down.02 | stream | heavy errors | rip |
 
 No filler line names a fix or a system-design term.
+
+## Lane lines
+
+Each lane of the Live screen (`docs/LIVE.md`) adds the lines its views need in its own section below,
+as one two-file edit: a row here and an entry under the matching `// anchor: <lane>` comment inside
+`LINES` in `src/strings.ts`. IDs keep the `<challenge>.<speaker>.<n>` form (or `fill.<chat>.<state>.<n>`
+for filler), so `tests/strings.test.ts` checks them like every other line. A section with only its
+header has no lines yet. UI micro-copy (labels, key caps) is not a line and stays out of these tables.
+
+### Board lane <!-- anchor: board -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+
+### Gauges lane <!-- anchor: gauges -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+| C1.alert.place | ui | Alert | C1 after the job card closes, until the first server is on the board | drag a SERVER card onto the grid |
+| C3.alert.title | ui | Alert | the C3 forecast headline, after the number | EVERYONE FILMING |
+| C3.alert.down | ui | Alert | a failure freezes the board, before the rewind | BLOCK DOWN |
+| C4.alert.title | ui | Alert | the C4 forecast and the surge, after the number | NEIGHBOURS REROUTED HERE |
+| C4.alert.refresh | ui | Alert | sub-line once retries push the surge up | Everyone's hitting refresh: each failed call comes straight back. |
+| C6.alert.title | ui | Alert | the C6 forecast headline, after the number | MIDNIGHT |
+| C6.alert.dip | ui | Alert | C6 forecast sub-line until the sizing is SET | Everyone calls and streams at once. One box loses power just before midnight. |
+| C6.alert.held | ui | Alert | midnight, the block held | HELD |
+| C6.alert.dark | ui | Alert | midnight, the block went dark | BLOCK DARK |
+| C7.alert.title | ui | Alert | the after-midnight forecast headline, after the number | FIREWORKS |
+
+The alert band prints the number first and these words after it; the sub-line is the challenge's
+forecast or flicker line. The C1 hint is the exception: with no alert up it stands alone on the
+band, with no number. Wording is a draft until the owner approves it (decision D8).
+
+### Comms lane <!-- anchor: comms -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+
+### Chat lane <!-- anchor: chat -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+| fill.stream.placed.01 | stream | stream | a part is placed on the board | ooh new box |
+| fill.stream.placed.02 | stream | stream | a part is placed on the board | she's building it live lol |
+| fill.stream.wired.01 | stream | stream | a wire is connected | cable management speedrun |
+| fill.stream.wired.02 | stream | stream | a wire is connected | is that thing plugged in now |
+| fill.stream.overclock.01 | stream | stream | the player overclocks a box | she's overclocking it?? brave |
+| fill.stream.pay.01 | stream | stream | the player pays the Solace banner | she PAID solace?? lux no |
+| fill.stream.ignore.01 | stream | stream | the player ignores the Solace banner | solace ad skipped. respect |
+| fill.stream.bin.01 | stream | stream | the player bins the Solace banner | binned the solace ad lmao |
+| fill.block.served.01 | block | block | the first serve, or a new box starts serving | kenji: oh it's moving again |
+| fill.block.served.02 | block | block | the first serve, or a new box starts serving | old man noodles: noodle cam is back |
+| fill.stream.served.01 | stream | stream | the first serve, or a new box starts serving | picture's back |
+| fill.stream.served.02 | stream | stream | the first serve, or a new box starts serving | smooth now |
+| fill.block.errors.01 | block | block | errors held 1 s (a complaint) | young father: my call just dropped |
+| fill.block.errors.02 | block | block | errors held 1 s (a complaint) | kenji: pages won't load |
+| fill.stream.errors.01 | stream | stream | errors held 1 s | buffering... |
+| fill.stream.errors.02 | stream | stream | errors held 1 s | is it freezing for anyone else |
+| fill.block.heavy.01 | block | block | heavy errors held 2 s (a complaint) | old man noodles: nothing is working at all |
+| fill.block.heavy.02 | block | block | heavy errors held 2 s (a complaint) | young father: lux please, my son is waiting |
+| fill.stream.heavy.01 | stream | stream | heavy errors held 2 s | stream's dying chat |
+| fill.stream.heavy.02 | stream | stream | heavy errors held 2 s | the picture is just one frame now |
+| fill.block.recovered.01 | block | block | calm 3 s after a spell of errors (thanks) | young father: it's working again. thank you |
+| fill.block.recovered.02 | block | block | calm 3 s after a spell of errors (thanks) | kenji: ok lux saved it |
+| fill.stream.recovered.01 | stream | stream | calm 3 s after a spell of errors | WE'RE BACK |
+| fill.stream.recovered.02 | stream | stream | calm 3 s after a spell of errors | she actually did it |
+| fill.block.rejoin.01 | block | block (system) | the recovery, if Mrs Okafor left | system: Mrs Okafor joined the chat |
+| fill.block.retries.01 | block | block | retries climb (a complaint) | kenji: i just keep hitting reload |
+| fill.block.retries.02 | block | block | retries climb (a complaint) | old man noodles: pressing the button again and again |
+| fill.stream.retries.01 | stream | stream | retries climb | everyone spamming refresh rn |
+| fill.stream.retries.02 | stream | stream | retries climb | refresh refresh refresh |
+| fill.stream.hot.01 | stream | stream | a box starts to overheat | is that box smoking |
+| fill.stream.hot.02 | stream | stream | a box starts to overheat | smell-o-vision on, it's toasty |
+| fill.stream.died.01 | stream | stream | a box dies from the heat | rip box |
+| fill.stream.died.02 | stream | stream | a box dies from the heat | it's gone. pour one out |
+| fill.stream.dip.01 | stream | stream | a power flicker warning starts | lights flickering on her side |
+| fill.stream.dip.02 | stream | stream | a power flicker warning starts | did her power just blink |
+| fill.stream.skipped.01 | stream | stream | calls go around a dark box, once a run | it just went around the dark one. neat |
+| fill.block.laundry.01 | block | block | the laundry floor is cut loose | old man noodles: my washing stopped halfway |
+| fill.stream.laundry.01 | stream | stream | the laundry floor is cut loose | she cut a whole floor off lol |
+| fill.stream.warning.01 | stream | stream | a surge warning goes up | something big is coming, look at that line |
+| fill.stream.warning.02 | stream | stream | a surge warning goes up | uh oh |
+| fill.block.surge.01 | block | block | the surge lands | kenji: the whole street is online now |
+| fill.block.surge.02 | block | block | the surge lands | old man noodles: so many people on the wifi tonight |
+| fill.stream.surge.01 | stream | stream | the surge lands | here it comes |
+| fill.stream.surge.02 | stream | stream | the surge lands | the neighbours are all piling in |
+| fill.stream.rescue.01 | stream | stream | the crew arrive | WHO ARE THESE PEOPLE |
+| fill.stream.rescue.02 | stream | stream | the crew arrive | she has backup?? |
+| fill.block.held.01 | block | block | midnight held | kenji: HAPPY NEW YEAR LUX |
+| fill.block.held.02 | block | block | midnight held | old man noodles: noodle cam saw the fireworks |
+| fill.stream.held.01 | stream | stream | midnight held | clean midnight. no lag |
+| fill.stream.held.02 | stream | stream | midnight held | best stream of the year |
+
+Reactions to what happens on the board (src/scenes/hud/chatEngine.ts REACTIONS), one pool per
+`fill.<chat>.<pool>.` prefix. None names a fix, a number or a system-design word. Wording is a draft
+until the owner approves it (decision D8).
+
+### Luxcam lane <!-- anchor: luxcam -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+
+### Learning lane <!-- anchor: learning -->
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+| C4.chat.dark | chat | block: kenji | the surge's power dip takes the big box dark | lights just blinked and the net went with them |
+| C5.chat.lb | chat | stream: viewer | 3 s after the board returns from the rescue | what did they just plug in for her?? |
+| C6.chat.dark | chat | block: young father | 23:59:50, the dip takes a box dark | lights blinked. please. ten more seconds |
+| C7.chat.01 | chat | block: mrs okafor | 5 s after midnight held | Happy New Year Lux. Now get some sleep x |
+| fill.block.dark.01 | block | block | filler while a box is dark | kenji: everything just went out again |
+| fill.block.dark.02 | block | block | filler while a box is dark | old man noodles: the noodle cam is just my own face now |
+
+Wording is a draft until the owner approves it (decision D8).
 
 ## Not settled yet
 
