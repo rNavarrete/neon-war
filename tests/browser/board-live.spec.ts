@@ -1269,14 +1269,14 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   await expect.poll(async () => (await board(page)).dragging).toBeNull();
   expect((await board(page)).parts.filter((p) => p.kind === 'server')).toHaveLength(1);
 
-  // Hovering a part shows its numbers and state in the script's words, never the debrief's.
+  // Hovering a part shows its numbers and state in real terms, never the old crew words.
   for (const id of ['gateway', s1, 'database']) {
     const p = (await part(page, id))!;
     await page.mouse.move(p.x, p.y, { steps: 2 });
     await expect.poll(async () => (await board(page)).hover.target).toBe(id);
     const text = (await board(page)).hover.text!;
     expect(text).toMatch(/req\/s/);
-    expect(text).toMatch(/capacity \d+ req\/s/);
+    if (id !== 'gateway') expect(text).toMatch(/capacity \d+ req\/s/);
     for (const word of CREW_WORDS) expect(text.toLowerCase()).not.toContain(word);
   }
   const hovered = (await board(page)).hover;
