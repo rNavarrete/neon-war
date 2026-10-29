@@ -44,7 +44,7 @@ import {
   parseCell,
   portNode,
 } from '../src/sim/grid';
-import { blockCentre, blockQuad, cellQuad, nodeAt } from '../src/scenes/board/cells';
+import { blockCentre, cellQuad, nodeAt } from '../src/scenes/board/cells';
 import { edgeBlocked, orthogonal, traceNodes } from '../src/scenes/board/lattice';
 import { ZONES, rectToArea } from '../src/scenes/live/layout';
 import { LOCKED_KINDS, lockedReason, trayCards } from '../src/scenes/board/tray';
@@ -98,9 +98,26 @@ describe('board layout', () => {
       }
   });
 
-  it('keeps the gateway on the left rim and the database on the right, the servers between', () => {
-    expect(GATEWAY.x).toBeLessThan(blockQuad(0, 0, 1, GRID.rows)[3].x);
-    expect(DATABASE.x).toBeGreaterThan(blockQuad(GRID.cols - 1, 0, 1, GRID.rows)[2].x);
+  it('stands the gateway on cells at the grid’s left side and the database at its right, the servers between', () => {
+    // Each stands on its own footprint: its centre over its cells, its foot inside their outline.
+    for (const [part, centre] of [
+      [gateway, GATEWAY],
+      [database, DATABASE],
+    ] as const) {
+      const q = footprintQuad(part.kind, FIXED_ANCHOR[part.kind]!)!;
+      expect(centre.x).toBeGreaterThan(Math.min(q[0].x, q[3].x));
+      expect(centre.x).toBeLessThan(Math.max(q[1].x, q[2].x));
+      const b = partBox(part)!;
+      expect(b.y + b.h / 2).toBeGreaterThan(q[0].y);
+      expect(b.y + b.h / 2).toBeLessThan(q[3].y);
+    }
+    // In the grid's first two columns and its last three, on their own rows.
+    const gw = parseCell(FIXED_ANCHOR.gateway!)!;
+    const db = parseCell(FIXED_ANCHOR.database!)!;
+    expect(gw.col).toBe(0);
+    expect(db.col).toBe(GRID.cols - 3);
+    expect(GATEWAY.x).toBeLessThan(nodeAt(2, gw.row).x);
+    expect(DATABASE.x).toBeGreaterThan(nodeAt(GRID.cols - 3, db.row).x);
     expect(partBox(balancer)!.x).toBeGreaterThan(GATEWAY.x);
     for (const id of SERVER_SLOTS) {
       const c = partCentre(server('a', id))!;
@@ -194,8 +211,11 @@ describe('board layout', () => {
   it('brings the block traffic in from the left rim to the gateway', () => {
     for (const lane of INBOUND_LANES) {
       expect(lane[0].x).toBeLessThan(BOARD_AREA.left);
-      expect(lane[lane.length - 1]).toEqual({ x: GATEWAY.x - PART_SIZE.gateway.w / 2 + 6, y: GATEWAY.y });
+      expect(lane[lane.length - 1]).toEqual(inPort(gateway));
+      // It reads left to right: never steps back toward the left edge.
+      for (let k = 1; k < lane.length; k++) expect(lane[k].x).toBeGreaterThan(lane[k - 1].x);
     }
+    expect(inPort(gateway)!.x).toBeLessThan(GATEWAY.x);
   });
 
   it('maps game space to page pixels through the canvas rect', () => {
@@ -277,9 +297,17 @@ describe('feed geometry (board-1)', () => {
     expect(TABLE.near.right).toBeLessThanOrEqual(BOARD_AREA.right);
   });
 
-  it('places the gateway and the database at their rims, and parts smaller toward the far edge', () => {
-    expect(partBox(gateway)).toEqual({ x: 640, y: 412, w: 110, h: 190 });
-    expect(partBox(database)).toEqual({ x: 1760, y: 412, w: 150, h: 140 });
+  it('stands the gateway and the database on their cells like servers, and parts smaller toward the far edge', () => {
+    expect(partBox(gateway)).toEqual(standBox('gateway', FIXED_ANCHOR.gateway!));
+    expect(partBox(database)).toEqual(standBox('database', FIXED_ANCHOR.database!));
+    // At the table's own perspective and scale: as wide as a server on the same cells, their art's shape.
+    expect(partBox(gateway)!.w).toBeCloseTo(standBox('server', FIXED_ANCHOR.gateway!)!.w);
+    for (const p of [gateway, database]) {
+      const b = partBox(p)!;
+      expect(b.w / b.h).toBeCloseTo(PART_SIZE[p.kind].w / PART_SIZE[p.kind].h);
+      expect(partScale(p)).toBeLessThanOrEqual(1);
+    }
+    expect(partBox(database)!.w).toBeGreaterThan(partBox(gateway)!.w);
     expect(PART_SIZE.server).toEqual({ w: 80, h: 114 });
     expect(FOOTPRINT.server).toEqual({ w: 2, h: 2 });
     expect(FOOTPRINT.balancer).toEqual({ w: 2, h: 1 });
@@ -313,7 +341,7 @@ describe('feed geometry (board-1)', () => {
     }
   });
 
-  it('keeps the suggested spots apart, off the bays and the splitter, and finds each under its centre', () => {
+  it('keeps the suggested spots apart, off the fixed parts and the splitter, and finds each under its centre', () => {
     const taken = new Set<string>();
     for (const id of SERVER_SLOTS) {
       for (const c of footprintCells('server', id)) {
@@ -330,9 +358,24 @@ describe('feed geometry (board-1)', () => {
       const c = footCentre('server', id);
       expect(dropAnchor('server', c.x, c.y)).toBe(id);
     }
-    // Off the grid (the gateway and the database stand on the rims) nothing is under the pointer.
-    expect(dropAnchor('server', GATEWAY.x, GATEWAY.y)).toBeNull();
-    expect(dropAnchor('server', DATABASE.x, DATABASE.y)).toBeNull();
+    // Off the grid (past the table's rims) nothing is under the pointer.
+    expect(dropAnchor('server', 640, 412)).toBeNull();
+    expect(dropAnchor('server', 1760, 412)).toBeNull();
+    // Over the gateway's or the database's cells a server footprint is blocked there (it shows red).
+    for (const kind of ['gateway', 'database'] as const) {
+      const c = footCentre(kind, FIXED_ANCHOR[kind]!);
+      const at = dropAnchor('server', c.x, c.y)!;
+      expect(at).not.toBeNull();
+      const { bad } = previewCells('server', at, [gateway, database]);
+      expect(bad.length).toBeGreaterThan(0);
+      for (const x of bad) expect(RESERVED[kind]).toContain(x);
+      expect(
+        padState(at, { parts: [gateway, database], credits: 999, dead: [] }, 'server', {
+          server: 80,
+          overclock: 60,
+        }),
+      ).toBe('wrong');
+    }
   });
 
   it('lays the grid as quads that share their edges, rows shallower toward the far edge', () => {
@@ -359,14 +402,15 @@ describe('feed geometry (board-1)', () => {
     );
   });
 
-  it('brings the stream in from x 452 through a mouth at x 455 that narrows to the gateway port', () => {
+  it('brings the stream in from x 452 through a mouth at x 455 that narrows toward the gateway port', () => {
     expect(INBOUND_FROM).toBe(452);
     expect(CHANNEL.mouth).toEqual({ x: 455, top: 322, bottom: 502 });
     expect(CHANNEL.port.x).toBe(585);
-    expect(CHANNEL.port.x).toBe(GATEWAY.x - PART_SIZE.gateway.w / 2);
+    // The channel ends on the table's left rim, short of the gateway on the grid, level with its in-port.
+    expect(CHANNEL.port.x).toBeLessThan(inPort(gateway)!.x);
     expect(CHANNEL.port.bottom - CHANNEL.port.top).toBeLessThan(CHANNEL.mouth.bottom - CHANNEL.mouth.top);
-    expect(CHANNEL.port.top).toBeGreaterThanOrEqual(GATEWAY.y - PART_SIZE.gateway.h / 2);
-    expect(CHANNEL.port.bottom).toBeLessThanOrEqual(GATEWAY.y + PART_SIZE.gateway.h / 2);
+    expect(inPort(gateway)!.y).toBeGreaterThan(CHANNEL.port.top);
+    expect(inPort(gateway)!.y).toBeLessThan(CHANNEL.port.bottom);
     expect(channelAt(455)).toEqual({ top: 322, bottom: 502 });
     expect(channelAt(585)).toEqual({ top: CHANNEL.port.top, bottom: CHANNEL.port.bottom });
     // Every lane starts at x 452 and stays between the channel's walls up to the port.

@@ -197,8 +197,8 @@ describe('batch 5 on the board: the midnight plate and the packet cube', () => {
     expect(p.y + p.h).toBeCloseTo(day.y + day.h);
     expect(p.x).toBeGreaterThanOrEqual(BOARD_AREA.left);
     expect(p.x + p.w).toBeLessThanOrEqual(BOARD_AREA.right);
-    // It lies inside the day plate, which stays under it (dimmed): the gateway and the database
-    // stand just past the narrower midnight plate's ends, so they are still on the day plate.
+    // It lies inside the day plate, which stays under it (dimmed); the gateway and the database
+    // stand on the grid's cells, on the day plate.
     expect(p.x).toBeGreaterThan(day.x);
     expect(p.x + p.w).toBeLessThan(day.x + day.w);
     for (const c of [GATEWAY, DATABASE]) {

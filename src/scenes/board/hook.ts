@@ -31,7 +31,8 @@ export interface BoardTestState {
    * cell's drawn size at the middle row (page CSS px); `nodes[j][i]` where grid line i (columns)
    * crosses grid line j (rows), in page CSS pixels, so a w x h footprint anchored at (col, row) has
    * its corners at nodes[row][col] and nodes[row + h][col + w]; `occupied` every cell a part stands
-   * on; `reserved` the fixed parts' cells (the gateway's and the database's footprints); `footprints` every part's cells with its anchor (a
+   * on; `reserved` the fixed parts' cells (the gateway's and the database's footprints);
+   * `footprints` every part's cells with its anchor, the gateway and the database among them (a
    * server's SKIPPED marks with it); `racks` the four power bands and which one the midnight dip
    * holds now; `suggested` the spot that pulses while the board waits for a build (null when none is
    * free) and `room` how many more servers the free cells still take; `preview` the footprint under

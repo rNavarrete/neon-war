@@ -1,5 +1,5 @@
 // The table's grid (src/sim/grid.ts): every painted square is a cell a part can stand on. A server
-// covers 2 x 2 cells, the splitter 2 x 1; the gateway and the database keep their bays on the rims;
+// covers 2 x 2 cells, the splitter 2 x 1; the gateway (2 x 2) and the database (3 x 2) stand on fixed cells;
 // the midnight dip takes one rack (a band of columns) dark.
 
 import { type Board, type Part, place } from '../src/sim/board';
@@ -57,11 +57,31 @@ describe('the grid', () => {
     expect(footprintCells('balancer', 'c4-2')).toEqual(['c4-2', 'c5-2']);
   });
 
-  it('keeps the gateway on the left edge and the database on the right, each in a bay nothing else takes', () => {
+  it('stands the gateway on cells at the left edge and the database on cells at the right, nothing else takes them', () => {
     const gw = parseCell(FIXED_ANCHOR.gateway!)!;
     const db = parseCell(FIXED_ANCHOR.database!)!;
     expect(gw.col).toBe(0);
     expect(db.col + FOOTPRINT.database.w).toBe(GRID.cols);
+    // On the grid, like a server: a 2 x 2 gateway and a 3 x 2 database, every cell on the table.
+    expect(FOOTPRINT.gateway).toEqual({ w: 2, h: 2 });
+    expect(FOOTPRINT.database).toEqual({ w: 3, h: 2 });
+    expect(RESERVED.gateway).toHaveLength(4);
+    expect(RESERVED.database).toHaveLength(6);
+    expect(RESERVED.gateway).toEqual(footprintCells('gateway', FIXED_ANCHOR.gateway!));
+    expect(RESERVED.database).toEqual(footprintCells('database', FIXED_ANCHOR.database!));
+    // Both stand on the first server spot's port row, so the first wire runs straight.
+    expect(
+      portNode(
+        STARTING_PARTS.find((p) => p.kind === 'gateway')!,
+        'out',
+      )!.j,
+    ).toBe(portNode(server('s', SERVER_SPOTS[0]), 'in')!.j);
+    expect(
+      portNode(
+        STARTING_PARTS.find((p) => p.kind === 'database')!,
+        'in',
+      )!.j,
+    ).toBe(portNode(server('s', SERVER_SPOTS[3]), 'out')!.j);
     for (const c of [...RESERVED.gateway!, ...RESERVED.database!]) expect(BOARD_SLOTS).not.toContain(c);
     const taken = occupancy(START);
     for (const c of RESERVED.gateway!) expect(taken.get(c)).toBe('gateway');
@@ -93,7 +113,7 @@ describe('fits: where a part may stand', () => {
     });
   });
 
-  it('blocks a footprint hanging off the table or over a fixed part’s bay', () => {
+  it('blocks a footprint hanging off the table or over a fixed part’s cells', () => {
     expect(fits(BOARD_SLOTS, START, 'server', cellId(GRID.cols - 1, 3))).toEqual({
       ok: false,
       reason: 'it would hang off the table',
@@ -103,7 +123,7 @@ describe('fits: where a part may stand', () => {
       ok: false,
       reason: 'the gateway needs that space',
     });
-    // One column into the database's bay is enough to block.
+    // One column into the database's cells is enough to block.
     const db = parseCell(FIXED_ANCHOR.database!)!;
     expect(fits(BOARD_SLOTS, START, 'server', cellId(db.col - 1, db.row + 1)).ok).toBe(false);
     expect(fits(BOARD_SLOTS, START, 'server', cellId(db.col - 2, db.row + 1)).ok).toBe(true);
