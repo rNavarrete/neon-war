@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { SERVER_SLOTS } from '../../src/sim/tick';
 
 // The shell: title, pause, settings, sound and the phone note. Every test drives the mouse at
 // positions the test hook reports (state.shell.buttons) and asserts on window.__neonTest.state.
@@ -174,7 +175,7 @@ test('placing a part and making a wire play their effects', async ({ page }) => 
   await openBoard(page);
   await page.waitForFunction(() => window.__neonShell !== undefined);
 
-  const id = await page.evaluate(() => window.__neonShell!.place('s1'));
+  const id = await page.evaluate((cell) => window.__neonShell!.place(cell), SERVER_SLOTS[0]);
   expect(id).not.toBeNull();
   expect((await state(page)).shell!.lastSfx).toBe('place-part');
 

@@ -44,7 +44,9 @@ describe('the grid', () => {
     expect(cellId(4, 2)).toBe('c4-2');
     expect(parseCell('c4-2')).toEqual({ col: 4, row: 2 });
     expect(parseCell('s1')).toBeNull();
-    expect(BOARD_SLOTS.length).toBe(GRID.cols * GRID.rows - RESERVED.gateway!.length - RESERVED.database!.length);
+    expect(BOARD_SLOTS.length).toBe(
+      GRID.cols * GRID.rows - RESERVED.gateway!.length - RESERVED.database!.length,
+    );
     for (const c of BOARD_SLOTS) expect(parseCell(c)).not.toBeNull();
   });
 
@@ -85,7 +87,10 @@ describe('fits: where a part may stand', () => {
       ok: false,
       reason: 'it would overlap a part already there',
     });
-    expect(fits(BOARD_SLOTS, [...START, a], 'server', 'c10-5')).toEqual({ ok: false, reason: 'that spot is taken' });
+    expect(fits(BOARD_SLOTS, [...START, a], 'server', 'c10-5')).toEqual({
+      ok: false,
+      reason: 'that spot is taken',
+    });
   });
 
   it('blocks a footprint hanging off the table or over a fixed part’s bay', () => {
@@ -230,6 +235,7 @@ describe('racks: the midnight dip takes one rack dark', () => {
   it('servers spread one per rack lose one box to the dip', () => {
     const parts: Part[] = [...START, ...SERVER_SPOTS.slice(0, 4).map((s, i) => server(`s${i}`, s))];
     const midnight = DIP_SCRIPT.find((d) => d.target === 'seeded')!;
-    for (let seed = 0; seed < 8; seed++) expect(resolveDip(board(parts), midnight, seed).parts).toHaveLength(1);
+    for (let seed = 0; seed < 8; seed++)
+      expect(resolveDip(board(parts), midnight, seed).parts).toHaveLength(1);
   });
 });

@@ -130,7 +130,7 @@ describe('inventoryCounts', () => {
     expect(inventoryCounts(60, two, false).overclock).toBe(1);
     // A grid packed until no 2 x 2 footprint is free: no server card left, a kit for every box.
     const full: Part[] = [...START];
-    for (let spot = findSpot(BOARD_CELLS, full, 'server', SERVER_SLOTS[0]); spot !== null; ) {
+    for (let spot = findSpot(BOARD_CELLS, full, 'server', SERVER_SLOTS[0]); spot !== null;) {
       full.push(server(`p${full.length}`, spot));
       spot = findSpot(BOARD_CELLS, full, 'server', SERVER_SLOTS[0]);
     }

@@ -258,8 +258,6 @@ describe('feed geometry (board-1)', () => {
     expect(b.y - b.h / 2).toBeGreaterThanOrEqual(BOARD_AREA.top);
     expect(b.y + b.h / 2).toBeLessThanOrEqual(BOARD_AREA.bottom);
   };
-  const overlap = (a: B, b: B) =>
-    Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < (a.h + b.h) / 2;
 
   it('draws the feed zone of the Live screen', () => {
     expect(BOARD_AREA).toEqual(rectToArea(ZONES.feed));

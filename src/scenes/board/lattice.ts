@@ -114,7 +114,13 @@ export function lPath(from: Node, to: Node): Node[] {
 }
 
 /** A trace from `from` to `to`, or the L-shaped fallback when the blocks leave no way through. */
-export function traceNodes(cols: number, rows: number, from: Node, to: Node, blocks: readonly Block[]): Node[] {
+export function traceNodes(
+  cols: number,
+  rows: number,
+  from: Node,
+  to: Node,
+  blocks: readonly Block[],
+): Node[] {
   return routeLattice(cols, rows, from, to, blocks) ?? lPath(from, to);
 }
 
@@ -125,7 +131,11 @@ export function corners(path: readonly Node[]): Node[] {
     const last = out[out.length - 1];
     if (last && last.i === p.i && last.j === p.j) continue;
     const before = out[out.length - 2];
-    if (last && before && ((before.i === last.i && last.i === p.i) || (before.j === last.j && last.j === p.j))) {
+    if (
+      last &&
+      before &&
+      ((before.i === last.i && last.i === p.i) || (before.j === last.j && last.j === p.j))
+    ) {
       out[out.length - 1] = p;
       continue;
     }

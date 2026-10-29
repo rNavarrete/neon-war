@@ -1,5 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { BoardTestState } from '../../src/scenes/board/hook';
+import { SERVER_SLOTS } from '../../src/sim/tick';
 
 // The playable board (ENG-504). Every test drives the mouse with positions from the test hook
 // (page CSS pixels) and asserts on window.__neonTest.state.board.
@@ -77,7 +78,9 @@ test('the tray shows the server, the kit and a locked load balancer, and the res
   const others = b.tray.filter((t) => !['server', 'overclock', 'balancer'].includes(t.id));
   expect(others.length).toBe(20);
   expect(others.every((t) => t.locked)).toBe(true);
-  expect(b.slots.find((s) => s.id === 'lb')?.locked).toBe(true);
+  // No padlocked pad on the table: the locked balancer stays in the drawer, and every spot is open.
+  expect(b.slots.every((s) => !s.locked)).toBe(true);
+  expect(b.parts.some((p) => p.kind === 'balancer')).toBe(false);
 
   // Trying the locked balancer says why.
   await page.mouse.click(byId.balancer.x, byId.balancer.y);
@@ -91,7 +94,7 @@ test('dragging a scrap server to a slot places it, spends 80 credits and shows i
 }) => {
   await openBoard(page);
   const before = (await board(page)).credits;
-  const id = await placeServer(page, 's1');
+  const id = await placeServer(page, SERVER_SLOTS[0]);
   const placed = await board(page);
   const server = placed.parts.find((p) => p.id === id)!;
   expect(server.kind).toBe('server');
@@ -118,8 +121,8 @@ test('dragging a scrap server to a slot places it, spends 80 credits and shows i
 
 test('dragging part to part wires them, and a refused wire shows its reason', async ({ page }) => {
   await openBoard(page);
-  const s1 = await placeServer(page, 's1');
-  const s2 = await placeServer(page, 's2');
+  const s1 = await placeServer(page, SERVER_SLOTS[0]);
+  const s2 = await placeServer(page, SERVER_SLOTS[1]);
 
   await wire(page, 'gateway', s1);
   await expect.poll(async () => (await board(page)).wires.map((w) => w.key)).toEqual([`gateway>${s1}`]);
@@ -139,8 +142,8 @@ test('clicking a wire and choosing cut removes it; decommissioning refunds half 
   page,
 }) => {
   await openBoard(page);
-  const s1 = await placeServer(page, 's1');
-  const s2 = await placeServer(page, 's2');
+  const s1 = await placeServer(page, SERVER_SLOTS[0]);
+  const s2 = await placeServer(page, SERVER_SLOTS[1]);
   await wire(page, 'gateway', s1);
   await expect.poll(async () => (await board(page)).wires.length).toBe(1);
 
@@ -175,7 +178,7 @@ test('dropping the overclock kit on a server makes it 120 req/s, spends 60 and r
   page,
 }) => {
   await openBoard(page);
-  const s1 = await placeServer(page, 's1');
+  const s1 = await placeServer(page, SERVER_SLOTS[0]);
   await wire(page, 'gateway', s1);
   await wire(page, s1, 'database');
   await waitOnline(page, s1);
@@ -204,7 +207,7 @@ test('packets follow each wire, load shows on each part, and the packet pool sto
   page,
 }) => {
   await openBoard(page);
-  const s1 = await placeServer(page, 's1');
+  const s1 = await placeServer(page, SERVER_SLOTS[0]);
   await wire(page, 'gateway', s1);
   await wire(page, s1, 'database');
   await expect.poll(async () => (await board(page)).wires.length).toBe(2);
@@ -244,7 +247,7 @@ test('packets follow each wire, load shows on each part, and the packet pool sto
 test('?test&speed=N runs the board N times faster: C3 in under 30 s', async ({ page }) => {
   await openBoard(page, '&speed=20');
   // Build gateway -> server -> database so the block is served on the way.
-  const s1 = await placeServer(page, 's1');
+  const s1 = await placeServer(page, SERVER_SLOTS[0]);
   await wire(page, 'gateway', s1);
   await wire(page, s1, 'database');
   const start = await board(page);

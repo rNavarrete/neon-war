@@ -88,7 +88,7 @@ export const BROWNOUT = {
     bayRow: 10,
     racks: ['A', 'B', 'C', 'D'],
     rackColumns: 7,
-    balancerSpot: { col: 3, row: 8 },
+    balancerSpot: { col: 5, row: 12 },
     serverSpots: { cols: [3, 9, 16, 22], rows: [11, 5, 15] },
   },
   /** C7: decommissioning down to this many servers counts as scaling down in the debrief. */

@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { SERVER_SLOTS } from '../../src/sim/tick';
 import type { LuxCamTestState } from '../../src/scenes/hud/luxcam';
 import type { Rect } from '../../src/scenes/live/layout';
 import { LINES, type LineId } from '../../src/strings';
@@ -257,7 +258,7 @@ test('a failure in C3 rewinds the night and the cam shows her exhausted, then le
   const { errors } = await openBoard(page, { autopilot: false });
   await dismissJobCard(page);
   // One stock server and no kit, the way story.spec stages it: the evening climb cooks it in C3.
-  const id = await page.evaluate(() => window.__neonShell!.place('s1'));
+  const id = await page.evaluate((cell) => window.__neonShell!.place(cell), SERVER_SLOTS[0]);
   expect(id).not.toBeNull();
   await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
   await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);
@@ -354,7 +355,7 @@ test.describe('luxcam-5 at 1920x1080', () => {
     await expect.poll(async () => (await cam(page)).stressedFor, { timeout: 15_000 }).toBeGreaterThan(6.5);
 
     // Wire one box: the errors stop, the panic lets go, and the relieved beat shows the picked bust.
-    const id = await page.evaluate(() => window.__neonShell!.place('s1'));
+    const id = await page.evaluate((cell) => window.__neonShell!.place(cell), SERVER_SLOTS[0]);
     expect(id).not.toBeNull();
     await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
     await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);
@@ -384,7 +385,7 @@ test.describe('luxcam-5 at 1920x1080', () => {
         ).board,
     );
     const card = board.tray.find((t) => t.id === 'server')!;
-    const slot = board.slots.find((s) => s.id === 's2') ?? board.slots[board.slots.length - 1];
+    const slot = board.slots[1] ?? board.slots[board.slots.length - 1];
     await page.mouse.move(card.x, card.y);
     await page.mouse.down();
     await page.mouse.move((card.x + slot.x) / 2, (card.y + slot.y) / 2, { steps: 6 });
@@ -409,7 +410,7 @@ test.describe('luxcam-5 at 1920x1080', () => {
     await dismissJobCard(page);
     // One wired box so the cam is quiet, then jump the clock past midnight to 4 s before the goggles
     // go up: the held midnight cheers her, then the goggles go up before the debrief at 540.
-    const id = await page.evaluate(() => window.__neonShell!.place('s1'));
+    const id = await page.evaluate((cell) => window.__neonShell!.place(cell), SERVER_SLOTS[0]);
     await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
     await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);
     await page.evaluate(() => window.__neonStory!.setNow(533));

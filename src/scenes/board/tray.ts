@@ -143,7 +143,6 @@ export interface InventoryCounts {
   balancer: number;
 }
 
-
 /**
  * How many of each card the player could use now, from the credits, the parts on the board and
  * whether the crew has given the balancer. Counts are derived, never stock: servers are what the

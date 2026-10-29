@@ -346,8 +346,13 @@ export class BoardScene extends Phaser.Scene {
   private cellsState: PadState | null = null;
   private cellsParts: readonly Part[] | null = null;
   /** What the drag preview shows now, for the hook: the footprint's cells and the ones blocked. */
-  private preview: { card: string; anchor: string; cells: string[]; bad: string[]; colour: 'green' | 'red' | 'amber' } | null =
-    null;
+  private preview: {
+    card: string;
+    anchor: string;
+    cells: string[];
+    bad: string[];
+    colour: 'green' | 'red' | 'amber';
+  } | null = null;
   /** The suggested spot pulsing while the board waits for a build, its anchor, and whether it shows. */
   private suggestG!: Phaser.GameObjects.Graphics;
   private suggestAt: string | null = null;
@@ -1445,7 +1450,12 @@ export class BoardScene extends Phaser.Scene {
     const card = d?.kind === 'card' ? d.id : null;
     const at = card !== null ? this.over.slot : null;
     const state = at !== null ? this.overState() : null;
-    if (card === this.cellsCard && at === this.cellsAt && state === this.cellsState && f.parts === this.cellsParts)
+    if (
+      card === this.cellsCard &&
+      at === this.cellsAt &&
+      state === this.cellsState &&
+      f.parts === this.cellsParts
+    )
       return;
     this.cellsCard = card;
     this.cellsAt = at;
@@ -1472,7 +1482,13 @@ export class BoardScene extends Phaser.Scene {
       g.fillStyle(c, 0.32).fillPoints(asVectors(q), true);
       g.lineStyle(2, c, 0.95).strokePoints(asVectors(q), true);
     }
-    this.preview = { card, anchor: at, cells, bad: colour === 'red' && bad.length === 0 ? cells : bad, colour };
+    this.preview = {
+      card,
+      anchor: at,
+      cells,
+      bad: colour === 'red' && bad.length === 0 ? cells : bad,
+      colour,
+    };
     g.setVisible(true);
   }
 
@@ -1519,7 +1535,11 @@ export class BoardScene extends Phaser.Scene {
         const p = parts[i];
         if (p.kind !== 'server' || p.slot === null) continue;
         const q = footprintQuad(p.kind, p.slot);
-        if (q) g.fillStyle(AMBER, 0.45).fillPoints(asVectors(q), true).lineStyle(2, AMBER, 1).strokePoints(asVectors(q), true);
+        if (q)
+          g.fillStyle(AMBER, 0.45)
+            .fillPoints(asVectors(q), true)
+            .lineStyle(2, AMBER, 1)
+            .strokePoints(asVectors(q), true);
       }
     }
     this.heldG.setAlpha(glow).setVisible(true);
@@ -2030,7 +2050,16 @@ export class BoardScene extends Phaser.Scene {
       this.ghostDirty = false;
       this.ghostFrame = f;
       const state = this.overState() ?? 'wrong';
-      this.ghostInfo = ghostInfo(f, BROWNOUT_RULES, f.offline, card, this.over.id, this.over.slot, state, true);
+      this.ghostInfo = ghostInfo(
+        f,
+        BROWNOUT_RULES,
+        f.offline,
+        card,
+        this.over.id,
+        this.over.slot,
+        state,
+        true,
+      );
     }
     const g = this.ghostInfo;
     // Snap the card in hand onto a legal spot while the ghost may show: the server stands on its footprint.
@@ -2055,7 +2084,8 @@ export class BoardScene extends Phaser.Scene {
           this.ghost.setPosition(box.x, box.y - box.h * 0.2);
         }
       } else if (card !== null) {
-        this.ghost.setScale(120 / this.ghost.frame.height).setPosition(this.pointer.x, this.pointer.y);
+        this.ghost.setScale(120 / this.ghost.frame.height);
+        this.ghost.setPosition(this.pointer.x, this.pointer.y - this.ghost.displayHeight / 2 - 8);
       }
     }
     // The plate beside the ghost: what the drop adds, or that nothing feeds it (also over a spot the
@@ -2407,7 +2437,8 @@ export class BoardScene extends Phaser.Scene {
     this.hover.part = null;
     this.hover.wire = null;
     if (d.kind === 'card') {
-      if (this.ghostShownFor === null) this.ghost.setPosition(p.x, p.y);
+      // Unsnapped, the card rides just above the pointer so the cells under it (green or red) stay in view.
+      if (this.ghostShownFor === null) this.ghost.setPosition(p.x, p.y - this.ghost.displayHeight / 2 - 8);
       this.updateOver(p.x, p.y, d.id, run().session.board.parts);
       return;
     }
@@ -2511,7 +2542,10 @@ export class BoardScene extends Phaser.Scene {
       .setDepth(20)
       .setAlpha(0)
       .setVisible(false);
-    this.cableImg = this.add.image(feed.x + feed.w / 2, feed.y, 'board-cable').setOrigin(0.5, 1).setDepth(2.9);
+    this.cableImg = this.add
+      .image(feed.x + feed.w / 2, feed.y, 'board-cable')
+      .setOrigin(0.5, 1)
+      .setDepth(2.9);
     this.cableImg.setScale(CABLE_SCALE).setVisible(false);
     this.kitImg = this.add.image(0, 0, 'overclock-kit').setDepth(32).setVisible(false);
     this.liftImg = this.add.image(0, 0, 'server').setDepth(7).setVisible(false);

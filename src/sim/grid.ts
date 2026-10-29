@@ -186,7 +186,7 @@ export function findSpot(
   return best;
 }
 
-/** Where the crew like to rack their splitter: in front of the gateway's bay, above its port row. */
+/** Where the crew like to rack their splitter: on the gateway's port row, just past the first server spot (clear of every server's art). */
 export const BALANCER_SPOT = cellId(B.balancerSpot.col, B.balancerSpot.row);
 
 /**
