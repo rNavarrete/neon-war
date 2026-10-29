@@ -25,6 +25,15 @@ import {
 } from './hud/cues';
 import { CARD_TEXT_POOL, type CardTextSpec, bannerTexts, dressCardText, jobCardTexts } from './hud/cardText';
 import { countdownText } from './hud/format';
+import {
+  type CoachInput,
+  type CoachState,
+  NEW_COACH,
+  coachHint,
+  coachLit,
+  coachProblem,
+  stepCoach,
+} from './hud/coach';
 import { type HudBounds, type HudTestState, type PagePoint, hudSection } from './hud/hook';
 import { dismissJobCard, jobCardDue, openJobCard } from './hud/jobCard';
 import { BANNER_BUTTONS, BOTTOM, CENTRE, COLORS, FONT, type Home, KEY } from './hud/layout';
@@ -101,6 +110,27 @@ export class HudScene extends Phaser.Scene {
   private unsubscribe: (() => void)[] = [];
 
   private director: DirectorState = NEW_DIRECTOR;
+  /** The tutorial coach: what the player is stuck on and how long (src/scenes/hud/coach.ts). */
+  private coach: CoachState = NEW_COACH;
+  /** What the board was last told to light: the problem's key and whether it showed. */
+  private coachShown: string | null = null;
+  /** Every nudge the coach said this run, in order (for the hook). */
+  private coachSaid: LineId[] = [];
+  /** A card or wire is in hand on the board: the coach waits rather than talk over the drag. */
+  private dragging = false;
+  private readonly coachInput: { -readonly [K in keyof CoachInput]: CoachInput[K] } = {
+    now: 0,
+    paused: false,
+    cardOpen: false,
+    waitingForFirstBuild: false,
+    rescued: false,
+    parts: [],
+    wires: [],
+    dead: [],
+    offline: [],
+    load: {},
+    dropped: 0,
+  };
   private bannerShown = false;
   private decommissionsAfterMidnight = 0;
   private lastSurgeAt = -1;
@@ -223,6 +253,9 @@ export class HudScene extends Phaser.Scene {
       bus.on('action', (a) => {
         if (a.type === 'decommission' && run().now >= MIDNIGHT) this.decommissionsAfterMidnight++;
       }),
+      bus.on('drag', (d) => {
+        this.dragging = d.kind !== null;
+      }),
     );
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       for (const off of this.unsubscribe) off();
@@ -264,6 +297,7 @@ export class HudScene extends Phaser.Scene {
     this.updateBanner(r);
 
     this.runDirector(f);
+    this.runCoach(f, step);
     if (this.perf.frame(delta)) this.samplePerf();
   }
 
@@ -321,6 +355,9 @@ export class HudScene extends Phaser.Scene {
     this.lastFrame = null;
     this.occurrences.length = 0;
     this.director = NEW_DIRECTOR;
+    this.coach = NEW_COACH;
+    this.coachSaid = [];
+    this.publishCoach(null);
     this.comms?.reset();
     this.chatFeed?.reset(this.clock);
     this.bannerShown = false;
@@ -507,6 +544,56 @@ export class HudScene extends Phaser.Scene {
   }
 
   /**
+   * One frame of the tutorial coach: what the player is stuck on (coachProblem), timed on the HUD
+   * clock while the board runs and nothing is in hand. A due nudge goes to the comms band like a
+   * bark and out on the bus for the chat; a change in what is lit goes out as bus `coach` for the
+   * board and the alert band.
+   */
+  private runCoach(f: Frame, dt: number): void {
+    const c = this.coachInput;
+    c.now = f.now;
+    c.paused = f.paused;
+    c.cardOpen = this.cardOpen;
+    c.waitingForFirstBuild = f.waitingForFirstBuild;
+    c.rescued = f.rescued;
+    c.parts = f.parts;
+    c.wires = f.wires;
+    c.dead = f.dead;
+    c.offline = f.offline;
+    c.load = f.flow.load;
+    c.dropped = f.dropped;
+    // Recomputed only when the sim moved or the card closed: the same frame gives the same problem.
+    const p = f === this.lastCoachFrame && this.cardOpen === this.lastCoachCard ? this.coach.problem : coachProblem(c);
+    this.lastCoachFrame = f;
+    this.lastCoachCard = this.cardOpen;
+    const out = stepCoach(this.coach, p, dt, f.paused || this.dragging);
+    this.coach = out.state;
+    if (out.nudge) {
+      this.coachSaid.push(out.nudge);
+      this.comms?.enqueue(out.nudge);
+      bus.emit('coachNudge', { step: out.state.problem?.step ?? '', id: out.nudge, at: this.clock });
+    }
+    const shown = coachLit(this.coach) && this.coach.problem ? this.coach.problem.key : null;
+    if (shown !== this.coachShown) this.publishCoach(shown);
+  }
+
+  private lastCoachFrame: Frame | null = null;
+  private lastCoachCard = false;
+
+  /** Tell the board and the band what the coach lights now (`key` null: nothing). */
+  private publishCoach(key: string | null): void {
+    this.coachShown = key;
+    const p = key !== null ? this.coach.problem : null;
+    bus.emit('coach', {
+      step: p?.step ?? null,
+      cards: p?.cards ?? [],
+      parts: p?.parts ?? [],
+      wire: p?.wire ?? null,
+      hint: p ? coachHint(this.coach) : null,
+    });
+  }
+
+  /**
    * Send a fired line out as bus `cue` and route it: barks to the bark queue. Chat ids are the chat
    * view's: it hears the cue and posts it (ChatFeedView; C6.fail.chat silences it instead of a row).
    */
@@ -600,6 +687,17 @@ export class HudScene extends Phaser.Scene {
       },
       bark: this.comms?.barkSnapshot() ?? { current: null, text: null, history: [] },
       cues: { fired: [...this.firedCues], silenced: chatSilenced(this.director) },
+      coach: {
+        step: this.coach.problem?.step ?? null,
+        key: this.coach.problem?.key ?? null,
+        lit: coachLit(this.coach),
+        stuckFor: this.coach.stuckFor,
+        hint: coachHint(this.coach),
+        cards: [...(this.coach.problem?.cards ?? [])],
+        parts: [...(this.coach.problem?.parts ?? [])],
+        wire: this.coach.problem?.wire ?? null,
+        said: [...this.coachSaid],
+      },
       // The chat view provides hud.chat (block and stream kept, the feed beside them) over this.
       chat: { block: [], stream: [] },
       timeScale: r.timeScale,

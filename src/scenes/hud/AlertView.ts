@@ -151,6 +151,8 @@ export class AlertView implements LiveView {
   /** The start-of-C1 hint up now, and the one the headline was last dressed for. */
   private hint: LineId | null = null;
   private shownHint: LineId | null = null;
+  /** The tutorial coach's step on the band (bus `coach`), shown in place of the start hint. */
+  private coachHint: LineId | null = null;
   /** What the hint reads, one object refilled every frame. */
   private readonly hintInput: {
     now: number;
@@ -252,6 +254,13 @@ export class AlertView implements LiveView {
     this.shownLit = true;
     this.hint = null;
     this.shownHint = null;
+    this.coachHint = null;
+    if (this.bus)
+      this.off.push(
+        this.bus.on('coach', (c) => {
+          this.coachHint = c.hint;
+        }),
+      );
     this.off.push(provideHudSection('alert', () => this.snapshot()));
     // The leader line ends under the plate's middle, while an alert is up (game px, made once).
     const under = { x: L.plate.x + L.plate.w / 2, y: L.plate.y + L.plate.h };
@@ -291,7 +300,7 @@ export class AlertView implements LiveView {
     hi.now = frame.now;
     hi.cardOpen = st.kind === 'none' && jobCardDue(run());
     hi.parts = frame.parts;
-    this.hint = st.kind === 'none' ? startHintOf(hi) : null;
+    this.hint = st.kind === 'none' ? (this.coachHint ?? startHintOf(hi)) : null;
 
     const visible = st.kind !== 'none' || this.hint !== null;
     if (visible !== this.visible) {

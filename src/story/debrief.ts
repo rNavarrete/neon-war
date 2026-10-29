@@ -103,7 +103,7 @@ export const TERM_NAMES: Readonly<Record<TermKey, string>> = (() => {
  */
 export const MOMENT_WORDS: Readonly<Record<MomentKind, (n: number | null) => string>> = {
   firstLive: () => 'your first box went live',
-  kitFitted: () => 'you fitted the kit to a box',
+  kitFitted: () => 'you swapped in a bigger box',
   secondBox: () => 'a second box went on the rack',
   splitterRacked: () => 'the crew racked the splitter',
   firstSkipped: () => 'the splitter stepped over a dark box',

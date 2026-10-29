@@ -115,6 +115,20 @@ export interface GameEvents {
    * number.
    */
   audience: { watching: number };
+  /**
+   * The tutorial coach's highlight changed (src/scenes/hud/coach.ts), emitted by the HUD: what to
+   * light on the board (tray cards, parts, a ghost wire) and what the alert band says, or step null
+   * when nothing is lit.
+   */
+  coach: {
+    step: string | null;
+    cards: readonly string[];
+    parts: readonly string[];
+    wire: { from: string; to: string } | null;
+    hint: LineId | null;
+  };
+  /** The coach said a nudge (it also goes to the comms band); the chat reacts to it. */
+  coachNudge: { step: string; id: LineId; at: number };
   /** One sample of the frame budget: the frame rate and what is on the display lists; `at` is the HUD clock. */
   perfSample: { at: number; fps: number; objects: number; texts: number; graphics: number };
 }

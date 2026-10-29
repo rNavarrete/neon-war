@@ -47,7 +47,8 @@ export const LABELS = {
   },
   inventory: {
     server: 'SERVER',
-    overclock: 'OVERCLOCK',
+    /** Scale up: swap one box for a bigger one (Rolando, 29 Oct 2026: no overclocking, it isn't real). */
+    overclock: 'BIGGER BOX',
     /** The crew's gift: the card keeps its code id, the screen says what it does. */
     splitter: 'SPLITTER (crew gift)',
     gift: 'GIFT',
@@ -85,7 +86,7 @@ export const LABELS = {
     gateway: 'GATEWAY · every call from the block comes in here · feeds one part',
     database: `DATABASE · where every call ends up · takes ${BROWNOUT.database.capacity} a second`,
     server: `SERVER · answers ${BROWNOUT.server.capacity} a second · ${BROWNOUT.server.cost} cr · boots ${BROWNOUT.server.bootSeconds} s`,
-    overclock: `OVERCLOCK · makes one box answer ${BROWNOUT.overclock.factor} times as many · ${BROWNOUT.overclock.cost} cr · reboots ${BROWNOUT.overclock.rebootSeconds} s`,
+    overclock: `BIGGER BOX · swaps one box for one that answers ${BROWNOUT.overclock.factor} times as many · ${BROWNOUT.overclock.cost} cr · down ${BROWNOUT.overclock.rebootSeconds} s while it swaps`,
     splitter: 'SPLITTER · shares the calls across every box wired behind it, and skips a dark one',
     nothingFeeds: 'nothing feeds it',
     /** Each part's name on the first line of its plate, by part kind (the balancer is the splitter). */

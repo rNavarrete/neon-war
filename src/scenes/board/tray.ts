@@ -88,10 +88,10 @@ export function trayCards(balancerUnlocked: boolean): TrayCard[] {
     card(
       1,
       'overclock',
-      'OVERCLOCK',
-      `OVERCLOCK ${BROWNOUT.overclock.cost}`,
+      LABELS.inventory.overclock,
+      `${LABELS.inventory.overclock} ${BROWNOUT.overclock.cost}`,
       BROWNOUT.overclock.cost,
-      'overclock-kit',
+      'server-overclocked',
       false,
     ),
     // The card prints the crew's word for it: the real name waits for the debrief (C8.terms).

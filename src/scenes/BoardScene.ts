@@ -2540,7 +2540,7 @@ export class BoardScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(2.9);
     this.cableImg.setScale(CABLE_SCALE).setVisible(false);
-    this.kitImg = this.add.image(0, 0, 'overclock-kit').setDepth(32).setVisible(false);
+    this.kitImg = this.add.image(0, 0, 'server-overclocked').setDepth(32).setVisible(false);
     this.liftImg = this.add.image(0, 0, 'server').setDepth(7).setVisible(false);
     this.floatText = this.add
       .text(0, 0, '', {

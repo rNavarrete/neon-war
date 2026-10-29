@@ -144,6 +144,24 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
   // The credits chip in the title cluster.
   'C7.ozzie.01': 'zone:title',
   'C7.triage.01': 'zone:alert',
+  // The tutorial coach's nudges (src/scenes/hud/coach.ts): at the thing to touch next.
+  'C1.triage.nudge.place.1': 'zone:inventory',
+  'C1.triage.nudge.place.2': 'zone:inventory',
+  'C1.lux.nudge.place': 'zone:inventory',
+  'C1.triage.nudge.feed.1': 'part:gateway',
+  'C1.triage.nudge.feed.2': 'part:gateway',
+  'C1.lux.nudge.feed': 'part:gateway',
+  'C1.triage.nudge.store.1': 'part:database',
+  'C1.triage.nudge.store.2': 'part:database',
+  'C1.lux.nudge.store': 'part:database',
+  'C3.triage.nudge.choose.1': 'zone:inventory',
+  'C3.triage.nudge.choose.2': 'zone:inventory',
+  'C5.triage.nudge.splitter': 'part:balancer',
+  'C5.lux.nudge.splitter': 'part:balancer',
+  'C5.triage.nudge.behind.1': 'part:balancer',
+  'C5.triage.nudge.behind.2': 'part:balancer',
+  'C5.lux.nudge.behind': 'part:balancer',
+  'C5.triage.nudge.replace.1': 'zone:inventory',
 };
 
 /** The debrief terms each line shows before they are named. Lines not listed teach nothing on their own. */
