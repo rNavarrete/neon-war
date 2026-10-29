@@ -603,9 +603,9 @@ export const PICKED_ART: readonly PickedArt[] = [
   {
     file: 'art/story/akemi-photo.webp',
     cut: size(805, 947),
-    display: scaled(size(805, 947), 0.42),
+    display: scaled(size(805, 947), 0.7),
     zone: 'story',
-    use: "Akemi's photo on the desk",
+    use: "Akemi's photo, an insert in the cold open until Lux speaks",
   },
   {
     file: 'art/ui/logo.webp',

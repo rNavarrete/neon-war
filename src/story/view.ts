@@ -8,6 +8,7 @@ import { TEXT_CPS, settings } from '../game/settings';
 import { LINES, type LineId } from '../strings';
 import { LABELS } from './labels';
 import { scriptFaces, typedChars } from './scripts';
+import { frameFor, slotsFor } from './stage';
 import { type PagePoint, type ViewSnapshot, playVoice, storyState } from './state';
 
 export const W = 1920;
@@ -25,10 +26,8 @@ export const TEX = {
 /** Texture key for a background or story file under public/. */
 export const fileKey = (file: string): string => `story:${file}`;
 
-/** Where each speaker stands, left to right; the chat panel keeps the top-right corner. */
-const STAGE_X: Record<string, number> = { Lux: 330, TRIAGE: 700, Rei: 1040, Mika: 1320, Ozzie: 1590 };
-const PORTRAIT_FEET = 820;
-const PORTRAIT_SCALE = 0.8;
+/** The speaker steps forward a little; everyone else dims (src/story/stage.ts places them). */
+const SPEAKER_SCALE = 1.03;
 const DIM = 0x55556a;
 
 const BODY_FONT = '"Trebuchet MS", "Segoe UI", Arial, sans-serif';
@@ -182,26 +181,11 @@ export class VnView {
 
     const portrait = name ? (face ? `portrait:${face}` : portraitFor(speaker, this.opts.where)?.key) : null;
     if (name && portrait) {
-      let img = this.portraits.get(name);
-      if (!img) {
-        img = this.scene.add
-          .image(STAGE_X[name] ?? W / 2, PORTRAIT_FEET, portrait)
-          .setOrigin(0.5, 1)
-          .setScale(PORTRAIT_SCALE)
-          .setDepth(10);
-        this.portraits.set(name, img);
-      } else {
-        img.setTexture(portrait);
-      }
+      const img = this.portraits.get(name);
+      if (!img) this.portraits.set(name, this.scene.add.image(0, 0, portrait).setOrigin(0.5, 1).setDepth(10));
+      else img.setTexture(portrait);
     }
-    for (const [who, img] of this.portraits) {
-      if (who === name)
-        img
-          .clearTint()
-          .setAlpha(1)
-          .setScale(PORTRAIT_SCALE * 1.03);
-      else img.setTint(DIM).setAlpha(0.85).setScale(PORTRAIT_SCALE);
-    }
+    this.stage();
 
     // Wrap once up front so words don't jump lines as they type in.
     this.body.setText('');
@@ -209,6 +193,22 @@ export class VnView {
     this.typingFor = 0;
     this.shown = -1;
     this.update(0);
+  }
+
+  /**
+   * Stands everyone on stage in the slots for that many people, in the order they came on, at their
+   * art's frame (src/story/stage.ts). The speaker is a touch bigger and lit; the others dim.
+   */
+  private stage(): void {
+    const xs = slotsFor(this.portraits.size);
+    let i = 0;
+    for (const [who, img] of this.portraits) {
+      const f = frameFor(img.height, xs[i++]!, H);
+      const speaking = who === this.speaking;
+      img.setPosition(f.x, f.bottom).setScale(f.scale * (speaking ? SPEAKER_SCALE : 1));
+      if (speaking) img.clearTint().setAlpha(1);
+      else img.setTint(DIM).setAlpha(0.85);
+    }
   }
 
   /** Add a line to the corner chat. */

@@ -458,3 +458,22 @@ test("the rain in Lux's room falls only on the window glass, never over the room
   }
   await page.screenshot({ path: 'test-results/screens/story-room-rain.png' });
 });
+
+test('the cold open shows the photo as an insert, then Lux holding it on the left third, sunk behind the text box', async ({
+  page,
+}) => {
+  await boot(page, '/?test&scene=story');
+  await expect.poll(async () => (await story(page))?.scriptId, { timeout: 15_000 }).toBe('C0');
+  let s = await story(page);
+  expect(s.lineId).toBe('C0.tv.01');
+  expect(s.photo).toBe(true);
+  await page.screenshot({ path: 'test-results/screens/story-photo-insert.png' });
+  while (s.lineId !== 'C0.lux.01') {
+    if (!s.typingDone) await clickStory(page);
+    s = await clickStory(page);
+  }
+  expect(s.photo).toBe(false);
+  expect(s.onStage).toEqual(['Lux']);
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: 'test-results/screens/story-lux-staged.png' });
+});

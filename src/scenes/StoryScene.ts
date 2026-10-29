@@ -59,6 +59,7 @@ export class StoryScene extends Phaser.Scene {
   private readonly seg: Segment = { x1: 0, y1: 0, x2: 0, y2: 0 };
   private readonly drawn: Segment = { x1: 0, y1: 0, x2: 0, y2: 0 };
   private flickerPending = false;
+  private photo: Phaser.GameObjects.Image | null = null;
   private frames = new FrameClock();
 
   constructor() {
@@ -94,6 +95,8 @@ export class StoryScene extends Phaser.Scene {
     this.tracking = [];
     this.rain = null;
     storyState.rain = null;
+    this.photo = null;
+    storyState.photo = false;
 
     if (s.backdrop) cover(this, fileKey(s.backdrop));
     if (s.look === 'vhs') this.drawReplay();
@@ -174,7 +177,19 @@ export class StoryScene extends Phaser.Scene {
   }
 
   private cue(step: ScriptStep): void {
-    if (step.cue === 'flicker') this.flickerPending = !settings().reduceFlicker;
+    if (step.cue === 'flicker') {
+      this.flickerPending = !settings().reduceFlicker;
+      const photo = this.photo;
+      this.photo = null;
+      storyState.photo = false;
+      if (photo)
+        this.tweens.add({
+          targets: photo,
+          alpha: 0,
+          duration: 400 / run().speed,
+          onComplete: () => photo.destroy(),
+        });
+    }
     if (step.cue === 'goggles') {
       playSfx('goggles-on');
       const lens = this.add
@@ -223,7 +238,10 @@ export class StoryScene extends Phaser.Scene {
     this.trickles = seedDrops(TRICKLES, ROOM_GLASS, 18, 60, Math.random);
     storyState.rain = { glass: { ...ROOM_GLASS }, drawn: null };
     if (this.script.photo) {
-      this.add.image(1180, 560, fileKey(EXTRA.photo)).setScale(0.42).setAngle(-6).setDepth(8);
+      // An insert, the way visual novels show a prop that matters: the photo fills the middle while the
+      // TV and Grandma talk, then gives way to Lux holding it when she speaks (the 'flicker' cue).
+      this.photo = this.add.image(900, 470, fileKey(EXTRA.photo)).setScale(0.7).setAngle(-4).setDepth(8);
+      storyState.photo = true;
       this.clock = this.add
         .text(80, 60, twelveHour(run().clock(0)), {
           fontFamily: 'monospace',

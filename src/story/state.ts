@@ -67,6 +67,8 @@ export interface StoryTestState {
   } | null;
   fireworks: { bursts: number; flashes: number };
   /** Lux's room only: the window glass and the box round the rain drawn this frame (null otherwise). */
+  /** Akemi's photo is up as an insert (the cold open, until Lux speaks). */
+  photo: boolean;
   rain: { glass: Box; drawn: { x: number; y: number; w: number; h: number } | null } | null;
   runNow: number;
   runHeld: boolean;
@@ -101,6 +103,7 @@ export const storyState: Omit<StoryTestState, 'runNow' | 'runHeld' | 'seen'> = {
   finished: [],
   debrief: null,
   fireworks: { bursts: 0, flashes: 0 },
+  photo: false,
   rain: null,
 };
 
