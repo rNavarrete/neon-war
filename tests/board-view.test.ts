@@ -1,4 +1,5 @@
 import boardSource from '../src/scenes/BoardScene.ts?raw';
+import { SERVER_SLOTS } from '../src/sim/tick';
 import { frame, readFrame, resetFrame } from '../src/game/frame';
 import { Run } from '../src/game/run';
 import type { Part } from '../src/sim/board';
@@ -138,7 +139,7 @@ describe('part look reuse (board-3)', () => {
 function wiredRun(): Run {
   const r = new Run();
   r.now = BROWNOUT.challenges.c1;
-  expect(r.placeServer('s1').ok).toBe(true);
+  expect(r.placeServer(SERVER_SLOTS[0]).ok).toBe(true);
   const id = r.session.board.parts[r.session.board.parts.length - 1].id;
   expect(r.connect('gateway', id).ok).toBe(true);
   expect(r.connect(id, 'database').ok).toBe(true);
@@ -266,7 +267,7 @@ describe('test speed', () => {
     const normal = new Run(1);
     // Each with a server wired gateway -> server -> database, so C1 doesn't wait for a first build.
     for (const r of [fast, normal]) {
-      r.placeServer('s1');
+      r.placeServer(SERVER_SLOTS[0]);
       const id = r.session.board.parts[r.session.board.parts.length - 1].id;
       r.connect('gateway', id);
       r.connect(id, 'database');
@@ -282,7 +283,7 @@ describe('test speed', () => {
   it('reaches C3 in under 30 s of real time at speed 20', () => {
     const r = new Run(20);
     // A server wired gateway -> server -> database keeps the block up, so nothing fails and rewinds.
-    expect(r.placeServer('s1').ok).toBe(true);
+    expect(r.placeServer(SERVER_SLOTS[0]).ok).toBe(true);
     const id = r.session.board.parts[r.session.board.parts.length - 1].id;
     expect(r.connect('gateway', id).ok).toBe(true);
     expect(r.connect(id, 'database').ok).toBe(true);

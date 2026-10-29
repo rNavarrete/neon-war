@@ -10,31 +10,27 @@ import type { BoardTestState } from './board/hook';
 import {
   type Box,
   BOARD_AREA,
-  RACK_ROWS,
-  SERVER_GRID,
-  padBox,
   CHANNEL,
   INBOUND_LANES,
-  LB_SLOT,
-  LB_SLOT_ID,
-  PAD_SIZE,
-  SERVER_PADS,
   TABLE,
   TABLE_FACE,
   WIRE_PICK,
   type Point,
   channelAt,
   distToPath,
+  dropAnchor,
+  footprintQuad,
+  outPort,
   partAt,
   partBox,
   partCentre,
+  partScale,
   partSize,
+  previewCells,
   project,
-  slotAt,
-  slotBox,
-  slotScale,
   pathLength,
   pointAlong,
+  standBox,
   toPage,
   wirePath,
   inPort,
@@ -43,6 +39,23 @@ import {
   padState,
   targetState,
 } from './board/layout';
+import {
+  BOARD_CELLS,
+  FIXED_ANCHOR,
+  FOOTPRINT,
+  GRID,
+  RACKS,
+  SERVER_SPOTS,
+  anchorOf,
+  fits,
+  footprintCells,
+  occupancy,
+  parseCell,
+  partCells,
+  roomFor,
+} from '../sim/grid';
+import { dipPhase } from '../sim/failures';
+import { blockCentre, blockQuad, cellQuad, cellSize, nodeAt } from './board/cells';
 import { register as registerLocate } from './hud/locate';
 import { registerPool } from './live/hook';
 import { ZONES, pageRect } from './live/layout';
@@ -91,7 +104,6 @@ import {
   tagChip,
   tagChipKey,
 } from './board/view';
-import { dashedOutline } from './live/view';
 import { TumblePool, type WaitState, crewChip, emptyWait, padPulseAlpha, waitInto } from './board/waits';
 import {
   type ChannelState,
@@ -180,8 +192,6 @@ const ART: Readonly<Record<string, string>> = {
   'database-hot': 'art/board/database-hot.webp',
   balancer: 'art/board/balancer.webp',
   'overclock-kit': 'art/board/overclock-kit.webp',
-  'slot-empty': 'art/board/slot-empty.webp',
-  'slot-locked': 'art/board/slot-locked.webp',
   'part-card': 'art/hud/part-card.webp',
   'icon-lock': 'art/hud/icons/lock.webp',
   'icon-cut': 'art/hud/icons/cut.webp',
@@ -209,6 +219,10 @@ interface PartView {
   chipKey: number;
   /** The warning triangle at the part's top corner. */
   warn: Phaser.GameObjects.Graphics;
+  /** A server's SKIPPED marks on its footprint; null for other kinds. */
+  skip: SkipMark | null;
+  /** The anchor cell the view was made for: a part id back on other cells (after a rewind) gets a new view. */
+  slot: string | null;
   /** Lit this frame (false only on the dark half of a power flicker's 6 Hz blink). */
   lit: boolean;
   /** board-9: the shared motion spec playing on the sprite (place, death, dip), and the haze over it while hot. */
@@ -226,18 +240,16 @@ interface PartView {
   dalpha: number;
 }
 
-/** A server pad and what the board draws on it: the dashed grey outline and the sticky SKIPPED tag. */
-interface PadView {
-  slot: string;
-  pad: Phaser.GameObjects.Image;
+/** What the board draws on a server's footprint while the balancer skips it: the dashed grey outline and the sticky SKIPPED tag. */
+interface SkipMark {
   dash: Phaser.GameObjects.Graphics;
-  /** board-12: the picked SKIPPED stamp on the pad, shown with the tag; null when not picked. */
+  /** board-12: the picked SKIPPED stamp on the footprint, shown with the tag; null when not picked. */
   stamp: Phaser.GameObjects.Image | null;
   /** The SKIPPED tag, baked once (board-11: fixed words are images, not live texts). */
   chip: Phaser.GameObjects.Image;
   /** Board-clock second the SKIPPED tag shows until (skipTagUntil); -Infinity before any skip. */
   skipUntil: number;
-  /** The balancer skips the box on this pad this frame (the sim's flow.skipped). */
+  /** The balancer skips this box this frame (the sim's flow.skipped). */
   skipped: boolean;
 }
 
@@ -248,14 +260,11 @@ const BAR_COLOURS: Readonly<Record<BarColour, number>> = {
   grey: 0x6b7385,
 };
 const BAR_INDEX: Readonly<Record<BarColour, number>> = { cyan: 1, amber: 2, red: 3, grey: 4 };
-/** A pad's tint while a card is dragged, by its legality (board-8). */
-const LEGALITY_TINT: Readonly<Record<PadState, number>> = {
-  legal: 0x9ffcff,
-  dead: 0x9ffcff,
-  poor: 0xffb02e,
-  taken: 0x6b7385,
-  wrong: 0xff4d5e,
-};
+/** The cells under a dragged card light green where the part fits and red where it does not; amber when only the credits fall short. */
+const FIT_GREEN = 0x3dff8a;
+const FIT_RED = 0xff4d5e;
+/** How many ping marks the board keeps (one per box the balancer checks). */
+const PING_MARKS = 24;
 /** The card prices padState checks the credits against. */
 const PRICES = { server: BROWNOUT.server.cost, overclock: BROWNOUT.overclock.cost } as const;
 /** The keys the board listens to (board-8); 1, 2 and 3 are the deck's and never taken here. */
@@ -303,7 +312,7 @@ const RED = 0xff4d5e;
 /** The day plate's tint under the midnight plate, once it has faded in: the ends of the table go cold. */
 const MIDNIGHT_DAY_TINT = 0x4a5468;
 /** strokePoints reads only x and y, so a plain point list will do. */
-const asVectors = (path: Point[]) => path as unknown as Phaser.Math.Vector2[];
+const asVectors = (path: readonly Point[]) => path as unknown as Phaser.Math.Vector2[];
 /** How much the skyline above the table is dimmed, so the board reads first but the city still shows. */
 const SKY_DIM = 0.3;
 /** Where the skyline's horizon sits in its art (a share of its height), and where it goes on screen. */
@@ -324,9 +333,34 @@ export class BoardScene extends Phaser.Scene {
   private views = new Map<string, PartView>();
   /** The one Frame read per board frame, and the board's frame count. */
   private snap = new BoardSnapshot();
-  private pads = new Map<string, Phaser.GameObjects.Image>();
-  /** The server pads in a plain list, so the per-frame loop needs no Map iterator. */
-  private padList: PadView[] = [];
+  /** The grid's static drawing: the rack bands, their labels and the fixed parts' bays, drawn once. */
+  private rackG!: Phaser.GameObjects.Graphics;
+  /** The midnight dip's shade over the rack that loses power, and the rack and phase it shows. */
+  private dipG!: Phaser.GameObjects.Graphics;
+  private dipRack: string | null = null;
+  private dipShown: 'flicker' | 'dark' | null = null;
+  /** The cells under a dragged card (green fits, red does not, amber short of credits) and what they show. */
+  private cellsG!: Phaser.GameObjects.Graphics;
+  private cellsCard: string | null = null;
+  private cellsAt: string | null = null;
+  private cellsState: PadState | null = null;
+  private cellsParts: readonly Part[] | null = null;
+  /** What the drag preview shows now, for the hook: the footprint's cells and the ones blocked. */
+  private preview: {
+    card: string;
+    anchor: string;
+    cells: string[];
+    bad: string[];
+    colour: 'green' | 'red' | 'amber';
+  } | null = null;
+  /** The suggested spot pulsing while the board waits for a build, its anchor, and whether it shows. */
+  private suggestG!: Phaser.GameObjects.Graphics;
+  private suggestAt: string | null = null;
+  private suggestParts: readonly Part[] | null = null;
+  private suggestOn = false;
+  /** The held servers' footprints glowing amber at midnight, and the parts they were drawn for. */
+  private heldG!: Phaser.GameObjects.Graphics;
+  private heldParts: readonly Part[] | null = null;
   /** What tells dark from dead this frame: the Frame's lists and the sim's overload seconds. */
   private readonly trouble: { -readonly [K in keyof PartTrouble]: PartTrouble[K] } = {
     dead: [],
@@ -371,8 +405,6 @@ export class BoardScene extends Phaser.Scene {
   private wait: WaitState = emptyWait();
   /** art3d-6: the red Glow on at most three over-capacity parts and the rescue's GradientMap. */
   private readonly glowProbe = new GlowProbe();
-  /** Empty pads pulsing this frame (the waits), by slot. */
-  private pulsingPads: boolean[] = [];
   private portG!: Phaser.GameObjects.Graphics;
   private crewText!: Phaser.GameObjects.Text;
   private crewShown = '';
@@ -382,7 +414,6 @@ export class BoardScene extends Phaser.Scene {
   private wireState: number[] = [];
   private wiresDirty = true;
   private previewShown = false;
-  private lbPad!: Phaser.GameObjects.Image;
   private wiresG!: Phaser.GameObjects.Graphics;
   private previewG!: Phaser.GameObjects.Graphics;
   private wireList: WireGeom[] = [];
@@ -443,8 +474,8 @@ export class BoardScene extends Phaser.Scene {
   private countedCredits = NaN;
   private balancerUnlocked = false;
   private ghost!: Phaser.GameObjects.Image;
-  /** board-8: what the card in hand is over (a slot or a part), and what a dragged wire would land on. */
-  private over: { id: string | null; slot: string | null; kind: 'pad' | 'part' | null } = {
+  /** board-8: what the card in hand is over (free cells by anchor, or a part), and what a dragged wire would land on. */
+  private over: { id: string | null; slot: string | null; kind: 'cell' | 'part' | null } = {
     id: null,
     slot: null,
     kind: null,
@@ -454,9 +485,9 @@ export class BoardScene extends Phaser.Scene {
     ok: false,
     reason: null,
   };
-  /** Each pad's legality for the card in hand (padList order), the balancer pad's, and what they were read from. */
-  private padLegality: PadState[] = [];
-  private lbLegality: PadState = 'wrong';
+  /** The legality of the spot the card in hand is over, and what it was read from. */
+  private overLegality: PadState | null = null;
+  private legalOver: string | null = null;
   private legalFrame: Frame | null = null;
   private legalCard: string | null = null;
   private readonly padBoard: { parts: readonly Part[]; credits: number; dead: readonly string[] } = {
@@ -554,6 +585,7 @@ export class BoardScene extends Phaser.Scene {
     v.chip?.destroy();
     v.warn.destroy();
     v.haze?.destroy();
+    destroySkip(v.skip);
     this.views.delete(id);
   };
 
@@ -574,8 +606,17 @@ export class BoardScene extends Phaser.Scene {
     this.resolveBoardArt();
     this.views = new Map();
     this.snap.reset();
-    this.pads = new Map();
-    this.padList = [];
+    this.dipRack = null;
+    this.dipShown = null;
+    this.cellsCard = null;
+    this.cellsAt = null;
+    this.cellsState = null;
+    this.cellsParts = null;
+    this.preview = null;
+    this.suggestAt = null;
+    this.suggestParts = null;
+    this.suggestOn = false;
+    this.heldParts = null;
     this.wireState = [];
     this.wiresDirty = true;
     this.previewShown = false;
@@ -593,7 +634,6 @@ export class BoardScene extends Phaser.Scene {
     this.sparkOwed = {};
     this.lite = flagsFrom(window.location.search).lite;
     this.wait = emptyWait();
-    this.pulsingPads = [];
     this.crewShown = '';
     this.tumbles = new TumblePool();
     this.tumbleSprites = [];
@@ -613,8 +653,8 @@ export class BoardScene extends Phaser.Scene {
     this.refusalUntil = 0;
     this.over = { id: null, slot: null, kind: null };
     this.wireTo = { id: null, ok: false, reason: null };
-    this.padLegality = [];
-    this.lbLegality = 'wrong';
+    this.overLegality = null;
+    this.legalOver = null;
     this.legalFrame = null;
     this.legalCard = null;
     this.ghostInfo = null;
@@ -649,16 +689,9 @@ export class BoardScene extends Phaser.Scene {
 
     this.drawBackdrop();
 
-    // Slot pads: six server slots, each scaled by its row, and the load balancer's slot between the
-    // gateway and the servers.
-    for (const [id, p] of Object.entries(SERVER_PADS)) {
-      const pad = this.add.image(p.x, p.y, 'slot-empty');
-      pad.setScale((PAD_SIZE.w * slotScale(id)) / pad.width).setAlpha(0.8);
-      this.pads.set(id, pad);
-      this.padList.push(this.makePad(id, pad));
-    }
-    this.lbPad = this.add.image(LB_SLOT.x, LB_SLOT.y + 10, 'slot-locked');
-    this.lbPad.setScale(PAD_SIZE.w / this.lbPad.width);
+    // The table's grid: every painted square is a cell a part can stand on. The rack bands and the
+    // fixed parts' bays are drawn once; the cells under a dragged card and the suggested spot on top.
+    this.drawGrid();
 
     this.wiresG = this.add.graphics();
     this.previewG = this.add.graphics();
@@ -1031,14 +1064,14 @@ export class BoardScene extends Phaser.Scene {
     return { frames, badge };
   }
 
-  /** The ping marks, one per server pad, 44 px and never above the file's size; hidden until a ping. */
+  /** The ping marks, one per box the balancer may check, 44 px and never above the file's size; hidden until a ping. */
   private makePingIcons(): void {
     this.pingIcons = [];
     const tex = this.artTex.get(PING_ICON_KEY);
     const cut = artRequest(PING_ICON_KEY)?.cut;
     if (tex === undefined || !cut) return;
     const scale = markScale(cut, 44);
-    for (let i = 0; i < this.padList.length; i++)
+    for (let i = 0; i < PING_MARKS; i++)
       this.pingIcons.push(this.add.image(0, 0, tex).setScale(scale).setDepth(6.5).setVisible(false));
   }
 
@@ -1138,8 +1171,7 @@ export class BoardScene extends Phaser.Scene {
     if (f.wires !== this.lastWires || parts !== this.lastParts) this.rebuildWires(f);
     const occ = this.edges(f);
 
-    // Parts. `unlocked` is already true once a balancer is racked.
-    this.lbPad.setTexture(unlocked ? 'slot-empty' : 'slot-locked');
+    // Parts.
     const cardInHand = d?.kind === 'card' ? d.id : null;
     if (cardInHand !== null) this.updateLegality(f, cardInHand);
     const t = this.time.now / 1000;
@@ -1152,31 +1184,10 @@ export class BoardScene extends Phaser.Scene {
     trouble.dips = f.dips;
     trouble.overload = this.snap.overload;
     const wait = waitInto(this.wait, f, t, reduce);
-    const waiting = wait.port !== null;
-    for (let i = 0; i < this.padList.length; i++) {
-      const pv = this.padList[i];
-      const pad = pv.pad;
-      const onPad = partInSlot(parts, pv.slot);
-      // A card in hand tints every pad by what a drop there would do (board-8).
-      const legality = cardInHand !== null ? (this.padLegality[i] ?? null) : null;
-      const target = legality !== null;
-      // While the board waits for a build, the empty pads pulse: room for a box here.
-      const pulsing = waiting && onPad === null && !target;
-      this.pulsingPads[i] = pulsing;
-      pad.setAlpha(target ? 1 : pulsing ? padPulseAlpha(t, reduce) : 0.8);
-      if (legality !== null) pad.setTint(LEGALITY_TINT[legality]);
-      else if (pulsing) pad.setTint(0x7fe9ff);
-      else pad.clearTint();
-      // The balancer skips the box on this pad: grey dashed pad, SKIPPED sticky for 1 s after.
-      pv.skipped = onPad !== null && this.isSkipped(flow.skipped, onPad.id);
-      pv.skipUntil = onPad === null ? -Infinity : skipTagUntil(pv.skipUntil, pv.skipped, t);
-      const shown = t < pv.skipUntil;
-      pv.dash.setVisible(shown);
-      pv.chip.setVisible(shown);
-      pv.stamp?.setVisible(shown);
-    }
-    if (cardInHand !== null) this.lbPad.setTint(LEGALITY_TINT[this.lbLegality]);
-    else this.lbPad.clearTint();
+    // While the board waits for a build, one good spot pulses: room for a box here (any free spot works).
+    this.drawSuggestion(wait.port !== null && cardInHand === null, parts, t, reduce);
+    this.drawCells(f);
+    this.drawRackDip(f);
     const pulse = reduce ? 0.55 : 0.55 + 0.25 * Math.sin(this.time.now / 120);
     const artOpts = this.artOpts;
     artOpts.t = t;
@@ -1218,6 +1229,16 @@ export class BoardScene extends Phaser.Scene {
       v.img.setAlpha(v.lit ? base : FLICKER_DIM);
       if (v.readout.update(look)) v.label.setText(v.readout.text).setColor(v.readout.colour);
       this.drawPartState(part, v);
+      // The balancer skips this box: grey dashed footprint, SKIPPED sticky for 1 s after.
+      const sk = v.skip;
+      if (sk) {
+        sk.skipped = this.isSkipped(flow.skipped, part.id);
+        sk.skipUntil = skipTagUntil(sk.skipUntil, sk.skipped, t);
+        const shown = t < sk.skipUntil;
+        sk.dash.setVisible(shown);
+        sk.chip.setVisible(shown);
+        sk.stamp?.setVisible(shown);
+      }
     }
     this.views.forEach(this.sweepView);
     this.glowProbe.step(this.views, t, reduce, this.cameras.main, f.rescued, f.paused);
@@ -1260,7 +1281,7 @@ export class BoardScene extends Phaser.Scene {
         if (c) {
           const size = partSize(part);
           const w = size.w * 0.8;
-          const h = 6 * slotScale(part.slot);
+          const h = 6 * partScale(part);
           const x = c.x - w / 2;
           const y = c.y + size.h / 2 + 3;
           bar.clear();
@@ -1296,7 +1317,7 @@ export class BoardScene extends Phaser.Scene {
     this.portG.lineStyle(3, AMBER, 1).strokeCircle(0, 0, 13);
     this.portG.fillStyle(AMBER, 1).fillCircle(0, 0, 6);
     this.crewText = this.add
-      .text(LB_SLOT.x, LB_SLOT.y + 66, '', {
+      .text(0, 0, '', {
         fontFamily: 'monospace',
         fontSize: '18px',
         fontStyle: 'bold',
@@ -1322,6 +1343,7 @@ export class BoardScene extends Phaser.Scene {
     if (port) this.portG.setPosition(port.x, port.y);
     this.portG.setVisible(w.portLit);
     if (w.crew) {
+      if (port) this.crewText.setPosition(port.x, port.y + 46);
       const text = crewChip(w.behind, w.need);
       if (text !== this.crewShown) {
         this.crewShown = text;
@@ -1348,6 +1370,181 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
+  // ---- the grid ----------------------------------------------------------------------------------
+  // Every painted square of the table is a cell a part can stand on (src/sim/grid.ts). The board
+  // draws the rack bands and the fixed parts' bays once; while a card is dragged, the cells its
+  // footprint would cover light green (it fits) or red (blocked); while the board waits for a
+  // build, one good spot pulses; at midnight the rack that loses power goes dark.
+
+  /** The grid's layers, and its static drawing: the rack bands with their labels, the fixed parts' bays. */
+  private drawGrid(): void {
+    const g = (this.rackG = this.add.graphics().setDepth(0.6));
+    for (let k = 0; k < RACKS.length; k++) {
+      const r = RACKS[k];
+      const q = blockQuad(r.from, 0, r.to - r.from + 1, GRID.rows);
+      // Every other rack a faint wash, so the four power feeds read as bands.
+      if (k % 2 === 1) g.fillStyle(CYAN, 0.04).fillPoints(asVectors(q), true);
+      if (k > 0) g.lineStyle(2, CYAN, 0.3).lineBetween(q[0].x, q[0].y, q[3].x, q[3].y);
+      addLabel(this, (q[0].x + q[1].x) / 2, q[0].y - 3, `rack-${r.id}`, `${LABELS.board.rack} ${r.id}`, {
+        fontFamily: 'monospace',
+        fontSize: '13px',
+        fontStyle: 'bold',
+        color: '#7fe9ff',
+        stroke: '#05070f',
+        strokeThickness: 3,
+      })
+        .setOrigin(0.5, 1)
+        .setAlpha(0.75)
+        .setDepth(0.62);
+    }
+    // The fixed parts' bays: grey dashed outlines, nothing else stands there.
+    g.lineStyle(2, GREY, 0.7);
+    for (const kind of FIXED_KINDS) {
+      const anchor = FIXED_ANCHOR[kind];
+      const q = anchor ? footprintQuad(kind, anchor) : null;
+      if (q) for (let k = 0; k < 4; k++) dashedLine(g, q[k], q[(k + 1) % 4], 6, 5);
+    }
+    this.dipG = this.add.graphics().setDepth(0.64).setVisible(false);
+    this.suggestG = this.add.graphics().setDepth(0.66).setVisible(false);
+    this.heldG = this.add.graphics().setDepth(0.68).setVisible(false);
+    this.cellsG = this.add.graphics().setDepth(0.7).setVisible(false);
+  }
+
+  /**
+   * The suggested spot: the first good server spot (SERVER_SPOTS) still free, its footprint
+   * outlined and pulsing while `on` (the board waits for a build and no card is in hand). Redrawn
+   * only when the parts change; the pulse is the layer's alpha.
+   */
+  private drawSuggestion(on: boolean, parts: readonly Part[], t: number, reduce: boolean): void {
+    if (parts !== this.suggestParts) {
+      this.suggestParts = parts;
+      let at: string | null = null;
+      for (let i = 0; i < SERVER_SPOTS.length && at === null; i++)
+        if (fits(BOARD_CELLS, parts, 'server', SERVER_SPOTS[i]).ok) at = SERVER_SPOTS[i];
+      if (at !== this.suggestAt) {
+        this.suggestAt = at;
+        const g = this.suggestG;
+        g.clear();
+        const q = at !== null ? footprintQuad('server', at) : null;
+        if (q) {
+          g.fillStyle(CYAN, 0.18).fillPoints(asVectors(q), true);
+          g.lineStyle(3, CYAN, 0.95);
+          for (let k = 0; k < 4; k++) dashedLine(g, q[k], q[(k + 1) % 4], 10, 6);
+        }
+      }
+    }
+    const shown = on && this.suggestAt !== null;
+    this.suggestOn = shown;
+    this.suggestG.setVisible(shown);
+    if (shown) this.suggestG.setAlpha(padPulseAlpha(t, reduce));
+  }
+
+  /**
+   * The footprint under the card in hand: each cell green where the part fits, red where it is
+   * blocked (off the playable cells or under a part), amber all over when only the credits fall
+   * short. Over a part (the kit on a server, a server card on a dead box) the part's footprint
+   * lights instead. Redrawn only when the card, the spot, its state or the parts change.
+   */
+  private drawCells(f: Frame): void {
+    const d = this.drag;
+    const card = d?.kind === 'card' ? d.id : null;
+    const at = card !== null ? this.over.slot : null;
+    const state = at !== null ? this.overState() : null;
+    if (
+      card === this.cellsCard &&
+      at === this.cellsAt &&
+      state === this.cellsState &&
+      f.parts === this.cellsParts
+    )
+      return;
+    this.cellsCard = card;
+    this.cellsAt = at;
+    this.cellsState = state;
+    this.cellsParts = f.parts;
+    const g = this.cellsG;
+    g.clear();
+    if (card === null || at === null || state === null) {
+      this.preview = null;
+      g.setVisible(false);
+      return;
+    }
+    const on = this.over.kind === 'part' ? partWithAnchor(f.parts, at) : null;
+    const kind = on ? on.kind : card === 'balancer' ? 'balancer' : 'server';
+    const cells = on ? partCells(on) : previewCells(kind, at, f.parts).cells;
+    const bad = on ? [] : previewCells(kind, at, f.parts).bad;
+    const ok = dropLegalOf(card, state);
+    const colour = state === 'poor' ? 'amber' : ok ? 'green' : 'red';
+    for (const id of cells) {
+      const q = cellQuad(id);
+      if (!q) continue;
+      const red = colour === 'red' && (bad.length === 0 || bad.includes(id));
+      const c = colour === 'amber' ? AMBER : red ? FIT_RED : FIT_GREEN;
+      g.fillStyle(c, 0.32).fillPoints(asVectors(q), true);
+      g.lineStyle(2, c, 0.95).strokePoints(asVectors(q), true);
+    }
+    this.preview = {
+      card,
+      anchor: at,
+      cells,
+      bad: colour === 'red' && bad.length === 0 ? cells : bad,
+      colour,
+    };
+    g.setVisible(true);
+  }
+
+  /** The midnight dip's rack: an amber outline while it flickers, a dark shade while it is out. */
+  private drawRackDip(f: Frame): void {
+    let rack: string | null = null;
+    let phase: 'flicker' | 'dark' | null = null;
+    for (let i = 0; i < f.dips.length; i++) {
+      const d = f.dips[i];
+      const p = d.rack ? dipPhase(d, f.now) : null;
+      if (p !== null) {
+        rack = d.rack ?? null;
+        phase = p;
+      }
+    }
+    if (rack === this.dipRack && phase === this.dipShown) return;
+    this.dipRack = rack;
+    this.dipShown = phase;
+    const g = this.dipG;
+    g.clear();
+    let r: (typeof RACKS)[number] | null = null;
+    for (let i = 0; i < RACKS.length; i++) if (RACKS[i].id === rack) r = RACKS[i];
+    if (r === null || phase === null) {
+      g.setVisible(false);
+      return;
+    }
+    const q = blockQuad(r.from, 0, r.to - r.from + 1, GRID.rows);
+    if (phase === 'dark') g.fillStyle(0x000000, 0.45).fillPoints(asVectors(q), true);
+    g.lineStyle(3, phase === 'dark' ? RED : AMBER, 0.85).strokePoints(asVectors(q), true);
+    g.setVisible(true);
+  }
+
+  /** The held servers' footprints glow amber as midnight strikes (`glow` 0..1; 0 hides them). */
+  private drawHeld(parts: readonly Part[], glow: number): void {
+    if (glow <= 0) {
+      if (this.heldG.visible) this.heldG.setVisible(false);
+      return;
+    }
+    if (parts !== this.heldParts) {
+      this.heldParts = parts;
+      const g = this.heldG;
+      g.clear();
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        if (p.kind !== 'server' || p.slot === null) continue;
+        const q = footprintQuad(p.kind, p.slot);
+        if (q)
+          g.fillStyle(AMBER, 0.45)
+            .fillPoints(asVectors(q), true)
+            .lineStyle(2, AMBER, 1)
+            .strokePoints(asVectors(q), true);
+      }
+    }
+    this.heldG.setAlpha(glow).setVisible(true);
+  }
+
   /** Whether the balancer skipped a wire into `id` this frame (plain loops: no closure, no string built). */
   private isSkipped(skipped: readonly string[], id: string): boolean {
     if (skipped.length === 0) return false;
@@ -1356,20 +1553,19 @@ export class BoardScene extends Phaser.Scene {
     return false;
   }
 
-  /** A server pad's view: its image, the dashed grey outline and the SKIPPED tag, both hidden. */
-  private makePad(slot: string, pad: Phaser.GameObjects.Image): PadView {
-    const b = padBox(slot)!;
-    const s = slotScale(slot);
+  /** A server's SKIPPED marks on its footprint: the dashed grey outline, the tag and the stamp, all hidden. */
+  private makeSkip(part: Part): SkipMark | null {
+    const q = part.slot !== null ? footprintQuad(part.kind, part.slot) : null;
+    if (!q) return null;
+    const s = partScale(part);
     const dash = this.add.graphics().setDepth(1.4).setVisible(false);
     dash.lineStyle(2, GREY, 0.95);
-    dash.beginPath();
-    for (const seg of dashedOutline({ x: b.x - b.w / 2, y: b.y - b.h / 2, w: b.w, h: b.h }, 8, 6)) {
-      dash.moveTo(seg.x1, seg.y1);
-      dash.lineTo(seg.x2, seg.y2);
-    }
-    dash.strokePath();
-    const size = Math.round(14 * s);
-    const chip = addLabel(this, b.x, b.y + b.h / 2, `skipped:${size}`, LABELS.partTags.skipped, {
+    for (let k = 0; k < 4; k++) dashedLine(dash, q[k], q[(k + 1) % 4], 8, 6);
+    const cx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4;
+    const cy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
+    const near = (q[2].y + q[3].y) / 2;
+    const size = Math.max(10, Math.round(14 * s));
+    const chip = addLabel(this, cx, near + 2, `skipped:${size}`, LABELS.partTags.skipped, {
       fontFamily: 'monospace',
       fontSize: `${size}px`,
       fontStyle: 'bold',
@@ -1380,37 +1576,42 @@ export class BoardScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(6)
       .setVisible(false);
-    // board-12: the picked SKIPPED stamp on the pad's middle, 64 px at the mid row.
+    // board-12: the picked SKIPPED stamp on the footprint's middle, 64 px at full size.
     const stampTex = this.artTex.get(SKIPPED_ICON_KEY);
     const stampCut = artRequest(SKIPPED_ICON_KEY)?.cut;
     const stamp =
       stampTex !== undefined && stampCut
         ? this.add
-            .image(b.x, b.y, stampTex)
+            .image(cx, cy, stampTex)
             .setScale(markScale(stampCut, 64 * s))
             .setDepth(5.9)
             .setVisible(false)
         : null;
-    return { slot, pad, dash, stamp, chip, skipUntil: -Infinity, skipped: false };
+    return { dash, stamp, chip, skipUntil: -Infinity, skipped: false };
   }
 
   /** The part's sprites, made the first time it is seen (a part never moves once placed). */
   private viewFor(part: Part): PartView | null {
     const known = this.views.get(part.id);
-    if (known) return known;
+    if (known && known.slot === part.slot) return known;
+    if (known) {
+      // The same id on other cells (a rewind put a different box under it): make its view anew.
+      known.seen = -1;
+      this.sweepView(known, part.id);
+    }
     const c = partCentre(part);
     if (!c) return null;
     const size = partSize(part);
-    const s = slotScale(part.slot);
+    const s = partScale(part);
     const shadow = this.add
       .ellipse(c.x + 8 * s, c.y + size.h / 2 - 6 * s, size.w * 1.05, 26 * s, 0x000000, 0.55)
       .setDepth(1.5);
-    // Nearer parts (lower on screen) draw over farther ones. The sync sets the right art next.
-    const img = this.add.image(c.x, c.y, artFor(part, false)).setDepth(3 + c.y / 1000);
+    // Nearer parts (their foot lower on screen) draw over farther ones. The sync sets the right art next.
+    const img = this.add.image(c.x, c.y, artFor(part, false)).setDepth(3 + (c.y + size.h / 2) / 1000);
     const label = this.add
       .text(c.x, c.y - size.h / 2 - 6, '', {
         fontFamily: 'monospace',
-        fontSize: `${Math.round(18 * s)}px`,
+        fontSize: `${Math.max(12, Math.round(18 * s))}px`,
         fontStyle: 'bold',
         color: '#2de2e6',
         stroke: '#05070f',
@@ -1446,6 +1647,8 @@ export class BoardScene extends Phaser.Scene {
       chip,
       chipKey: -1,
       warn,
+      skip: part.kind === 'server' ? this.makeSkip(part) : null,
+      slot: part.slot,
       lit: true,
       player: new MotionPlayer(),
       haze: null,
@@ -1465,11 +1668,11 @@ export class BoardScene extends Phaser.Scene {
   private makeChip(part: Part): Phaser.GameObjects.Text {
     const c = partCentre(part) ?? { x: 0, y: 0 };
     const size = partSize(part);
-    const s = slotScale(part.slot);
+    const s = partScale(part);
     return this.add
       .text(c.x, c.y - size.h / 2 + 16 * s, '', {
         fontFamily: 'monospace',
-        fontSize: `${Math.round(15 * s)}px`,
+        fontSize: `${Math.max(11, Math.round(15 * s))}px`,
         fontStyle: 'bold',
         color: '#ffffff',
         backgroundColor: '#3b4150',
@@ -1479,10 +1682,10 @@ export class BoardScene extends Phaser.Scene {
       .setDepth(6);
   }
 
-  /** Scale that fits a part's art inside its box on the board (smaller on the rack's far row). */
+  /** Scale that fits a part's art inside its box on the board (smaller toward the far edge), never above its file's size. */
   private artScale(part: Pick<Part, 'kind' | 'slot'>, img: Phaser.GameObjects.Image): number {
     const size = partSize(part);
-    return Math.min(size.w / img.width, size.h / img.height);
+    return Math.min(1, size.w / img.width, size.h / img.height);
   }
 
   /** Lay the traces out again: only when the wires or parts change, never on a steady frame. */
@@ -1496,7 +1699,7 @@ export class BoardScene extends Phaser.Scene {
     for (const w of f.wires) {
       const a = partById(f.parts, w.from);
       const b = partById(f.parts, w.to);
-      const path = a && b ? wirePath(a, b) : null;
+      const path = a && b ? wirePath(a, b, f.parts) : null;
       if (!path) continue;
       const length = pathLength(path);
       const g: WireGeom = {
@@ -1614,8 +1817,8 @@ export class BoardScene extends Phaser.Scene {
     }
     p.clear();
     this.previewShown = true;
-    const w = partSize(from).w;
-    p.lineStyle(4, CYAN, 0.6).lineBetween(c.x + w / 2 - 6, c.y, this.pointer.x, this.pointer.y);
+    const out = outPort(from) ?? c;
+    p.lineStyle(4, CYAN, 0.6).lineBetween(out.x, out.y, this.pointer.x, this.pointer.y);
     p.fillStyle(CYAN, 0.9).fillCircle(this.pointer.x, this.pointer.y, 7);
     // The part it would land on rings cyan when connect() takes it, red when it refuses (board-8).
     const to = this.wireTo.id !== null ? partById(parts, this.wireTo.id) : null;
@@ -1805,34 +2008,31 @@ export class BoardScene extends Phaser.Scene {
   // ---- board-8: legality, the what-if ghost, plates, REPLACE -----------------------------------
 
   /**
-   * Every pad's legality for the card in hand (padState), recomputed only when the card or the
-   * Frame changes; nothing allocates on a steady frame.
+   * The legality of the spot the card in hand is over (padState on its anchor), recomputed only
+   * when the card, the spot or the Frame changes; nothing allocates on a steady frame.
    */
   private updateLegality(f: Frame, card: string): void {
-    if (f === this.legalFrame && card === this.legalCard) return;
+    const at = this.over.slot;
+    if (f === this.legalFrame && card === this.legalCard && at === this.legalOver) return;
     this.legalFrame = f;
     this.legalCard = card;
+    this.legalOver = at;
     const board = this.padBoard;
     board.parts = f.parts;
     board.credits = f.credits;
     board.dead = f.dead;
-    for (let i = 0; i < this.padList.length; i++) {
-      this.padLegality[i] = padState(this.padList[i].slot, board, card, PRICES);
-    }
-    this.lbLegality = padState(LB_SLOT_ID, board, card, PRICES);
+    this.overLegality = at === null ? null : padState(at, board, card, PRICES);
     this.ghostDirty = true;
   }
 
-  /** The legality of the pad (a slot id) the card is over, or 'wrong' over a part with no pad. */
+  /** The legality of the spot (an anchor cell, or a part's) the card is over, or null over nothing. */
   private overState(): PadState | null {
     const o = this.over;
     if (o.id === null) return null;
-    if (o.slot === LB_SLOT_ID) return this.lbLegality;
-    if (o.slot !== null) {
-      for (let i = 0; i < this.padList.length; i++)
-        if (this.padList[i].slot === o.slot) return this.padLegality[i];
-    }
-    return 'wrong';
+    if (o.slot === null) return 'wrong';
+    const d = this.drag;
+    if (d?.kind === 'card') this.updateLegality(this.snap.current ?? frame(run()), d.id);
+    return this.overLegality;
   }
 
   /**
@@ -1856,59 +2056,49 @@ export class BoardScene extends Phaser.Scene {
         f.offline,
         card,
         this.over.id,
-        this.over.slot !== null && this.over.slot !== LB_SLOT_ID ? this.over.slot : null,
+        this.over.slot,
         state,
         true,
       );
     }
     const g = this.ghostInfo;
-    // Snap the card in hand onto a legal target while the ghost may show.
-    const snap =
-      g !== null && g.legal && card !== null && this.over.slot !== null && this.over.slot !== LB_SLOT_ID;
+    // Snap the card in hand onto a legal spot while the ghost may show: the server stands on its footprint.
+    const snap = g !== null && g.legal && card !== null && this.over.slot !== null;
     const key = snap ? this.over.slot : null;
     if (key !== this.ghostShownFor) {
       this.ghostShownFor = key;
       const og = this.ghostOutline;
       og.clear();
       if (key !== null) {
-        const box = slotBox(key);
-        const c = card === 'server' ? partCentre({ kind: 'server', slot: key }) : null;
-        if (box) {
+        const box = this.targetBox(key);
+        const q = this.targetQuad(key);
+        if (q) {
           og.lineStyle(2, CYAN, 0.95);
-          og.beginPath();
-          for (const seg of dashedOutline(
-            { x: box.x - box.w / 2, y: box.y - box.h / 2, w: box.w, h: box.h },
-            8,
-            6,
-          )) {
-            og.moveTo(seg.x1, seg.y1);
-            og.lineTo(seg.x2, seg.y2);
-          }
-          og.strokePath();
+          for (let k = 0; k < 4; k++) dashedLine(og, q[k], q[(k + 1) % 4], 8, 6);
         }
-        if (c) {
-          const size = partSize({ kind: 'server', slot: key });
+        if (card === 'server' && box) {
           this.ghost
-            .setPosition(c.x, c.y)
-            .setScale(Math.min(size.w / this.ghost.width, size.h / this.ghost.height));
+            .setPosition(box.x, box.y)
+            .setScale(Math.min(1, box.w / this.ghost.width, box.h / this.ghost.height));
         } else if (box) {
           this.ghost.setPosition(box.x, box.y - box.h * 0.2);
         }
       } else if (card !== null) {
-        this.ghost.setScale(120 / this.ghost.frame.height).setPosition(this.pointer.x, this.pointer.y);
+        this.ghost.setScale(120 / this.ghost.frame.height);
+        this.ghost.setPosition(this.pointer.x, this.pointer.y - this.ghost.displayHeight / 2 - 8);
       }
     }
-    // The plate beside the ghost: what the drop adds, or that nothing feeds it (also over a pad the
+    // The plate beside the ghost: what the drop adds, or that nothing feeds it (also over a spot the
     // credits fall short for, where only the drop is refused).
-    const at = g !== null && g.plate !== null && this.over.slot !== null && this.over.slot !== LB_SLOT_ID;
+    const at = g !== null && g.plate !== null && this.over.slot !== null;
     const plate = at ? g.plate : null;
     const plateAt = at ? this.over.slot : null;
     if (plate !== this.ghostPlateShown || plateAt !== this.ghostPlateAt) {
       this.ghostPlateShown = plate;
       this.ghostPlateAt = plateAt;
-      if (plate === null || plateAt === null) this.ghostText.setVisible(false);
+      const box = plateAt !== null ? this.targetBox(plateAt) : null;
+      if (plate === null || box === null) this.ghostText.setVisible(false);
       else {
-        const box = slotBox(plateAt)!;
         this.ghostText
           .setText(plate)
           .setPosition(
@@ -1920,6 +2110,18 @@ export class BoardScene extends Phaser.Scene {
       }
     }
     this.drawWhatIf(at ? g.whatIf : null, at ? g.tick : null);
+  }
+
+  /** The box the card in hand lands in at `anchor`: the part standing there, or a new server on its footprint. */
+  private targetBox(anchor: string): Box | null {
+    const on = this.over.kind === 'part' ? partWithAnchor(run().session.board.parts, anchor) : null;
+    return on ? partBox(on) : standBox('server', anchor);
+  }
+
+  /** The cells' outline the card in hand lands on at `anchor`: the part's footprint, or a server's. */
+  private targetQuad(anchor: string): [Point, Point, Point, Point] | null {
+    const on = this.over.kind === 'part' ? partWithAnchor(run().session.board.parts, anchor) : null;
+    return on && on.slot !== null ? footprintQuad(on.kind, on.slot) : footprintQuad('server', anchor);
   }
 
   /** The what-if tick on the channel at the ghost's level, labelled "ROOM +60"; drawn only on a change. */
@@ -2028,14 +2230,10 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
-  /** Whether the SKIPPED tag is on the pad under `part` now. */
+  /** Whether the SKIPPED tag is on `part`'s footprint now. */
   private skippedNow(part: Part): boolean {
-    if (part.slot === null) return false;
-    for (let i = 0; i < this.padList.length; i++) {
-      const pv = this.padList[i];
-      if (pv.slot === part.slot) return this.clock < pv.skipUntil;
-    }
-    return false;
+    const sk = this.views.get(part.id)?.skip;
+    return sk !== undefined && sk !== null && this.clock < sk.skipUntil;
   }
 
   // ---- input ---------------------------------------------------------------------------------
@@ -2086,32 +2284,45 @@ export class BoardScene extends Phaser.Scene {
     if (had) this.emitDrag();
   }
 
-  /** What a card dragged to (x, y) is over: a pad (slot) or a part, by the card. */
+  /**
+   * What a card dragged to (x, y) is over: a part (the kit on any part, a server card on a dead
+   * box: `slot` is the part's anchor) or the cells its footprint would cover there, centred under
+   * the pointer and snapped to the grid (`slot` is the footprint's anchor cell). Off the grid, nothing.
+   */
   private updateOver(x: number, y: number, card: string, parts: readonly Part[]): void {
     let id: string | null = null;
     let slot: string | null = null;
-    let kind: 'pad' | 'part' | null = null;
-    const pad = slotAt(x, y);
+    let kind: 'cell' | 'part' | null = null;
     const part = partAt(parts, x, y);
-    if (card === 'overclock' && part) {
-      id = part.slot ?? part.id;
-      slot = part.slot;
+    const anchor = dropAnchor(card === 'balancer' ? 'balancer' : 'server', x, y);
+    const onPart =
+      part !== null &&
+      (card === 'overclock' || (card === 'server' && part.kind === 'server' && this.snapDead(part.id)));
+    if (onPart) {
+      slot = anchorOf(part) ?? null;
+      id = slot ?? part.id;
       kind = 'part';
-    } else if (pad !== null) {
-      id = pad;
-      slot = pad;
-      kind = 'pad';
+    } else if (anchor !== null) {
+      id = anchor;
+      slot = anchor;
+      kind = 'cell';
     } else if (part) {
       id = part.id;
-      slot = part.slot;
+      slot = anchorOf(part);
       kind = 'part';
     }
-    if (id === this.over.id) return;
+    if (id === this.over.id && kind === this.over.kind) return;
     this.over.id = id;
     this.over.slot = slot;
     this.over.kind = kind;
     this.ghostDirty = true;
     this.emitDrag();
+  }
+
+  /** Whether `id` is a dead box on the board the sync last read. */
+  private snapDead(id: string): boolean {
+    const f = this.snap.current;
+    return f !== null && f !== undefined && f.dead.includes(id);
   }
 
   /** The part a wire dragged to (x, y) would land on, and whether connect() would take it. */
@@ -2226,7 +2437,8 @@ export class BoardScene extends Phaser.Scene {
     this.hover.part = null;
     this.hover.wire = null;
     if (d.kind === 'card') {
-      if (this.ghostShownFor === null) this.ghost.setPosition(p.x, p.y);
+      // Unsnapped, the card rides just above the pointer so the cells under it (green or red) stay in view.
+      if (this.ghostShownFor === null) this.ghost.setPosition(p.x, p.y - this.ghost.displayHeight / 2 - 8);
       this.updateOver(p.x, p.y, d.id, run().session.board.parts);
       return;
     }
@@ -2248,16 +2460,18 @@ export class BoardScene extends Phaser.Scene {
 
     if (d.kind === 'card') {
       if (d.id === 'server') {
-        const slot = slotAt(p.x, p.y);
-        const on = slot !== null ? partInSlot(parts, slot) : null;
-        if (slot === LB_SLOT_ID) this.refuse('only the load balancer fits that slot');
-        else if (on !== null && on.kind === 'server' && r.dead.includes(on.id)) r.replaceServer(on.id);
-        else if (slot) r.placeServer(slot);
+        // A dead box under the pointer is replaced on its cells; otherwise the server snaps to the
+        // footprint under the pointer (the green cells), and the run says why if it does not fit.
+        const on = partAt(parts, p.x, p.y);
+        const anchor = dropAnchor('server', p.x, p.y);
+        if (on !== null && on.kind === 'server' && r.dead.includes(on.id)) r.replaceServer(on.id);
+        else if (anchor !== null) r.placeServer(anchor);
       } else if (d.id === 'overclock') {
         const target = partAt(parts, p.x, p.y);
         if (target) r.overclock(target.id);
       } else if (d.id === 'balancer') {
-        if (slotAt(p.x, p.y) === LB_SLOT_ID) {
+        // The crew rack their splitter themselves: a drop on the table says so.
+        if (dropAnchor('balancer', p.x, p.y) !== null) {
           const res = placeBalancer(r);
           if (!res.ok) this.refuse(res.reason);
         }
@@ -2328,7 +2542,10 @@ export class BoardScene extends Phaser.Scene {
       .setDepth(20)
       .setAlpha(0)
       .setVisible(false);
-    this.cableImg = this.add.image(LB_SLOT.x, feed.y, 'board-cable').setOrigin(0.5, 1).setDepth(2.9);
+    this.cableImg = this.add
+      .image(feed.x + feed.w / 2, feed.y, 'board-cable')
+      .setOrigin(0.5, 1)
+      .setDepth(2.9);
     this.cableImg.setScale(CABLE_SCALE).setVisible(false);
     this.kitImg = this.add.image(0, 0, 'overclock-kit').setDepth(32).setVisible(false);
     this.liftImg = this.add.image(0, 0, 'server').setDepth(7).setVisible(false);
@@ -2383,7 +2600,7 @@ export class BoardScene extends Phaser.Scene {
     this.cutGeoms.clear();
     this.views.forEach(stopPlayer);
     // Scene-side timers go with the rewind too: no SKIPPED tag stays stuck on a pad from before it.
-    for (let i = 0; i < this.padList.length; i++) this.padList[i].skipUntil = -Infinity;
+    this.views.forEach(clearSkip);
   }
 
   /**
@@ -2590,16 +2807,9 @@ export class BoardScene extends Phaser.Scene {
           .setVisible(true);
       } else if (v.haze?.visible) v.haze.setVisible(false);
     }
-    // The held pads glow (flash in full, a slow warm glow when calm).
+    // The held servers' footprints glow (flash in full, a slow warm glow when calm).
     const held = this.animBook.playing('fireworks', null);
-    if (held) {
-      const glow = heldPadGlow(now - held.start, held.calm);
-      for (let i = 0; i < this.padList.length; i++) {
-        const pv = this.padList[i];
-        if (glow > 0 && partInSlot(parts, pv.slot) !== null)
-          pv.pad.setTint(lerpColour(0xffffff, AMBER, glow));
-      }
-    }
+    this.drawHeld(parts, held ? heldPadGlow(now - held.start, held.calm) : 0);
   }
 
   /** The drawn layer: traces drawing on, cut traces fading, boot rings, the death flash, the pings. Cleared only while one plays. */
@@ -2795,8 +3005,8 @@ export class BoardScene extends Phaser.Scene {
   private burst(calm: boolean): void {
     const n = this.burstCount++;
     if (calm) {
-      const pv = this.padList[n % this.padList.length];
-      this.particles.emit('ember', pv.pad.x, pv.pad.y, EMBER_SIZE);
+      const at = SPOT_CENTRES[n % SPOT_CENTRES.length];
+      this.particles.emit('ember', at.x, at.y, EMBER_SIZE);
       return;
     }
     const feed = ZONES.feed;
@@ -2839,23 +3049,25 @@ export class BoardScene extends Phaser.Scene {
     const page = (x: number, y: number) => toPage({ x, y }, rect, { width: GAME_WIDTH, height: GAME_HEIGHT });
     const pageBox = (b: Box) => pageRect({ x: b.x - b.w / 2, y: b.y - b.h / 2, w: b.w, h: b.h }, rect);
     const offline = [...f.offline];
-    const slots = [
-      {
-        id: LB_SLOT_ID,
-        ...page(LB_SLOT.x, LB_SLOT.y),
-        part: null as string | null,
-        locked: !this.balancerUnlocked,
-        rect: pageBox(slotBox(LB_SLOT_ID)!),
-      },
-      ...Object.entries(SERVER_PADS).map(([id, pad]) => ({
+    const footBox = (kind: Part['kind'], anchor: string) => {
+      const q = footprintQuad(kind, anchor)!;
+      const xs = q.map((p) => p.x);
+      const ys = q.map((p) => p.y);
+      const x0 = Math.min(...xs);
+      const y0 = Math.min(...ys);
+      return pageRect({ x: x0, y: y0, w: Math.max(...xs) - x0, h: Math.max(...ys) - y0 }, rect);
+    };
+    const slots = SERVER_SPOTS.map((id) => {
+      const c = parseCell(id)!;
+      const centre = blockCentre(c.col, c.row, FOOTPRINT.server.w, FOOTPRINT.server.h);
+      return {
         id,
-        ...page(pad.x, pad.y),
+        ...page(centre.x, centre.y),
         part: board.parts.find((p) => p.slot === id)?.id ?? null,
         locked: false,
-        rect: pageBox(slotBox(id)!),
-      })),
-    ];
-    slots[0].part = board.parts.find((p) => p.kind === 'balancer')?.id ?? null;
+        rect: footBox('server', id),
+      };
+    });
     const round = (n: number) => Math.round(n * 1000) / 1000;
     const feed = ZONES.feed;
     const skyShown = this.sky.visible && this.sky.alpha > 0;
@@ -2906,13 +3118,14 @@ export class BoardScene extends Phaser.Scene {
           : null,
         packet: { texture: this.packetTex, scale: round(this.packetScaleNow) },
         pingMarks: this.pingIcons.filter((i) => i.visible).length,
-        stamps: this.padList.filter((p) => p.stamp?.visible === true).map((p) => p.slot),
+        stamps: board.parts
+          .filter((p) => p.slot !== null && this.views.get(p.id)?.skip?.stamp?.visible === true)
+          .map((p) => p.slot as string),
       },
       parts: board.parts.flatMap((part) => {
         const c = partCentre(part);
         if (!c) return [];
         const look = partLook(part, f.flow.load[part.id] ?? 0, offline, f.offlineUntil, f.now, this.trouble);
-        const pad = part.slot ? this.padList.find((p) => p.slot === part.slot) : undefined;
         const view = this.views.get(part.id);
         return [
           {
@@ -2938,8 +3151,8 @@ export class BoardScene extends Phaser.Scene {
             bar: round(look.bar),
             barColour: look.barColour,
             flickerLit: view?.lit ?? true,
-            scale: slotScale(part.slot),
-            tags: partTags(look, pad !== undefined && this.clock < pad.skipUntil),
+            scale: round(partScale(part)),
+            tags: partTags(look, this.skippedNow(part)),
             packetsIn: this.packetsInto(part.id),
             replaceButton:
               this.replaceBtn.visible && this.selectedPart === part.id
@@ -2961,51 +3174,58 @@ export class BoardScene extends Phaser.Scene {
           },
         ];
       }),
-      pads: [
-        {
-          slot: LB_SLOT_ID,
-          ...page(LB_SLOT.x, LB_SLOT.y),
-          w: round((PAD_SIZE.w * rect.width) / GAME_WIDTH),
-          h: round((PAD_SIZE.h * rect.height) / GAME_HEIGHT),
-          row: null,
-          scale: 1,
-          part: board.parts.find((p) => p.kind === 'balancer')?.id ?? null,
-          locked: !this.balancerUnlocked,
-          state: !this.balancerUnlocked
-            ? ('locked' as const)
-            : board.parts.some((p) => p.kind === 'balancer')
-              ? ('taken' as const)
-              : ('empty' as const),
-          skipped: false,
-          skipTagUntil: null,
-          dashed: false,
-          pulsing: false,
-          legality: this.drag?.kind === 'card' ? this.lbLegality : null,
-        },
-        ...this.padList.map((pv) => {
-          const b = padBox(pv.slot)!;
-          const on = board.parts.find((p) => p.slot === pv.slot);
-          const g = SERVER_GRID[pv.slot];
-          const pr = pageBox(b);
+      grid: {
+        cols: GRID.cols,
+        rows: GRID.rows,
+        cell: (() => {
+          const c = cellSize(GRID.rows >> 1);
           return {
-            slot: pv.slot,
-            ...page(b.x, b.y),
-            w: pr.w,
-            h: pr.h,
-            row: g.row,
-            scale: RACK_ROWS[g.row].scale,
-            part: on?.id ?? null,
-            locked: false,
-            state: !on ? ('empty' as const) : f.dead.includes(on.id) ? ('dead' as const) : ('taken' as const),
-            skipped: pv.skipped,
-            skipTagUntil: Number.isFinite(pv.skipUntil) ? round(pv.skipUntil) : null,
-            dashed: this.clock < pv.skipUntil,
-            pulsing: this.pulsingPads[this.padList.indexOf(pv)] === true,
-            legality:
-              this.drag?.kind === 'card' ? (this.padLegality[this.padList.indexOf(pv)] ?? null) : null,
+            w: round((c.w * rect.width) / GAME_WIDTH),
+            h: round((c.h * rect.height) / GAME_HEIGHT),
           };
+        })(),
+        nodes: Array.from({ length: GRID.rows + 1 }, (_, j) =>
+          Array.from({ length: GRID.cols + 1 }, (_, i) => {
+            const n = nodeAt(i, j);
+            const q = page(n.x, n.y);
+            return { x: round(q.x), y: round(q.y) };
+          }),
+        ),
+        occupied: [...occupancy(board.parts).keys()],
+        reserved: FIXED_KINDS.flatMap((k) => (FIXED_ANCHOR[k] ? footprintCells(k, FIXED_ANCHOR[k]!) : [])),
+        footprints: board.parts.flatMap((part) => {
+          const anchor = anchorOf(part);
+          if (anchor === null || parseCell(anchor) === null) return [];
+          const sk = this.views.get(part.id)?.skip ?? null;
+          const c = parseCell(anchor)!;
+          const { w, h } = FOOTPRINT[part.kind];
+          const centre = blockCentre(c.col, c.row, w, h);
+          return [
+            {
+              part: part.id,
+              kind: part.kind,
+              anchor,
+              cells: partCells(part),
+              ...page(centre.x, centre.y),
+              rect: footBox(part.kind, anchor),
+              skipped: sk?.skipped ?? false,
+              skipTagUntil: sk && Number.isFinite(sk.skipUntil) ? round(sk.skipUntil) : null,
+              dashed: sk !== null && this.clock < sk.skipUntil,
+            },
+          ];
         }),
-      ],
+        racks: RACKS.map((r) => ({
+          id: r.id,
+          from: r.from,
+          to: r.to,
+          dip: this.dipRack === r.id ? this.dipShown : null,
+        })),
+        suggested: this.suggestAt,
+        room: roomFor(BOARD_CELLS, board.parts, 'server'),
+        preview: this.preview
+          ? { ...this.preview, cells: [...this.preview.cells], bad: [...this.preview.bad] }
+          : null,
+      },
       clock: round(this.clock),
       reduceFlicker: this.reduceFlicker,
       wires: this.wireList.map((w) => ({
@@ -3060,7 +3280,7 @@ export class BoardScene extends Phaser.Scene {
         portLit: this.wait.portLit,
         blinking: this.wait.blinking,
         tumbled: this.tumbles.active,
-        pulsing: this.padList.filter((_, i) => this.pulsingPads[i] === true).map((pv) => pv.slot),
+        pulsing: this.suggestOn && this.suggestAt !== null ? [this.suggestAt] : [],
         chip: this.crewText.visible ? this.crewText.text : null,
       },
       rewinds: f.rewinds.map((w) => ({ at: round(w.at), to: w.to })),
@@ -3189,10 +3409,44 @@ function partById(parts: readonly Part[], id: string): Part | null {
   return null;
 }
 
-/** The part standing in this slot, or null when the slot is empty. */
-function partInSlot(parts: readonly Part[], slot: string): Part | null {
-  for (let i = 0; i < parts.length; i++) if (parts[i].slot === slot) return parts[i];
+/** The part whose footprint is anchored at `anchor` (a fixed part by its bay), or null. */
+function partWithAnchor(parts: readonly Part[], anchor: string): Part | null {
+  for (let i = 0; i < parts.length; i++) if (anchorOf(parts[i]) === anchor) return parts[i];
   return null;
+}
+
+/** Destroy a server's SKIPPED marks with its view. */
+function destroySkip(sk: SkipMark | null): void {
+  if (!sk) return;
+  sk.dash.destroy();
+  sk.chip.destroy();
+  sk.stamp?.destroy();
+}
+
+/** Forget a part view's SKIPPED tag (a rewind). */
+function clearSkip(v: PartView): void {
+  if (v.skip) v.skip.skipUntil = -Infinity;
+}
+
+/** The fixed parts, whose bays the grid outlines. */
+const FIXED_KINDS = ['gateway', 'database'] as const;
+
+/** The centres of the good server spots, where the calm embers rise at midnight. */
+const SPOT_CENTRES: readonly Point[] = SERVER_SPOTS.map((id) => {
+  const c = parseCell(id)!;
+  return blockCentre(c.col, c.row, FOOTPRINT.server.w, FOOTPRINT.server.h);
+});
+
+/** A dashed straight line from `a` to `b`: `dash` px drawn, `gap` px skipped. */
+function dashedLine(g: Phaser.GameObjects.Graphics, a: Point, b: Point, dash: number, gap: number): void {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len <= 0) return;
+  const ux = (b.x - a.x) / len;
+  const uy = (b.y - a.y) / len;
+  for (let d = 0; d < len; d += dash + gap) {
+    const e = Math.min(len, d + dash);
+    g.lineBetween(a.x + ux * d, a.y + uy * d, a.x + ux * e, a.y + uy * e);
+  }
 }
 
 // ---- the table ---------------------------------------------------------------------------------

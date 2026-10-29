@@ -24,6 +24,8 @@ import {
 import { type Board, type Part, type Wire, route } from '../src/sim/board';
 import { BROWNOUT_RULES } from '../src/sim/brownout';
 import { BOARD_AREA, CHANNEL, inPort, returnPath } from '../src/scenes/board/layout';
+import { BALANCER_SPOT } from '../src/sim/grid';
+import { SERVER_SLOTS } from '../src/sim/tick';
 
 describe('packet spacing', () => {
   it('draws packets in proportion to a wire’s req/s', () => {
@@ -379,8 +381,9 @@ describe('the return path (board-7)', () => {
   const parts: Part[] = [
     gw,
     db,
-    { id: 'lb', kind: 'balancer', slot: null },
-    ...['s1', 's2', 's3', 's4', 's5', 's6'].map((s) => srv(`x-${s}`, s)),
+    // Placed parts stand on the grid: the crew's splitter on its spot, the servers on theirs.
+    { id: 'lb', kind: 'balancer', slot: BALANCER_SPOT },
+    ...SERVER_SLOTS.map((s) => srv(`x-${s}`, s)),
   ];
 
   it('starts at the dropping part’s in-port and ends at the channel’s mouth, inside the feed', () => {

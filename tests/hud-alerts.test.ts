@@ -491,7 +491,7 @@ describe('the start of C1: the band says what to do first', () => {
     expect(hintAt(C.c1)).toBe('C1.alert.place');
     expect(hintAt(C.c1 + 30)).toBe('C1.alert.place');
     expect(hintAt(C.c1 + 5, { parts: [gateway, server] })).toBeNull();
-    expect(LINES['C1.alert.place'].text).toBe('drag a SERVER card onto a glowing pad');
+    expect(LINES['C1.alert.place'].text).toBe('drag a SERVER card onto the grid');
   });
 
   it('says nothing under the job card, before C1 or from C2', () => {

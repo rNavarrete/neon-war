@@ -1,7 +1,9 @@
-// The board's plumbing: parts in slots, wires between them, and how requests flow through.
+// The board's plumbing: parts on the table's grid, wires between them, and how requests flow through.
 // Pure functions over plain data, kept from the Viral Signal prototype (PR #2) without its
 // story or numbers. Session rules (traffic curves, overheating, upkeep, power dips) build on
 // this and pass their numbers in through BoardRules.
+
+import { fits } from './grid';
 
 export type PartKind = 'gateway' | 'balancer' | 'server' | 'database';
 
@@ -11,7 +13,10 @@ export const KIND_ORDER: readonly PartKind[] = ['gateway', 'balancer', 'server',
 export interface Part {
   readonly id: string;
   readonly kind: PartKind;
-  /** Slot the player placed the part in, or null for parts the session starts with. */
+  /**
+   * The part's anchor cell on the table's grid ('c4-11': the far-left cell of its footprint, see
+   * grid.ts), or null for the parts the session starts with (they stand in fixed bays).
+   */
   readonly slot: string | null;
   /** Capacity multiplier from an upgrade such as the overclock kit; missing means 1. */
   readonly boost?: number;
@@ -26,6 +31,7 @@ export interface Board {
   readonly credits: number;
   readonly parts: readonly Part[];
   readonly wires: readonly Wire[];
+  /** Every cell a part may stand on (an old board may list plain slot names instead). */
   readonly slots: readonly string[];
   readonly nextId: number;
 }
@@ -84,9 +90,13 @@ export function partById(board: Board, id: string): Part | undefined {
   return board.parts.find((p) => p.id === id);
 }
 
+/**
+ * Place a part with its footprint's anchor at `slot`. Every cell of the footprint must be on the
+ * table, outside the fixed parts' bays and free (grid.ts fits), and the price must be in hand.
+ */
 export function place(board: Board, rules: BoardRules, slot: string, kind: PartKind): BoardResult {
-  if (!board.slots.includes(slot)) return fail(`no slot ${slot}`);
-  if (board.parts.some((p) => p.slot === slot)) return fail('that slot is taken');
+  const fit = fits(board.slots, board.parts, kind, slot);
+  if (!fit.ok) return fail(fit.reason);
   const cost = rules.cost[kind];
   if (cost === undefined) return fail(`a ${kind} can't be placed`);
   if (board.credits < cost) return fail('not enough credits');
@@ -107,6 +117,7 @@ export function decommission(board: Board, rules: BoardRules, id: string): Board
   const part = partById(board, id);
   if (!part) return fail(`no part ${id}`);
   if (part.slot === null) return fail('only placed parts can be decommissioned');
+  if (rules.cost[part.kind] === undefined) return fail('that part stays where the crew put it');
   const refund = Math.floor((rules.cost[part.kind] ?? 0) * rules.refund);
   return {
     ok: true,

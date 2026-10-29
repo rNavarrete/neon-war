@@ -4,6 +4,8 @@ import type { LiveTestState } from '../../src/scenes/live/hook';
 import type { Rect } from '../../src/scenes/live/layout';
 import { inboundLaneRates } from '../../src/scenes/board/channel';
 import { openBoard as liveOpen, reach as liveReach, shot } from './live/reach';
+import { BALANCER_SPOT, FIXED_ANCHOR, parseCell } from '../../src/sim/grid';
+import { SERVER_SLOTS } from '../../src/sim/tick';
 
 // The board on the Live screen (board lane, M1): the feed's tilted table, its parts and slots inside
 // the feed zone, the skyline above it and no goggles overlay. Positions come from the test hook in
@@ -23,6 +25,20 @@ async function sections(page: Page): Promise<Sections> {
 }
 
 const board = async (page: Page) => (await sections(page)).board;
+
+// The suggested server spots (anchor cells of 2 x 2 footprints): the first four along the gateway's
+// port row, one per rack; the next four on a far row, the next four on a near row.
+const [S1, S2, , S4] = SERVER_SLOTS;
+const FAR = SERVER_SLOTS[4];
+const NEAR = SERVER_SLOTS[8];
+
+/** The page point at the middle of a w x h footprint anchored at `anchor`, from the hook's grid nodes. */
+function footAt(b: BoardTestState, anchor: string, w = 2, h = 2): Pt {
+  const c = parseCell(anchor)!;
+  const n = b.grid.nodes;
+  const q = [n[c.row][c.col], n[c.row][c.col + w], n[c.row + h][c.col + w], n[c.row + h][c.col]];
+  return { x: q.reduce((a, p) => a + p.x, 0) / 4, y: q.reduce((a, p) => a + p.y, 0) / 4 };
+}
 
 /** The HUD may open the job card over the board: click it away if it is open. */
 async function dismissJobCard(page: Page): Promise<void> {
@@ -97,17 +113,17 @@ test('the feed: every part and slot inside the feed zone, the skyline above the 
 }) => {
   await openBoard(page);
   // One server on the far row and one on the near row, so both ends of the rack's depth are checked.
-  await placeServer(page, 's1');
-  await placeServer(page, 's6');
+  await placeServer(page, FAR);
+  await placeServer(page, NEAR);
 
   const { board: b, live } = await sections(page);
   const feed = live.zones.feed;
   expect(b.area).toEqual(feed);
 
-  expect(b.slots.map((s) => s.id).sort()).toEqual(['lb', 's1', 's2', 's3', 's4', 's5', 's6']);
+  expect(b.slots.map((s) => s.id).sort()).toEqual([...SERVER_SLOTS].sort());
   for (const s of b.slots) {
     expectInside(s.rect, feed, `slot ${s.id}`);
-    // The slot's pad centre (where a drop lands) is inside its own drop box.
+    // The spot's footprint centre (where a drop lands) is inside its own footprint's box.
     expect(s.x).toBeGreaterThanOrEqual(s.rect.x);
     expect(s.x).toBeLessThanOrEqual(s.rect.x + s.rect.w);
     expect(s.y).toBeGreaterThanOrEqual(s.rect.y);
@@ -115,9 +131,9 @@ test('the feed: every part and slot inside the feed zone, the skyline above the 
   }
   expect(b.parts.map((p) => p.kind).sort()).toEqual(['database', 'gateway', 'server', 'server']);
   for (const p of b.parts) expectInside(p.rect, feed, `part ${p.id}`);
-  // The near row draws bigger than the far row.
-  const far = b.parts.find((p) => p.slot === 's1')!;
-  const near = b.parts.find((p) => p.slot === 's6')!;
+  // A server on a near row draws bigger than one on a far row.
+  const far = b.parts.find((p) => p.slot === FAR)!;
+  const near = b.parts.find((p) => p.slot === NEAR)!;
   expect(near.rect.h).toBeGreaterThan(far.rect.h);
   expect(near.y).toBeGreaterThan(far.y);
 
@@ -131,6 +147,66 @@ test('the feed: every part and slot inside the feed zone, the skyline above the 
   for (const p of b.parts) expect(p.rect.y).toBeGreaterThan(sky.y + sky.h);
 
   await page.screenshot({ path: 'test-results/screens/board-live-c1.png' });
+});
+
+test('the grid: a server card dragged onto free cells snaps to a 2 x 2 footprint, green where it fits and red where it does not', async ({
+  page,
+}) => {
+  await openBoard(page);
+  let b = await board(page);
+  // The whole table is a grid of cells; the gateway's and the database's bays are held for them.
+  expect(b.grid.cols).toBe(28);
+  expect(b.grid.rows).toBe(19);
+  expect(b.grid.nodes).toHaveLength(b.grid.rows + 1);
+  expect(b.grid.nodes[0]).toHaveLength(b.grid.cols + 1);
+  expect(b.grid.cell.w).toBeGreaterThan(0);
+  expect(b.grid.occupied.sort()).toEqual([...b.grid.reserved].sort());
+  expect(b.grid.room, 'room for twenty servers and more').toBeGreaterThanOrEqual(20);
+  expect(b.grid.racks.map((r) => r.id)).toEqual(['A', 'B', 'C', 'D']);
+  // Pads are gone: the board suggests one spot, and any free footprint works as well.
+  expect(b.grid.suggested).toBe(S1);
+
+  // A spot nobody suggested, in rack C on a near row: carried there by the mouse, the footprint
+  // lights green, then the drop snaps the server onto those four cells.
+  const anchor = 'c17-14';
+  const card = b.tray.find((t) => t.id === 'server')!;
+  const to = footAt(b, anchor);
+  await hold(page, card, to);
+  await expect.poll(async () => (await board(page)).grid.preview?.anchor).toBe(anchor);
+  b = await board(page);
+  expect(b.dragOver).toMatchObject({
+    card: 'server',
+    over: anchor,
+    overKind: 'cell',
+    state: 'legal',
+    legal: true,
+  });
+  expect(b.grid.preview).toMatchObject({ card: 'server', anchor, bad: [], colour: 'green' });
+  expect(b.grid.preview!.cells.sort()).toEqual(['c17-14', 'c18-14', 'c17-15', 'c18-15'].sort());
+  await page.screenshot({ path: 'test-results/screens/grid-board-fits.png' });
+  await page.mouse.up();
+  await expect.poll(async () => (await board(page)).parts.find((p) => p.slot === anchor)?.id).toBeDefined();
+  b = await board(page);
+  const id = b.parts.find((p) => p.slot === anchor)!.id;
+  const foot = b.grid.footprints.find((f) => f.part === id)!;
+  expect(foot).toMatchObject({ kind: 'server', anchor });
+  expect(foot.cells.sort()).toEqual(['c17-14', 'c18-14', 'c17-15', 'c18-15'].sort());
+  for (const c of foot.cells) expect(b.grid.occupied).toContain(c);
+  expect(b.grid.preview).toBeNull();
+
+  // One cell to the left would overlap it: the footprint lights red where it is blocked, and a
+  // drop there places nothing.
+  const over = 'c16-14';
+  await hold(page, card, footAt(b, over));
+  await expect.poll(async () => (await board(page)).grid.preview?.anchor).toBe(over);
+  b = await board(page);
+  expect(b.dragOver).toMatchObject({ over, state: 'taken', legal: false });
+  expect(b.grid.preview).toMatchObject({ colour: 'red' });
+  expect(b.grid.preview!.bad.sort()).toEqual(['c17-14', 'c17-15'].sort());
+  await page.screenshot({ path: 'test-results/screens/grid-board.png' });
+  await page.mouse.up();
+  await expect.poll(async () => (await board(page)).dragging).toBeNull();
+  expect((await board(page)).parts.filter((p) => p.kind === 'server')).toHaveLength(1);
 });
 
 test('the inventory row: cards with prices and counts in the inventory zone, the drawer not for tonight', async ({
@@ -159,7 +235,7 @@ test('the inventory row: cards with prices and counts in the inventory zone, the
 
   // Placing a server spends 80 (and upkeep drips a little more): the server count follows the
   // credits, and there is now one server to fit a kit to.
-  await placeServer(page, 's1');
+  await placeServer(page, S1);
   await expect.poll(async () => (await board(page)).inventory.counts.overclock).toBe(1);
   const after = await board(page);
   const servers = Math.min(Math.floor(after.credits / 80), 5);
@@ -181,7 +257,7 @@ test('one read of the run per frame: the board draws from the shared Frame it re
   page,
 }) => {
   await openBoard(page);
-  const id = await placeServer(page, 's1');
+  const id = await placeServer(page, S1);
   const before = await board(page);
   const gateway = before.parts.find((p) => p.kind === 'gateway')!;
   const server = before.parts.find((p) => p.id === id)!;
@@ -245,8 +321,9 @@ test('C1 (board-4, board-6): the clock holds and the board shows why; bank marks
     expect(x.waiting.crew).toBe(false);
     expect(x.waiting.blinking).toBe(true);
     expect(x.waiting.port).not.toBeNull();
-    expect(x.waiting.pulsing.sort()).toEqual(['s1', 's2', 's3', 's4', 's5', 's6']);
-    for (const p of x.pads) expect(p.pulsing).toBe(p.slot !== 'lb');
+    // One good spot pulses (any free footprint works): the first suggested one.
+    expect(x.waiting.pulsing).toEqual([S1]);
+    expect(x.grid.suggested).toBe(S1);
     lit.add(x.waiting.portLit);
     tumbled = Math.max(tumbled, x.waiting.tumbled);
     await page.waitForTimeout(40);
@@ -257,12 +334,12 @@ test('C1 (board-4, board-6): the clock holds and the board shows why; bank marks
   expect(b.waiting.port!.x).toBeGreaterThan(gw.x);
 
   // Racked only (the clock holds in C1 until the first build): the ROOM tick stays at 0.
-  const id = await placeServer(page, 's1');
+  const id = await placeServer(page, S1);
   b = await board(page);
   expect(b.channel.capacityLevel).toBe(0);
   expect(b.channel.wired).toBe(0);
   expect(b.waiting.first).toBe(true);
-  expect(b.waiting.pulsing.sort()).toEqual(['s2', 's3', 's4', 's5', 's6']);
+  expect(b.waiting.pulsing).toEqual([S2]);
 
   // Wired gateway -> server -> database and online: the tick moves to 60 / 400.
   await wire(page, 'gateway', id);
@@ -280,7 +357,7 @@ test('C1 (board-4, board-6): the clock holds and the board shows why; bank marks
   expect(b.channel.level).toBeCloseTo(Math.min(1, b.channel.demand / 400), 2);
 
   // A second server racked and up but fed by nothing: the tick never moves for it.
-  const idle = await placeServer(page, 's2');
+  const idle = await placeServer(page, S2);
   await expect.poll(async () => (await part(page, idle))?.status, { timeout: 20_000 }).toBe('online');
   for (let i = 0; i < 3; i++) {
     b = await board(page);
@@ -314,7 +391,7 @@ async function watch(
     if (Date.now() > deadline)
       throw new Error(
         `watch: ${what} not seen within ${timeout / 1000} s (board.now ${b.now}, paused ${b.paused}, ` +
-          `clock ${b.clock}, pads ${JSON.stringify(b.pads)}, parts ${JSON.stringify(b.parts.map((p) => [p.id, p.status, p.label, p.tags]))})`,
+          `clock ${b.clock}, footprints ${JSON.stringify(b.grid.footprints)}, parts ${JSON.stringify(b.parts.map((p) => [p.id, p.status, p.label, p.tags]))})`,
       );
     await page.waitForTimeout(15);
   }
@@ -445,15 +522,15 @@ test('C3 (board-5, board-6): an idle second box reads UNFED with no packets; the
   page.on('pageerror', (err) => pageErrors.push(err.message));
   await openBoard(page, '&speed=20');
   await recordAnims(page);
-  const s1 = await placeServer(page, 's1');
+  const s1 = await placeServer(page, S1);
   await wire(page, 'gateway', s1);
   await wire(page, s1, 'database');
 
-  // A second box racked before the climb: nothing can feed it (the gateway feeds one part only).
-  // It goes on s4, beside the C2 banner: the banner (still open, unanswered) covers s2 and takes
-  // the drop.
-  await watch(page, 'board.now >= 150', (b) => b.now >= 150);
-  const s2 = await placeServer(page, 's4');
+  // A second box racked long before the climb: nothing can feed it (the gateway feeds one part
+  // only). It goes down right after the first is wired, before the C2 banner can open over the
+  // table, so it is long online by C3 (racked at board.now 150 it could still be booting when the
+  // hot box died at speed 20).
+  const s2 = await placeServer(page, S4);
   const idle = await watch(page, 'the second box online in C3', (b) => {
     const p = b.parts.find((x) => x.id === s2);
     return b.now >= 180 && p?.status === 'online';
@@ -575,7 +652,7 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   await openBoard(page, '&speed=20');
   await recordAnims(page);
   // GAME.md's best play before the crew: one box wired, the kit on it.
-  const s1 = await placeServer(page, 's1');
+  const s1 = await placeServer(page, S1);
   await wire(page, 'gateway', s1);
   await wire(page, s1, 'database');
   await drag(page, b0(await board(page), 'overclock'), (await part(page, s1))!);
@@ -645,7 +722,7 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   expect(crew.waiting.blinking, 'no blink under reduce flicker').toBe(false);
   const lb = crew.parts.find((p) => p.kind === 'balancer')!;
   expect(crew.waiting.port!.x).toBeGreaterThan(lb.x);
-  expect(crew.waiting.pulsing.sort()).toEqual(['s2', 's3', 's4', 's5', 's6']);
+  expect(crew.waiting.pulsing).toEqual([S2]);
   for (let i = 0; i < 5; i++) {
     await page.waitForTimeout(100);
     const x = await board(page);
@@ -656,12 +733,13 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
 
   // Rack a box behind the balancer: it is booting (the clock holds, so it stays booting), so the
   // balancer skips it: the pad goes grey and dashed with SKIPPED on it.
-  const s2 = await placeServer(page, 's2');
+  const s2 = await placeServer(page, S2);
   await wire(page, 'balancer', s2);
-  let b = await watch(page, 'the s2 pad SKIPPED', (x) => x.pads.find((p) => p.slot === 's2')!.dashed);
-  let pad = b.pads.find((p) => p.slot === 's2')!;
+  const marks = (x: BoardTestState) => x.grid.footprints.find((f) => f.part === s2)!;
+  let b = await watch(page, 'the second box SKIPPED', (x) => marks(x).dashed);
+  let pad = marks(b);
   expect(pad.skipped).toBe(true);
-  expect(pad.part).toBe(s2);
+  expect(pad.anchor).toBe(S2);
   expect(b.parts.find((p) => p.id === s2)!.tags).toContain('SKIPPED');
   expect(b.parts.find((p) => p.id === s2)!.status).toBe('booting');
   await page.screenshot({ path: 'test-results/screens/live-m2-board.png' });
@@ -676,15 +754,15 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   b = await watch(
     page,
     'the skip on s2 cleared',
-    (x) => !x.pads.find((p) => p.slot === 's2')!.skipped,
+    (x) => !marks(x).skipped,
     (x) => {
-      if (x.pads.find((p) => p.slot === 's2')!.skipped) lastSkipped = x.clock;
+      if (marks(x).skipped) lastSkipped = x.clock;
     },
   );
-  pad = b.pads.find((p) => p.slot === 's2')!;
-  expect(pad.dashed, 'SKIPPED still on the pad just after the skip cleared').toBe(true);
+  pad = marks(b);
+  expect(pad.dashed, 'SKIPPED still on the footprint just after the skip cleared').toBe(true);
   expect(pad.skipTagUntil!).toBeGreaterThanOrEqual(lastSkipped + 1 - 0.001);
-  b = await watch(page, 'the SKIPPED tag gone', (x) => !x.pads.find((p) => p.slot === 's2')!.dashed);
+  b = await watch(page, 'the SKIPPED tag gone', (x) => !marks(x).dashed);
   expect(b.clock - lastSkipped, 'the tag stayed at least 1 s').toBeGreaterThanOrEqual(1 - 0.05);
 
   // The wait lasts until the boxes behind the balancer cover 120: wired on to the database it is
@@ -719,9 +797,9 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   b = await board(page);
   expect(b.anims).not.toContain('cable');
   const lbNow = b.parts.find((p) => p.kind === 'balancer')!;
-  const lbSlot = b.slots.find((x) => x.id === 'lb')!;
-  expect(lbNow.drawn, 'the balancer landed on its pad').toEqual({ dy: 0, scale: 1, alpha: 1 });
-  expect(Math.abs(lbNow.x - lbSlot.x)).toBeLessThanOrEqual(1);
+  expect(lbNow.drawn, 'the balancer landed on its cells').toEqual({ dy: 0, scale: 1, alpha: 1 });
+  expect(lbNow.slot).toBe(BALANCER_SPOT);
+  expect(b.grid.footprints.find((f) => f.part === lbNow.id)?.anchor).toBe(BALANCER_SPOT);
   expect(lbNow.motion).toBe('idle');
   const logged = b.animLog.filter((e) => e.name !== 'ping');
   expect(logged.length).toBeGreaterThan(0);
@@ -911,9 +989,15 @@ test('the night at speed 20 (board-7, board-9 to board-11): C1, the surge, a ski
   expect(rec.seen['cable'], 'the cable').toBeDefined();
 
   // ---- a skip: the balancer passes over a box it cannot reach (booting or dark) --------------
-  const skipped = await watch(page, 'a SKIPPED pad', (x) => x.pads.some((p) => p.dashed), undefined, 40_000);
+  const skipped = await watch(
+    page,
+    'a SKIPPED footprint',
+    (x) => x.grid.footprints.some((f) => f.dashed),
+    undefined,
+    40_000,
+  );
   await shot(page, 'board-skipped');
-  expect(skipped.pads.find((p) => p.dashed)!.part).not.toBeNull();
+  expect(skipped.grid.footprints.find((f) => f.dashed)!.kind).toBe('server');
 
   // ---- midnight held: fireworks over the feed and the held pads flash (reduce flicker is off) --
   await liveReach(page, 'midnight');
@@ -995,37 +1079,37 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   let b = await board(page);
   expect(b.keys.sort()).toEqual(['Backspace', 'Delete', 'Escape']);
   const card = b0(b, 'server');
-  const s1Pad = b.slots.find((s) => s.id === 's1')!;
-  const lbPad = b.slots.find((s) => s.id === 'lb')!;
+  const s1Pad = b.slots.find((s) => s.id === S1)!;
+  // The gateway's bay: cells in front of the gateway nothing else may take.
+  const bay = footAt(b, FIXED_ANCHOR.gateway!);
   const credits = b.credits;
 
-  // A card drag tints every pad by legality and reports what it is over. There is no estimate step,
-  // so the ghost shows from the first drag.
+  // A card drag lights the footprint under it by legality (green fits, red blocked) and reports what
+  // it is over. There is no estimate step, so the ghost shows from the first drag.
   await hold(page, card, s1Pad);
   b = await board(page);
   expect(b.dragging).toBe('server');
   expect(b.dragOver).toMatchObject({
     kind: 'card',
     card: 'server',
-    over: 's1',
-    overKind: 'pad',
+    over: S1,
+    overKind: 'cell',
     state: 'legal',
     legal: true,
   });
-  const legality = Object.fromEntries(b.pads.map((p) => [p.slot, p.legality]));
-  expect(legality).toEqual({
-    lb: 'wrong',
-    s1: 'legal',
-    s2: 'legal',
-    s3: 'legal',
-    s4: 'legal',
-    s5: 'legal',
-    s6: 'legal',
+  await expect.poll(async () => (await board(page)).grid.preview?.anchor).toBe(S1);
+  expect((await board(page)).grid.preview).toMatchObject({
+    card: 'server',
+    anchor: S1,
+    bad: [],
+    colour: 'green',
   });
-  expect((await expectGhost(page, 's1')).ghost).toMatchObject({ over: 's1', adds: 60 });
-  await page.mouse.move(lbPad.x, lbPad.y, { steps: 3 });
-  await expect.poll(async () => (await board(page)).dragOver?.over).toBe('lb');
+  expect((await board(page)).grid.preview!.cells).toHaveLength(4);
+  expect((await expectGhost(page, S1)).ghost).toMatchObject({ over: S1, adds: 60 });
+  await page.mouse.move(bay.x, bay.y, { steps: 3 });
+  await expect.poll(async () => (await board(page)).dragOver?.over).toBe(FIXED_ANCHOR.gateway);
   expect((await board(page)).dragOver).toMatchObject({ state: 'wrong', legal: false });
+  await expect.poll(async () => (await board(page)).grid.preview?.colour).toBe('red');
 
   // Esc cancels the drag (and the pause menu stays shut); nothing was placed or spent.
   await page.keyboard.press('Escape');
@@ -1034,16 +1118,16 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   b = await board(page);
   expect(b.dragOver).toBeNull();
   expect(b.parts.some((p) => p.kind === 'server')).toBe(false);
-  expect(b.pads.every((p) => p.legality === null)).toBe(true);
+  expect(b.grid.preview).toBeNull();
   expect((await shell(page))?.paused, 'Esc during a drag does not open the pause menu').toBe(false);
 
   // The ghost again: over s1 with the gateway free it adds 60, the what-if tick reads ROOM +60,
   // and no credits are spent while it hovers.
   await hold(page, card, s1Pad);
-  b = await expectGhost(page, 's1');
+  b = await expectGhost(page, S1);
   expect(b.ghost).toMatchObject({
     card: 'server',
-    over: 's1',
+    over: S1,
     legal: true,
     adds: 60,
     tick: 'ROOM +60',
@@ -1054,8 +1138,8 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   expect(b.credits).toBeGreaterThan(credits - 1);
   await page.screenshot({ path: 'test-results/screens/live-m3-board-ghost-c1.png' });
   await page.mouse.up();
-  await expect.poll(async () => (await board(page)).parts.find((p) => p.slot === 's1')?.id).toBeDefined();
-  const s1 = (await board(page)).parts.find((p) => p.slot === 's1')!.id;
+  await expect.poll(async () => (await board(page)).parts.find((p) => p.slot === S1)?.id).toBeDefined();
+  const s1 = (await board(page)).parts.find((p) => p.slot === S1)!.id;
   expect((await board(page)).ghost).toBeNull();
 
   // Wire it in; once it is up, the ghost over the second pad tells the truth: nothing feeds it, and
@@ -1063,9 +1147,9 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   await wire(page, 'gateway', s1);
   await wire(page, s1, 'database');
   await expect.poll(async () => (await board(page)).channel.wired, { timeout: 20_000 }).toBe(60);
-  const s2Pad = (await board(page)).slots.find((s) => s.id === 's2')!;
+  const s2Pad = (await board(page)).slots.find((s) => s.id === S2)!;
   await hold(page, card, s2Pad);
-  b = await expectGhost(page, 's2');
+  b = await expectGhost(page, S2);
   expect(b.ghost).toMatchObject({ legal: true, adds: 0, capacity: 60, wired: 60, tick: null });
   expect(b.ghost!.plate).toBe('+0 room · nothing feeds it');
   expect(b.channel.whatIf).toBeCloseTo(b.channel.capacityLevel, 3);
@@ -1145,13 +1229,13 @@ test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behi
   }
   let b = await board(page);
   const card = b0(b, 'server');
-  const empty = b.slots.filter((s) => s.id !== 'lb' && s.part === null);
+  const empty = b.slots.filter((s) => s.part === null);
   expect(empty.length).toBeGreaterThan(0);
   const pad = empty[empty.length - 1];
   await hold(page, card, pad);
   await expect.poll(async () => (await board(page)).dragOver?.over).toBe(pad.id);
   b = await board(page);
-  // An empty pad: legal, or short of credits by now (the ghost shows either way; only the drop differs).
+  // A free spot: legal, or short of credits by now (the ghost shows either way; only the drop differs).
   expect(['legal', 'poor']).toContain(b.dragOver!.state);
 
   // The ghost comes, wired behind the crew's splitter, adding 60.

@@ -5,6 +5,7 @@
 import { type Board, type BoardRules, type Flow, type Part, capacityOf } from './board';
 import { BROWNOUT } from './brownout';
 import { demandAt } from './demand';
+import { rackOf } from './grid';
 
 const C = BROWNOUT.challenges;
 const D = BROWNOUT.demand;
@@ -85,7 +86,10 @@ export function blockDemand(now: number, rescued: boolean, laundryCut: boolean):
   return Math.max(0, base - shed);
 }
 
-/** Who a scripted dip takes dark: the overclocked server (C4), or a seeded pick of the servers (C6). */
+/**
+ * Who a scripted dip takes dark: the overclocked server (C4), or a seeded pick of the racks that hold
+ * a server, every server in it (C6).
+ */
 export type DipTarget = 'overclocked' | 'seeded';
 
 export interface ScheduledDip {
@@ -101,11 +105,15 @@ export const DIP_SCRIPT: readonly ScheduledDip[] = [
   { id: 'midnight', darkAt: BROWNOUT.clock.midnight - DIP.beforeMidnightSeconds, target: 'seeded' },
 ];
 
-/** A dip with its part picked: flickers from warnAt, dark from darkAt until endsAt. */
+/** A dip with its parts picked: flickers from warnAt, dark from darkAt until endsAt. */
 export interface PowerDip {
   readonly id: string;
-  /** The part it takes dark, or null when there was no server to take. */
+  /** The (first) part it takes dark, or null when there was no server to take. */
   readonly part: string | null;
+  /** Every part it takes dark (missing means just `part`). */
+  readonly parts?: readonly string[];
+  /** The rack that lost power (C6), or null for a dip on one part. */
+  readonly rack?: string | null;
   readonly warnAt: number;
   readonly darkAt: number;
   readonly endsAt: number;
@@ -118,37 +126,58 @@ export function seededIndex(seed: number, n: number): number {
   return n > 0 ? (Math.imul(seed | 0, 0x9e3779b1) >>> 0) % n : 0;
 }
 
-/** Pick the part a scheduled dip takes dark on this board. */
+/** Every part a dip takes dark. */
+export function dipParts(dip: PowerDip): readonly string[] {
+  return dip.parts ?? (dip.part === null ? [] : [dip.part]);
+}
+
+/**
+ * The racks that hold a server on this board, in the order their first server was placed (grid.ts
+ * rackOf: a column band of the table; an old fixed slot is a rack of its own).
+ */
+export function serverRacks(board: Board): string[] {
+  const out: string[] = [];
+  for (const p of board.parts) {
+    const r = p.kind === 'server' ? rackOf(p.slot) : null;
+    if (r !== null && !out.includes(r)) out.push(r);
+  }
+  return out;
+}
+
+/**
+ * Pick what a scheduled dip takes dark on this board: the overclocked server in the surge (C4); at
+ * midnight (C6) one rack loses power, picked by the seed from the racks that hold a server, and every
+ * server anchored in it goes dark. Servers spread over the racks lose one each; servers stacked in
+ * one rack all go together.
+ */
 export function resolveDip(board: Board, dip: ScheduledDip, seed: number): PowerDip {
   const servers = board.parts.filter((p) => p.kind === 'server');
-  const part: Part | undefined =
-    dip.target === 'overclocked'
-      ? (servers.find((p) => p.boost !== undefined) ?? servers[0])
-      : servers[seededIndex(seed, servers.length)];
-  return {
-    id: dip.id,
-    part: part?.id ?? null,
-    warnAt: dipWarnAt(dip),
-    darkAt: dip.darkAt,
-    endsAt: dip.darkAt + DIP.darkSeconds,
-  };
+  const timing = { warnAt: dipWarnAt(dip), darkAt: dip.darkAt, endsAt: dip.darkAt + DIP.darkSeconds };
+  if (dip.target === 'overclocked') {
+    const part: Part | undefined = servers.find((p) => p.boost !== undefined) ?? servers[0];
+    return { id: dip.id, part: part?.id ?? null, parts: part ? [part.id] : [], rack: null, ...timing };
+  }
+  const racks = serverRacks(board);
+  const rack = racks.length > 0 ? racks[seededIndex(seed, racks.length)] : null;
+  const parts = servers.filter((p) => rack !== null && rackOf(p.slot) === rack).map((p) => p.id);
+  return { id: dip.id, part: parts[0] ?? null, parts, rack, ...timing };
 }
 
 export type DipPhase = 'flicker' | 'dark' | null;
 
 export function dipPhase(dip: PowerDip, now: number): DipPhase {
-  if (dip.part === null || now < dip.warnAt || now >= dip.endsAt) return null;
+  if (dipParts(dip).length === 0 || now < dip.warnAt || now >= dip.endsAt) return null;
   return now < dip.darkAt ? 'flicker' : 'dark';
 }
 
 /** Parts in a power dip at `now`: offline, so the load balancer skips them and the gateway does not. */
 export function darkParts(dips: readonly PowerDip[], now: number): string[] {
-  return dips.filter((d) => dipPhase(d, now) === 'dark').map((d) => d.part as string);
+  return dips.filter((d) => dipPhase(d, now) === 'dark').flatMap((d) => dipParts(d));
 }
 
 /** Parts showing the flicker warning at `now`: still online. */
 export function flickeringParts(dips: readonly PowerDip[], now: number): string[] {
-  return dips.filter((d) => dipPhase(d, now) === 'flicker').map((d) => d.part as string);
+  return dips.filter((d) => dipPhase(d, now) === 'flicker').flatMap((d) => dipParts(d));
 }
 
 export type RescueCause = 'trust' | 'time';

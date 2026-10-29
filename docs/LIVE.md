@@ -188,7 +188,7 @@ no events of their own by module augmentation: a new event is a line in `GameEve
 | `line` | CommsView, when a band line starts | `{id, speaker, tag, lesson, since}` | chat (quiet), luxcam (speaking), the mixer |
 | `audience` | ChatFeedView, on every change of `viewersOf` | `{watching}` | TitleView (WATCHING) |
 
-- **`drag.state` and `drag.legal`.** `state` is the board's `PadState` for the pad or part under the
+- **`drag.state` and `drag.legal`.** `state` is the board's `PadState` for the footprint (grid cells) or part under the
   card in hand (`legal`, `taken`, `dead`, `poor`, `wrong`; the bus spells it `DragState` so it
   imports nothing from a scene), null over nothing, on a wire drag and when the drag ends. `legal`
   is `state === 'legal'`, null where `state` is null. `dragVerdict(state)` builds both. They are
@@ -264,7 +264,7 @@ The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard
 | `hud.comms` | CommsView (`live/views/comms.ts`) | the band line, the five slots, `queue`, `history`, `dropped`, the reread log, the TRIAGE mood |
 | `hud.bark` | the host, from CommsView | `{current, text, history}`, the band's shown lines (the older name) |
 | `hud.luxCam` | LuxCamView | the mood, the art, `history` of moods, REC, the frame, `speaking`, `motion` |
-| `hud.alert` | AlertView | the alert up now and its kind, line, tag and text; `hint` and `hintText`, the start-of-C1 hint ("drag a SERVER card onto a glowing pad") while no alert is up |
+| `hud.alert` | AlertView | the alert up now and its kind, line, tag and text; `hint` and `hintText`, the start-of-C1 hint ("drag a SERVER card onto the grid") while no alert is up |
 | `hud.gauge`, `hud.chart` | GaugeView, ChartView | the COMING /s gauge; the scope's series over the host's `chart` |
 | `hud.map` | MapView | the city map's dots, raid outlines and midnight |
 | `hud.deck`, `hud.headroom`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, the room-left bar, Regroup and the laundry cut |
@@ -281,7 +281,7 @@ Every top-level section of `window.__neonTest.state` (each `provideTestState` ca
 | Section | Provided by | What it mirrors |
 | --- | --- | --- |
 | `scene`, `ready`, `canvas` | `src/main.ts` (`TestSnapshot` in `src/testHook.ts`) | the scene on top, whether it is ready, the canvas size |
-| `board` | BoardScene | parts, wires, pads, the tray, packets and `board.channel` (the channel at the feed's left edge: `demand`, `max`, `level`, `capacityLevel`, `marks`, lanes) |
+| `board` | BoardScene | parts, wires, the grid (`board.grid`: cells, footprints, the drag preview), the suggested spots, the tray, packets and `board.channel` (the channel at the feed's left edge: `demand`, `max`, `level`, `capacityLevel`, `marks`, lanes) |
 | `hud` | HudScene, with every `hud.<name>` above | the HUD's keys and the views' sections |
 | `live` | HudScene (`src/scenes/live/hook.ts`) | `zones`, `placeholders`, `layoutVersion` |
 | `perf` | HudScene (`PerfMeter`) | the display-list counts (see "Perf budget") |

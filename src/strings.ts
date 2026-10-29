@@ -428,7 +428,7 @@ export const LINES = {
   // its anchor, and nowhere else, as one edit here and one row in the script's matching section.
   // anchor: board
   // anchor: gauges
-  'C1.alert.place': { kind: 'ui', speaker: 'Alert', text: 'drag a SERVER card onto a glowing pad' },
+  'C1.alert.place': { kind: 'ui', speaker: 'Alert', text: 'drag a SERVER card onto the grid' },
   'C3.alert.title': { kind: 'ui', speaker: 'Alert', text: 'EVERYONE FILMING' },
   'C3.alert.down': { kind: 'ui', speaker: 'Alert', text: 'BLOCK DOWN' },
   'C4.alert.title': { kind: 'ui', speaker: 'Alert', text: 'NEIGHBOURS REROUTED HERE' },

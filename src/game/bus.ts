@@ -69,7 +69,7 @@ export interface GameEvents {
   drag: {
     kind: 'card' | 'wire' | null;
     card: 'server' | 'overclock' | 'balancer' | null;
-    over: 'pad' | 'part' | null;
+    over: 'cell' | 'part' | null;
     /**
      * What the card in hand may do where it is: the board's padState for the pad or part under it
      * (src/scenes/board/layout.ts PadState), null while it is over nothing, on a wire drag and when

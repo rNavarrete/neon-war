@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { SERVER_SLOTS } from '../../src/sim/tick';
 import type { TestState } from '../../src/testHook';
 
 // The story layer: scene player, cold open, rescue, rewinds, debrief and Night Book. Some tests open
@@ -222,7 +223,7 @@ test("a real overheat in C3 plays TRIAGE's replay and rewinds credits, parts and
   test.setTimeout(120_000);
   await toBoard(page, 20);
   // One stock server and no kit: the evening climb to 90 cooks it.
-  const id = await page.evaluate(() => window.__neonShell!.place('s1'));
+  const id = await page.evaluate((cell) => window.__neonShell!.place(cell), SERVER_SLOTS[0]);
   expect(id).not.toBeNull();
   await page.evaluate((s) => window.__neonShell!.connect('gateway', s!), id);
   await page.evaluate((s) => window.__neonShell!.connect(s!, 'database'), id);

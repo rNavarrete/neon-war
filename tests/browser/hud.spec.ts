@@ -89,7 +89,7 @@ test('the session opens on the job card, and clicking it away starts C1', async 
   expect(h.now).toBeGreaterThanOrEqual(15);
   // No estimate step: the band says what to do first, straight to the build.
   expect(h.alert?.hint).toBe('C1.alert.place');
-  expect(h.alert?.hintText).toBe('drag a SERVER card onto a glowing pad');
+  expect(h.alert?.hintText).toBe('drag a SERVER card onto the grid');
   // TRIAGE guesses first, never pausing the board.
   await expect
     .poll(async () => (await hud(page)).bark.current, { timeout: 40_000, intervals: [50] })

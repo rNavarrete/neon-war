@@ -57,7 +57,7 @@ declare module '../testHook' {
 
 /** Test-only handle on `window.__neonShell` (only with `?test`): drives the real Run and bus. */
 export interface ShellTestHandle {
-  /** Place a server in a slot through the real Run action; returns the new part's id or null. */
+  /** Place a server with its footprint anchored at a cell ('c3-11') through the real Run action; returns the new part's id or null. */
   place(slot: string): string | null;
   /** Wire two parts through the real Run action. */
   connect(from: string, to: string): boolean;

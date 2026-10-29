@@ -251,7 +251,7 @@ export interface StartHintInput {
 
 /**
  * The hint the band shows at the start of C1, while no alert is up: once the job card closes, until
- * the first server is on the board, drag a SERVER card onto a glowing pad. Null otherwise (and while
+ * the first server is on the board, drag a SERVER card onto the grid. Null otherwise (and while
  * the job card is up, before C1 and from C2). The words are in the crew's terms (no debrief term);
  * steady, they never flash. Pure, allocates nothing.
  */

@@ -19,8 +19,53 @@ export interface BoardTestState {
   paused: boolean;
   credits: number;
   demand: number;
-  /** Each slot's pad centre, and `rect` its drop box, in page CSS pixels. */
+  /**
+   * The suggested server spots (src/sim/tick.ts SERVER_SLOTS, one per rack along each row in
+   * turn): `id` the anchor cell, the centre of its 2 x 2 footprint, the part anchored there and
+   * `rect` the footprint's bounding box, in page CSS pixels. Any other free footprint works as well:
+   * `grid` has every cell.
+   */
   slots: (Point & { id: string; part: string | null; locked: boolean; rect: Rect })[];
+  /**
+   * The table's grid (src/sim/grid.ts, drawn by board/cells.ts): `cols` x `rows` cells; `cell` a
+   * cell's drawn size at the middle row (page CSS px); `nodes[j][i]` where grid line i (columns)
+   * crosses grid line j (rows), in page CSS pixels, so a w x h footprint anchored at (col, row) has
+   * its corners at nodes[row][col] and nodes[row + h][col + w]; `occupied` every cell a part stands
+   * on; `reserved` the fixed parts' bays; `footprints` every part's cells with its anchor (a
+   * server's SKIPPED marks with it); `racks` the four power bands and which one the midnight dip
+   * holds now; `suggested` the spot that pulses while the board waits for a build (null when none is
+   * free) and `room` how many more servers the free cells still take; `preview` the footprint under
+   * the card in hand: its cells, the blocked ones and the colour they light (green fits, red
+   * blocked, amber short of credits), or null.
+   */
+  grid: {
+    cols: number;
+    rows: number;
+    cell: { w: number; h: number };
+    nodes: Point[][];
+    occupied: string[];
+    reserved: string[];
+    footprints: (Point & {
+      part: string;
+      kind: PartKind;
+      anchor: string;
+      cells: string[];
+      rect: Rect;
+      skipped: boolean;
+      skipTagUntil: number | null;
+      dashed: boolean;
+    })[];
+    racks: { id: string; from: number; to: number; dip: 'flicker' | 'dark' | null }[];
+    suggested: string | null;
+    room: number;
+    preview: {
+      card: string;
+      anchor: string;
+      cells: string[];
+      bad: string[];
+      colour: 'green' | 'red' | 'amber';
+    } | null;
+  };
   /**
    * Every card in the inventory row, at its centre: `count` is how many the player could use now
    * (0 for a drawer mini) and `price` its cost in credits (0 for the crew's gift, null for a mini).
@@ -37,7 +82,7 @@ export interface BoardTestState {
    * is loaded (the rest keep today's code drawing); `table` is 'plate' (the painted table plate)
    * or 'bake' (the code slab), drawn at `tableRect` (page CSS pixels) and `tableScale` (never above
    * 1); `channelPlate` the channel plate's rect or null; `pingMarks` how many ping marks show now;
-   * `stamps` the server pads wearing the SKIPPED stamp now.
+   * `stamps` the anchors of the server footprints wearing the SKIPPED stamp now.
    */
   art: {
     picked: string[];
@@ -93,7 +138,7 @@ export interface BoardTestState {
     barColour: BarColour;
     /** Lit this frame: false only on the dark half of a power flicker's blink; always true under reduce flicker. */
     flickerLit: boolean;
-    /** The row's draw scale (1 off the rack). */
+    /** How big the part draws against its full size (smaller toward the table's far edge; 1 for the gateway and the database). */
     scale: number;
     /** The tags the part wears (the lead's enum), first is the one shown. */
     tags: PartTag[];
@@ -110,29 +155,6 @@ export interface BoardTestState {
     pose: { dy: number; scale: number; alpha: number };
     /** The pose the sprite was drawn in this frame: equal to `pose` once its animation has ended. */
     drawn: { dy: number; scale: number; alpha: number };
-  })[];
-  /**
-   * Every pad (board-5): the balancer's and the six server pads, with their drawn box (page CSS
-   * pixels), rack row and scale, the part on it, whether the balancer skips that part now
-   * (`skipped`, the sim's flow.skipped), the board-clock second the SKIPPED tag shows until
-   * (`skipTagUntil`, sticky 1 s after the skip clears; null before any skip) and whether the pad is
-   * drawn grey and dashed with the tag on it now (`dashed`).
-   */
-  pads: (Point & {
-    slot: string;
-    w: number;
-    h: number;
-    row: number | null;
-    scale: number;
-    part: string | null;
-    locked: boolean;
-    state: 'empty' | 'taken' | 'dead' | 'locked';
-    skipped: boolean;
-    skipTagUntil: number | null;
-    dashed: boolean;
-    pulsing: boolean;
-    /** While a card is dragged (board-8): what a drop on this pad would do (layout.padState), else null. */
-    legality: PadState | null;
   })[];
   /** The board clock in seconds (the scene's own time): what skipTagUntil and the blinks count on. */
   clock: number;
@@ -181,7 +203,8 @@ export interface BoardTestState {
    * the clock waits after the rescue for the boxes behind the balancer to cover `need` (120; they
    * cover `behind` now). The board shows why: the out-port that needs a wire (`port`, page CSS
    * pixels) blinks (`blinking`; `portLit` this frame, always lit under reduce flicker), cubes tumble
-   * off it (`tumbled` now), the empty pads pulse (`pulsing`, by slot) and in the crew wait a chip by
+   * off it (`tumbled` now), the suggested spot pulses (`pulsing`, its anchor cell; empty when no
+   * card could go anywhere or a card is in hand) and in the crew wait a chip by
    * the balancer reads behind/need (`chip`).
    */
   waiting: {
@@ -209,8 +232,9 @@ export interface BoardTestState {
   /** The REPLACE button under the selected dead box (board-8), in page CSS pixels, or null. */
   replaceButton: Point | null;
   /**
-   * What the drag in hand is over (board-8), always reported, gate or not: for a card the slot id
-   * ('s1'..'s6', 'lb') or the part id under it, the pad's legality (`state`) and whether a drop
+   * What the drag in hand is over (board-8), always reported, gate or not: for a card the anchor
+   * cell of the footprint under it (`overKind` 'cell'), or the anchor of the part it targets (the
+   * kit on a part, a server card on a dead box; 'part'), the spot's legality (`state`) and whether a drop
    * would do something (`legal`); for a wire the part it would land on and connect()'s answer
    * (`legal`, `reason`). Null with nothing in hand.
    */
@@ -218,7 +242,7 @@ export interface BoardTestState {
     kind: 'card' | 'wire';
     card: string | null;
     over: string | null;
-    overKind: 'pad' | 'part' | null;
+    overKind: 'cell' | 'part' | null;
     state: PadState | null;
     legal: boolean | null;
     reason: string | null;

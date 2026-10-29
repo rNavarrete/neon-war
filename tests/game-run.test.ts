@@ -1,4 +1,5 @@
 import { bestPlay } from '../src/game/autopilot';
+import { SERVER_SLOTS } from '../src/sim/tick';
 import { Run } from '../src/game/run';
 import { BROWNOUT } from '../src/sim/brownout';
 
@@ -21,7 +22,7 @@ describe('the live run', () => {
     for (let i = 0; i < 300; i++) r.tick(0.1);
     expect(r.now).toBe(C.c1);
     expect(r.session.trust).toBe(100);
-    expect(r.placeServer('s1').ok).toBe(true);
+    expect(r.placeServer(SERVER_SLOTS[0]).ok).toBe(true);
     const id = r.session.board.parts[r.session.board.parts.length - 1].id;
     expect(r.connect('gateway', id).ok).toBe(true);
     r.tick(0.1);
@@ -53,7 +54,7 @@ describe('the live run', () => {
   it('waits after the rescue until the servers behind the balancer can carry the tail', () => {
     const r = new Run();
     r.now = C.c1;
-    expect(r.placeServer('s1').ok).toBe(true);
+    expect(r.placeServer(SERVER_SLOTS[0]).ok).toBe(true);
     const first = r.session.board.parts[r.session.board.parts.length - 1].id;
     r.connect('gateway', first);
     r.connect(first, 'database');
@@ -81,7 +82,7 @@ describe('the live run', () => {
     const lb = r.session.board.parts.find((p) => p.kind === 'balancer')!;
     const rackOne = () => {
       const taken = new Set(r.session.board.parts.map((p) => p.slot));
-      const free = ['s1', 's2', 's3', 's4', 's5', 's6'].find((s) => !taken.has(s))!;
+      const free = SERVER_SLOTS.find((s) => !taken.has(s))!;
       expect(r.placeServer(free).ok).toBe(true);
       const id = r.session.board.parts[r.session.board.parts.length - 1].id;
       expect(r.connect(lb.id, id).ok).toBe(true);

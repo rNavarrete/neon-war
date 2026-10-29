@@ -16,6 +16,8 @@ import {
   trayCards,
 } from '../src/scenes/board/tray';
 import { ZONES, rectToArea } from '../src/scenes/live/layout';
+import { BOARD_CELLS, findSpot, roomFor } from '../src/sim/grid';
+import { SERVER_SLOTS } from '../src/sim/tick';
 
 // The inventory row (board-2): three cards with prices and counts, and a padlocked drawer of the
 // catalog's other parts drawn without their names.
@@ -117,15 +119,24 @@ describe('inventory row', () => {
 });
 
 describe('inventoryCounts', () => {
-  it('counts what the credits buy, up to the free slots and the servers without a kit', () => {
+  it('counts what the credits buy, up to the room on the grid and the servers without a kit', () => {
     expect(inventoryCounts(400, START, false)).toEqual({ server: 5, overclock: 0, balancer: 0 });
-    expect(inventoryCounts(1000, START, false).server).toBe(6);
-    const two = [...START, server('a', 's1'), server('b', 's2', 2)];
-    expect(inventoryCounts(400, two, false)).toEqual({ server: 4, overclock: 1, balancer: 0 });
+    // The grid has room for far more than the credits buy: the credits cap the count.
+    expect(inventoryCounts(1000, START, false).server).toBe(12);
+    const two = [...START, server('a', SERVER_SLOTS[0]), server('b', SERVER_SLOTS[1], 2)];
+    // Two boxes racked leave the grid plenty of room: 400 credits still buy five.
+    expect(inventoryCounts(400, two, false)).toEqual({ server: 5, overclock: 1, balancer: 0 });
     expect(inventoryCounts(59.9, two, false)).toEqual({ server: 0, overclock: 0, balancer: 0 });
     expect(inventoryCounts(60, two, false).overclock).toBe(1);
-    const full = [...START, ...['s1', 's2', 's3', 's4', 's5', 's6'].map((s, i) => server(`p${i}`, s))];
-    expect(inventoryCounts(10_000, full, false)).toEqual({ server: 0, overclock: 6, balancer: 0 });
+    // A grid packed until no 2 x 2 footprint is free: no server card left, a kit for every box.
+    const full: Part[] = [...START];
+    for (let spot = findSpot(BOARD_CELLS, full, 'server', SERVER_SLOTS[0]); spot !== null;) {
+      full.push(server(`p${full.length}`, spot));
+      spot = findSpot(BOARD_CELLS, full, 'server', SERVER_SLOTS[0]);
+    }
+    const racked = full.length - START.length;
+    expect(roomFor(BOARD_CELLS, full, 'server')).toBe(0);
+    expect(inventoryCounts(10_000, full, false)).toEqual({ server: 0, overclock: racked, balancer: 0 });
   });
 
   it('never goes below zero when the credits are in debt', () => {
@@ -146,7 +157,7 @@ describe('inventoryCounts', () => {
   it('reads only the credits, the parts and whether the balancer was given', () => {
     expect(inventoryCounts.length).toBe(3);
     const read = new Set<string>();
-    const watched = [...START, server('a', 's1'), server('b', 's2', 2)].map(
+    const watched = [...START, server('a', SERVER_SLOTS[0]), server('b', SERVER_SLOTS[1], 2)].map(
       (p) =>
         new Proxy(Object.freeze({ ...p }), {
           get(t, key, r) {
@@ -159,8 +170,8 @@ describe('inventoryCounts', () => {
     const before = JSON.stringify(parts);
     read.clear();
     expect(inventoryCounts(300, parts, true)).toEqual({ server: 3, overclock: 1, balancer: 1 });
-    // A part's kind and kit only; never its id, slot or anything else on the run.
-    expect([...read].sort()).toEqual(['boost', 'kind']);
+    // A part's kind, kit and where it stands (the room left on the grid); never its id or anything else on the run.
+    expect([...read].sort()).toEqual(['boost', 'kind', 'slot']);
     expect(JSON.stringify(parts)).toBe(before);
   });
 });

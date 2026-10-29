@@ -5,7 +5,7 @@
 
 import { type Part, capacityOf } from '../../sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../../sim/brownout';
-import type { PowerDip } from '../../sim/failures';
+import { type PowerDip, dipParts } from '../../sim/failures';
 import { LABELS, diesIn as diesInLabel } from '../hud/labels';
 import { type PartArtOptions, stateArt } from './art';
 
@@ -173,7 +173,7 @@ export function partLookInto(
 function darkSecondsLeft(dips: readonly PowerDip[], id: string, now: number): number {
   for (let i = 0; i < dips.length; i++) {
     const d = dips[i];
-    if (d.part === id && d.darkAt <= now && now < d.endsAt) return d.endsAt - now;
+    if (dipParts(d).includes(id) && d.darkAt <= now && now < d.endsAt) return d.endsAt - now;
   }
   return 0;
 }

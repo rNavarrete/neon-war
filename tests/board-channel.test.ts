@@ -1,4 +1,5 @@
 import boardSource from '../src/scenes/BoardScene.ts?raw';
+import { SERVER_SLOTS } from '../src/sim/tick';
 import { readFrame, resetFrame, wiredCapacity } from '../src/game/frame';
 import { Run } from '../src/game/run';
 import type { Part, Wire } from '../src/sim/board';
@@ -173,7 +174,7 @@ describe('the ROOM tick follows wired capacity, never what is only racked (board
     r.now = C.c1;
     const room = () => channelState(readFrame(r)).capacityLevel;
     expect(room()).toBe(0);
-    const id = rack(r, 's1');
+    const id = rack(r, SERVER_SLOTS[0]);
     // Racked: run().capacity counts it once it boots; the ROOM tick does not move.
     expect(room()).toBe(0);
     expect(r.connect('gateway', id).ok).toBe(true);
@@ -185,7 +186,7 @@ describe('the ROOM tick follows wired capacity, never what is only racked (board
     expect(room()).toBeCloseTo(60 / 400);
 
     // A second server racked and booted but fed by nothing: run().capacity doubles, the tick holds.
-    const idle = rack(r, 's2');
+    const idle = rack(r, SERVER_SLOTS[1]);
     for (let i = 0; i < 4 * 60; i++) r.tick(1 / 60);
     expect(r.capacity).toBe(120);
     expect(readFrame(r).wiredCapacity).toBe(60);

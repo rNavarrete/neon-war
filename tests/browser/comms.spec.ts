@@ -202,7 +202,7 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
         ).board,
     );
     const card = board.tray.find((t) => t.id === 'server')!;
-    const slot = board.slots.find((s) => s.id === 's1')!;
+    const slot = board.slots[0];
     await page.mouse.move(card.x, card.y);
     await page.mouse.down();
     await page.mouse.move(c.log.band.x, c.log.band.y, { steps: 4 });
@@ -213,7 +213,7 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
     }
     await page.mouse.move(slot.x, slot.y, { steps: 4 });
     await page.mouse.up();
-    // It was a real drag: the server landed in the slot.
+    // It was a real drag: the server landed on the first suggested spot.
     await expect
       .poll(() =>
         page.evaluate(
@@ -222,7 +222,7 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
               window.__neonTest!.state as unknown as {
                 board: { slots: { id: string; part: string | null }[] };
               }
-            ).board.slots.find((s) => s.id === 's1')?.part ?? null,
+            ).board.slots[0]?.part ?? null,
         ),
       )
       .not.toBeNull();

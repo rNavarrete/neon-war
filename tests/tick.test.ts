@@ -1,6 +1,6 @@
 import { BROWNOUT } from '../src/sim/brownout';
 import { placeServer } from '../src/sim/economy';
-import { brownoutSession, liveCapacity, stepCalm } from '../src/sim/tick';
+import { SERVER_SLOTS, brownoutSession, liveCapacity, stepCalm } from '../src/sim/tick';
 import { connect } from '../src/sim/board';
 import { BROWNOUT_RULES } from '../src/sim/brownout';
 
@@ -13,7 +13,7 @@ describe('calm-weather step', () => {
 
   it('serves the block once a booted server is wired, and charges upkeep', () => {
     let s = brownoutSession();
-    const r = placeServer(s, 's1', 0);
+    const r = placeServer(s, SERVER_SLOTS[0], 0);
     if (!r.ok) throw new Error(r.reason);
     s = r.session;
     const id = s.board.parts[2].id;

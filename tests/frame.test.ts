@@ -1,4 +1,5 @@
 import { bestPlay } from '../src/game/autopilot';
+import { SERVER_SLOTS } from '../src/sim/tick';
 import { type Frame, frame, liveCapacity, readFrame, resetFrame, wiredCapacity } from '../src/game/frame';
 import { Run } from '../src/game/run';
 import { BROWNOUT } from '../src/sim/brownout';
@@ -14,7 +15,7 @@ function playTo(r: Run, t: number, limit = 20_000): void {
 function runWithServer(): { r: Run; id: string } {
   const r = new Run();
   r.now = C.c1;
-  expect(r.placeServer('s1').ok).toBe(true);
+  expect(r.placeServer(SERVER_SLOTS[0]).ok).toBe(true);
   const parts = r.session.board.parts;
   return { r, id: parts[parts.length - 1].id };
 }
@@ -45,12 +46,12 @@ describe('frame(run)', () => {
     const routing = vi.spyOn(r, 'flow', 'get');
     const before = frame(r);
     expect(before.parts.map((p) => p.id)).toEqual(['gateway', 'database']);
-    expect(r.placeServer('s1').ok).toBe(true);
+    expect(r.placeServer(SERVER_SLOTS[0]).ok).toBe(true);
     const after = frame(r);
     expect(after).not.toBe(before);
     expect(routing).toHaveBeenCalledTimes(2);
     expect(after.parts.map((p) => p.kind)).toEqual(['gateway', 'database', 'server']);
-    expect(after.parts[2].slot).toBe('s1');
+    expect(after.parts[2].slot).toBe(SERVER_SLOTS[0]);
     expect(after.credits).toBe(before.credits - BROWNOUT.server.cost);
     // The new server is booting: offline, counted in capacity once it is up, never wired yet.
     expect(after.offline).toEqual([after.parts[2].id]);

@@ -1,9 +1,12 @@
 import { readFrame, resetFrame } from '../src/game/frame';
+import { SERVER_SLOTS } from '../src/sim/tick';
+import { BALANCER_SPOT } from '../src/sim/grid';
+import { partCentre } from '../src/scenes/board/layout';
 import { Run } from '../src/game/run';
 import type { Part, Wire } from '../src/sim/board';
 import { BROWNOUT } from '../src/sim/brownout';
 import {
-  BALANCER_OUT,
+  balancerOut,
   CREW_NEED,
   GATEWAY_OUT,
   TUMBLE_LIFE,
@@ -31,7 +34,7 @@ describe('the board waits (board-6)', () => {
       crew: false,
       port: GATEWAY_OUT,
     });
-    expect(r.placeServer('s1').ok).toBe(true);
+    expect(r.placeServer(SERVER_SLOTS[0]).ok).toBe(true);
     const id = r.session.board.parts[r.session.board.parts.length - 1].id;
     expect(r.connect('gateway', id).ok).toBe(true);
     expect(waitInto(w, readFrame(r), 0, false).first).toBe(true);
@@ -76,8 +79,8 @@ describe('the board waits (board-6)', () => {
 
   it('shows the crew wait at the balancer with what the boxes behind it cover', () => {
     const parts: Part[] = [
-      { id: 'balancer', kind: 'balancer', slot: null },
-      { id: 'a', kind: 'server', slot: 's1' },
+      { id: 'balancer', kind: 'balancer', slot: BALANCER_SPOT },
+      { id: 'a', kind: 'server', slot: SERVER_SLOTS[0] },
     ];
     const wires: Wire[] = [
       { from: 'balancer', to: 'a' },
@@ -94,9 +97,12 @@ describe('the board waits (board-6)', () => {
       crew: true,
       behind: 60,
       need: 120,
-      port: BALANCER_OUT,
+      port: balancerOut(parts),
       blinking: true,
     });
+    // The port is the splitter's out-port on the grid, right of where it stands.
+    expect(w.port).not.toBeNull();
+    expect(w.port!.x).toBeGreaterThan(partCentre(parts[0])!.x);
   });
 
   it('blinks the waiting port at 2 Hz, lit steady under reduce flicker; pads pulse unless reduced', () => {
