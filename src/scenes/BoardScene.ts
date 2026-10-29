@@ -333,7 +333,7 @@ export class BoardScene extends Phaser.Scene {
   private views = new Map<string, PartView>();
   /** The one Frame read per board frame, and the board's frame count. */
   private snap = new BoardSnapshot();
-  /** The grid's static drawing: the rack bands, their labels and the fixed parts' bays, drawn once. */
+  /** The grid's static drawing: the rack bands and their labels, drawn once. */
   private rackG!: Phaser.GameObjects.Graphics;
   /** The midnight dip's shade over the rack that loses power, and the rack and phase it shows. */
   private dipG!: Phaser.GameObjects.Graphics;
@@ -689,8 +689,8 @@ export class BoardScene extends Phaser.Scene {
 
     this.drawBackdrop();
 
-    // The table's grid: every painted square is a cell a part can stand on. The rack bands and the
-    // fixed parts' bays are drawn once; the cells under a dragged card and the suggested spot on top.
+    // The table's grid: every painted square is a cell a part can stand on. The
+    // rack bands are drawn once; the cells under a dragged card and the suggested spot on top.
     this.drawGrid();
 
     this.wiresG = this.add.graphics();
@@ -1372,11 +1372,11 @@ export class BoardScene extends Phaser.Scene {
 
   // ---- the grid ----------------------------------------------------------------------------------
   // Every painted square of the table is a cell a part can stand on (src/sim/grid.ts). The board
-  // draws the rack bands and the fixed parts' bays once; while a card is dragged, the cells its
+  // draws the rack bands once; while a card is dragged, the cells its
   // footprint would cover light green (it fits) or red (blocked); while the board waits for a
   // build, one good spot pulses; at midnight the rack that loses power goes dark.
 
-  /** The grid's layers, and its static drawing: the rack bands with their labels, the fixed parts' bays. */
+  /** The grid's layers, and its static drawing: the rack bands with their labels. */
   private drawGrid(): void {
     const g = (this.rackG = this.add.graphics().setDepth(0.6));
     for (let k = 0; k < RACKS.length; k++) {
@@ -1396,13 +1396,6 @@ export class BoardScene extends Phaser.Scene {
         .setOrigin(0.5, 1)
         .setAlpha(0.75)
         .setDepth(0.62);
-    }
-    // The fixed parts' bays: grey dashed outlines, nothing else stands there.
-    g.lineStyle(2, GREY, 0.7);
-    for (const kind of FIXED_KINDS) {
-      const anchor = FIXED_ANCHOR[kind];
-      const q = anchor ? footprintQuad(kind, anchor) : null;
-      if (q) for (let k = 0; k < 4; k++) dashedLine(g, q[k], q[(k + 1) % 4], 6, 5);
     }
     this.dipG = this.add.graphics().setDepth(0.64).setVisible(false);
     this.suggestG = this.add.graphics().setDepth(0.66).setVisible(false);
@@ -2969,7 +2962,7 @@ export class BoardScene extends Phaser.Scene {
 
     // Batch 5: the midnight plate fades in over the day plate once the clock strikes midnight (at
     // once when calm), and the day plate darkens under it: the midnight plate is narrower, so the
-    // day plate stays as the table's ends (the gateway and the database stand just past its ends). A
+    // day plate stays as the table's ends. A
     // rewind past midnight brings the day plate back.
     const mp = this.midnightPlate;
     if (mp) {
@@ -3409,7 +3402,7 @@ function partById(parts: readonly Part[], id: string): Part | null {
   return null;
 }
 
-/** The part whose footprint is anchored at `anchor` (a fixed part by its bay), or null. */
+/** The part whose footprint is anchored at `anchor` (a fixed part by its fixed cell), or null. */
 function partWithAnchor(parts: readonly Part[], anchor: string): Part | null {
   for (let i = 0; i < parts.length; i++) if (anchorOf(parts[i]) === anchor) return parts[i];
   return null;
@@ -3428,7 +3421,7 @@ function clearSkip(v: PartView): void {
   if (v.skip) v.skip.skipUntil = -Infinity;
 }
 
-/** The fixed parts, whose bays the grid outlines. */
+/** The fixed parts, standing on their own cells. */
 const FIXED_KINDS = ['gateway', 'database'] as const;
 
 /** The centres of the good server spots, where the calm embers rise at midnight. */

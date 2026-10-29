@@ -8,7 +8,7 @@
 import type { Part, Wire } from '../../sim/board';
 import { capacityOf } from '../../sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../../sim/brownout';
-import { GATEWAY, PART_SIZE, type Point, outPort } from './layout';
+import { type Point, outPort } from './layout';
 
 /** Req/s the boxes behind the balancer must cover before the clock runs again (the tail). */
 export const CREW_NEED = BROWNOUT.demand.tail;
@@ -50,7 +50,7 @@ export function padPulseAlpha(t: number, reduceFlicker: boolean): number {
 }
 
 /** The out-port that needs a wire: the gateway's in C1, the balancer's after the rescue. */
-export const GATEWAY_OUT: Point = { x: GATEWAY.x + PART_SIZE.gateway.w / 2, y: GATEWAY.y };
+export const GATEWAY_OUT: Point = outPort({ kind: 'gateway', slot: null })!;
 
 /** The balancer's out-port on the grid (the start of its traces), read again only when the balancer part changes. */
 let lbFor: Part | null = null;

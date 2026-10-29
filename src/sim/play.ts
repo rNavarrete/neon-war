@@ -234,7 +234,7 @@ export function applyRescue(play: Play, now: number, by: RescueCause): Play {
     if (r.ok) board = r.board;
   }
   if (!board.parts.some((p) => p.kind === 'balancer')) {
-    // The crew rack it on the nearest free 2 x 1 cells to their spot by the gateway's bay.
+    // The crew rack it on the nearest free 2 x 1 cells to their spot by the gateway.
     const slot = findSpot(board.slots, board.parts, 'balancer', BALANCER_SPOT);
     board = { ...board, parts: [...board.parts, { id: 'balancer', kind: 'balancer', slot }] };
   }

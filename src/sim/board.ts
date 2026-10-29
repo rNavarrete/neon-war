@@ -15,7 +15,7 @@ export interface Part {
   readonly kind: PartKind;
   /**
    * The part's anchor cell on the table's grid ('c4-11': the far-left cell of its footprint, see
-   * grid.ts), or null for the parts the session starts with (they stand in fixed bays).
+   * grid.ts), or null for the parts the session starts with (the gateway and the database stand on their fixed cells).
    */
   readonly slot: string | null;
   /** Capacity multiplier from an upgrade such as the overclock kit; missing means 1. */
@@ -92,7 +92,7 @@ export function partById(board: Board, id: string): Part | undefined {
 
 /**
  * Place a part with its footprint's anchor at `slot`. Every cell of the footprint must be on the
- * table, outside the fixed parts' bays and free (grid.ts fits), and the price must be in hand.
+ * table, off the fixed parts' cells and free (grid.ts fits), and the price must be in hand.
  */
 export function place(board: Board, rules: BoardRules, slot: string, kind: PartKind): BoardResult {
   const fit = fits(board.slots, board.parts, kind, slot);

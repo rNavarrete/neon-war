@@ -72,8 +72,8 @@ export const BROWNOUT = {
   surgeScript: { dipAfterSeconds: 5 },
   /**
    * The table's grid (src/sim/grid.ts): the painted silkscreen's squares, the cells each kind
-   * covers, the fixed parts' bays (gateway at the left edge, database at the right, `bayRow` their
-   * first row), the racks (bands of `rackColumns` columns, each on its own power feed), where the
+   * covers, where the fixed parts stand on it (`fixed`: each one's anchor cell; the gateway near the
+   * left side, the database near the right, both on the first server spots' port row), the racks (bands of `rackColumns` columns, each on its own power feed), where the
    * crew rack their splitter, and the suggested server spots (one per rack along each row in turn).
    */
   board: {
@@ -82,10 +82,10 @@ export const BROWNOUT = {
     footprint: {
       server: { w: 2, h: 2 },
       balancer: { w: 2, h: 1 },
-      gateway: { w: 2, h: 4 },
-      database: { w: 2, h: 4 },
+      gateway: { w: 2, h: 2 },
+      database: { w: 3, h: 2 },
     },
-    bayRow: 10,
+    fixed: { gateway: { col: 0, row: 11 }, database: { col: 25, row: 11 } },
     racks: ['A', 'B', 'C', 'D'],
     rackColumns: 7,
     balancerSpot: { col: 5, row: 12 },

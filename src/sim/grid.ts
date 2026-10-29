@@ -3,8 +3,9 @@
 // (src/scenes/board/cells.ts). A placed part's slot is its anchor cell, the top-left (far-left) cell
 // of its footprint; the board's slots list is every free cell.
 //
-// The gateway and the residents' database stand on the table's left and right rims, each with a
-// bay of cells in front of it that nothing else can take. The table is split into four racks (bands
+// The gateway and the residents' database are fixed parts standing on the grid like the servers:
+// the gateway near the table's left side, the database near its right side. Nothing else can take
+// their cells, and the player cannot move or sell them. The table is split into four racks (bands
 // of columns), each on its own power feed: the midnight power dip takes one rack dark.
 
 import type { Part, PartKind } from './board';
@@ -15,7 +16,7 @@ const B = BROWNOUT.board;
 /** The painted grid: 28 columns by 19 rows of squares. */
 export const GRID = { cols: B.cols, rows: B.rows } as const;
 
-/** Cells a kind covers on the table: a server 2 x 2, the splitter 2 x 1, each fixed part's bay 2 x 4. */
+/** Cells a kind covers on the table: a server 2 x 2, the splitter 2 x 1, the gateway 2 x 2, the database 3 x 2. */
 export const FOOTPRINT: Readonly<Record<PartKind, { readonly w: number; readonly h: number }>> = B.footprint;
 
 export interface Cell {
@@ -39,10 +40,10 @@ export function inGrid(col: number, row: number): boolean {
   return col >= 0 && row >= 0 && col < GRID.cols && row < GRID.rows;
 }
 
-/** Where the fixed parts' bays start: the gateway's at the left edge, the database's at the right. */
+/** Where the fixed parts stand: their anchor cells, the gateway near the left side, the database near the right. */
 export const FIXED_ANCHOR: Readonly<Partial<Record<PartKind, string>>> = {
-  gateway: cellId(0, B.bayRow),
-  database: cellId(GRID.cols - FOOTPRINT.database.w, B.bayRow),
+  gateway: cellId(B.fixed.gateway.col, B.fixed.gateway.row),
+  database: cellId(B.fixed.database.col, B.fixed.database.row),
 };
 
 /**
@@ -60,7 +61,7 @@ export function footprintCells(kind: PartKind, anchor: string): string[] {
   return out;
 }
 
-/** A part's anchor: its slot, or its fixed bay for the gateway and the database; null otherwise. */
+/** A part's anchor: its slot, or its fixed cell for the gateway and the database; null otherwise. */
 export function anchorOf(part: Pick<Part, 'kind' | 'slot'>): string | null {
   return part.slot ?? FIXED_ANCHOR[part.kind] ?? null;
 }
@@ -78,7 +79,7 @@ export const ALL_CELLS: readonly string[] = (() => {
   return out;
 })();
 
-/** The fixed parts' bays, by kind: cells nothing else can take. */
+/** The fixed parts' cells, by kind: cells nothing else can take. */
 export const RESERVED: Readonly<Partial<Record<PartKind, readonly string[]>>> = {
   gateway: footprintCells('gateway', FIXED_ANCHOR.gateway!),
   database: footprintCells('database', FIXED_ANCHOR.database!),
@@ -86,7 +87,7 @@ export const RESERVED: Readonly<Partial<Record<PartKind, readonly string[]>>> = 
 
 const RESERVED_SET = new Set([...RESERVED.gateway!, ...RESERVED.database!]);
 
-/** The board's slots on Session 0: every cell outside the fixed parts' bays. */
+/** The board's slots on Session 0: every cell outside the fixed parts' footprints. */
 export const BOARD_CELLS: readonly string[] = ALL_CELLS.filter((c) => !RESERVED_SET.has(c));
 
 export interface Rack {
@@ -128,7 +129,7 @@ export type Fit = { ok: true } | { ok: false; reason: string };
 
 /**
  * Whether a part of `kind` fits with its anchor at `anchor` on a board with these slots and parts.
- * Every cell of its footprint must be on the table, outside the fixed parts' bays, and free (a part
+ * Every cell of its footprint must be on the table, off the fixed parts' cells, and free (a part
  * listed in `ignore` does not count, for a replacement). The reasons print on screen.
  */
 export function fits(
@@ -192,7 +193,7 @@ export const BALANCER_SPOT = cellId(B.balancerSpot.col, B.balancerSpot.row);
 /**
  * Good server spots, in the order the autopilot fills them and the board suggests them: one in
  * each rack along the gateway's port row first (the first sits right at the gateway's port), then
- * a second row above and a third below. They never overlap each other, the bays or BALANCER_SPOT.
+ * a second row above and a third below. They never overlap each other, the fixed parts or BALANCER_SPOT.
  */
 export const SERVER_SPOTS: readonly string[] = B.serverSpots.rows.flatMap((row) =>
   B.serverSpots.cols.map((col) => cellId(col, row)),
@@ -207,8 +208,9 @@ export interface Node {
 /**
  * Where a part takes wires in and sends them out, on the grid's lines: a server's in-port is the
  * middle of its footprint's left edge and its out-port the middle of its right edge; the splitter's
- * are its left and right ends on its far edge; the gateway sends out from the right edge of its bay
- * and the database takes in on the left edge of its bay. Null for a part with no cells.
+ * are its left and right ends on its far edge; the gateway and the database are like a server (the
+ * gateway sends out from the middle of its right edge, the database takes in on the middle of its
+ * left edge). Null for a part with no cells.
  */
 export function portNode(part: Pick<Part, 'kind' | 'slot'>, side: 'in' | 'out'): Node | null {
   const a = anchorOf(part);

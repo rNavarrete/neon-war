@@ -13,6 +13,7 @@
 import { type BoardRules, type Part, type PartKind, type Wire, connect } from '../../sim/board';
 import {
   BOARD_CELLS,
+  FIXED_ANCHOR,
   FOOTPRINT,
   GRID,
   anchorOf,
@@ -64,15 +65,9 @@ export function project(u: number, v: number): Point {
   return { x: left + (right - left) * u, y: far.y + (near.y - far.y) * v };
 }
 
-/** Centre of the gateway, where the block's traffic comes in. It stands on the table's left rim. */
-export const GATEWAY: Point = { x: 640, y: 412 };
-/** Centre of the residents' database, at the end of the line, on the table's right rim. */
-export const DATABASE: Point = { x: 1760, y: 412 };
-
 /**
- * Drawn size of each kind on the board (its hit box), in game pixels. The gateway and the database
- * are drawn at this size; a server or the splitter is scaled to its footprint's width, keeping this
- * shape (never above its art's own size).
+ * Each kind's art shape on the board, in game pixels: every part, the gateway and the database
+ * among them, is scaled to its footprint's width keeping this shape (never above its art's own size).
  */
 export const PART_SIZE: Readonly<Record<PartKind, { w: number; h: number }>> = {
   gateway: { w: 110, h: 190 },
@@ -104,25 +99,33 @@ export function standBox(kind: PartKind, anchor: string): Box | null {
   return { x: (q[0].x + q[1].x + q[2].x + q[3].x) / 4, y: foot - height / 2, w: width, h: height };
 }
 
+/** Centre of the gateway, where the block's traffic comes in: standing on its cells near the grid's left side. */
+export const GATEWAY: Point = boxCentre(standBox('gateway', FIXED_ANCHOR.gateway!)!);
+/** Centre of the residents' database, at the end of the line: standing on its cells near the grid's right side. */
+export const DATABASE: Point = boxCentre(standBox('database', FIXED_ANCHOR.database!)!);
+
+function boxCentre(b: Box): Point {
+  return { x: b.x, y: b.y };
+}
+
 /** Centre of a part on the board, or null if it has nowhere to stand. */
 export function partCentre(part: Pick<Part, 'kind' | 'slot'>): Point | null {
   const b = partBox(part);
   return b ? { x: b.x, y: b.y } : null;
 }
 
-/** A part's drawn size: a server's or the splitter's follows its footprint (smaller toward the far edge). */
+/** A part's drawn size: it follows its footprint (smaller toward the far edge). */
 export function partSize(part: Pick<Part, 'kind' | 'slot'>): { w: number; h: number } {
   const b = partBox(part);
   return b ? { w: b.w, h: b.h } : PART_SIZE[part.kind];
 }
 
 export function partBox(part: Pick<Part, 'kind' | 'slot'>): Box | null {
-  if (part.kind === 'gateway') return { ...GATEWAY, ...PART_SIZE.gateway };
-  if (part.kind === 'database') return { ...DATABASE, ...PART_SIZE.database };
-  return part.slot === null ? null : standBox(part.kind, part.slot);
+  const a = anchorOf(part);
+  return a === null ? null : standBox(part.kind, a);
 }
 
-/** How big a part draws against its PART_SIZE (1 for the gateway and the database): text and marks scale with it. */
+/** How big a part draws against its PART_SIZE: text and marks scale with it. */
 export function partScale(part: Pick<Part, 'kind' | 'slot'>): number {
   const b = partBox(part);
   return b ? b.w / PART_SIZE[part.kind].w : 1;
@@ -187,7 +190,7 @@ export function previewCells(
  * What dropping a card at a spot would do, for the drag's tints: `legal` it takes (a server
  * footprint on free cells, the kit on a server without one), `dead` a dead server is there (a server
  * card replaces it), `poor` it would take but the credits are short, `taken` a part is in the way,
- * `wrong` the card does not go there (a fixed part's bay, the crew's splitter, not a cell).
+ * `wrong` the card does not go there (on or over a fixed part's cells, the crew's splitter, not a cell).
  */
 export type PadState = 'legal' | 'taken' | 'dead' | 'poor' | 'wrong';
 
@@ -217,7 +220,7 @@ export function padState(slot: string, board: PadBoard, card: string, prices: Pa
     if (on !== null && on.kind === 'server' && dead) return board.credits >= prices.server ? 'dead' : 'poor';
     if (on !== null) return on.kind === 'gateway' || on.kind === 'database' ? 'wrong' : 'taken';
     if (!fits(BOARD_CELLS, board.parts, 'server', slot).ok) {
-      // Blocked only by parts: taken. Hanging off the table or over a fixed part's bay: wrong.
+      // Blocked only by parts: taken. Hanging off the table or over a fixed part's cells: wrong.
       const { cells, bad } = previewCells('server', slot, board.parts);
       const whole = cells.length === FOOTPRINT.server.w * FOOTPRINT.server.h;
       return whole && bad.every((c) => BOARD_CELL_SET.has(c)) ? 'taken' : 'wrong';
@@ -272,8 +275,8 @@ export function partAnchor(
 
 // Wires run like traces on a circuit board, along the painted grid's lines: straight runs and right
 // angles only, never through a part's footprint (lattice.ts finds the way). A trace leaves a part's
-// out-port node and enters the next one's in-port node (grid.ts portNode); the gateway's starts at
-// its art's right edge and runs into its bay, the database's ends at its art's left edge.
+// out-port node and enters the next one's in-port node (grid.ts portNode), the gateway's and the
+// database's like any other part's.
 
 /** Every part's footprint as a block the traces go round. */
 function blocksOf(parts: readonly Pick<Part, 'kind' | 'slot'>[]): Block[] {
@@ -286,14 +289,9 @@ function blocksOf(parts: readonly Pick<Part, 'kind' | 'slot'>[]): Block[] {
   return out;
 }
 
-/** The gateway's out-port at its art's right edge, and the database's in-port at its art's left edge. */
-const GATEWAY_ART_OUT = GATEWAY.x + PART_SIZE.gateway.w / 2 - 6;
-const DATABASE_ART_IN = DATABASE.x - PART_SIZE.database.w / 2 + 6;
-
 /**
  * The trace a wire follows from one part to the next, as corner points in game pixels: the
- * lattice route between their ports round every footprint in `parts` (an L when no route exists),
- * with the gateway's and the database's art edges added at the ends, level with their port rows.
+ * lattice route between their ports round every footprint in `parts` (an L when no route exists).
  * Null if either has no cells.
  */
 export function wirePath(
@@ -305,18 +303,13 @@ export function wirePath(
   const b = portNode(to, 'in');
   if (!a || !b) return null;
   const nodes = traceNodes(GRID.cols, GRID.rows, a, b, blocksOf(parts));
-  const points: Point[] = nodes.map(nodePoint);
-  if (from.kind === 'gateway') points.unshift({ x: GATEWAY_ART_OUT, y: points[0].y });
-  if (to.kind === 'database') points.push({ x: DATABASE_ART_IN, y: points[points.length - 1].y });
-  return tidy(points);
+  return tidy(nodes.map(nodePoint));
 }
 
 /** Where a part sends its wires out (the trace's first point), or null. */
 export function outPort(part: Pick<Part, 'kind' | 'slot'>): Point | null {
   const n = portNode(part, 'out');
-  if (!n) return null;
-  const p = nodePoint(n);
-  return part.kind === 'gateway' ? { x: GATEWAY_ART_OUT, y: p.y } : p;
+  return n ? nodePoint(n) : null;
 }
 
 /** Drop repeated points and points in the middle of a straight run. */
@@ -376,12 +369,13 @@ export const INBOUND_FROM = BOARD_AREA.left - 3;
 
 /**
  * The channel the block's traffic arrives along: a mouth on the feed's left edge (x 455, y 322-502)
- * that narrows to the gateway's port on its left face (x 585). Geometry only; how full it is (the
- * demand level) is a later ticket's.
+ * that narrows to its port on the table's left rim (x 585), level with the gateway's in-port; the
+ * stream runs on from there across the rim into the gateway standing on the grid. Geometry only; how
+ * full it is (the demand level) is a later ticket's.
  */
 export const CHANNEL = {
   mouth: { x: BOARD_AREA.left, top: 322, bottom: 502 },
-  port: { x: GATEWAY.x - PART_SIZE.gateway.w / 2, top: 372, bottom: 452 },
+  port: { x: 585, top: 372, bottom: 452 },
 } as const;
 
 /** The channel's walls at x, between the mouth and the port. */
@@ -398,28 +392,34 @@ export function channelAt(x: number): { top: number; bottom: number } {
 const LANE_SPREAD = 54;
 
 /**
- * The block's traffic arriving at the gateway: three lanes in from the left that run straight
- * through the channel's mouth and merge into the gateway's port, so the stream reads as a crowd,
- * not a single file. Each lane stays between the channel's walls.
- */
-export const INBOUND_LANES: readonly (readonly Point[])[] = [-LANE_SPREAD, 0, LANE_SPREAD].map((dy) => {
-  const end = { x: GATEWAY.x - PART_SIZE.gateway.w / 2 + 6, y: GATEWAY.y };
-  return dy === 0
-    ? [{ x: INBOUND_FROM, y: GATEWAY.y }, end]
-    : [{ x: INBOUND_FROM, y: GATEWAY.y + dy }, { x: CHANNEL.mouth.x + 30, y: GATEWAY.y + dy }, end];
-});
-
-/**
- * Where a part takes its wires in (the end wirePath draws to): its in-port node on the grid, the
- * database's art edge level with its port row, or the gateway's left edge where the channel meets it.
+ * Where a part takes its wires in (the end wirePath draws to): its in-port node on the grid. The
+ * gateway's is the middle of its footprint's left edge, where the block's traffic comes in.
  */
 export function inPort(part: Pick<Part, 'kind' | 'slot'>): Point | null {
-  if (part.kind === 'gateway') return { x: GATEWAY.x - PART_SIZE.gateway.w / 2 + 6, y: GATEWAY.y };
   const n = portNode(part, 'in');
-  if (!n) return null;
-  const p = nodePoint(n);
-  return part.kind === 'database' ? { x: DATABASE_ART_IN, y: p.y } : p;
+  return n ? nodePoint(n) : null;
 }
+
+/** The gateway's in-port on the grid: where the inbound stream ends. */
+const GATEWAY_IN: Point = inPort({ kind: 'gateway', slot: null })!;
+
+/**
+ * The block's traffic arriving at the gateway: three lanes in from the left that run straight
+ * through the channel's mouth, merge at its port and run on along the gateway's port row into its
+ * in-port, so the stream reads as a crowd, not a single file, left to right. Each lane stays
+ * between the channel's walls.
+ */
+export const INBOUND_LANES: readonly (readonly Point[])[] = [-LANE_SPREAD, 0, LANE_SPREAD].map((dy) => {
+  const end = GATEWAY_IN;
+  return dy === 0
+    ? [{ x: INBOUND_FROM, y: end.y }, end]
+    : [
+        { x: INBOUND_FROM, y: end.y + dy },
+        { x: CHANNEL.mouth.x + 30, y: end.y + dy },
+        { x: CHANNEL.port.x, y: end.y },
+        end,
+      ];
+});
 
 /** The far rim the retries run back along, just inside the table's far edge (above the grid). */
 export const RETURN_RIM = TABLE.far.y + 4;
