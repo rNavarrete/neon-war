@@ -563,7 +563,10 @@ export class HudScene extends Phaser.Scene {
     c.load = f.flow.load;
     c.dropped = f.dropped;
     // Recomputed only when the sim moved or the card closed: the same frame gives the same problem.
-    const p = f === this.lastCoachFrame && this.cardOpen === this.lastCoachCard ? this.coach.problem : coachProblem(c);
+    const p =
+      f === this.lastCoachFrame && this.cardOpen === this.lastCoachCard
+        ? this.coach.problem
+        : coachProblem(c);
     this.lastCoachFrame = f;
     this.lastCoachCard = this.cardOpen;
     const out = stepCoach(this.coach, p, dt, f.paused || this.dragging);

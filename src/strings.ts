@@ -10,7 +10,11 @@ export interface Line {
 }
 
 export const LINES = {
-  'C0.tv.01': { kind: 'scene', speaker: 'TV downstairs', text: '...and Halation, we are five minutes from midnight!' },
+  'C0.tv.01': {
+    kind: 'scene',
+    speaker: 'TV downstairs',
+    text: '...and Halation, we are five minutes from midnight!',
+  },
   'C0.tv.02': {
     kind: 'scene',
     speaker: 'TV downstairs',
@@ -78,14 +82,42 @@ export const LINES = {
     speaker: 'TRIAGE (happy)',
     text: '30 coming, 60 of room. Look at all that room.',
   },
-  'C1.triage.nudge.place.1': { kind: 'bark', speaker: 'TRIAGE (eager)', text: "The tray's down there! Grab a SERVER card and drop it on the grid." },
-  'C1.triage.nudge.place.2': { kind: 'bark', speaker: 'TRIAGE (thinking)', text: "Lux? The block's still dark. A box goes on the grid first." },
+  'C1.triage.nudge.place.1': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: "The tray's down there! Grab a SERVER card and drop it on the grid.",
+  },
+  'C1.triage.nudge.place.2': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "Lux? The block's still dark. A box goes on the grid first.",
+  },
   'C1.lux.nudge.place': { kind: 'bark', speaker: 'Lux', text: 'Right. Server card, onto the table.' },
-  'C1.triage.nudge.feed.1': { kind: 'bark', speaker: 'TRIAGE (thinking)', text: "It's just sitting there. Is it plugged in? I don't think so." },
-  'C1.triage.nudge.feed.2': { kind: 'bark', speaker: 'TRIAGE (eager)', text: "Drag from the gateway onto the box. That's how the calls get in!" },
-  'C1.lux.nudge.feed': { kind: 'bark', speaker: 'Lux', text: "Don't forget to connect it. Gateway first, then the box." },
-  'C1.triage.nudge.store.1': { kind: 'bark', speaker: 'TRIAGE (thinking)', text: 'Calls go in... and stop. Where do they go after the box?' },
-  'C1.triage.nudge.store.2': { kind: 'bark', speaker: 'TRIAGE (eager)', text: 'Drag from the box onto the database! Gateway, box, database!' },
+  'C1.triage.nudge.feed.1': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "It's just sitting there. Is it plugged in? I don't think so.",
+  },
+  'C1.triage.nudge.feed.2': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: "Drag from the gateway onto the box. That's how the calls get in!",
+  },
+  'C1.lux.nudge.feed': {
+    kind: 'bark',
+    speaker: 'Lux',
+    text: "Don't forget to connect it. Gateway first, then the box.",
+  },
+  'C1.triage.nudge.store.1': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: 'Calls go in... and stop. Where do they go after the box?',
+  },
+  'C1.triage.nudge.store.2': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: 'Drag from the box onto the database! Gateway, box, database!',
+  },
   'C1.lux.nudge.store': { kind: 'bark', speaker: 'Lux', text: 'Connect it. Box to the database.' },
   'C2.banner.title': { kind: 'ui', speaker: 'Solace banner', text: 'SOLACE PRIORITY SERVICE' },
   'C2.banner.body': {
@@ -123,22 +155,38 @@ export const LINES = {
     text: "video keeps buffering, my son's on in 5",
   },
   'C3.chat.02': { kind: 'chat', speaker: 'block: kenji', text: 'heating alarm on 3rd floor beeping??' },
-  'C3.triage.01': { kind: 'bark', speaker: 'TRIAGE (eager)', text: "New toys! A bigger box, or a second box. Which one's more box?" },
+  'C3.triage.01': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: "New toys! A bigger box, or a second box. Which one's more box?",
+  },
   'C3.triage.02': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
     text: "It's on! Why is it doing nothing? Is it shy?",
   },
   'C3.lux.01': { kind: 'bark', speaker: 'Lux', text: 'The gateway only feeds one box.' },
-  'C3.triage.03': { kind: 'bark', speaker: 'TRIAGE (eager)', text: "Swapping in the big one... 3, 2, 1... it's huge now. 120!" },
+  'C3.triage.03': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: "Swapping in the big one... 3, 2, 1... it's huge now. 120!",
+  },
   'C3.triage.04': {
     kind: 'bark',
     speaker: 'TRIAGE (panicking)',
     text: "It's getting hot. Like, smell-it hot.",
   },
   'C3.chat.03': { kind: 'chat', speaker: 'stream: viewer', text: 'F' },
-  'C3.triage.nudge.choose.1': { kind: 'bark', speaker: 'TRIAGE (thinking)', text: 'Too much for one box! The tray has two ideas. Pick one!' },
-  'C3.triage.nudge.choose.2': { kind: 'bark', speaker: 'TRIAGE (thinking)', text: "Bigger box, or more boxes? I'm not saying. I'm pointing." },
+  'C3.triage.nudge.choose.1': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: 'Too much for one box! The tray has two ideas. Pick one!',
+  },
+  'C3.triage.nudge.choose.2': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "Bigger box, or more boxes? I'm not saying. I'm pointing.",
+  },
   'C3.triage.rewind': {
     kind: 'scene',
     speaker: 'TRIAGE (sheepish)',
@@ -185,7 +233,11 @@ export const LINES = {
   },
   'C4.chat.03': { kind: 'chat', speaker: 'block (system)', text: 'Mrs Okafor left the chat' },
   'C4.chat.04': { kind: 'chat', speaker: 'stream: viewer', text: 'is the stream frozen or is it just me' },
-  'C4.grandma.01': { kind: 'bark', speaker: 'Grandma (through the door)', text: 'Two minutes, love! Come down!' },
+  'C4.grandma.01': {
+    kind: 'bark',
+    speaker: 'Grandma (through the door)',
+    text: 'Two minutes, love! Come down!',
+  },
   'C4.lux.02': { kind: 'bark', speaker: 'Lux', text: "I can't hold this. I can't—" },
   'C5.triage.01': {
     kind: 'scene',
@@ -226,7 +278,11 @@ export const LINES = {
     speaker: 'Mika',
     text: 'One more thing. When it gets fast, hit this. Time slows down. You get it once.',
   },
-  'C5.triage.02': { kind: 'bark', speaker: 'TRIAGE (sheepish)', text: 'The big box cooked. The crew put a normal one back. Sorry, big box.' },
+  'C5.triage.02': {
+    kind: 'bark',
+    speaker: 'TRIAGE (sheepish)',
+    text: 'The big box cooked. The crew put a normal one back. Sorry, big box.',
+  },
   'C5.triage.03': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
@@ -240,12 +296,28 @@ export const LINES = {
     text: 'Look at the chart. Half of that is just heating your room.',
   },
   'C5.chat.01': { kind: 'chat', speaker: 'block: young father', text: "it's back!!!" },
-  'C5.triage.nudge.splitter': { kind: 'bark', speaker: 'TRIAGE (thinking)', text: "The gateway isn't feeding the splitter. Drag from one to the other!" },
+  'C5.triage.nudge.splitter': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "The gateway isn't feeding the splitter. Drag from one to the other!",
+  },
   'C5.lux.nudge.splitter': { kind: 'bark', speaker: 'Lux', text: 'Gateway into the splitter. Connect it.' },
-  'C5.triage.nudge.behind.1': { kind: 'bark', speaker: 'TRIAGE (thinking)', text: "That box isn't behind the splitter. Nothing reaches it." },
-  'C5.triage.nudge.behind.2': { kind: 'bark', speaker: 'TRIAGE (eager)', text: 'Drag from the splitter onto the box. Then the box to the database!' },
+  'C5.triage.nudge.behind.1': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: "That box isn't behind the splitter. Nothing reaches it.",
+  },
+  'C5.triage.nudge.behind.2': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: 'Drag from the splitter onto the box. Then the box to the database!',
+  },
   'C5.lux.nudge.behind': { kind: 'bark', speaker: 'Lux', text: 'Wire it behind the splitter.' },
-  'C5.triage.nudge.replace.1': { kind: 'bark', speaker: 'TRIAGE (sheepish)', text: 'That box cooked. Click it and press REPLACE, or drop a SERVER on it.' },
+  'C5.triage.nudge.replace.1': {
+    kind: 'bark',
+    speaker: 'TRIAGE (sheepish)',
+    text: 'That box cooked. Click it and press REPLACE, or drop a SERVER on it.',
+  },
   'C5.lux.nudge.replace': { kind: 'bark', speaker: 'Lux', text: 'Swap the dead box.' },
   'C5.rei.rewind': { kind: 'scene', speaker: 'Rei', text: 'Again. Slower.' },
   'C6.warn.01': {
@@ -325,7 +397,11 @@ export const LINES = {
     speaker: 'Sizing',
     text: "**Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one box did 60). **Back-of-the-envelope estimate** (flats times calls, before you build). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening).",
   },
-  'C8.terms.scaling': { kind: 'ui', speaker: 'Scaling', text: '**Scaling up** (the bigger box: quick, but it has a ceiling and goes dark while it swaps). **Scaling out** (more boxes). **Load balancer** with **health checks** (splits traffic, skips dark boxes). **Scaling down** (turning them off after).' },
+  'C8.terms.scaling': {
+    kind: 'ui',
+    speaker: 'Scaling',
+    text: '**Scaling up** (the bigger box: quick, but it has a ceiling and goes dark while it swaps). **Scaling out** (more boxes). **Load balancer** with **health checks** (splits traffic, skips dark boxes). **Scaling down** (turning them off after).',
+  },
   'C8.terms.failure': {
     kind: 'ui',
     speaker: 'Failure',
@@ -451,7 +527,11 @@ export const LINES = {
   'fill.stream.placed.02': { kind: 'stream', speaker: 'stream', text: "she's building it live lol" },
   'fill.stream.wired.01': { kind: 'stream', speaker: 'stream', text: 'cable management speedrun' },
   'fill.stream.wired.02': { kind: 'stream', speaker: 'stream', text: 'is that thing plugged in now' },
-  'fill.stream.overclock.01': { kind: 'stream', speaker: 'stream', text: "she's going for the big box?? brave" },
+  'fill.stream.overclock.01': {
+    kind: 'stream',
+    speaker: 'stream',
+    text: "she's going for the big box?? brave",
+  },
   'fill.stream.pay.01': { kind: 'stream', speaker: 'stream', text: 'she PAID solace?? lux no' },
   'fill.stream.ignore.01': { kind: 'stream', speaker: 'stream', text: 'solace ad skipped. respect' },
   'fill.stream.bin.01': { kind: 'stream', speaker: 'stream', text: 'binned the solace ad lmao' },

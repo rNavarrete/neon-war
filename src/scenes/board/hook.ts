@@ -222,6 +222,18 @@ export interface BoardTestState {
   };
   /** Each rewind so far: the sim second it happened and the challenge start it went back to. */
   rewinds: { at: number; to: number }[];
+  /**
+   * What the tutorial coach lights on the board now (bus `coach`), or null: the step, the tray
+   * cards and parts ringed, the connection to make, and its ghost wire's corners in page CSS pixels
+   * (null until drawn, or with no wire).
+   */
+  coach: {
+    step: string | null;
+    cards: string[];
+    parts: string[];
+    wire: { from: string; to: string } | null;
+    path: { x: number; y: number }[] | null;
+  } | null;
   selectedPart: string | null;
   selectedWire: string | null;
   cutButton: Point | null;

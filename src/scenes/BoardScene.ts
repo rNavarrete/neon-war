@@ -565,6 +565,15 @@ export class BoardScene extends Phaser.Scene {
   private readonly cf = { lower: 0, dy: -CABLE_DROP_PX, sway: 0, landed: false };
   private readonly pf = { along: 0, alpha: 0, radius: 0 };
   private offAction: (() => void) | null = null;
+  private offCoach: (() => void) | null = null;
+  /** What the tutorial coach lights now (bus `coach`), or null; drawn by drawCoach. */
+  private coachLit: GameEvents['coach'] | null = null;
+  private coachG!: Phaser.GameObjects.Graphics;
+  /** The coach's ghost wire along the grid, and the parts it was routed round. */
+  private coachPath: Point[] | null = null;
+  private coachPathLength = 0;
+  private coachPathFor: readonly Part[] | null = null;
+  private readonly coachDot = { x: 0, y: 0 };
   /** board-11: the board clock each wire was first laid on, and the last key the board consumed. */
   private wireBorn = new Map<string, number>();
   private lastKey: string | null = null;
@@ -773,6 +782,14 @@ export class BoardScene extends Phaser.Scene {
     this.offBus = bus.on('refused', ({ reason }) => this.showRefusal(reason));
     this.offAction?.();
     this.offAction = bus.on('action', (a) => this.onAction(a));
+    this.offCoach?.();
+    this.coachLit = null;
+    this.coachPathFor = null;
+    this.coachG = this.add.graphics().setDepth(6.4);
+    this.offCoach = bus.on('coach', (c) => {
+      this.coachLit = c.step !== null ? c : null;
+      this.coachPathFor = null;
+    });
     this.director?.destroy();
     this.director = new Director();
     // Where the comms band's leader line may point on the board (game px, made once): the
@@ -790,6 +807,8 @@ export class BoardScene extends Phaser.Scene {
       this.offBus = null;
       this.offAction?.();
       this.offAction = null;
+      this.offCoach?.();
+      this.offCoach = null;
       this.director?.destroy();
       this.director = null;
       this.glowProbe.clear();
@@ -1262,6 +1281,7 @@ export class BoardScene extends Phaser.Scene {
     this.stepSparks(dt, parts);
     if (!f.paused) this.playSounds(occ, parts);
     this.drawWait(wait, f.paused ? 0 : Math.min(seconds, 0.25));
+    this.drawCoach(parts, t, reduce);
     this.updateGhost(f);
     this.updatePlate(parts, f);
     this.placeButtons(parts);
@@ -1308,6 +1328,63 @@ export class BoardScene extends Phaser.Scene {
       }
     }
     v.warn.setVisible(look.warning && v.lit);
+  }
+
+  /**
+   * The tutorial coach's highlight (src/scenes/hud/coach.ts): a pulsing cyan ring round each tray
+   * card and part it names, and the connection to make as a ghost wire along the grid, dashes
+   * marching from the part that sends to the part that takes, an arrowhead at the end and a cube
+   * running it to show the way. Steady under reduce flicker. The route is found again only when the
+   * coach or the parts change.
+   */
+  private drawCoach(parts: readonly Part[], t: number, reduce: boolean): void {
+    const g = this.coachG;
+    g.clear();
+    const c = this.coachLit;
+    if (!c) return;
+    const a = reduce ? 0.9 : 0.55 + 0.45 * Math.abs(Math.sin(Math.PI * 1.2 * t));
+    for (let i = 0; i < c.cards.length; i++) {
+      const card = this.cards.find((k) => k.id === c.cards[i]);
+      if (!card) continue;
+      ringBox(g, card.x, card.y, card.w + 14, card.h + 14, a);
+    }
+    for (let i = 0; i < c.parts.length; i++) {
+      const p = partById(parts, c.parts[i]);
+      const b = p ? partBox(p) : null;
+      if (b) ringBox(g, b.x, b.y, b.w + 18, b.h + 18, a);
+    }
+    if (!c.wire) return;
+    if (this.coachPathFor !== parts) {
+      this.coachPathFor = parts;
+      const from = partById(parts, c.wire.from);
+      const to = partById(parts, c.wire.to);
+      this.coachPath = from && to ? wirePath(from, to, parts) : null;
+      this.coachPathLength = this.coachPath ? pathLength(this.coachPath) : 0;
+    }
+    const path = this.coachPath;
+    if (!path || path.length < 2) return;
+    const shift = reduce ? 0 : (t * 48) % 24;
+    g.lineStyle(10, CYAN, 0.18 * a);
+    for (let i = 1; i < path.length; i++) g.lineBetween(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y);
+    g.lineStyle(4, CYAN, a);
+    marchingDashes(g, path, 14, 10, shift);
+    // The arrowhead on the part that takes the wire.
+    const end = path[path.length - 1];
+    const prev = path[path.length - 2];
+    const ang = Math.atan2(end.y - prev.y, end.x - prev.x);
+    const s = 16;
+    g.fillStyle(CYAN, a).fillTriangle(
+      end.x,
+      end.y,
+      end.x - s * Math.cos(ang) + (s / 2) * Math.sin(ang),
+      end.y - s * Math.sin(ang) - (s / 2) * Math.cos(ang),
+      end.x - s * Math.cos(ang) - (s / 2) * Math.sin(ang),
+      end.y - s * Math.sin(ang) + (s / 2) * Math.cos(ang),
+    );
+    if (!reduce) {
+      pointAlong(path, this.coachPathLength, (t * 0.6) % 1, this.coachDot);
+      g.fillStyle(0xffffff, 0.9).fillCircle(this.coachDot.x, this.coachDot.y, 5);
+    }
   }
 
   /** The waits' port blink, the crew chip and the pool of tumbling cubes, made once. */
@@ -3277,6 +3354,18 @@ export class BoardScene extends Phaser.Scene {
         chip: this.crewText.visible ? this.crewText.text : null,
       },
       rewinds: f.rewinds.map((w) => ({ at: round(w.at), to: w.to })),
+      coach: this.coachLit
+        ? {
+            step: this.coachLit.step,
+            cards: [...this.coachLit.cards],
+            parts: [...this.coachLit.parts],
+            wire: this.coachLit.wire,
+            path:
+              this.coachLit.wire && this.coachPath && this.coachPathFor === f.parts
+                ? this.coachPath.map((p) => page(p.x, p.y))
+                : null,
+          }
+        : null,
       selectedPart: this.selectedPart,
       selectedWire: this.selectedWire,
       cutButton: this.cutBtn.visible ? page(this.cutBtn.x, this.cutBtn.y) : null,
@@ -3431,6 +3520,48 @@ const SPOT_CENTRES: readonly Point[] = SERVER_SPOTS.map((id) => {
 });
 
 /** A dashed straight line from `a` to `b`: `dash` px drawn, `gap` px skipped. */
+/** A pulsing highlight ring (an outer glow and a crisp edge) round a box centred on (x, y). */
+function ringBox(
+  g: Phaser.GameObjects.Graphics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  a: number,
+): void {
+  g.lineStyle(10, CYAN, 0.22 * a).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 14);
+  g.lineStyle(3, CYAN, a).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 14);
+}
+
+/** Dashes along a whole path, shifted `offset` px forward so they march toward its end. */
+function marchingDashes(
+  g: Phaser.GameObjects.Graphics,
+  path: readonly Point[],
+  dash: number,
+  gap: number,
+  offset: number,
+): void {
+  const period = dash + gap;
+  let run = -offset;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len <= 0) continue;
+    const ux = (b.x - a.x) / len;
+    const uy = (b.y - a.y) / len;
+    // The first dash on this segment starts where the pattern left off on the last one.
+    let d = ((-run % period) + period) % period;
+    if (d > gap) d -= period;
+    for (; d < len; d += period) {
+      const s0 = Math.max(0, d);
+      const s1 = Math.min(len, d + dash);
+      if (s1 > s0) g.lineBetween(a.x + ux * s0, a.y + uy * s0, a.x + ux * s1, a.y + uy * s1);
+    }
+    run += len;
+  }
+}
+
 function dashedLine(g: Phaser.GameObjects.Graphics, a: Point, b: Point, dash: number, gap: number): void {
   const len = Math.hypot(b.x - a.x, b.y - a.y);
   if (len <= 0) return;

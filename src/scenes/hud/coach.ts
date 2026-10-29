@@ -142,7 +142,9 @@ export function coachProblem(f: CoachInput): CoachProblem | null {
     if (p.kind === 'balancer' && lb === null) lb = p;
   }
   if (servers.length === 0) {
-    return f.waitingForFirstBuild || f.now < C.c2 ? problem('place', 'place', ['server'], NO_IDS, null) : null;
+    return f.waitingForFirstBuild || f.now < C.c2
+      ? problem('place', 'place', ['server'], NO_IDS, null)
+      : null;
   }
   const live = servers.filter((s) => !f.dead.includes(s.id));
   const fedFrom = lb ?? null;
@@ -151,7 +153,15 @@ export function coachProblem(f: CoachInput): CoachProblem | null {
   if (lb) {
     // After the crew: gateway into the splitter, the splitter into every box, every box on to the database.
     if (gwTo !== lb.id)
-      return problem('feed', `feed:${lb.id}`, NO_IDS, [lb.id], { from: 'gateway', to: lb.id }, FEED_SPLITTER, 'C5.alert.splitter');
+      return problem(
+        'feed',
+        `feed:${lb.id}`,
+        NO_IDS,
+        [lb.id],
+        { from: 'gateway', to: lb.id },
+        FEED_SPLITTER,
+        'C5.alert.splitter',
+      );
   } else if (gwTo === null) {
     // Before the crew: the gateway feeds one box. Point at the box already wired to the database if
     // there is one, else the first one placed.
@@ -234,7 +244,12 @@ export interface CoachStepResult {
  * runs only while the board runs (a card, a scene or the pause menu stop it), restarts when the
  * problem changes, and says a nudge when one is due. Returns `s` itself when nothing changed.
  */
-export function stepCoach(s: CoachState, p: CoachProblem | null, dt: number, paused: boolean): CoachStepResult {
+export function stepCoach(
+  s: CoachState,
+  p: CoachProblem | null,
+  dt: number,
+  paused: boolean,
+): CoachStepResult {
   if (p === null) {
     if (s.problem === null) return { state: s, nudge: null };
     return { state: { ...NEW_COACH, said: s.said }, nudge: null };
