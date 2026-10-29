@@ -71,7 +71,7 @@ export function project(u: number, v: number): Point {
  */
 export const PART_SIZE: Readonly<Record<PartKind, { w: number; h: number }>> = {
   gateway: { w: 110, h: 190 },
-  balancer: { w: 140, h: 100 },
+  balancer: { w: 140, h: 145 },
   server: { w: 80, h: 114 },
   database: { w: 150, h: 140 },
 };
