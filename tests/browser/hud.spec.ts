@@ -189,12 +189,26 @@ test('the surge, the laundry cut, the dip flicker, the rescue, the midnight fore
     expect(h.surge?.line).toBe('C4.warn.01');
   });
 
-  // The dip's 2 s warning lands while the laundry cut is being taken: watch for it from here on.
+  // The dip's 2 s warning lands while the laundry cut is being taken, and at speed 5 it is up for
+  // under half a real second, so a poll from here can miss it behind a screenshot. The page itself
+  // keeps the first frame's HUD snapshot that carries it.
+  await page.evaluate(() => {
+    const w = window as unknown as { __dipSeen?: unknown };
+    w.__dipSeen = null;
+    const watch = (): void => {
+      const h = window.__neonTest?.state.hud as unknown as { dip?: unknown } | undefined;
+      if (h?.dip) w.__dipSeen = JSON.parse(JSON.stringify(h));
+      else requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+  });
   const dipSeen = (async () => {
     for (const end = Date.now() + 90_000; Date.now() < end;) {
-      const n = await hud(page);
-      if (n.dip) return n;
-      await page.waitForTimeout(25);
+      const n = await page.evaluate(
+        () => (window as unknown as { __dipSeen?: unknown }).__dipSeen as HudTestState | null,
+      );
+      if (n) return n;
+      await page.waitForTimeout(100);
     }
     return null;
   })();
