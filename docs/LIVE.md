@@ -235,7 +235,7 @@ against `src/game/bus.ts`):
 | `cue` | HudScene's host loop (above) | `{id, kind, at}` |
 | `audience` | ChatFeedView (above) | `{watching}` |
 | `coach` | HudScene, when what the tutorial coach lights changes (`src/scenes/hud/coach.ts`) | `{step, cards, parts, wire, hint}` |
-| `coachNudge` | HudScene, when the coach says a nudge (it also goes to the comms band) | `{step, id, at}` |
+| `coachNudge` | HudScene, when the coach says a nudge (it also goes to the comms band); `nth` counts from 1 per problem | `{step, id, nth, at}` |
 | `perfSample` | HudScene, once per perf sample | `{at, fps, objects, texts, graphics}` |
 
 ### Hook sections

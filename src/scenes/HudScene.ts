@@ -32,6 +32,7 @@ import {
   coachHint,
   coachLit,
   coachProblem,
+  quietCoach,
   stepCoach,
 } from './hud/coach';
 import { type HudBounds, type HudTestState, type PagePoint, hudSection } from './hud/hook';
@@ -255,8 +256,13 @@ export class HudScene extends Phaser.Scene {
       }),
       bus.on('drag', (d) => {
         this.dragging = d.kind !== null;
+        // Picking something up or letting go is the player trying: the coach holds its next nudge.
+        this.coach = quietCoach(this.coach);
       }),
     );
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
+      this.coach = quietCoach(this.coach);
+    });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       for (const off of this.unsubscribe) off();
       this.unsubscribe = [];
@@ -574,7 +580,12 @@ export class HudScene extends Phaser.Scene {
     if (out.nudge) {
       this.coachSaid.push(out.nudge);
       this.comms?.enqueue(out.nudge);
-      bus.emit('coachNudge', { step: out.state.problem?.step ?? '', id: out.nudge, at: this.clock });
+      bus.emit('coachNudge', {
+        step: out.state.problem?.step ?? '',
+        id: out.nudge,
+        nth: out.state.nudges,
+        at: this.clock,
+      });
     }
     const shown = coachLit(this.coach) && this.coach.problem ? this.coach.problem.key : null;
     if (shown !== this.coachShown) this.publishCoach(shown);

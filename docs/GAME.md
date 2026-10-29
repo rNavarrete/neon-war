@@ -94,9 +94,17 @@ first-timer gets stuck (`src/scenes/hud/coach.ts`) and helps more the longer it 
 | C3: the one box over its limit, dropping calls    | the BIGGER BOX and SERVER cards (never which)    | (nothing: the forecast is up)             |
 
 The highlight comes after 3 s stuck (4 s for the first server), the first nudge after 6 s (8 s; 4 s in C3), then
-a nudge every 9 s, each a little more direct, from TRIAGE or Lux. The ghost wire marches toward the part that
-takes it. The coach waits while a card or wire is in hand and while the board is held. Nudges explain how the
-board works; they never give a number or a sizing answer. The chat reacts to them too.
+the next nudges 9 s and 12 s later, each a little more direct, from TRIAGE or Lux. After that only the most direct
+one comes back, every 25 s, while the highlight and band hint stay up. The ghost wire marches toward the part
+that takes it. The coach waits while a card or wire is in hand and while the board is held, and a nudge never
+comes within 5 s of the player's last drag or click (they are trying). Nudges are ten words or fewer, explain
+how the board works, and never give a number or a sizing answer. The chat reacts to the first nudge for each
+problem only.
+
+Why this shape: Plants vs. Zombies' tutorial (George Fan, GDC 2012) helps only the player doing the wrong
+thing, keeps help passive and short, and warns that noise teaches players to ignore every message; Navi
+("Hey! Listen!") is the standard warning about a helper who repeats on a timer; Valve's Portal playtests
+found players wanted GLaDOS, but not talking while they worked the puzzle.
 
 ## Rules and numbers
 

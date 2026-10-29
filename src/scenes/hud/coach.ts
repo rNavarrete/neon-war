@@ -2,8 +2,15 @@
 // 0 is the player's first look at the board, so the coach watches for the moments a first-timer gets
 // stuck and helps in three steps that grow with time: the thing to touch lights up (a tray card, a
 // part, or a dashed ghost wire along the grid between the two parts to connect), the alert band says
-// the step in a few words, and TRIAGE or Lux nudge out loud, again every few seconds, each nudge a
-// little more direct than the last.
+// the step in a few words, and TRIAGE or Lux nudge out loud, each nudge a little more direct than the
+// last, further apart each time, and then only the most direct one, now and then.
+//
+// Why this shape (research, 29 Oct 2026): Plants vs. Zombies' tutorial (George Fan, GDC 2012) shows
+// help only to the player doing the wrong thing, keeps it passive (never stops the game) and short,
+// and warns that noise teaches players to ignore every message. Navi ("Hey! Listen!") is the classic
+// warning about a helper who repeats herself on a timer. Valve's Portal playtests found players
+// wanted GLaDOS, but not talking while they worked the puzzle. So the visual cue comes first and
+// stays, the voice backs off, and it waits while the player is busy trying.
 //
 // What counts as stuck (coachProblem, in priority order):
 //   place   no server on the board in C1
@@ -69,8 +76,12 @@ export const COACH_TIMING = Object.freeze({
   highlightAfter: 3,
   /** Seconds stuck before the first nudge. */
   firstNudge: 6,
-  /** Seconds between nudges after that. */
-  repeat: 9,
+  /** Seconds between the nudges after that, one per gap; past the last gap, `repeat`. */
+  gaps: [9, 12] as readonly number[],
+  /** Seconds between reminders once every nudge has been said (the most direct one, again). */
+  repeat: 25,
+  /** A nudge never comes sooner than this after the player's last drag or click on the board. */
+  quietAfterInput: 5,
 });
 
 /** Steps whose highlight and first nudge come at other times than COACH_TIMING's. */
@@ -81,7 +92,7 @@ const STEP_TIMING: Readonly<Partial<Record<CoachStep, { highlightAfter: number; 
   choose: { highlightAfter: 3, firstNudge: 4 },
 };
 
-/** The nudges for each step, gentlest first; past the last, the last two take turns. */
+/** The nudges for each step, gentlest first; past the last, the last one comes back now and then. */
 export const NUDGES: Readonly<Record<CoachStep, readonly LineId[]>> = {
   place: ['C1.triage.nudge.place.1', 'C1.triage.nudge.place.2', 'C1.lux.nudge.place'],
   feed: ['C1.triage.nudge.feed.1', 'C1.triage.nudge.feed.2', 'C1.lux.nudge.feed'],
@@ -225,12 +236,26 @@ function timingOf(step: CoachStep): { highlightAfter: number; firstNudge: number
   return STEP_TIMING[step] ?? COACH_TIMING;
 }
 
-/** The nudge to say as the `n`th (0-based) for a problem: down the list, then the last two in turn. */
+/** The nudge to say as the `n`th (0-based) for a problem: down the list, then the last one again. */
 export function nudgeFor(p: CoachProblem, n: number): LineId {
   const list = p.lines;
-  if (n < list.length) return list[n];
-  if (list.length < 2) return list[list.length - 1];
-  return list[list.length - 2 + ((n - list.length) % 2)];
+  return list[Math.min(n, list.length - 1)];
+}
+
+/** Seconds from the `n`th nudge (0-based) to the next one. */
+export function gapAfter(n: number): number {
+  const g = COACH_TIMING.gaps;
+  return n < g.length ? g[n] : COACH_TIMING.repeat;
+}
+
+/**
+ * The player just dragged or clicked on the board: they are trying, so the next nudge waits until
+ * at least COACH_TIMING.quietAfterInput seconds from now. The highlight is left as it is.
+ */
+export function quietCoach(s: CoachState): CoachState {
+  if (s.problem === null) return s;
+  const earliest = s.stuckFor + COACH_TIMING.quietAfterInput;
+  return s.nextNudge >= earliest ? s : { ...s, nextNudge: earliest };
 }
 
 export interface CoachStepResult {
@@ -269,7 +294,7 @@ export function stepCoach(
       problem: p,
       stuckFor,
       nudges: s.nudges + 1,
-      nextNudge: stuckFor + COACH_TIMING.repeat,
+      nextNudge: stuckFor + gapAfter(s.nudges),
       said: s.said + 1,
     },
     nudge,

@@ -6,7 +6,11 @@ import {
   coachHint,
   coachLit,
   coachProblem,
+  FEED_SPLITTER,
+  gapAfter,
+  NUDGES,
   nudgeFor,
+  quietCoach,
   stepCoach,
 } from '../src/scenes/hud/coach';
 import { LINES } from '../src/strings';
@@ -203,24 +207,40 @@ describe('stepCoach: help that grows with time', () => {
     expect(at8.state.nudges).toBe(1);
   });
 
-  it('nudges again every 9 s, more directly each time, then the last two take turns', () => {
+  it('nudges further apart each time, more directly, then only the most direct one every 25 s', () => {
     let s = stepCoach(NEW_COACH, feed, 0, false).state;
-    const said: (string | null)[] = [];
-    for (let i = 0; i < 60 * 10; i++) {
+    const said: [number, string][] = [];
+    for (let i = 1; i <= 90 * 10; i++) {
       const out = stepCoach(s, feed, 0.1, false);
       s = out.state;
-      if (out.nudge) said.push(out.nudge);
+      if (out.nudge) said.push([Math.round(i) / 10, out.nudge]);
     }
-    // 6, 15, 24, 33, 42, 51 and 60 s.
     expect(said).toEqual([
-      'C1.triage.nudge.feed.1',
-      'C1.triage.nudge.feed.2',
-      'C1.lux.nudge.feed',
-      'C1.triage.nudge.feed.2',
-      'C1.lux.nudge.feed',
-      'C1.triage.nudge.feed.2',
-      'C1.lux.nudge.feed',
+      [6, 'C1.triage.nudge.feed.1'],
+      [15, 'C1.triage.nudge.feed.2'],
+      [27, 'C1.lux.nudge.feed'],
+      [52, 'C1.lux.nudge.feed'],
+      [77, 'C1.lux.nudge.feed'],
     ]);
+  });
+
+  it('gapAfter: 9 s, then 12 s, then 25 s from then on', () => {
+    expect([0, 1, 2, 3, 10].map(gapAfter)).toEqual([9, 12, 25, 25, 25]);
+  });
+
+  it('a drag or click holds the next nudge to 5 s after it, and leaves the highlight lit', () => {
+    let s = stepCoach(NEW_COACH, feed, 0, false).state;
+    s = stepCoach(s, feed, 5, false).state;
+    expect(coachLit(s)).toBe(true);
+    s = quietCoach(s);
+    expect(s.nextNudge).toBe(10);
+    expect(coachLit(s)).toBe(true);
+    expect(stepCoach(s, feed, 4.9, false).nudge).toBe(null);
+    expect(stepCoach(s, feed, 5, false).nudge).toBe('C1.triage.nudge.feed.1');
+    // A nudge already further off than that is left alone, and no problem means nothing to hold.
+    const far = { ...s, nextNudge: 30 };
+    expect(quietCoach(far)).toBe(far);
+    expect(quietCoach(NEW_COACH)).toBe(NEW_COACH);
   });
 
   it('the clock stands still while the board is held or a drag is in hand', () => {
@@ -244,11 +264,11 @@ describe('stepCoach: help that grows with time', () => {
     expect(cleared.said).toBe(1);
   });
 
-  it('nudgeFor walks the list and then alternates the last two', () => {
+  it('nudgeFor walks the list and then stays on the last, most direct one', () => {
     expect(nudgeFor(place, 0)).toBe('C1.triage.nudge.place.1');
     expect(nudgeFor(place, 2)).toBe('C1.lux.nudge.place');
-    expect(nudgeFor(place, 3)).toBe('C1.triage.nudge.place.2');
-    expect(nudgeFor(place, 4)).toBe('C1.lux.nudge.place');
+    expect(nudgeFor(place, 3)).toBe('C1.lux.nudge.place');
+    expect(nudgeFor(place, 9)).toBe('C1.lux.nudge.place');
   });
 });
 
@@ -267,10 +287,15 @@ describe('the nudges themselves', () => {
     expect(ids.map((id) => LINES[id].text.length <= 70)).toEqual([true, true, true, true, true, true, true]);
   });
 
+  it('are ten words or fewer, every one (short enough to read at a glance mid-drag)', () => {
+    const all = [...Object.values(NUDGES).flat(), ...FEED_SPLITTER];
+    expect(all.length).toBe(18);
+    const long = all.filter((id) => LINES[id].text.split(/\s+/).length > 10);
+    expect(long).toEqual([]);
+  });
+
   it('never give a number in C3: TRIAGE points, the player picks', () => {
-    expect(LINES['C3.triage.nudge.choose.1'].text).toBe(
-      'Too much for one box! The tray has two ideas. Pick one!',
-    );
+    expect(LINES['C3.triage.nudge.choose.1'].text).toBe('Too much for one box! The tray has two ideas.');
     expect(LINES['C3.triage.nudge.choose.2'].text).toBe(
       "Bigger box, or more boxes? I'm not saying. I'm pointing.",
     );

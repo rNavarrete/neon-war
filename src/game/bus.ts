@@ -128,7 +128,7 @@ export interface GameEvents {
     hint: LineId | null;
   };
   /** The coach said a nudge (it also goes to the comms band); the chat reacts to it. */
-  coachNudge: { step: string; id: LineId; at: number };
+  coachNudge: { step: string; id: LineId; nth: number; at: number };
   /** One sample of the frame budget: the frame rate and what is on the display lists; `at` is the HUD clock. */
   perfSample: { at: number; fps: number; objects: number; texts: number; graphics: number };
 }

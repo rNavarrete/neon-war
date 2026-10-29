@@ -85,23 +85,23 @@ export const LINES = {
   'C1.triage.nudge.place.1': {
     kind: 'bark',
     speaker: 'TRIAGE (eager)',
-    text: "The tray's down there! Grab a SERVER card and drop it on the grid.",
+    text: 'SERVER card, from the tray, onto the grid. Go on!',
   },
   'C1.triage.nudge.place.2': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
-    text: "Lux? The block's still dark. A box goes on the grid first.",
+    text: 'Lux? Still dark. A box goes on the grid first.',
   },
   'C1.lux.nudge.place': { kind: 'bark', speaker: 'Lux', text: 'Right. Server card, onto the table.' },
   'C1.triage.nudge.feed.1': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
-    text: "It's just sitting there. Is it plugged in? I don't think so.",
+    text: "It's just sitting there. Is it even plugged in?",
   },
   'C1.triage.nudge.feed.2': {
     kind: 'bark',
     speaker: 'TRIAGE (eager)',
-    text: "Drag from the gateway onto the box. That's how the calls get in!",
+    text: 'Drag from the gateway onto the box. Calls get in!',
   },
   'C1.lux.nudge.feed': {
     kind: 'bark',
@@ -111,7 +111,7 @@ export const LINES = {
   'C1.triage.nudge.store.1': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
-    text: 'Calls go in... and stop. Where do they go after the box?',
+    text: 'Calls go in... and stop. Where do they go next?',
   },
   'C1.triage.nudge.store.2': {
     kind: 'bark',
@@ -180,7 +180,7 @@ export const LINES = {
   'C3.triage.nudge.choose.1': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
-    text: 'Too much for one box! The tray has two ideas. Pick one!',
+    text: 'Too much for one box! The tray has two ideas.',
   },
   'C3.triage.nudge.choose.2': {
     kind: 'bark',
@@ -299,7 +299,7 @@ export const LINES = {
   'C5.triage.nudge.splitter': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
-    text: "The gateway isn't feeding the splitter. Drag from one to the other!",
+    text: "Gateway's not feeding the splitter. Drag one onto the other!",
   },
   'C5.lux.nudge.splitter': { kind: 'bark', speaker: 'Lux', text: 'Gateway into the splitter. Connect it.' },
   'C5.triage.nudge.behind.1': {
@@ -310,13 +310,13 @@ export const LINES = {
   'C5.triage.nudge.behind.2': {
     kind: 'bark',
     speaker: 'TRIAGE (eager)',
-    text: 'Drag from the splitter onto the box. Then the box to the database!',
+    text: 'Splitter onto the box. Then box onto the database!',
   },
   'C5.lux.nudge.behind': { kind: 'bark', speaker: 'Lux', text: 'Wire it behind the splitter.' },
   'C5.triage.nudge.replace.1': {
     kind: 'bark',
     speaker: 'TRIAGE (sheepish)',
-    text: 'That box cooked. Click it and press REPLACE, or drop a SERVER on it.',
+    text: 'That box cooked! Click it, then press REPLACE.',
   },
   'C5.lux.nudge.replace': { kind: 'bark', speaker: 'Lux', text: 'Swap the dead box.' },
   'C5.rei.rewind': { kind: 'scene', speaker: 'Rei', text: 'Again. Slower.' },

@@ -346,7 +346,8 @@ export class ChatFeed {
         this.pending.push({ kind: 'line', id: l.id, lesson: isLesson(l.id) });
       }),
       bus.on('coachNudge', (n) => {
-        this.pending.push({ kind: 'coach', step: n.step });
+        // Only the first nudge for a problem: chat piling on every reminder is noise.
+        if (n.nth === 1) this.pending.push({ kind: 'coach', step: n.step });
       }),
       bus.on('action', (a) => {
         if (a.type === 'overclock') this.pending.push({ kind: 'action', type: 'overclock' });

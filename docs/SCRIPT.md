@@ -57,15 +57,15 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C1.chat.01 | chat | block: mrs okafor | server goes live | It's back! Bless you Lux |
 | C1.chat.02 | chat | stream: viewer | server goes live | first try lol |
 | C1.triage.06 | bark | TRIAGE (happy) | 10 s at 30 against 60 | "30 coming, 60 of room. Look at all that room." |
-| C1.triage.nudge.place.1 | bark | TRIAGE (eager) | coach: no server on the grid 8 s after the card closes, SERVER card lit | "The tray's down there! Grab a SERVER card and drop it on the grid." |
-| C1.triage.nudge.place.2 | bark | TRIAGE (thinking) | coach: still no server, 9 s later | "Lux? The block's still dark. A box goes on the grid first." |
-| C1.lux.nudge.place | bark | Lux | coach: still no server, 9 s later (then the last two take turns) | "Right. Server card, onto the table." |
-| C1.triage.nudge.feed.1 | bark | TRIAGE (thinking) | coach: a server the gateway does not feed, ghost wire lit | "It's just sitting there. Is it plugged in? I don't think so." |
-| C1.triage.nudge.feed.2 | bark | TRIAGE (eager) | coach: still not fed, 9 s later | "Drag from the gateway onto the box. That's how the calls get in!" |
-| C1.lux.nudge.feed | bark | Lux | coach: still not fed, 9 s later | "Don't forget to connect it. Gateway first, then the box." |
-| C1.triage.nudge.store.1 | bark | TRIAGE (thinking) | coach: a fed server with no wire to the database, ghost wire lit | "Calls go in... and stop. Where do they go after the box?" |
+| C1.triage.nudge.place.1 | bark | TRIAGE (eager) | coach: no server on the grid 8 s after the card closes, SERVER card lit | "SERVER card, from the tray, onto the grid. Go on!" |
+| C1.triage.nudge.place.2 | bark | TRIAGE (thinking) | coach: still no server, 9 s later | "Lux? Still dark. A box goes on the grid first." |
+| C1.lux.nudge.place | bark | Lux | coach: still no server, 12 s later (then again every 25 s while stuck) | "Right. Server card, onto the table." |
+| C1.triage.nudge.feed.1 | bark | TRIAGE (thinking) | coach: a server the gateway does not feed, ghost wire lit | "It's just sitting there. Is it even plugged in?" |
+| C1.triage.nudge.feed.2 | bark | TRIAGE (eager) | coach: still not fed, 9 s later | "Drag from the gateway onto the box. Calls get in!" |
+| C1.lux.nudge.feed | bark | Lux | coach: still not fed, 12 s later (then again every 25 s) | "Don't forget to connect it. Gateway first, then the box." |
+| C1.triage.nudge.store.1 | bark | TRIAGE (thinking) | coach: a fed server with no wire to the database, ghost wire lit | "Calls go in... and stop. Where do they go next?" |
 | C1.triage.nudge.store.2 | bark | TRIAGE (eager) | coach: still no database wire, 9 s later | "Drag from the box onto the database! Gateway, box, database!" |
-| C1.lux.nudge.store | bark | Lux | coach: still no database wire, 9 s later | "Connect it. Box to the database." |
+| C1.lux.nudge.store | bark | Lux | coach: still no database wire, 12 s later (then again every 25 s) | "Connect it. Box to the database." |
 
 ### C2 The Solace banner
 
@@ -94,8 +94,8 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C3.triage.03 | bark | TRIAGE (eager) | player swaps in the bigger box | "Swapping in the big one... 3, 2, 1... it's huge now. 120!" |
 | C3.triage.04 | bark | TRIAGE (panicking) | server over 100% for 4 s | "It's getting hot. Like, smell-it hot." |
 | C3.chat.03 | chat | stream: viewer | server dies | F |
-| C3.triage.nudge.choose.1 | bark | TRIAGE (thinking) | coach: the one box over its limit and dropping calls, both tray cards lit | "Too much for one box! The tray has two ideas. Pick one!" |
-| C3.triage.nudge.choose.2 | bark | TRIAGE (thinking) | coach: still over, 9 s later | "Bigger box, or more boxes? I'm not saying. I'm pointing." |
+| C3.triage.nudge.choose.1 | bark | TRIAGE (thinking) | coach: the one box over its limit and dropping calls, both tray cards lit | "Too much for one box! The tray has two ideas." |
+| C3.triage.nudge.choose.2 | bark | TRIAGE (thinking) | coach: still over, 9 s later (then again every 25 s) | "Bigger box, or more boxes? I'm not saying. I'm pointing." |
 | C3.triage.rewind | scene | TRIAGE (sheepish) | a failure in C1 to C3 | "I recorded the last minute. Want to try that again?" |
 | C3.lux.rewind | scene | Lux | rewind accepted | "Yeah. Rewind." |
 
@@ -164,13 +164,13 @@ while the sim is frozen; the lines after it are barks.
 | C5.ozzie.04 | bark | Ozzie | 5 or more servers | "See? Six. Sleep tonight." |
 | C5.mika.05 | bark | Mika | 5 or more servers | "Look at the chart. Half of that is just heating your room." |
 | C5.chat.01 | chat | block: young father | errors stop | it's back!!! |
-| C5.triage.nudge.splitter | bark | TRIAGE (thinking) | coach: the gateway does not feed the splitter, ghost wire lit | "The gateway isn't feeding the splitter. Drag from one to the other!" |
-| C5.lux.nudge.splitter | bark | Lux | coach: still not fed, 9 s later | "Gateway into the splitter. Connect it." |
+| C5.triage.nudge.splitter | bark | TRIAGE (thinking) | coach: the gateway does not feed the splitter, ghost wire lit | "Gateway's not feeding the splitter. Drag one onto the other!" |
+| C5.lux.nudge.splitter | bark | Lux | coach: still not fed, 9 s later (then again every 25 s) | "Gateway into the splitter. Connect it." |
 | C5.triage.nudge.behind.1 | bark | TRIAGE (thinking) | coach: a server outside the splitter, ghost wire lit | "That box isn't behind the splitter. Nothing reaches it." |
-| C5.triage.nudge.behind.2 | bark | TRIAGE (eager) | coach: still outside, 9 s later | "Drag from the splitter onto the box. Then the box to the database!" |
-| C5.lux.nudge.behind | bark | Lux | coach: still outside, 9 s later | "Wire it behind the splitter." |
-| C5.triage.nudge.replace.1 | bark | TRIAGE (sheepish) | coach: a dead box waiting to be swapped, the box lit | "That box cooked. Click it and press REPLACE, or drop a SERVER on it." |
-| C5.lux.nudge.replace | bark | Lux | coach: still dead, 9 s later | "Swap the dead box." |
+| C5.triage.nudge.behind.2 | bark | TRIAGE (eager) | coach: still outside, 9 s later | "Splitter onto the box. Then box onto the database!" |
+| C5.lux.nudge.behind | bark | Lux | coach: still outside, 12 s later (then again every 25 s) | "Wire it behind the splitter." |
+| C5.triage.nudge.replace.1 | bark | TRIAGE (sheepish) | coach: a dead box waiting to be swapped, the box lit | "That box cooked! Click it, then press REPLACE." |
+| C5.lux.nudge.replace | bark | Lux | coach: still dead, 9 s later (then again every 25 s) | "Swap the dead box." |
 
 ### Rewind after the crew arrives
 
