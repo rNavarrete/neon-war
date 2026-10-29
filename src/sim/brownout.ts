@@ -1,19 +1,19 @@
 // Session 0 (Brownout): every number from docs/GAME.md's "Rules and numbers" and "Flow", in one
 // object so Rolando can tune them by playing. No other file in src/sim/ hard-codes these numbers;
-// the rules read them from here. Times are seconds since the session clock opened at 23:51:30.
+// the rules read them from here. Times are seconds since the session clock opened at 23:54:25.
 
 import type { BoardRules } from './board';
 
 export const BROWNOUT = {
   clock: {
-    opensAt: '23:51:30',
+    opensAt: '23:54:25',
     secondsPerMinute: 60,
-    /** Seconds since the clock opened when midnight lands (8:30 in). */
-    midnight: 510,
+    /** Seconds since the clock opened when midnight lands (5:35 in; Rolando 29 Oct 2026: fewer dead stretches). */
+    midnight: 335,
   },
 
   /** When each challenge starts, from GAME.md's Flow table. */
-  challenges: { c0: 0, c1: 15, c2: 90, c3: 180, c4: 300, c5: 360, c6: 450, c7: 510, c8: 540 },
+  challenges: { c0: 0, c1: 15, c2: 45, c3: 90, c4: 165, c5: 215, c6: 275, c7: 335, c8: 365 },
 
   block: { flats: 120, callEverySeconds: 4 },
 
@@ -27,7 +27,7 @@ export const BROWNOUT = {
   demand: {
     /** Evening climb (C3): ramps from the block's base to this over climbRampSeconds, then holds. */
     climb: 90,
-    climbRampSeconds: 60,
+    climbRampSeconds: 45,
     /** District surge (C4). */
     surge: 250,
     surgeWithRetries: 375,
@@ -66,7 +66,7 @@ export const BROWNOUT = {
   retries: { maxDemandRise: 0.5, risePerSecond: 0.05, fallPerSecond: 0.1 },
   powerDip: { warningSeconds: 2, darkSeconds: 20, beforeMidnightSeconds: 10 },
   regroup: { speed: 0.25, seconds: 10, charges: 1 },
-  rescue: { trustBelow: 30, surgeSeconds: 45 },
+  rescue: { trustBelow: 30, surgeSeconds: 40 },
   finalSizing: { holds: 4, holdsWithFastReplacement: 3, drops: 2, waste: 5 },
   /** The C4 script: the power dip takes the overclocked server dark this long into the surge (a draft). */
   surgeScript: { dipAfterSeconds: 5 },

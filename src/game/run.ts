@@ -96,7 +96,7 @@ export class Run {
     return this.play.session;
   }
 
-  /** Seconds since the clock opened at 23:51:30. Setting it jumps the clock (the cold open hands over at C1). */
+  /** Seconds since the clock opened at 23:54:25. Setting it jumps the clock (the cold open hands over at C1). */
   get now(): number {
     return this.play.t;
   }
@@ -258,7 +258,7 @@ export class Run {
     return this.apply(rewind(this.play), () => {});
   }
 
-  /** In-world clock at `now`, as hh:mm:ss (23:51:30 at 0, 00:00:00 at midnight). */
+  /** In-world clock at `now`, as hh:mm:ss (23:54:25 at 0, 00:00:00 at midnight). */
   clock(now = this.now): string {
     const [h, m, s] = BROWNOUT.clock.opensAt.split(':').map(Number);
     const total = (((h * 3600 + m * 60 + s + Math.floor(now)) % 86400) + 86400) % 86400;

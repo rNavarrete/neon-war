@@ -1,6 +1,6 @@
 // Session 0's bad weather: overheating, retries, power dips, the laundry-floor cut, the rescue
 // trigger and the midnight sizing table. Pure functions over plain data; time comes in as `now` or
-// `dt` (seconds since the clock opened at 23:51:30). Every number comes from BROWNOUT.
+// `dt` (seconds since the clock opened at 23:54:25). Every number comes from BROWNOUT.
 
 import { type Board, type BoardRules, type Flow, type Part, capacityOf } from './board';
 import { BROWNOUT } from './brownout';

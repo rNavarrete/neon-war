@@ -9,7 +9,7 @@ export function secondsToMidnight(now: number, midnight: number = BROWNOUT.clock
 }
 
 /**
- * An hh:mm:ss in-world clock as the player reads it, in 12-hour time: '23:51:45' is '11:51:45 PM',
+ * An hh:mm:ss in-world clock as the player reads it, in 12-hour time: '23:54:40' is '11:54:40 PM',
  * '00:00:00' is '12:00:00 AM' (Rolando, 28 Oct 2026: no 24-hour clock on screen).
  */
 export function twelveHour(hms: string): string {

@@ -25,7 +25,7 @@ export interface FallForecast {
 
 export interface Frame {
   // ---- the clock ----
-  /** Sim seconds since the clock opened at 23:51:30. */
+  /** Sim seconds since the clock opened at 23:54:25. */
   readonly now: number;
   /** The in-world clock as hh:mm:ss. */
   readonly clock: string;

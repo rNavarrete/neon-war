@@ -1,5 +1,5 @@
 // Session 0's demand schedule and the estimate, as pure functions of the session clock.
-// t is seconds since the clock opened at 23:51:30; every number comes from BROWNOUT.
+// t is seconds since the clock opened at 23:54:25; every number comes from BROWNOUT.
 
 import { BROWNOUT } from './brownout';
 

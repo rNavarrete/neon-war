@@ -245,7 +245,7 @@ export class StoryScene extends Phaser.Scene {
   private updateRoomClock(): void {
     if (!this.clock) return;
     // The clock flickers to 02:14 for one frame when Lux looks at the photo (the 'flicker' cue); a
-    // steady clock with reduce flicker. Otherwise it ticks from 23:51:30 and stops at 23:51:45, where
+    // steady clock with reduce flicker. Otherwise it ticks from 23:54:25 and stops at 23:54:40, where
     // the board picks the run up however long she sits there (src/game/flow.ts).
     if (this.flickerPending) {
       this.flickerPending = false;
@@ -331,7 +331,7 @@ declare global {
       playRescue(laundryCut?: boolean): void;
       playRewind(kind: RewindKind): void;
       playDebrief(results?: Partial<DebriefResults>): void;
-      /** Set the run's clock (seconds since 23:51:30), to stage a failure at a given time. */
+      /** Set the run's clock (seconds since 23:54:25), to stage a failure at a given time. */
       setNow(now: number): void;
     };
   }

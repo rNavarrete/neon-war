@@ -84,7 +84,7 @@ export interface Midnight {
 }
 
 export interface Play {
-  /** Seconds since the clock opened at 23:51:30. */
+  /** Seconds since the clock opened at 23:54:25. */
   readonly t: number;
   /** Picks which server the midnight dip takes; the same seed gives the same dip on every replay. */
   readonly seed: number;
