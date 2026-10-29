@@ -154,7 +154,7 @@ test('the grid: a server card dragged onto free cells snaps to a 2 x 2 footprint
 }) => {
   await openBoard(page);
   let b = await board(page);
-  // The whole table is a grid of cells; the gateway's and the database's bays are held for them.
+  // The whole table is a grid of cells; the gateway and the database stand on cells held for them.
   expect(b.grid.cols).toBe(28);
   expect(b.grid.rows).toBe(19);
   expect(b.grid.nodes).toHaveLength(b.grid.rows + 1);
@@ -207,6 +207,80 @@ test('the grid: a server card dragged onto free cells snaps to a 2 x 2 footprint
   await page.mouse.up();
   await expect.poll(async () => (await board(page)).dragging).toBeNull();
   expect((await board(page)).parts.filter((p) => p.kind === 'server')).toHaveLength(1);
+});
+
+test('the fixed parts on the grid: the gateway and the database stand on their own cells, held from placement, wired along the grid', async ({
+  page,
+}) => {
+  await openBoard(page);
+  let b = await board(page);
+  const n = b.grid.nodes;
+  const fixed = [
+    { id: 'gateway', anchor: FIXED_ANCHOR.gateway!, w: 2, h: 2 },
+    { id: 'database', anchor: FIXED_ANCHOR.database!, w: 3, h: 2 },
+  ];
+  for (const f of fixed) {
+    // The hook's footprints list it on its cells, like a server; those cells are held for it.
+    const foot = b.grid.footprints.find((x) => x.part === f.id)!;
+    expect(foot, `${f.id} footprint`).toBeDefined();
+    expect(foot.anchor).toBe(f.anchor);
+    expect(foot.cells).toHaveLength(f.w * f.h);
+    for (const c of foot.cells) {
+      expect(b.grid.reserved).toContain(c);
+      expect(b.grid.occupied).toContain(c);
+    }
+    // It is drawn standing on those cells, inside the grid: its middle over the footprint, its
+    // foot between the footprint's far and near edges.
+    const c = parseCell(f.anchor)!;
+    const far = n[c.row][c.col];
+    const nearRight = n[c.row + f.h][c.col + f.w];
+    const nearLeft = n[c.row + f.h][c.col];
+    const rect = b.parts.find((p) => p.id === f.id)!.rect;
+    const mid = rect.x + rect.w / 2;
+    expect(mid).toBeGreaterThan(Math.min(far.x, nearLeft.x));
+    expect(mid).toBeLessThan(Math.max(n[c.row][c.col + f.w].x, nearRight.x));
+    const foot2 = rect.y + rect.h;
+    expect(foot2).toBeGreaterThan(far.y);
+    expect(foot2).toBeLessThan(nearLeft.y + 1);
+  }
+  // The gateway near the grid's left side, the database near its right.
+  expect(parseCell(FIXED_ANCHOR.gateway!)!.col).toBe(0);
+  expect(parseCell(FIXED_ANCHOR.database!)!.col + 3).toBe(b.grid.cols);
+  expect([...b.grid.reserved].sort()).toEqual(
+    b.grid.footprints
+      .filter((f) => f.kind === 'gateway' || f.kind === 'database')
+      .flatMap((f) => f.cells)
+      .sort(),
+  );
+
+  // A server card held over the database's cells lights red and drops nothing.
+  const card = b.tray.find((t) => t.id === 'server')!;
+  const db = footAt(b, FIXED_ANCHOR.database!, 3, 2);
+  await hold(page, card, db);
+  await expect.poll(async () => (await board(page)).grid.preview?.colour).toBe('red');
+  b = await board(page);
+  expect(b.dragOver).toMatchObject({ state: 'wrong', legal: false });
+  const dbCells = b.grid.footprints.find((f) => f.part === 'database')!.cells;
+  expect(b.grid.preview!.cells.some((x) => dbCells.includes(x))).toBe(true);
+  await page.screenshot({ path: 'test-results/screens/grid-fixed-parts.png' });
+  await page.mouse.up();
+  await expect.poll(async () => (await board(page)).dragging).toBeNull();
+  expect((await board(page)).parts.filter((p) => p.kind === 'server')).toHaveLength(0);
+
+  // Wired gateway -> server -> database, each trace runs on the grid between the parts.
+  const s1 = await placeServer(page, S1);
+  await wire(page, 'gateway', s1);
+  await wire(page, s1, 'database');
+  b = await board(page);
+  const left = n[0][0].x;
+  const right = n[b.grid.rows][b.grid.cols].x;
+  for (const w of b.wires) {
+    expect(w.x, `${w.key} on the grid`).toBeGreaterThan(Math.min(left, n[b.grid.rows][0].x));
+    expect(w.x, `${w.key} on the grid`).toBeLessThan(Math.max(right, n[0][b.grid.cols].x));
+  }
+  // The gateway and the database stay put: they cannot be sold.
+  expect(b.parts.find((p) => p.id === 'gateway')!.slot).toBeNull();
+  expect(b.parts.find((p) => p.id === 'database')!.slot).toBeNull();
 });
 
 test('the inventory row: cards with prices and counts in the inventory zone, the drawer not for tonight', async ({
@@ -1080,7 +1154,7 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   expect(b.keys.sort()).toEqual(['Backspace', 'Delete', 'Escape']);
   const card = b0(b, 'server');
   const s1Pad = b.slots.find((s) => s.id === S1)!;
-  // The gateway's bay: cells in front of the gateway nothing else may take.
+  // The gateway's cells: it stands on them, nothing else may take them.
   const bay = footAt(b, FIXED_ANCHOR.gateway!);
   const credits = b.credits;
 
