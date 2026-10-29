@@ -8,22 +8,22 @@ import { BROWNOUT } from '../src/sim/brownout';
 import { SERVER_SLOTS } from '../src/sim/tick';
 
 describe('midnight countdown', () => {
-  it('reads 8:30 when the clock opens and 0:00 at midnight', () => {
-    expect(countdownText(0)).toBe('8:30');
+  it('reads 5:35 when the clock opens and 0:00 at midnight', () => {
+    expect(countdownText(0)).toBe('5:35');
     expect(countdownText(BROWNOUT.clock.midnight)).toBe('0:00');
     expect(countdownText(BROWNOUT.clock.midnight + 30)).toBe('0:00');
   });
 
   it('rounds up, so it only reaches 0:00 on the stroke of midnight', () => {
-    expect(countdownText(509.5)).toBe('0:01');
-    expect(countdownText(450)).toBe('1:00');
-    expect(countdownText(449.2)).toBe('1:01');
-    expect(secondsToMidnight(15)).toBe(495);
+    expect(countdownText(334.5)).toBe('0:01');
+    expect(countdownText(275)).toBe('1:00');
+    expect(countdownText(274.2)).toBe('1:01');
+    expect(secondsToMidnight(15)).toBe(320);
   });
 
-  it('agrees with the run clock: 23:51:30 at the start, 00:00:00 at midnight', () => {
+  it('agrees with the run clock: 23:54:25 at the start, 00:00:00 at midnight', () => {
     const r = new Run();
-    expect(r.clock(0)).toBe('23:51:30');
+    expect(r.clock(0)).toBe('23:54:25');
     expect(r.clock(BROWNOUT.clock.midnight)).toBe('00:00:00');
   });
 });

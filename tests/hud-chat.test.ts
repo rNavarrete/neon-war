@@ -113,9 +113,14 @@ describe('chat', () => {
   });
 
   it('picks filler from the pool for the error state', () => {
-    expect(fillerPool('block', 'ok')).toHaveLength(4);
-    expect(fillerPool('block', 'slow')).toHaveLength(3);
-    expect(fillerPool('stream', 'down')).toEqual(['fill.stream.down.01', 'fill.stream.down.02']);
+    expect(fillerPool('block', 'ok')).toHaveLength(10);
+    expect(fillerPool('block', 'slow')).toHaveLength(5);
+    expect(fillerPool('stream', 'down')).toEqual([
+      'fill.stream.down.01',
+      'fill.stream.down.02',
+      'fill.stream.down.03',
+      'fill.stream.down.04',
+    ]);
     const rand = seededRandom(1);
     for (let i = 0; i < 20; i++) expect(pickFiller('block', 'down', rand)).toMatch(/^fill\.block\.down\./);
     expect(pickFiller('stream', 'down', () => 0, 'fill.stream.down.01')).toBe('fill.stream.down.02');
@@ -403,7 +408,8 @@ describe('the chat in the host loop (chat-3)', () => {
     const first = stubScene();
     const a = new ChatFeedView();
     a.create(first.scene, hostOn(first.scene, b));
-    expect(a.feed.listening).toBe(3);
+    // cue, line, coachNudge and action.
+    expect(a.feed.listening).toBe(4);
     a.shutdown();
     expect(a.feed.listening).toBe(0);
     expect(first.down).toHaveLength(0);
@@ -615,9 +621,10 @@ describe('the LIVE CHAT panel (chat-4)', () => {
 
   it('sits the rows back to alpha 0.4 while the chat is silent', () => {
     const { view, bus: b } = liveView();
-    view.update(frameAt(), clockAt(5), []);
-    b.emit('cue', { id: 'C6.fail.chat', kind: 'chat', at: 5 });
-    view.update(frameAt(), clockAt(5.05), []);
+    // Before the first filler (3.5 s at the earliest), so no row is still fading in.
+    view.update(frameAt(), clockAt(3), []);
+    b.emit('cue', { id: 'C6.fail.chat', kind: 'chat', at: 3 });
+    view.update(frameAt(), clockAt(3.05), []);
     const c = chatRead();
     expect(c.silenced).toBe(true);
     expect(c.rows.every((r) => r.alpha === 0.4)).toBe(true);

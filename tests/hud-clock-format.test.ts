@@ -18,7 +18,7 @@ describe('twelveHour', () => {
 
   it("turns the run's clock into what the title shows, from the open to past midnight", () => {
     const r = new Run();
-    expect(twelveHour(r.clock(0))).toBe('11:51:30 PM');
+    expect(twelveHour(r.clock(0))).toBe('11:54:25 PM');
     expect(twelveHour(r.clock(BROWNOUT.clock.midnight))).toBe('12:00:00 AM');
   });
 

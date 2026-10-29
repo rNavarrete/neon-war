@@ -125,7 +125,7 @@ Every `Frame` field (`tests/live-docs.test.ts` checks this list against the inte
 
 | Field | What it holds |
 | --- | --- |
-| `now` | Sim seconds since the clock opened at 23:51:30 |
+| `now` | Sim seconds since the clock opened at 23:54:25 |
 | `clock` | The in-world clock as hh:mm:ss |
 | `speed` | The test speed multiplier (1 in play) |
 | `paused` | Something holds the board (a card, a scene, the pause menu) or a failure waits for its rewind |
@@ -234,6 +234,8 @@ against `src/game/bus.ts`):
 | `voiceEnd` | the mixer, the clip finished or was stopped | `{id}` |
 | `cue` | HudScene's host loop (above) | `{id, kind, at}` |
 | `audience` | ChatFeedView (above) | `{watching}` |
+| `coach` | HudScene, when what the tutorial coach lights changes (`src/scenes/hud/coach.ts`) | `{step, cards, parts, wire, hint}` |
+| `coachNudge` | HudScene, when the coach says a nudge (it also goes to the comms band) | `{step, id, at}` |
 | `perfSample` | HudScene, once per perf sample | `{at, fps, objects, texts, graphics}` |
 
 ### Hook sections

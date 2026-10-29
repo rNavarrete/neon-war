@@ -489,7 +489,7 @@ describe('the start of C1: the band says what to do first', () => {
 
   it('asks for a server once the job card closes, until one is on the board', () => {
     expect(hintAt(C.c1)).toBe('C1.alert.place');
-    expect(hintAt(C.c1 + 30)).toBe('C1.alert.place');
+    expect(hintAt(C.c1 + 20)).toBe('C1.alert.place');
     expect(hintAt(C.c1 + 5, { parts: [gateway, server] })).toBeNull();
     expect(LINES['C1.alert.place'].text).toBe('drag a SERVER card onto the grid');
   });

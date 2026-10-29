@@ -237,9 +237,9 @@ describe('TitleView and ClockView', () => {
     clock.update(readFrame(r));
     expect(texts.some((t) => t.text === 'WATCHING')).toBe(true);
     expect(texts.some((t) => t.text === 'waiting for your build')).toBe(true);
-    // The title shows the run's clock in 12-hour time (11:51:45 PM).
+    // The title shows the run's clock in 12-hour time (11:54:40 PM).
     expect(texts.some((t) => t.text === twelveHour(r.clock()))).toBe(true);
-    expect(texts.some((t) => t.text === 'midnight in 8:15')).toBe(true);
+    expect(texts.some((t) => t.text === 'midnight in 5:20')).toBe(true);
 
     const hud = getTestState().hud as unknown as { title: { live: string; watching: number | null } };
     expect(hud.title.live).toBe('waiting');

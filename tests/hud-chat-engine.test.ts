@@ -98,8 +98,8 @@ describe('stepChat identity', () => {
   it('returns the identical state and NO_POSTS on a frame with no edges or events', () => {
     const m = sim(0);
     const s = m.s;
-    // The first filler is due 6..10 s in: every frame before it changes nothing.
-    for (let c = DT; c < 5.9; c += DT) {
+    // The first filler is due 3.5..6.5 s in: every frame before it changes nothing.
+    for (let c = DT; c < 3.4; c += DT) {
       const step = stepChat(s, { ...CALM, clock: c }, [], m.rand);
       expect(step.state).toBe(s);
       expect(step.posts).toBe(NO_POSTS);
@@ -534,9 +534,9 @@ describe('the chat anchor lines (chat-2)', () => {
     'estimate',
   ];
 
-  it('has about 48 lines, and Object.keys(LINES) equals the SCRIPT.md id set, word for word', () => {
-    expect(rows.length).toBeGreaterThanOrEqual(44);
-    expect(rows.length).toBeLessThanOrEqual(56);
+  it('has about 100 lines, and Object.keys(LINES) equals the SCRIPT.md id set, word for word', () => {
+    // 50 from the chat lane, 47 more for the tutorial pass (Rolando, 29 Oct 2026: more live chat).
+    expect(rows.length).toBe(97);
     expect(Object.keys(LINES).sort()).toEqual([...scriptIds].sort());
     for (const r of rows) {
       const id = r[0] as LineId;
@@ -587,18 +587,18 @@ describe('the chat anchor lines (chat-2)', () => {
     }
   });
 
-  it('has fill.block.rejoin.01 (Mrs Okafor rejoins) and no new ok, slow or down pool', () => {
+  it('has fill.block.rejoin.01 (Mrs Okafor rejoins) and no ok, slow or down pool in the chat lane', () => {
     expect(rows.map((r) => r[0])).toContain('fill.block.rejoin.01');
     expect(LINES['fill.block.rejoin.01'].text).toContain('Mrs Okafor');
     expect(LINES['fill.block.rejoin.01'].speaker).toContain('(system)');
     for (const r of rows) expect(r[0].split('.')[2], r[0]).not.toMatch(/^(ok|slow|down)$/);
-    // The pinned pool sizes in tests/hud-chat.test.ts are unchanged.
-    expect(fillerPool('block', 'ok')).toHaveLength(4);
-    expect(fillerPool('block', 'slow')).toHaveLength(3);
-    expect(fillerPool('block', 'down')).toHaveLength(2);
-    expect(fillerPool('stream', 'ok')).toHaveLength(3);
-    expect(fillerPool('stream', 'slow')).toHaveLength(2);
-    expect(fillerPool('stream', 'down')).toHaveLength(2);
+    // The filler pools (the Chat filler table, not this lane), pinned as in tests/hud-chat.test.ts.
+    expect(fillerPool('block', 'ok')).toHaveLength(10);
+    expect(fillerPool('block', 'slow')).toHaveLength(5);
+    expect(fillerPool('block', 'down')).toHaveLength(4);
+    expect(fillerPool('stream', 'ok')).toHaveLength(9);
+    expect(fillerPool('stream', 'slow')).toHaveLength(4);
+    expect(fillerPool('stream', 'down')).toHaveLength(4);
   });
 
   it('posts the rejoin as a system row once calm holds after Mrs Okafor left', () => {

@@ -243,12 +243,12 @@ describe('the beats', () => {
     expect(seen).not.toContain('cheer');
   });
 
-  it('gogglesUp from now >= 537, and it sticks', () => {
+  it('gogglesUp from now >= 362, and it sticks', () => {
     expect(CAM_GOGGLES_AT).toBe(BROWNOUT.challenges.c8 - 3);
-    expect(CAM_GOGGLES_AT).toBe(537);
-    let s = camStep(settled(), { ...QUIET, clock: 10, now: 536.9 });
+    expect(CAM_GOGGLES_AT).toBe(362);
+    let s = camStep(settled(), { ...QUIET, clock: 10, now: 361.9 });
     expect(s.mood).toBe('calm');
-    s = camStep(s, { ...QUIET, clock: 10.1, now: 537 });
+    s = camStep(s, { ...QUIET, clock: 10.1, now: 362 });
     expect(s.mood).toBe('gogglesUp');
     s = run(s, 10.1, 20, () => ({ now: 400, errorShare: 0.9, midnightHeld: true, rewinds: 1 }));
     expect(s.mood).toBe('gogglesUp');

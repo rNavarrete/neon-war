@@ -89,7 +89,7 @@ describe('hover plates (board-8)', () => {
 
   it('a kitted box and the other parts say what they are from labels.ts', () => {
     expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/30\/120 a second/);
-    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/OVERCLOCK/);
+    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/BIGGER BOX/);
     expect(partPlate(gw, partLook(gw, 30, [], {}, 10, none), false)).toMatch(
       /^GATEWAY · 30 a second coming in/,
     );
