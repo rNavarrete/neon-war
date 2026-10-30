@@ -53,6 +53,15 @@ export function autopilotOn(search: string): boolean {
   return params.has('test') && params.has('autopilot');
 }
 
+/**
+ * Whether a browser test asked for the title's "press any key" gate with `?test&gate`. Under the test
+ * hook the gate shows only then, so the other tests reach the menu straight away.
+ */
+export function gateForced(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.has('test') && params.has('gate');
+}
+
 /** Scene a browser test asks to start in with `?test&scene=<key>`, or null. */
 export function startScene(search: string): string | null {
   const params = new URLSearchParams(search);

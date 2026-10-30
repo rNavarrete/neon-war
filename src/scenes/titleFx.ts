@@ -130,3 +130,24 @@ export function logoDips(t: number, reduceFlicker: boolean): boolean {
 export function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
+
+/**
+ * The console-style "press any key" gate before the menu. Browsers hold every sound until the page
+ * gets a click or a key press, so the title shows the gate while sound is held: the player's first
+ * press opens the menu and lets the title music play, instead of being the START that leaves it.
+ */
+export const GATE = { text: 'CLICK OR PRESS ANY KEY', pulseSeconds: 1.6, minAlpha: 0.35 } as const;
+
+/**
+ * Whether the title opens on the gate: while the browser still holds sound. Under the test hook it
+ * shows only when the test asks (`?test&gate`), so other tests reach the menu straight away.
+ */
+export function gateWanted(soundLocked: boolean, test = false, forced = false): boolean {
+  return test ? forced : soundLocked;
+}
+
+/** The gate prompt's alpha t seconds in: a slow breathe between GATE.minAlpha and 1. */
+export function gateAlpha(t: number): number {
+  const k = (1 - Math.cos((2 * Math.PI * t) / GATE.pulseSeconds)) / 2;
+  return 1 - (1 - GATE.minAlpha) * k;
+}

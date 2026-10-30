@@ -135,6 +135,12 @@ export class OverlayScene extends Phaser.Scene {
     });
     mixer.attach(this.soundPort());
     this.loadAudio();
+    // Browsers hold every sound until the first click or key press, and Phaser drops a play asked
+    // for before then. Once sound is allowed, start whichever music the screen wants from the top.
+    this.sound.once(Phaser.Sound.Events.UNLOCKED, () => {
+      if (this.titleMusicOn) this.playTitleMusic(true);
+      if (this.musicOn) this.playMusic(true);
+    });
 
     this.pauseButton = addButton(this, 'pause', W - 70, 52, 'II', () => openPause(this), 0.2, 30);
     this.pauseButton.setVisible(false);
@@ -284,7 +290,7 @@ export class OverlayScene extends Phaser.Scene {
 
   /**
    * Start the title loop from the top at the music level, or fade it out over TITLE_MUSIC_FADE and
-   * stop it. Played while audio is still locked, it starts on the first click or key press.
+   * stop it. Asked for while audio is still locked, it is started again on the UNLOCKED event.
    */
   private playTitleMusic(on: boolean): void {
     const m = this.titleMusic as Phaser.Sound.WebAudioSound | null;

@@ -137,6 +137,35 @@ test('the title plays its own music; the speaker icon mutes it, shows it muted a
   await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying).toBe(false);
 });
 
+test('while the browser holds sound, the title opens on a press-any-key gate; the press shows the menu and plays the music', async ({
+  page,
+}) => {
+  // Under the test hook the gate shows only with ?gate, as it does on a real first visit.
+  await page.goto('/?test&gate');
+  await waitForScene(page, 'title');
+  expect((await state(page)).title!.gate).toBe(true);
+  // No menu button can be pressed while the gate shows.
+  expect((await state(page)).shell!.buttons.start).toBeUndefined();
+  await page.screenshot({ path: 'test-results/screens/title-gate.png' });
+  // Click where the gate's words sit (over the SETTINGS button's spot): the release opens the
+  // menu and presses nothing.
+  const canvas = (await page.locator('canvas').boundingBox())!;
+  const k = canvas.width / 1920;
+  await page.mouse.click(canvas.x + 640 * k, canvas.y + 660 * k);
+  await expect.poll(async () => (await state(page)).title!.gate).toBe(false);
+  await expect.poll(async () => (await state(page)).shell!.buttons.start ?? null).not.toBeNull();
+  expect((await state(page)).scene).toBe('title');
+  expect((await state(page)).shell!.titleMusicPlaying).toBe(true);
+
+  // A key press opens it too.
+  await page.reload();
+  await waitForScene(page, 'title');
+  expect((await state(page)).title!.gate).toBe(true);
+  await page.keyboard.press('Space');
+  await expect.poll(async () => (await state(page)).title!.gate).toBe(false);
+  await expect.poll(async () => (await state(page)).shell!.buttons.start ?? null).not.toBeNull();
+});
+
 test('Esc and the pause button open Pause; the sim clock holds still while paused', async ({ page }) => {
   await openBoard(page);
   await page.screenshot({ path: 'test-results/screens/board-pause-button.png' });

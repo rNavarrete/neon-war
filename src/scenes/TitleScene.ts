@@ -4,7 +4,7 @@ import { startSession } from '../game/flow';
 import { settings, updateSettings } from '../game/settings';
 import { line } from '../strings';
 import { FrameClock } from '../story/view';
-import { provideTestState } from '../testHook';
+import { gateForced, provideTestState, testHookEnabled } from '../testHook';
 import { seededRandom } from './hud/chat';
 import { SCENES } from './keys';
 import {
@@ -24,12 +24,15 @@ import {
   type Box,
   type Burst,
   FIREWORK,
+  GATE,
   HERO,
   RAIN,
   type Streak,
   beamAngle,
   burstAlpha,
   fallStreak,
+  gateAlpha,
+  gateWanted,
   igniteBurst,
   logoDips,
   seedRain,
@@ -73,6 +76,8 @@ export interface TitleTestState {
   logoDip: boolean;
   /** The speaker icon's box in game px, and whether it shows the music muted. */
   speaker: Box & { muted: boolean };
+  /** True while the "press any key" gate shows in place of the menu. */
+  gate: boolean;
 }
 
 declare module '../testHook' {
@@ -104,6 +109,7 @@ export class TitleScene extends Phaser.Scene {
   private frames = new FrameClock();
   private speakerG: Phaser.GameObjects.Graphics | null = null;
   private speakerHover = false;
+  private gate: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super(SCENES.title);
@@ -164,6 +170,7 @@ export class TitleScene extends Phaser.Scene {
     this.buildSpeaker();
     this.credits = this.buildCredits();
     this.showCredits(false);
+    this.buildGate();
     provideTestState('title', () => this.snapshot());
     this.ready = true;
   }
@@ -178,6 +185,35 @@ export class TitleScene extends Phaser.Scene {
     this.drawFireworks(dt, reduce);
     this.dip = logoDips(this.t, reduce);
     this.logo?.setAlpha(this.dip ? 0.55 : 1);
+    this.gate?.setAlpha(gateAlpha(this.t));
+  }
+
+  /** The "press any key" gate (GATE in titleFx.ts): shown in the menu's place while sound is held. */
+  private buildGate(): void {
+    this.gate = null;
+    const search = window.location.search;
+    if (!gateWanted(this.sound.locked, testHookEnabled(search), gateForced(search))) return;
+    for (const b of this.menu) b.setVisible(false);
+    this.gate = this.add
+      .text(LOGO.x, MENU.y, GATE.text, { fontFamily: UI_FONT, fontSize: '40px', color: CYAN })
+      .setOrigin(0.5)
+      .setShadow(0, 0, '#2de2e6', 12, false, true);
+    const open = (): void => {
+      if (!this.gate) return;
+      this.input.off(Phaser.Input.Events.POINTER_UP, open);
+      this.input.keyboard?.off(Phaser.Input.Keyboard.Events.ANY_KEY_DOWN, open);
+      this.gate.destroy();
+      this.gate = null;
+      // The menu shows on the next frame, so the release that opened it can't also press a button
+      // that appears under the pointer.
+      this.time.delayedCall(1, () => {
+        for (const b of this.menu) b.setVisible(!this.creditsOpen);
+      });
+    };
+    // On release: the press is what lets the browser play sound, and a menu shown under a held
+    // pointer would take the release as a click.
+    this.input.on(Phaser.Input.Events.POINTER_UP, open);
+    this.input.keyboard?.on(Phaser.Input.Keyboard.Events.ANY_KEY_DOWN, open);
   }
 
   private drawBeams(): void {
@@ -317,6 +353,7 @@ export class TitleScene extends Phaser.Scene {
         h: SPEAKER.r * 2,
         muted: settings().musicMuted,
       },
+      gate: this.gate !== null,
     };
   }
 
