@@ -73,6 +73,10 @@ export interface StoryTestState {
   figures: Record<string, { left: number; right: number; top: number; facesLeft: boolean }>;
   /** Akemi's photo is up as an insert (the cold open, until Lux speaks). */
   photo: boolean;
+  /** The full-screen CG up now (its file under public/), or null: the jack-in shots at the cold open's end. */
+  cg: string | null;
+  /** The jack-in's flash to the board has started (clicks are ignored from here). */
+  jackin: 'tap' | 'dissolve' | 'flash' | null;
   rain: { glass: Box; drawn: { x: number; y: number; w: number; h: number } | null } | null;
   runNow: number;
   runHeld: boolean;
@@ -110,6 +114,8 @@ export const storyState: Omit<StoryTestState, 'runNow' | 'runHeld' | 'seen'> = {
   fireworks: { bursts: 0, flashes: 0 },
   figures: {},
   photo: false,
+  cg: null,
+  jackin: null,
   rain: null,
 };
 

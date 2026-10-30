@@ -36,7 +36,7 @@ plays on a timer. The run's clock holds at 23:51:30 until the goggles come down,
 | C0.chat.03 | chat | block: mrs okafor | with C0.chat.01 | Countdown stream keeps freezing. Is it you or the rain? |
 | C0.chat.04 | chat | block: kenji | with C0.chat.01 | lux pls |
 | C0.triage.02 | bark | TRIAGE (thinking) | same click, reading the chat as it rolls in | "Uh... your chat's blowing up. The block's net is dropping again." |
-| C0.lux.02 | scene | Lux | click, goggles down; the next click starts the board | "Yeah. Let's go look." |
+| C0.lux.02 | scene | Lux | click: the jack-in CG fills the screen, a finger on the visor as it boots; the next click dissolves her room into the grid (a second CG) and a cyan flash cuts to the board | "Yeah. Let's go look." |
 
 ## C1 to C3: the board, alone with TRIAGE (23:51:45 to 23:56:30)
 

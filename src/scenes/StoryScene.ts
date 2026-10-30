@@ -28,7 +28,12 @@ const EXTRA = {
   goggles: 'art/hud/goggles-overlay.webp',
   cable: 'art/board/crew-cable.webp',
   regroup: 'art/hud/regroup-ready.webp',
+  jackinTap: 'art/story/jackin-tap.webp',
+  jackinDissolve: 'art/story/jackin-dissolve.webp',
 } as const;
+
+/** The jack-in's beats in ms at speed 1: the tap CG fading in, the dissolve crossfade, its hold, the flash. */
+export const JACKIN_MS = { tapIn: 450, dissolve: 700, hold: 1300, flash: 260 } as const;
 
 /** Seconds the rewind animation runs after the last line. */
 const REWIND_SECONDS = 1.4;
@@ -61,6 +66,9 @@ export class StoryScene extends Phaser.Scene {
   private readonly drawn: Segment = { x1: 0, y1: 0, x2: 0, y2: 0 };
   private flickerPending = false;
   private photo: Phaser.GameObjects.Image | null = null;
+  /** The jack-in CG shown under the last line, waiting for the click that plays the outro. */
+  private jackin: Phaser.GameObjects.Image | null = null;
+  private outro = false;
   private frames = new FrameClock();
 
   constructor() {
@@ -98,6 +106,10 @@ export class StoryScene extends Phaser.Scene {
     storyState.rain = null;
     this.photo = null;
     storyState.photo = false;
+    this.jackin = null;
+    this.outro = false;
+    storyState.cg = null;
+    storyState.jackin = null;
 
     if (s.backdrop) cover(this, fileKey(s.backdrop));
     if (s.look === 'vhs') this.drawReplay();
@@ -154,7 +166,7 @@ export class StoryScene extends Phaser.Scene {
 
   /** A click finishes the typing line, or goes on to the next one. */
   private click(): void {
-    if (this.done || this.rewinding >= 0) return;
+    if (this.done || this.rewinding >= 0 || this.outro) return;
     if (!this.view.typingDone) {
       this.view.finishTyping();
       return;
@@ -174,7 +186,8 @@ export class StoryScene extends Phaser.Scene {
       this.view.say(step.lineId, step.face);
       return;
     }
-    if (this.story?.rewind) this.startRewind();
+    if (this.jackin) this.playJackin();
+    else if (this.story?.rewind) this.startRewind();
     else this.finish();
   }
 
@@ -201,6 +214,17 @@ export class StoryScene extends Phaser.Scene {
       lens.setDisplaySize(W, H);
       this.tweens.add({ targets: lens, alpha: 1, duration: 800 / run().speed });
     }
+    if (step.cue === 'jackin') {
+      // A visual novel's event CG for the moment that matters: the whole frame becomes the shot of her
+      // tapping the visor on, the stage and the stream chat giving way to it, with her line over it.
+      playSfx('goggles-on');
+      const cg = cover(this, fileKey(EXTRA.jackinTap)).setDepth(15).setAlpha(0);
+      this.tweens.add({ targets: cg, alpha: 1, duration: JACKIN_MS.tapIn / run().speed });
+      this.view.hideChat(JACKIN_MS.tapIn / run().speed);
+      this.jackin = cg;
+      storyState.cg = EXTRA.jackinTap;
+      storyState.jackin = 'tap';
+    }
     if (step.cue === 'cable') {
       playSfx('rescue-cable');
       const cable = this.add
@@ -217,6 +241,42 @@ export class StoryScene extends Phaser.Scene {
         .setAlpha(0);
       this.tweens.add({ targets: icon, alpha: 1, duration: 500 / run().speed });
     }
+  }
+
+  /**
+   * The click after her last line: the box goes, her room dissolves into the grid (the second CG
+   * crossfades in and holds), then a cyan flash cuts to the board; under reduce flicker a dark fade
+   * replaces the flash. Clicks are ignored from here; Skip still ends it at once.
+   */
+  private playJackin(): void {
+    this.outro = true;
+    this.view.hideBox();
+    const speed = run().speed;
+    const dissolve = cover(this, fileKey(EXTRA.jackinDissolve)).setDepth(16).setAlpha(0);
+    storyState.cg = EXTRA.jackinDissolve;
+    storyState.jackin = 'dissolve';
+    this.tweens.add({
+      targets: dissolve,
+      alpha: 1,
+      duration: JACKIN_MS.dissolve / speed,
+      onComplete: () => {
+        this.time.delayedCall(JACKIN_MS.hold / speed, () => {
+          if (this.done) return;
+          storyState.jackin = 'flash';
+          const flash = this.add
+            .rectangle(0, 0, W, H, settings().reduceFlicker ? 0x05070f : 0x9ff6ff)
+            .setOrigin(0)
+            .setDepth(45)
+            .setAlpha(0);
+          this.tweens.add({
+            targets: flash,
+            alpha: 1,
+            duration: JACKIN_MS.flash / speed,
+            onComplete: () => this.finish(),
+          });
+        });
+      },
+    });
   }
 
   private finish(): void {

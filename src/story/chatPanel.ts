@@ -178,6 +178,11 @@ export class StoryChat {
     this.root = add.container(r.x, r.y, objects).setDepth(depth);
   }
 
+  /** Fade the panel out (a full-screen CG owns the frame) or back in. */
+  fade(scene: Phaser.Scene, on: boolean, ms: number): void {
+    scene.tweens.add({ targets: this.root, alpha: on ? 1 : 0, duration: ms });
+  }
+
   /** Queue a script line: it lands after the ones already waiting, one at a time. */
   post(msg: StoryChatMessage): void {
     if (this.queue.length === 0 && this.arriveIn <= 0) this.arriveIn = 0.15;

@@ -24,7 +24,8 @@ describe('story scripts', () => {
     // No step carries a timer: the scene player only ever moves on a click.
     for (const s of c0.steps) expect(Object.keys(s)).not.toContain('at');
     expect(c0.steps.find((s) => s.lineId === 'C0.lux.01')?.cue).toBe('flicker');
-    expect(c0.steps.at(-1)?.cue).toBe('goggles');
+    // The goggles now come down as the jack-in CG (Rolando's pick, sequence C, 30 Oct 2026).
+    expect(c0.steps.at(-1)?.cue).toBe('jackin');
     expect(c0.where).toBe('room');
     expect(c0.backdrop).toBe('art/bg/bedroom-dark.webp');
   });

@@ -225,6 +225,11 @@ export class VnView {
     }
   }
 
+  /** Fade the corner chat out while a full-screen CG is up. */
+  hideChat(ms: number): void {
+    this.chatPanel?.fade(this.scene, false, ms);
+  }
+
   /** Post a chat line to the corner chat. */
   chat(id: LineId): void {
     const { speaker, text } = LINES[id];

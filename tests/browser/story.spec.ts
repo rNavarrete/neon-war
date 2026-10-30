@@ -102,6 +102,9 @@ test('the cold open waits for a click on every line, then hands over to the boar
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.02');
   expect(s.sfx).toContain('goggles-on');
+  // Her last line plays over the jack-in CG (Rolando's pick, sequence C, 30 Oct 2026).
+  expect(s.cg).toBe('art/story/jackin-tap.webp');
+  expect(s.jackin).toBe('tap');
   expect((await state(page)).scene).toBe('story');
 
   // The last click brings the goggles down and hands over to the board at 23:54:40. Even a
@@ -112,6 +115,11 @@ test('the cold open waits for a click on every line, then hands over to the boar
   s = await story(page);
   expect(s.lineId).toBe('C0.lux.02');
   await page.mouse.dblclick(s.click!.x, s.click!.y);
+  // The click plays the jack-in: the room dissolves into the grid, then the flash cuts to the board.
+  await expect
+    .poll(async () => (await story(page)).cg, { timeout: 5_000 })
+    .toBe('art/story/jackin-dissolve.webp');
+  await page.screenshot({ path: 'test-results/screens/cold-open-jackin.png' });
   await expect.poll(async () => (await state(page)).scene, { timeout: 15_000 }).toBe('board');
   s = await story(page);
   expect(s.active).toBe(false);

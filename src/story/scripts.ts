@@ -8,8 +8,13 @@ import { LINES, type LineId } from '../strings';
 export type Cue =
   /** The bedroom clock flickers to 02:14 for one frame, the night her mum died (cold open). */
   | 'flicker'
-  /** The goggles come down: goggles-on sound and the lens fades in (cold open). */
+  /** The goggles come down: goggles-on sound and the lens fades in. */
   | 'goggles'
+  /**
+   * Jacking in (cold open, Rolando's pick, 30 Oct 2026): the visor-tap CG fills the screen under her
+   * last line; after it the room dissolves into the grid (a second CG) and a cyan flash cuts to the board.
+   */
+  | 'jackin'
   /** The crew's cable drops in (rescue). */
   | 'cable'
   /** Mika hands over Regroup (rescue). */
@@ -47,7 +52,8 @@ export interface SceneScript {
 /**
  * C0, the cold open: one line per click in the order of docs/SCRIPT.md. TRIAGE wakes and checks on
  * Lux first; once she says she's fine the block's four chat lines roll in and TRIAGE reads them out
- * (Rolando, 30 Oct 2026: "it's the net again" had no setup). The last click brings the goggles down.
+ * (Rolando, 30 Oct 2026: "it's the net again" had no setup). On her last line she taps the visor on
+ * (a full-screen CG) and the click after it plays the jack-in: the room dissolves into the grid, then the board.
  */
 const COLD_OPEN: SceneScript = {
   id: 'C0',
@@ -67,7 +73,7 @@ const COLD_OPEN: SceneScript = {
     { lineId: 'C0.chat.03' },
     { lineId: 'C0.chat.04' },
     { lineId: 'C0.triage.02' },
-    { lineId: 'C0.lux.02', face: 'lux/vn/neutral', cue: 'goggles' },
+    { lineId: 'C0.lux.02', face: 'lux/vn/neutral', cue: 'jackin' },
   ],
 };
 

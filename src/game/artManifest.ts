@@ -756,6 +756,20 @@ export const PICKED_ART: readonly PickedArt[] = [
     use: "Akemi's photo, an insert in the cold open until Lux speaks",
   },
   {
+    file: 'art/story/jackin-tap.webp',
+    cut: BG,
+    display: BG,
+    zone: 'story',
+    use: "the jack-in CG under Lux's last cold-open line: a finger on the visor as it boots (Rolando's pick)",
+  },
+  {
+    file: 'art/story/jackin-dissolve.webp',
+    cut: BG,
+    display: BG,
+    zone: 'story',
+    use: 'the jack-in CG after it: over her shoulder as the room dissolves into the grid',
+  },
+  {
     file: 'art/ui/logo.webp',
     cut: size(1441, 614),
     display: scaled(size(1441, 614), 0.6),
