@@ -89,6 +89,25 @@ test('the title shows the logo over the skyline with Start, Settings and Credits
   expect((await state(page)).shell!.recentSfx).toContain('ui-click');
 });
 
+test('the title is the picked rooftop art: logo and menu clear of Lux, rain, searchlights and fireworks moving', async ({
+  page,
+}) => {
+  await page.goto('/?test');
+  await waitForScene(page, 'title');
+  const t0 = (await state(page)).title!;
+  expect(t0.art).toBe('bg/title-rooftop');
+  const apart = (a: typeof t0.hero, b: typeof t0.hero) =>
+    a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
+  expect(apart(t0.logo, t0.hero)).toBe(true);
+  expect(apart(t0.menu, t0.hero)).toBe(true);
+  expect(t0.rainDrawn).toBeGreaterThan(100);
+  // Fireworks keep bursting while the title idles, and the searchlights sweep.
+  await expect.poll(async () => (await state(page)).title!.bursts, { timeout: 10_000 }).toBeGreaterThan(2);
+  const t1 = (await state(page)).title!;
+  expect(t1.beams[0]).not.toBeCloseTo(t0.beams[0], 3);
+  await page.screenshot({ path: 'test-results/screens/title-rooftop.png' });
+});
+
 test('Esc and the pause button open Pause; the sim clock holds still while paused', async ({ page }) => {
   await openBoard(page);
   await page.screenshot({ path: 'test-results/screens/board-pause-button.png' });

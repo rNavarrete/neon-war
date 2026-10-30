@@ -582,7 +582,7 @@ export const PICKED_ART: readonly PickedArt[] = [
     cut: BG,
     display: COVER,
     zone: 'feed',
-    use: 'the skyline behind the board; the title screen',
+    use: 'the skyline behind the board',
     cover: true,
   },
   {
@@ -591,6 +591,14 @@ export const PICKED_ART: readonly PickedArt[] = [
     display: COVER,
     zone: 'story',
     use: "Lux's room in C0 and the fail scene; the cam backdrop stand-in",
+    cover: true,
+  },
+  {
+    file: 'art/bg/title-rooftop.webp',
+    cut: BG,
+    display: COVER,
+    zone: 'titleScreen',
+    use: 'the title screen: Lux and TRIAGE on a rooftop (Rolando picked title A, 30 Oct 2026)',
     cover: true,
   },
   {
@@ -626,7 +634,7 @@ export const PICKED_ART: readonly PickedArt[] = [
   {
     file: 'art/ui/logo.webp',
     cut: size(1441, 614),
-    display: scaled(size(1441, 614), 0.72),
+    display: scaled(size(1441, 614), 0.6),
     zone: 'titleScreen',
     use: 'the title logo',
   },

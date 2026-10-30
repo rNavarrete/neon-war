@@ -32,7 +32,7 @@ Notes:
 | `art/chars/ozzie/poses/` | coin (365x950), shrug (578x948), nod (322x950) | ozzie-poses |
 | `art/ui/` | logo (1441x614) | logo |
 | `art/story/` | akemi-photo (805x947), night-book-page (1536x1024) | akemi-photo, night-book-page |
-| `art/bg/` | bedroom-lit (1536x1024), bedroom-dark (1536x1024), bedroom-midnight (1536x1024), immersive (1536x1024), skyline (1536x1024), rooftop (1536x1024), grandma-flat (1536x1024) | bg-bedroom-dark, bg-bedroom-lit, bg-bedroom-midnight, bg-grandma-flat, bg-immersive, bg-rooftop, bg-skyline |
+| `art/bg/` | bedroom-lit (1536x1024), bedroom-dark (1536x1024), bedroom-midnight (1536x1024), immersive (1536x1024), skyline (1536x1024), rooftop (1536x1024), grandma-flat (1536x1024), title-rooftop (1536x1024) | bg-bedroom-dark, bg-bedroom-lit, bg-bedroom-midnight, bg-grandma-flat, bg-immersive, bg-rooftop, bg-skyline; title-rooftop is Rolando's title A pick (30 Oct 2026) |
 | `art/chars/avatars/` | kenji (512x512), mrs-okafor (512x512), young-father (512x512), old-man-noodles (512x512) | chat-avatars-v2b |
 | `art/parts/auth/` | scrap (241x382), street (249x476), pro (346x660), solace (391x829) | comp-auth |
 | `art/parts/autoscaler/` | scrap (282x289), street (299x353), pro (423x471), solace (432x595) | comp-autoscaler |
