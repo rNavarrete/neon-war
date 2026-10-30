@@ -26,10 +26,13 @@ Notes:
 | `art/chars/lux/poses/` | reach (459x893), point (353x885), swipe (678x826), tap-drag (423x963), cheer (535x824), rest (468x541), hug-knees (553x683), goggles-up (382x953), look-back (396x927) | lux-poses-board, lux-poses-room, lux-poses-room-v2, lux-poses-win-v2 |
 | `art/chars/rei/faces/` | smirk (420x449), stern (392x440), impressed (403x432), grading (421x443), laugh (400x450), annoyed (408x439) | rei-faces |
 | `art/chars/rei/poses/` | landing (505x624), arms-crossed (281x889), point (305x884) | rei-poses |
+| `art/chars/rei/vn/` | annoyed, grading, impressed, laugh, smirk, stern (454x927); pose-1 (455x927), pose-2 (433x927), pose-3 (435x927) | vn-rei-&lt;mood&gt;, vn-rei-1..3 (tall story sprites; the six moods share one canvas so they swap in place) |
 | `art/chars/mika/faces/` | calm (367x457), worried (359x445), reassure (371x456), explain (450x458), focused (365x455), nod (370x461) | mika-sheet |
 | `art/chars/mika/poses/` | tablet (296x920), point (455x903), read (311x915) | mika-poses |
+| `art/chars/mika/vn/` | calm, explain, focused, nod, reassure, worried (464x927); pose-1 (437x927), pose-2 (400x927), pose-3 (489x927) | vn-mika-&lt;mood&gt;, vn-mika-1..3 (tall story sprites; the six moods share one canvas so they swap in place) |
 | `art/chars/ozzie/faces/` | sceptical (460x495), annoyed (481x490), half-smile (456x486), sums (471x501), alarmed (446x495), smug (452x499) | ozzie-faces |
 | `art/chars/ozzie/poses/` | coin (365x950), shrug (578x948), nod (322x950) | ozzie-poses |
+| `art/chars/ozzie/vn/` | alarmed, annoyed, half-smile, sceptical, smug, sums (538x927); pose-1 (492x927), pose-2 (474x927), pose-3 (533x927) | vn-ozzie-&lt;mood&gt;, vn-ozzie-1..3 (tall story sprites; the six moods share one canvas so they swap in place) |
 | `art/ui/` | logo (1441x614) | logo |
 | `art/story/` | akemi-photo (805x947), night-book-page (1536x1024) | akemi-photo, night-book-page |
 | `art/bg/` | bedroom-lit (1536x1024), bedroom-dark (1536x1024), bedroom-midnight (1536x1024), immersive (1536x1024), skyline (1536x1024), rooftop (1536x1024), grandma-flat (1536x1024), title-rooftop (1536x1024) | bg-bedroom-dark, bg-bedroom-lit, bg-bedroom-midnight, bg-grandma-flat, bg-immersive, bg-rooftop, bg-skyline; title-rooftop is Rolando's title A pick (30 Oct 2026) |

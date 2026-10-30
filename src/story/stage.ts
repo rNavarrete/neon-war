@@ -37,6 +37,17 @@ export function slotsFor(count: number): readonly number[] {
 }
 
 /**
+ * The x of each of `count` people sharing the stretch from `from` to `to`, evenly, left to right: for
+ * a scene whose panels own part of the screen (the debrief's results and interview card on the left),
+ * so the cast stands beside them instead of behind them. Pure.
+ */
+export function slotsBetween(count: number, from: number, to: number): readonly number[] {
+  if (count <= 0) return [];
+  const step = (to - from) / count;
+  return Array.from({ length: count }, (_, i) => from + (i + 0.5) * step);
+}
+
+/**
  * How art `h` pixels tall stands at slot `x`: its bottom centre and its scale. A full sprite is scaled
  * down to SPRITE_H (never up) and stands on the bottom edge; a bust is drawn near its own size with
  * its cut edge just behind the text box.

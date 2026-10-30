@@ -79,7 +79,9 @@ describe('story scripts', () => {
 
   it('only overrides faces with picked portrait files', () => {
     for (const f of scriptFaces())
-      expect(f).toMatch(/^(lux\/faces-(board|room)|lux\/vn|rei\/faces|mika\/faces|ozzie\/faces)\//);
+      expect(f).toMatch(
+        /^(lux\/faces-(board|room)|lux\/vn|rei\/(faces|vn)|mika\/(faces|vn)|ozzie\/(faces|vn))\//,
+      );
   });
 
   it('stands Lux up in every story scene: her faces there are the tall sprites, goggles down on the board', () => {
@@ -92,5 +94,16 @@ describe('story scripts', () => {
     for (const f of luxFaces) expect(f).toMatch(/^lux\/vn\//);
     expect(portraitFor('Lux', 'board')?.file).toBe('art/chars/lux/vn/board-determined.webp');
     expect(SCRIPTS.C5.steps.find((st) => st.lineId === 'C5.lux.01')?.face).toBe('lux/vn/board-shocked');
+  });
+
+  it('stands the crew up too: Rei, Mika and Ozzie speak from their tall sprites, in the room and on the board', () => {
+    for (const who of ['Rei', 'Mika', 'Ozzie'])
+      for (const where of ['room', 'board'] as const)
+        expect(portraitFor(who, where)?.file).toMatch(new RegExp(`^art/chars/${who.toLowerCase()}/vn/`));
+    const crewFaces = Object.values(SCRIPTS).flatMap((sc) =>
+      sc.steps.filter((st) => st.face && !st.face.startsWith('lux/')).map((st) => st.face),
+    );
+    expect(crewFaces.length).toBeGreaterThan(5);
+    for (const f of crewFaces) expect(f).toMatch(/^(rei|mika|ozzie)\/vn\//);
   });
 });

@@ -9,7 +9,7 @@ import { LINES, type LineId } from '../strings';
 import { LABELS } from './labels';
 import { StoryChat, chatMessage, preloadChat } from './chatPanel';
 import { chatText, scriptFaces, typedChars } from './scripts';
-import { HOVERING, bobAt, frameFor, hoverFor, slotsFor } from './stage';
+import { HOVERING, bobAt, frameFor, hoverFor, slotsBetween, slotsFor } from './stage';
 import { type PagePoint, type ViewSnapshot, playVoice, storyState } from './state';
 
 export const W = 1920;
@@ -80,6 +80,8 @@ export interface VnViewOptions {
   filler?: readonly LineId[];
   /** Show the Skip button (the scene was seen before). */
   skippable: boolean;
+  /** Stand the cast between these x only (game px), clear of the scene's own panels; the whole stage by default. */
+  stage?: { readonly from: number; readonly to: number };
   onClick: () => void;
   onSkip: () => void;
 }
@@ -193,7 +195,8 @@ export class VnView {
   private stage(): void {
     let standing = 0;
     for (const who of this.portraits.keys()) if (!HOVERING.has(who)) standing++;
-    const xs = slotsFor(standing);
+    const zone = this.opts.stage;
+    const xs = zone ? slotsBetween(standing, zone.from, zone.to) : slotsFor(standing);
     let i = 0;
     this.flyers = [];
     for (const [who, img] of this.portraits) {
@@ -264,6 +267,12 @@ export class VnView {
       portrait: speaking ? speaking.texture.key : null,
       onStage,
       dimmed: onStage.filter((w) => !speaking || w !== this.speaking),
+      figures: Object.fromEntries(
+        [...this.portraits].map(([who, img]) => {
+          const b = img.getBounds();
+          return [who, { left: Math.round(b.left), right: Math.round(b.right), top: Math.round(b.top) }];
+        }),
+      ),
       click: toPage(this.scene, W / 2, 945),
       skip: b ? { visible: b.visible, ...toPage(this.scene, b.x, b.y) } : { visible: false, x: 0, y: 0 },
     };

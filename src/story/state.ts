@@ -69,6 +69,8 @@ export interface StoryTestState {
   } | null;
   fireworks: { bursts: number; flashes: number };
   /** Lux's room only: the window glass and the box round the rain drawn this frame (null otherwise). */
+  /** Where each character on stage is drawn (game px): its left and right edges and its top. */
+  figures: Record<string, { left: number; right: number; top: number }>;
   /** Akemi's photo is up as an insert (the cold open, until Lux speaks). */
   photo: boolean;
   rain: { glass: Box; drawn: { x: number; y: number; w: number; h: number } | null } | null;
@@ -106,6 +108,7 @@ export const storyState: Omit<StoryTestState, 'runNow' | 'runHeld' | 'seen'> = {
   finished: [],
   debrief: null,
   fireworks: { bursts: 0, flashes: 0 },
+  figures: {},
   photo: false,
   rain: null,
 };
@@ -129,6 +132,7 @@ export type ViewSnapshot = Pick<
   | 'click'
   | 'skip'
   | 'chatShown'
+  | 'figures'
 >;
 
 let liveView: { snapshot(): ViewSnapshot } | null = null;

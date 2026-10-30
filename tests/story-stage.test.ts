@@ -6,6 +6,7 @@ import {
   bobAt,
   frameFor,
   hoverFor,
+  slotsBetween,
   slotsFor,
 } from '../src/story/stage';
 
@@ -56,5 +57,16 @@ describe('flyers', () => {
     expect(hoverFor([]).x).toBe(slotsFor(1)[0]);
     expect(Math.abs(bobAt(0.6))).toBeLessThanOrEqual(HOVER_BOB.amp);
     expect(bobAt(0)).toBeCloseTo(bobAt(HOVER_BOB.period));
+  });
+
+  it('stands a cast between two edges evenly, for a scene whose panels own the left (the debrief)', () => {
+    expect(slotsBetween(0, 1000, 1900)).toEqual([]);
+    expect(slotsBetween(1, 1000, 1900)).toEqual([1450]);
+    expect(slotsBetween(2, 1000, 1900)).toEqual([1225, 1675]);
+    // A tall sprite at its drawn width (about 450 x 0.97) stays inside the stretch.
+    for (const x of slotsBetween(2, 1000, 1900)) {
+      expect(x - 225).toBeGreaterThanOrEqual(1000);
+      expect(x + 225).toBeLessThanOrEqual(1920);
+    }
   });
 });

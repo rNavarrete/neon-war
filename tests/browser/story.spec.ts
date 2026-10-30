@@ -367,7 +367,10 @@ test('the debrief grades the night, names the terms, ends with the interview car
   let s = await story(page);
   expect(s.debrief?.step).toBe('grades');
   expect(s.debrief?.results).toEqual(results);
-  expect(s.portrait).toBe('portrait:rei/faces/grading');
+  expect(s.portrait).toBe('portrait:rei/vn/grading');
+  // Rei stands tall beside the results panel (x 90 to 710) and the interview card (to 950), not behind them.
+  expect(s.figures.Rei!.left).toBeGreaterThan(950);
+  expect(s.figures.Rei!.right).toBeLessThanOrEqual(1920);
   await page.screenshot({ path: 'test-results/screens/debrief.png' });
 
   const grades = [s.lineId];

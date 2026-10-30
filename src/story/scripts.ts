@@ -80,15 +80,15 @@ const RESCUE: SceneScript = {
     { lineId: 'C5.lux.01', face: 'lux/vn/board-shocked' },
     { lineId: 'C5.rei.02' },
     { lineId: 'C5.mika.01' },
-    { lineId: 'C5.mika.02', face: 'mika/faces/explain' },
+    { lineId: 'C5.mika.02', face: 'mika/vn/explain' },
     { lineId: 'C5.rei.03', cue: 'cable' },
-    { lineId: 'C5.rei.cut', onlyIf: 'laundryCut', face: 'rei/faces/impressed' },
+    { lineId: 'C5.rei.cut', onlyIf: 'laundryCut', face: 'rei/vn/impressed' },
     { lineId: 'C5.lux.cut', onlyIf: 'laundryCut', face: 'lux/vn/board-deadpan' },
-    { lineId: 'C5.ozzie.01', face: 'ozzie/faces/sums' },
+    { lineId: 'C5.ozzie.01', face: 'ozzie/vn/sums' },
     { lineId: 'C5.ozzie.02' },
-    { lineId: 'C5.mika.03', face: 'mika/faces/focused' },
-    { lineId: 'C5.ozzie.03', face: 'ozzie/faces/sceptical' },
-    { lineId: 'C5.rei.04', face: 'rei/faces/stern' },
+    { lineId: 'C5.mika.03', face: 'mika/vn/focused' },
+    { lineId: 'C5.ozzie.03', face: 'ozzie/vn/sceptical' },
+    { lineId: 'C5.rei.04', face: 'rei/vn/stern' },
     // C5.mika.04 (Mika hands over Regroup) is not in Session 0: BROWNOUT.regroup.inSession.
   ],
 };
@@ -108,7 +108,7 @@ const REWIND_REI_SURGE: SceneScript = {
   backdrop: 'art/bg/immersive.webp',
   where: 'board',
   look: 'crew',
-  steps: [{ lineId: 'C5.rei.rewind', face: 'rei/faces/stern' }],
+  steps: [{ lineId: 'C5.rei.rewind', face: 'rei/vn/stern' }],
 };
 
 /** Rei's rewind when the block goes dark at midnight. */
@@ -117,7 +117,7 @@ const REWIND_REI_MIDNIGHT: SceneScript = {
   backdrop: 'art/bg/bedroom-dark.webp',
   where: 'board',
   look: 'crew',
-  steps: [{ lineId: 'C6.rei.fail', face: 'rei/faces/stern' }],
+  steps: [{ lineId: 'C6.rei.fail', face: 'rei/vn/stern' }],
 };
 
 export const SCRIPTS: Readonly<Record<ScriptId, SceneScript>> = {
