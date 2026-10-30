@@ -308,10 +308,9 @@ describe('missing voices', () => {
     expect(m.ja).toContain('C1.triage.02');
     expect(m.en).toContain('C1.lux.01');
     // 85 until Lux's 26 board lines were recorded, then 111 until the 20 coach nudges were
-    // (Rolando, 30 Oct 2026): every spoken line now. 130 since C0.triage.01 was rewritten for the
-    // cold open's check-in beat (Rolando, 30 Oct 2026) and its old take removed until re-recorded.
-    expect(m.ja).toHaveLength(130);
-    expect(m.en).toHaveLength(130);
+    // (Rolando, 30 Oct 2026): every spoken line now, 133 with the cold open's check-in beat.
+    expect(m.ja).toHaveLength(133);
+    expect(m.en).toHaveLength(133);
   });
 
   it('keeps the last 20 requests', () => {

@@ -14,10 +14,23 @@
   [
     "C0.grandma.01",
     "grandma",
-    "[calling through a door] Lux? Your show's starting, love.",
-    "[ドア越しに呼ぶ] ルクス？配信始まるよ。"
+    "[warm, calling through the door] Lux, it's almost midnight, love. Come downstairs.",
+    "[ドア越しに優しく呼びかけて] ルクス、もうすぐ年越しよ。下りておいで。"
   ],
   ["C0.lux.01", "lux", "[distracted, quiet] In a minute, Baachan.", "[上の空で、小声] 今行く、ばあちゃん。"],
+  [
+    "C0.triage.01",
+    "triage",
+    "[gentle, worried] Hey... you okay, Lux?",
+    "[優しく、心配そうに] ねえ……ルクス、大丈夫？"
+  ],
+  ["C0.lux.03", "lux", "[quietly, wiping her eyes] Yeah. I'm fine.", "[静かに、涙をぬぐって] うん。平気。"],
+  [
+    "C0.triage.02",
+    "triage",
+    "[eager, then uneasy] Uh... your chat's blowing up. The block's net is dropping again.",
+    "[明るく、だんだん不安そうに] えっと……チャットが大騒ぎ。またブロックのネットが落ちてる。"
+  ],
   ["C0.lux.02", "lux", "Yeah. Let's go look.", "うん。見に行こう。"],
   [
     "C1.triage.01",

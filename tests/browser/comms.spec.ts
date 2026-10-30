@@ -531,10 +531,6 @@ test('comms-6: scene lines ask for their voice in order; a click past a line cut
   await page.goto('/?test&scene=story');
   await expect.poll(async () => (await storyOf(page))?.scriptId ?? null, { timeout: 15_000 }).toBe('C0');
 
-  // The cold open's check-in beat (Rolando, 30 Oct 2026) has three lines not recorded yet
-  // (docs/VOICE.md "Not recorded yet"): they still ask for their voice and are cut, but no clip starts,
-  // nothing is fetched and the mixer lists them as missing. Every recorded line keeps every check.
-  const NOT_RECORDED = new Set(['C0.triage.01', 'C0.lux.03', 'C0.triage.02']);
   const shown: string[] = [];
   for (let guard = 0; guard < 20; guard++) {
     const s = (await storyOf(page))!;
@@ -546,10 +542,9 @@ test('comms-6: scene lines ask for their voice in order; a click past a line cut
       expect((await voiceOf(page)).recentVoice.at(-1), s.lineId).toBe(s.lineId);
       if (shown.length > 1) expect(s.voiceStops.at(-1)).toBe(shown.at(-2));
       // Its clip starts while the line shows: the mixer reports voiceStart for it.
-      if (!NOT_RECORDED.has(s.lineId))
-        await expect
-          .poll(async () => (await voiceOf(page)).started, { timeout: 5_000, intervals: [25] })
-          .toContain(s.lineId);
+      await expect
+        .poll(async () => (await voiceOf(page)).started, { timeout: 5_000, intervals: [25] })
+        .toContain(s.lineId);
     }
     await expect.poll(async () => (await storyOf(page))!.typingDone, { timeout: 5_000 }).toBe(true);
     const before = (await storyOf(page))!;
@@ -560,7 +555,9 @@ test('comms-6: scene lines ask for their voice in order; a click past a line cut
           const n = (await storyOf(page))!;
           return n.clicks > before.clicks && (n.lineId !== before.lineId || !n.active);
         },
-        { timeout: 5_000 },
+        // 10 s since the cold open ends on the jack-in (Rolando's pick, 30 Oct 2026): the click past the
+        // last line plays about 2.3 s of dissolve and flash before the scene ends.
+        { timeout: 10_000 },
       )
       .toBe(true);
   }
@@ -580,12 +577,10 @@ test('comms-6: scene lines ask for their voice in order; a click past a line cut
   expect(v.lastVoice).toBe(shown.at(-1));
   // The files exist now: no shown id is missing, each clip started once, in the order shown, and
   // was fetched once in Japanese. The scene ending cut the last one, so nothing plays.
-  const recorded = shown.filter((id) => !NOT_RECORDED.has(id));
-  for (const id of recorded) expect(v.missing).not.toContain(id);
-  for (const id of shown.filter((id) => NOT_RECORDED.has(id))) expect(v.missing).toContain(id);
+  for (const id of shown) expect(v.missing).not.toContain(id);
   expect(v.playing).toBeNull();
-  expect(v.started).toEqual(recorded);
-  for (const id of recorded)
+  expect(v.started).toEqual(shown);
+  for (const id of shown)
     expect(
       fetched.filter((u) => u.endsWith(`/audio/voice/ja/${id}.mp3`)),
       id,
