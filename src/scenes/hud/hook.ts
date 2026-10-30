@@ -26,8 +26,11 @@ export interface HudTestState {
   jobCard: { open: boolean; x: number; y: number };
   /** The last values plotted on the chart, and the sim's right now. */
   chart: { demand: number; capacity: number; ceiling: number };
-  /** `block` is what the block sends before retries (the laundry cut sheds from it). */
-  sim: { demand: number; block: number; capacity: number; trust: number; credits: number };
+  /**
+   * `block` is what the block sends before retries (the laundry cut sheds from it). `tipped` is every
+   * credit the viewers' tips brought in so far, so a test can tell a tip from a spend.
+   */
+  sim: { demand: number; block: number; capacity: number; trust: number; credits: number; tipped: number };
   /** Trust and credits as shown on screen. */
   shown: { trust: number; credits: number };
   /** The surge warning on screen; `shownAt` is the sim time it first appeared. */

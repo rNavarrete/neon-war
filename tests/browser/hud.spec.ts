@@ -160,7 +160,9 @@ for (const choice of ['pay', 'ignore', 'bin'] as const) {
     const after = await hud(page);
     expect(after.banner.open).toBe(false);
     // Pay spends 200; the server's upkeep (5 credits a minute) moves credits by a little either way.
-    const spent = before.sim.credits - after.sim.credits;
+    // A viewer's tip can land between the two reads at speed 20 (CI saw a 5-credit trickle), so the
+    // tips that came in between are counted back: they are income, not the banner's price.
+    const spent = before.sim.credits - after.sim.credits + (after.sim.tipped - before.sim.tipped);
     const expected = choice === 'pay' ? 200 : 0;
     expect(spent).toBeGreaterThanOrEqual(expected);
     expect(spent).toBeLessThan(expected + 3);

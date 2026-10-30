@@ -7,6 +7,7 @@ import { allPortraits } from '../game/portraits';
 import { MAX_FRAME_SECONDS, type Run, run } from '../game/run';
 import { settings } from '../game/settings';
 import { BROWNOUT } from '../sim/brownout';
+import { tipTotal } from '../sim/tips';
 import type { BannerChoice } from '../sim/economy';
 import { LINES, type LineId, line } from '../strings';
 import { provideTestState } from '../testHook';
@@ -669,6 +670,7 @@ export class HudScene extends Phaser.Scene {
         capacity: r.capacity,
         trust: r.session.trust,
         credits: r.session.board.credits,
+        tipped: tipTotal(r.play.tips),
       },
       shown: { trust: shownTrust(f.trust), credits: shownCredits(f.credits) },
       surge: w
