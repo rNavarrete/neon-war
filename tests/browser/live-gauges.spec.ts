@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { ZONES } from '../../src/scenes/live/layout';
 import type { KeyName } from '../../src/scenes/hud/deck';
 import type { HudTestState } from '../../src/scenes/hud/hook';
 import { BROWNOUT } from '../../src/sim/brownout';
@@ -44,7 +45,10 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
     const ids = h.bounds.map((b) => b.id);
     expect(ids).not.toContain('dial');
     expect(ids).not.toContain('sizing');
-    const topRight = { x: 1560, y: 120, w: 340, h: 250 };
+    // Layout A2 (Rolando, 30 Oct) put the caller column right of the feed, so the feed's top right
+    // corner is read from its zone (it was 1560, 120 when the feed ran to x 1900).
+    const feed = ZONES.feed;
+    const topRight = { x: feed.x + feed.w - 340, y: feed.y, w: 340, h: 250 };
     const canvas = await page.evaluate(() => {
       const r = document.querySelector('canvas')!.getBoundingClientRect();
       return { left: r.left, top: r.top, sx: r.width / 1920, sy: r.height / 1080 };
@@ -95,7 +99,9 @@ test('the headroom bar: red within one sim second of the district surge at speed
   expect(room.label).toMatch(/^HEADROOM · OVER \+\d+ req\/s$/);
   expect(room.label).not.toMatch(/room left|\bbox\b/i);
   expect(room.capacity).toBeCloseTo(h.sim.capacity, 0);
-  expect(room.right).toBeLessThanOrEqual(1232);
+  // Layout A2 (Rolando, 30 Oct): the gauge, and its headroom words, moved to the right column, so
+  // the words end inside the gauge zone (they ended left of the old deck key at x 1232).
+  expect(room.right).toBeLessThanOrEqual(ZONES.gauge.x + ZONES.gauge.w);
   await shot(page, 'live-m2-deck');
   expect(errors).toEqual([]);
 });
@@ -197,7 +203,9 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(room.lit).toBeGreaterThan(0);
     expect(room.lit).toBeLessThanOrEqual(30);
     expect(room.label).toMatch(/^HEADROOM -?\d+% · \d+ of \d+$/);
-    expect(room.right).toBeLessThanOrEqual(1232);
+    // Layout A2 (Rolando, 30 Oct): the gauge, and its headroom words, moved to the right column, so
+    // the words end inside the gauge zone (they ended left of the old deck key at x 1232).
+    expect(room.right).toBeLessThanOrEqual(ZONES.gauge.x + ZONES.gauge.w);
 
     // No LAST 60 s chart any more (30 Oct 2026): the gauge is the one demand widget.
     expect(h.chart.plot).toBeUndefined();

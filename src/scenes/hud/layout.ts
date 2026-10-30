@@ -56,7 +56,8 @@ export const RIGHT = {
   /** The one chat column (block and stream merged): its panel is the zone, the rows the body. */
   chat: { x: chat.x, y: chat.y, w: chat.w, h: chat.h },
   chatTitle: { x: chat.x + 22, y: chat.y + 14 },
-  chatBody: { x: chat.x + 20, y: chat.y + 40, w: chat.w - 40, h: 220, rows: 5 },
+  /** The rows fill the tall column (layout A, Rolando 30 Oct 2026: "following the chat is really fun"). */
+  chatBody: { x: chat.x + 20, y: chat.y + 40, w: chat.w - 40, h: chat.h - 60, rows: 16 },
 };
 
 // ---- the bottom: the comms band's slots and the deck ----
@@ -74,10 +75,24 @@ const KEY_LABELS = [
 ] as const;
 
 export const BOTTOM = {
-  /** The crew's five slots, r 42 at y 720, x 517 + 98 i (comms.ts commsLayout matches them). */
-  slots: SLOT_NAMES.map((name, i) => ({ name, x: comms.x + 62 + 98 * i, y: comms.y + 75, r: 42 })),
-  /** The deck's keys, 80x64 at (1272, 1022) and (1360, 1022); the third slot (SET) is empty. */
-  keys: KEY_LABELS.map((k, i) => ({ ...k, x: deck.x + 817 + 88 * i, y: deck.y + 52, w: 80, h: 64 })),
+  /**
+   * The crew's five slots in the caller column, r 42 along its bottom, overlapping like a call's
+   * participant stack: y 512, x 1616 + 61 i (comms.ts commsLayout matches them).
+   */
+  slots: SLOT_NAMES.map((name, i) => ({
+    name,
+    x: Math.round(comms.x + 50 + ((comms.w - 100) / (SLOT_NAMES.length - 1)) * i),
+    y: comms.y + comms.h - 64,
+    r: 42,
+  })),
+  /** The deck's keys, 120x52, side by side across the strip under the tray; each shows only while it can act. */
+  keys: KEY_LABELS.map((k, i) => ({
+    ...k,
+    x: deck.x + deck.w / 2 + (i - 0.5) * 132,
+    y: deck.y + deck.h / 2 + 4,
+    w: 120,
+    h: 52,
+  })),
 };
 
 export const KEY = { regroup: 0, cut: 1 } as const;

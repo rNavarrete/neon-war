@@ -75,7 +75,7 @@ export class HeadroomView {
   create(scene: Phaser.Scene, at: { x: number; y: number }, bus: Bus): Phaser.GameObjects.Text {
     this.bus = bus;
     this.label = scene.add
-      .text(at.x, at.y, '', { fontFamily: FONT, fontSize: '20px', color: LABEL_COLORS.green })
+      .text(at.x, at.y, '', { fontFamily: FONT, fontSize: '18px', color: LABEL_COLORS.green })
       .setOrigin(0.5, 0)
       .setDepth(GAUGES_DEPTH);
     this.shownState = null;

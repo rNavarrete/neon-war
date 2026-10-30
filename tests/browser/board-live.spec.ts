@@ -1137,7 +1137,7 @@ test('the night at speed 20 (board-7, board-9 to board-11): C1, the surge, a ski
   expect(end.sfx.counts['server-online']).toBeGreaterThan(0);
   expect(end.sfx.counts['packet-drop']).toBeGreaterThan(0);
 
-  // The board's live texts within its share of the Live screen's 110 (docs/LIVE.md).
+  // The board's live texts within its share of the Live screen's 144 (docs/LIVE.md).
   test.info().annotations.push({
     type: 'board texts',
     description: `surge ${atSurge.textsBy.board}, midnight ${atMidnight.textsBy.board}`,

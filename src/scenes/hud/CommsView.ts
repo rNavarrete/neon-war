@@ -41,6 +41,8 @@ import {
   OTHER_RING_ALPHA,
   type TriageMood,
   bandAlpha,
+  CALL_SLIDE,
+  callAlpha,
   chipArt,
   clickLog,
   commsLayout,
@@ -68,6 +70,8 @@ import {
   stepLog,
   swapTick,
   tag,
+  TRIAGE_TILE,
+  callShows,
   triageMood,
   typedOf,
 } from './comms';
@@ -255,7 +259,7 @@ declare global {
 
 export class CommsView implements LiveView {
   readonly zone = 'comms' as const;
-  readonly budget: LiveBudget = { objects: 29, texts: 13 };
+  readonly budget: LiveBudget = { objects: 31, texts: 13 };
 
   /** The band's model; replaced, never mutated. */
   state: CommsState = NO_COMMS;
@@ -341,6 +345,11 @@ export class CommsView implements LiveView {
   private leaderPts: readonly [LocatedPoint, LocatedPoint, LocatedPoint] | null = null;
   /** The line the leader belongs to, and the real time of the last try while it found nothing. */
   private leaderFor: LineId | null = null;
+  /** The call panel (layout A): the speaker's video tile, and how far the panel has popped up (0 to 1). */
+  private tileBg: Phaser.GameObjects.Graphics | null = null;
+  private tileImg: Phaser.GameObjects.Image | null = null;
+  private callA = 0;
+  private callReal = 0;
   private leaderTry = -Infinity;
   private shownLeaderAlpha = -1;
 
@@ -352,6 +361,11 @@ export class CommsView implements LiveView {
       COMMS_AVATARS.OZZIE,
       ...COMMS_AVATARS.HOUSE,
     ]);
+    // TRIAGE's painted moods for the call panel's video tile.
+    for (const [mood, file] of Object.entries(TRIAGE_TILE)) {
+      const key = `call:triage:${mood}`;
+      if (scene.load && !scene.textures.exists(key)) scene.load.image(key, file);
+    }
     // The picked plate, once the manifest carries its cut (its fallback is the HUD's text box).
     const file = plateFile();
     if (file && !scene.textures.exists(fileTexture(file))) scene.load.image(fileTexture(file), file);
@@ -371,11 +385,24 @@ export class CommsView implements LiveView {
     // its fallback, so a pick dropped in later needs no change here.
     const exists = (t: string): boolean => scene.textures.exists(t);
     const pa = plateArt(exists);
-    this.plateUse = pa;
-    let plate: Phaser.GameObjects.Image | Phaser.GameObjects.NineSlice | Phaser.GameObjects.Rectangle;
+    // The call panel (layout A, A2) draws its plate in code, so the snapshot says so.
+    this.plateUse = L.tile ? { use: 'code', texture: null, nine: false, tint: 0xffffff, alpha: 1 } : pa;
+    let plate:
+      | Phaser.GameObjects.Image
+      | Phaser.GameObjects.NineSlice
+      | Phaser.GameObjects.Rectangle
+      | Phaser.GameObjects.Graphics;
     this.plateSource = null;
     this.plateRect = { x: r.x, y: r.y, w: r.w, h: r.h };
-    if (pa.texture && !pa.nine) {
+    if (L.tile) {
+      // The call panel is drawn in code: the painted band's plate is a 1455 x 149 strip.
+      const g = add.graphics();
+      g.fillStyle(COLORS.ink, 0.92);
+      g.fillRoundedRect(r.x, r.y, r.w, r.h, 10);
+      g.lineStyle(2, COLORS.cyan, 0.55);
+      g.strokeRoundedRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 10);
+      plate = g;
+    } else if (pa.texture && !pa.nine) {
       // The picked plate is a little under the band (1455x149 in 1455x150): drawn at its own
       // size, centred on whole pixels, never stretched up to the band.
       const src = this.frameSize(scene, pa.texture);
@@ -395,6 +422,8 @@ export class CommsView implements LiveView {
       fontSize: '13px',
       color: COLORS.cyanText,
     });
+    // Over the call tile, on a dark chip so a face under it never hides it.
+    if (L.tile) title.setBackgroundColor('#05070fcc').setPadding(4, 2, 4, 2);
 
     const slots = add.graphics();
     const rims = add.graphics();
@@ -509,8 +538,30 @@ export class CommsView implements LiveView {
       .setOrigin(0.5)
       .setVisible(false);
 
+    // The call panel's video tile: a dark screen with the speaker's face on it while they talk.
+    const tileParts: Phaser.GameObjects.GameObject[] = [];
+    this.tileBg = null;
+    this.tileImg = null;
+    if (L.tile) {
+      const t = L.tile;
+      const bg = add.graphics();
+      bg.fillStyle(0x0b1220, 1);
+      bg.fillRoundedRect(t.x, t.y, t.w, t.h, 8);
+      bg.lineStyle(2, COLORS.cyan, 0.8);
+      bg.strokeRoundedRect(t.x, t.y, t.w, t.h, 8);
+      this.tileBg = bg;
+      this.tileImg =
+        typeof add.image === 'function'
+          ? add.image(t.x + t.w / 2, t.y + t.h, '__DEFAULT').setOrigin(0.5, 1)
+          : null;
+      this.tileImg?.setVisible(false);
+      tileParts.push(bg, ...(this.tileImg ? [this.tileImg] : []));
+    }
+    this.callA = L.tile ? 0 : 1;
+
     this.root = add.container(0, 0, [
       plate,
+      ...tileParts,
       title,
       slots,
       ...this.faces,
@@ -527,6 +578,7 @@ export class CommsView implements LiveView {
       ...this.logRows,
       this.replayGlyph,
     ]);
+    this.root.setAlpha(this.callA);
     // The leader leaves the band, so it is not in the band's container (hud.bounds keeps the band).
     this.leaderGfx = add.graphics().setVisible(false);
 
@@ -607,6 +659,7 @@ export class CommsView implements LiveView {
       this.lineText!.setAlpha(alpha);
     }
     if (frame.rescued !== this.shownPresent) this.setPresent(frame.rescued);
+    this.updateCall();
     this.updateMotion(alpha);
     this.updateLeader(frame, alpha);
     this.held = frame.paused;
@@ -884,6 +937,51 @@ export class CommsView implements LiveView {
     }
   }
 
+  /**
+   * The call panel pops up while someone is on the line (or the log is open) and away after, and the
+   * speaker's tile slides in as their line starts. The old full-width band never fades (no tile).
+   */
+  private updateCall(): void {
+    const L = this.L!;
+    if (!L.tile) return;
+    const dt = Math.min(0.1, Math.max(0, this.real - this.callReal));
+    this.callReal = this.real;
+    const showing = callShows(this.state.current?.id ?? null, logOpen(this.log, this.real));
+    const a = callAlpha(this.callA, showing, dt, this.steady());
+    if (a !== this.callA) {
+      this.callA = a;
+      this.root!.setAlpha(a);
+    }
+    const img = this.tileImg;
+    if (img?.visible) {
+      const k = this.steady() ? 1 : Math.min(1, (this.real - this.lineAt) / 0.25);
+      img.setX(L.tile.x + L.tile.w / 2 + CALL_SLIDE * (1 - k) * (1 - k));
+    }
+  }
+
+  /** The speaker's face on the call tile: TRIAGE's mood, a crew member's face, the door or the TV. */
+  private showTile(id: LineId | null): void {
+    const img = this.tileImg;
+    const t = this.L?.tile;
+    if (!img || !t || !this.scene) return;
+    const slot = id ? slotOf(LINES[id].speaker) : null;
+    let key: string | null = null;
+    if (slot === 'TRIAGE') key = `call:triage:${moodOf(triageMood(id!))}`;
+    else if (slot === 'HOUSE') key = this.chips[this.houseShown]?.texture ?? null;
+    else if (slot) key = avatarSource(COMMS_AVATARS[slot]).texture;
+    if (!key || !this.scene.textures.exists(key)) {
+      img.setVisible(false);
+      return;
+    }
+    img.setTexture(key);
+    const src = this.frameSize(this.scene, key);
+    const k = src.w > 0 && src.h > 0 ? Math.min((t.w - 12) / src.w, (t.h - 8) / src.h, 1) : 1;
+    img
+      .setScale(k)
+      .setPosition(t.x + t.w / 2, t.y + t.h - 4)
+      .setVisible(true);
+  }
+
   /** Redraw the nameplate, tag pill and speaker ring for a line (or clear them). Once per line. */
   private drawLine(id: LineId | null): void {
     const L = this.L!;
@@ -897,6 +995,7 @@ export class CommsView implements LiveView {
       this.nameText!.setText('');
       this.tagText!.setText('');
       this.lineText!.setText('');
+      this.showTile(null);
       return;
     }
     const l = LINES[id];
@@ -922,6 +1021,7 @@ export class CommsView implements LiveView {
       this.ring!.lineStyle(3, t === 'WARNING' ? COLORS.red : COLORS.hero, 1);
       this.ring!.strokeCircle(s.x, s.y, s.r);
     }
+    this.showTile(id);
   }
 
   /** HOUSE's chip: 0 the door, 1 the TV; its picked art, or a code glyph until that lands. */

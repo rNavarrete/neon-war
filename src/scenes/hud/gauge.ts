@@ -223,30 +223,42 @@ export interface GaugeLayout {
   readonly room: { readonly x: number; readonly y: number };
   readonly sub: { readonly x: number; readonly y: number };
   readonly strip: { readonly x: number; readonly y: number };
+  /** The painted face's and needle's scale (GAUGE_ART_K at full size). */
+  readonly k: number;
+  /** The text's scale against the full-size dial's font sizes. */
+  readonly text: number;
 }
 
 /**
- * The gauge laid out in `rect` (ZONES.gauge, 408 x 360, the whole left column's foot since the chart
- * went): the arc centred across the zone at (rect.x + 204, rect.y + 198), so (220, 908), outer
- * radius 154 and a 123 px needle; the readout stacked and centred under it.
+ * The gauge laid out in `rect`. The full-size dial (a zone 360 px tall or more, as before layout A)
+ * centres its arc at (rect.x + w / 2, rect.y + 198) with outer radius 154 and a 123 px needle, the
+ * readout stacked under it. A shorter zone (layout A's 344 x 260, Rolando 30 Oct 2026: "the gauge
+ * doesn't have to be that big") draws the same dial at GAUGE_COMPACT of that size.
  */
 export function gaugeLayout(rect: Rect): GaugeLayout {
+  const f = rect.h >= 360 ? 1 : GAUGE_COMPACT;
+  const at = (n: number): number => Math.round(n * f);
   const cx = rect.x + Math.round(rect.w / 2);
-  const cy = rect.y + 198;
+  const cy = rect.y + at(198) - (f < 1 ? 2 : 0);
   return {
     plate: { x: rect.x, y: rect.y, w: rect.w, h: rect.h },
     centre: { x: cx, y: cy },
-    outer: 154,
-    inner: 132,
-    needle: 123,
-    numbers: 106,
-    title: { x: rect.x + 12, y: rect.y + 8 },
-    readout: { x: cx, y: rect.y + 232 },
-    room: { x: cx, y: rect.y + 286 },
-    sub: { x: cx, y: rect.y + 312 },
-    strip: { x: cx, y: rect.y + 334 },
+    outer: at(154),
+    inner: at(132),
+    needle: at(123),
+    numbers: at(106),
+    title: { x: rect.x + 12, y: rect.y + (f < 1 ? 6 : 8) },
+    readout: { x: cx, y: cy + at(34) },
+    room: { x: cx, y: cy + at(88) },
+    sub: { x: cx, y: cy + at(114) },
+    strip: { x: cx, y: cy + at(136) },
+    k: GAUGE_ART_K * f,
+    text: f,
   };
 }
+
+/** The share of full size the dial draws at in a zone under 360 px tall. */
+export const GAUGE_COMPACT = 0.72;
 
 /** A point on the arc at value `v` and radius `r` from the layout's centre. */
 export function arcPoint(L: GaugeLayout, v: number, r: number): { x: number; y: number } {
@@ -273,11 +285,11 @@ export const NEEDLE_PIVOT = { x: 0.5, y: 150 / 162 } as const;
  * height is the file's at k (188.3), so the face is never drawn above its file's size. Pure.
  */
 export function gaugeFacePlace(L: GaugeLayout): { x: number; y: number; w: number; h: number } {
-  const w = FACE_FILE.w * GAUGE_ART_K;
-  const h = FACE_FILE.h * GAUGE_ART_K;
+  const w = FACE_FILE.w * L.k;
+  const h = FACE_FILE.h * L.k;
   const p = L.plate;
-  const x = Math.max(p.x, Math.round(L.centre.x - FACE_HUB.x * GAUGE_ART_K));
-  const y = Math.min(p.y + p.h - Math.ceil(h), Math.round(L.centre.y - FACE_HUB.y * GAUGE_ART_K));
+  const x = Math.max(p.x, Math.round(L.centre.x - FACE_HUB.x * L.k));
+  const y = Math.min(p.y + p.h - Math.ceil(h), Math.round(L.centre.y - FACE_HUB.y * L.k));
   return { x, y, w, h };
 }
 

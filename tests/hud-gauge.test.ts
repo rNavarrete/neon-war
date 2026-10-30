@@ -222,9 +222,15 @@ describe('the layout', () => {
     const z = ZONES.gauge;
     const L = gaugeLayout(z);
     // The dial fills the column's width since the chart went (30 Oct 2026), the readout under it.
-    expect(L.centre).toEqual({ x: 220, y: 908 });
-    expect(L.outer).toBe(154);
-    expect(L.needle).toBe(123);
+    // Layout A2's smaller gauge (Rolando, 30 Oct 2026, 344x260) draws it at GAUGE_COMPACT (0.72).
+    expect(L.centre).toEqual({ x: 1738, y: 721 });
+    expect(L.outer).toBe(111);
+    expect(L.needle).toBe(89);
+    expect(gaugeLayout({ x: 16, y: 710, w: 408, h: 360 })).toMatchObject({
+      centre: { x: 220, y: 908 },
+      outer: 154,
+      needle: 123,
+    });
     expect(L.centre.x - L.outer - 8).toBeGreaterThanOrEqual(z.x);
     expect(L.centre.x + L.outer + 8).toBeLessThanOrEqual(z.x + z.w);
     expect(L.readout.y).toBeGreaterThan(L.centre.y);

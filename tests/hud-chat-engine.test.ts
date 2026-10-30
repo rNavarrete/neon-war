@@ -488,11 +488,12 @@ describe('scripted extras', () => {
     expect(back.silenced).toBe(false);
   });
 
-  it('toggles BLOCK ONLY and shows the newest five rows', () => {
+  // Sixteen rows since the layout A chat column (Rolando, 30 Oct 2026); five before.
+  it('toggles BLOCK ONLY and shows the newest sixteen rows', () => {
     const m = play(sim(0), 0, 120, () => ({}));
     const all = visibleRows(m.s);
-    expect(all.length).toBe(5);
-    expect(all[4]).toBe(m.s.feed[m.s.feed.length - 1]);
+    expect(all.length).toBe(16);
+    expect(all[15]).toBe(m.s.feed[m.s.feed.length - 1]);
     const blockOnly = toggleFilter(m.s);
     expect(blockOnly.filter).toBe('block');
     expect(visibleRows(blockOnly).every((r) => r.chat === 'block')).toBe(true);

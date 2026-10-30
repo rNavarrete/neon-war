@@ -132,6 +132,45 @@ export const CHAT_PLATE_SLICE: readonly [number, number, number, number] = [100,
 /** The wide plate's painted header band, in file pixel rows. */
 export const CHAT_PLATE_BAND = Object.freeze({ top: 48, bottom: 90 });
 
+/**
+ * Whether a nine-sliced file can fill `display` with every region at or under its file size. The
+ * layout A chat (465x750, Rolando 30 Oct 2026) is taller than either painted plate can reach, so it
+ * draws the code glass plate (CHAT_GLASS) instead of stretching the plain glass up past 1:1. Pure.
+ */
+export function plateFits(
+  file: { w: number; h: number },
+  display: { w: number; h: number },
+  k: number,
+  slice: readonly [number, number, number, number],
+): boolean {
+  const s = nineSliceScales(file, display, k, slice);
+  return s.corner <= 1 && s.midX > 0 && s.midX <= 1 && s.midY > 0 && s.midY <= 1;
+}
+
+/** The portrait chat panel's file size and nine-slice, its fallback plate. */
+export const CHAT_PANEL_FILE = Object.freeze({ w: 353, h: 524 });
+export const CHAT_PANEL_K = 0.55;
+export const CHAT_PANEL_SLICE: readonly [number, number, number, number] = [70, 70, 70, 70];
+
+/** The code plate for a chat too tall for the painted ones: dark navy glass, see-through, a thin amber rim. */
+export const CHAT_GLASS = Object.freeze({
+  fill: 0x0b1220,
+  alpha: 0.82,
+  rim: 0xffa62b,
+  rimAlpha: 0.7,
+  rimWidth: 2,
+});
+
+/**
+ * Which plate draws in `zone`: the picked wide plate where it fits without upscaling, else the code
+ * glass in its colours. The portrait panel stays the fallback for a plate that has not landed. Pure.
+ */
+export function chatPlateFor(want: ChatArt['plate'], zone: { w: number; h: number }): ChatArt['plate'] {
+  if (want !== 'wide') return want;
+  const wide = artRequest(CHAT_PLATE_WIDE)?.cut;
+  return wide && plateFits(wide, zone, CHAT_PLATE_K, CHAT_PLATE_SLICE) ? 'wide' : 'glass';
+}
+
 /** How much each part of a nine-sliced file is scaled to draw at `display` (1 = file size). Pure. */
 export function nineSliceScales(
   file: { w: number; h: number },
@@ -176,8 +215,11 @@ export function chatArtPicked(key: string): boolean {
 
 /** Which of the chat's requested art draws: each falls back to code until its file is picked. */
 export interface ChatArt {
-  /** 'wide' once hud/chat-plate-wide is picked; the portrait chat panel nine-sliced until then. */
-  plate: 'wide' | 'portrait';
+  /**
+   * 'wide' once hud/chat-plate-wide is picked; the portrait chat panel nine-sliced until then; 'glass'
+   * (a code plate) where the zone is too tall for either to fill without upscaling (chatPlateFor).
+   */
+  plate: 'wide' | 'portrait' | 'glass';
   /** Stream rows show painted avatars (all four chars/avatars/stream-N picked); a cyan ring until then. */
   streamAvatars: boolean;
   /** System rows show the glyph (hud/icons/system picked); the amber rule until then. */
@@ -459,13 +501,15 @@ const onRect = (r: Rect, x: number, y: number): boolean =>
 
 export class ChatFeedView implements LiveView {
   readonly zone = 'chat' as const;
-  readonly budget: LiveBudget = { objects: 31, texts: 17 };
+  // Six fixed objects (two texts) and five per row slot (three texts), VISIBLE_ROWS slots.
+  readonly budget: LiveBudget = { objects: 6 + 5 * VISIBLE_ROWS, texts: 2 + 3 * VISIBLE_ROWS };
 
   /** The controller; outlives create/shutdown so the HUD can reset it before the view is built. */
   readonly feed = new ChatFeed();
   private scene: Phaser.Scene | null = null;
   private root: Phaser.GameObjects.Container | null = null;
-  private plate: Phaser.GameObjects.NineSlice | Phaser.GameObjects.Image | null = null;
+  private plate:
+    Phaser.GameObjects.NineSlice | Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle | null = null;
   /** The art that draws: what the manifest says has landed, less anything whose texture is not in. */
   private art: ChatArt;
   /** Where the header's words sit on the plate that draws. */
@@ -520,7 +564,7 @@ export class ChatFeedView implements LiveView {
     const has = (key: string): boolean => scene.textures.exists(key) === true;
     const want = chatArtOf(this.picked);
     this.art = {
-      plate: want.plate === 'wide' && has(artTexture(CHAT_PLATE_WIDE)) ? 'wide' : 'portrait',
+      plate: chatPlateFor(want.plate === 'wide' && has(artTexture(CHAT_PLATE_WIDE)) ? 'wide' : 'portrait', r),
       streamAvatars: want.streamAvatars && STREAM_AVATARS.every((k) => has(artTexture(k))),
       systemGlyph: want.systemGlyph && has(artTexture(SYSTEM_GLYPH)),
     };
@@ -531,7 +575,15 @@ export class ChatFeedView implements LiveView {
             k: CHAT_PLATE_K,
             slice: [...CHAT_PLATE_SLICE],
           })
-        : panel(scene, 'hud:chat-panel', r.x, r.y, r.w, r.h, { k: 0.55, slice: [70, 70, 70, 70] });
+        : this.art.plate === 'portrait'
+          ? panel(scene, 'hud:chat-panel', r.x, r.y, r.w, r.h, {
+              k: CHAT_PANEL_K,
+              slice: [...CHAT_PANEL_SLICE],
+            })
+          : add
+              .rectangle(r.x + r.w / 2, r.y + r.h / 2, r.w - CHAT_GLASS.rimWidth, r.h - CHAT_GLASS.rimWidth)
+              .setFillStyle(CHAT_GLASS.fill, CHAT_GLASS.alpha)
+              .setStrokeStyle(CHAT_GLASS.rimWidth, CHAT_GLASS.rim, CHAT_GLASS.rimAlpha);
     this.header = chatHeaderLayout(this.art.plate);
     const title = add
       .text(TITLE_X, this.header.titleY, CHAT_TEXT.title, {
@@ -563,12 +615,12 @@ export class ChatFeedView implements LiveView {
       const g = add.graphics();
       const avatar = add.image(0, 0, this.avatarTextures[BLOCK_AVATARS.kenji]).setVisible(false);
       const initial = add
-        .text(0, 0, '', { fontFamily: FONT, fontSize: '14px', color: COLORS.cyanText })
+        .text(0, 0, '', { fontFamily: FONT, fontSize: '16px', color: COLORS.cyanText })
         .setOrigin(0.5);
-      const name = add.text(0, 0, '', { fontFamily: FONT, fontSize: '12px', color: COLORS.amberText });
+      const name = add.text(0, 0, '', { fontFamily: FONT, fontSize: '14px', color: COLORS.amberText });
       const text = add.text(0, 0, '', {
         fontFamily: FONT_SANS,
-        fontSize: '14px',
+        fontSize: '16px',
         color: COLORS.white,
         wordWrap: { width: textW },
         maxLines: 2,
@@ -604,7 +656,7 @@ export class ChatFeedView implements LiveView {
   }
 
   /** The panel, for the HUD's bounds check; null once shut down. */
-  get panel(): Phaser.GameObjects.NineSlice | Phaser.GameObjects.Image | null {
+  get panel(): Phaser.GameObjects.NineSlice | Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle | null {
     return this.plate;
   }
 

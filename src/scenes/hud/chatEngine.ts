@@ -73,8 +73,8 @@ export const VIEWERS_HEAVY_HOLD = 5;
 export const RETRY_STEPS: readonly number[] = [0.2, 0.4];
 /** Rows the feed keeps as history (the view shows the newest five). */
 export const FEED_MAX = 40;
-/** Rows the view shows. */
-export const VISIBLE_ROWS = 5;
+/** Rows the view shows at most (the tall chat column, layout A); fitRows keeps them inside its body. */
+export const VISIBLE_ROWS = 16;
 
 // ---- causes and reactions ----
 

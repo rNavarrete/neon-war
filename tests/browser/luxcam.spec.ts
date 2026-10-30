@@ -39,15 +39,16 @@ test('the cam: inside its zone, the face and backdrop cropped to the lens, art o
 
   const zone = await camZone(page);
   let c = await cam(page);
-  // The hook's zone is ZONES.cam (x 16-424, y 430-700) in page px, the same rect live.zones reports.
+  // The hook's zone is ZONES.cam in page px, the same rect live.zones reports. Layout A2 (Rolando,
+  // 30 Oct 2026) put the cam at the top of the left column: x 6-416, y 110-380 (was x 16, y 430).
   expect(c.zone).toEqual(zone);
   const canvas = await page.evaluate(() => {
     const r = document.querySelector('canvas')!.getBoundingClientRect();
     return { left: r.left, top: r.top, width: r.width, height: r.height };
   });
   const k = canvas.width / 1920;
-  expect(zone.x).toBeCloseTo(canvas.left + 16 * k, 0);
-  expect(zone.y).toBeCloseTo(canvas.top + 430 * (canvas.height / 1080), 0);
+  expect(zone.x).toBeCloseTo(canvas.left + 6 * k, 0);
+  expect(zone.y).toBeCloseTo(canvas.top + 110 * (canvas.height / 1080), 0);
   expect(c.lens.w).toBeCloseTo(388 * k, 0);
   expect(c.lens.h).toBeCloseTo(230 * (canvas.height / 1080), 0);
   expect(within(c.lens, zone)).toBe(true);

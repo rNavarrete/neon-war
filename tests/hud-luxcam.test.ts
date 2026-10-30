@@ -51,6 +51,7 @@ import {
 } from '../src/scenes/hud/luxcam';
 import { HEADROOM_AMBER_FROM, HEADROOM_EXIT } from '../src/scenes/hud/thresholds';
 import { BROWNOUT } from '../src/sim/brownout';
+import { LINES } from '../src/strings';
 
 // luxcam-1: the cam's pure mood selector (src/scenes/hud/luxcam.ts).
 
@@ -382,13 +383,14 @@ describe('CAM_ART', () => {
 // ---- luxcam-2: the cam's geometry, art loading and the view against a stub scene ----
 
 describe('the cam’s geometry', () => {
-  it('puts a 388x230 lens and every piece inside ZONES.cam (x 16-424, y 430-700)', () => {
-    expect(ZONES.cam).toEqual({ x: 16, y: 430, w: 408, h: 270 });
+  // The cam sits top left above the chat since layout A2 (Rolando, 30 Oct 2026).
+  it('puts a 388x230 lens and every piece inside ZONES.cam (x 6-416, y 110-380)', () => {
+    expect(ZONES.cam).toEqual({ x: 6, y: 110, w: 410, h: 270 });
     const L = camLayout(ZONES.cam);
     expect(L.plate).toEqual(ZONES.cam);
     expect(L.lens.w).toBe(CAM_LENS.w);
     expect(L.lens.h).toBe(CAM_LENS.h);
-    expect(L.lens).toEqual({ x: 26, y: 460, w: 388, h: 230 });
+    expect(L.lens).toEqual({ x: 17, y: 140, w: 388, h: 230 });
     expect(inside(L.lens, ZONES.cam)).toBe(true);
     for (const p of [L.label, L.recDot, L.recText, ...L.bars]) {
       expect(p.x).toBeGreaterThan(ZONES.cam.x);
@@ -400,7 +402,10 @@ describe('the cam’s geometry', () => {
   });
 
   it('crops any image to the lens: what shows is always inside it', () => {
-    const lens = camLayout(ZONES.cam).lens;
+    // The crop is zone-agnostic: this is the lens where the cam sat before layout A (x 16-424, y
+    // 430-700), so the placements below read as they did.
+    const lens = camLayout({ x: 16, y: 430, w: 408, h: 270 }).lens;
+    expect(lens).toEqual({ x: 26, y: 460, w: 388, h: 230 });
     const out = emptyCrop();
     // A 1000x1000 texture at 0.5 over the whole lens: the crop is the lens, in texture pixels.
     lensCrop(lens, 0, 400, 1000, 1000, 0.5, out);
@@ -639,9 +644,11 @@ describe('LuxCamView', () => {
     v.create(scene as never, camHost(scene));
     expect(made.length).toBeLessThanOrEqual(v.budget.objects);
     expect(made.filter((m) => m.kind === 'Text').length).toBeLessThanOrEqual(v.budget.texts);
+    // Plus Lux's caption, empty until she talks (layout A2: her lines show on her cam, Rolando 30 Oct 2026).
     expect(made.filter((m) => m.kind === 'Text').map((m) => m.text)).toEqual([
       CAM_WORDS.title,
       CAM_WORDS.rec,
+      '',
     ]);
     expect(made.every((m) => m.depth > 0)).toBe(true);
     v.shutdown();
@@ -918,7 +925,8 @@ describe('LuxCamView: the bus facts (luxcam-3)', () => {
         v.update(f, { now: clock, dt: 0.016 }, []);
       }
     };
-    const bars = made.filter((m) => m.kind === 'Rectangle').slice(1);
+    // The plate, the three bars, then the caption's backing strip.
+    const bars = made.filter((m) => m.kind === 'Rectangle').slice(1, 4);
     return { v, bus, step, bars, now: () => clock };
   }
 
@@ -929,6 +937,8 @@ describe('LuxCamView: the bus facts (luxcam-3)', () => {
     expect(camHook().speaking).toBe(false);
     bus.emit('line', { id: 'C1.lux.01', speaker: 'Lux', tag: 'LUX', lesson: false, since: 1 });
     expect(camHook().speaking).toBe(true);
+    // Her words are captioned on her lens while she talks (layout A2, Rolando 30 Oct 2026).
+    expect(camHook().caption).toBe(LINES['C1.lux.01'].text);
     step(0.5);
     expect(camHook().speaking).toBe(true);
     expect(v.mood).toBe('focused');
@@ -939,6 +949,7 @@ describe('LuxCamView: the bus facts (luxcam-3)', () => {
     expect(camHook().speaking).toBe(true);
     bus.emit('lineEnd', { id: 'C1.lux.01' });
     expect(camHook().speaking).toBe(false);
+    expect(camHook().caption).toBeNull();
     step(0.1);
     expect(bars.every((b) => b.scaleY === 0.25 && b.alpha < 1)).toBe(true);
     // A crew line is not hers; a new line pre-empting hers ends her talking too.

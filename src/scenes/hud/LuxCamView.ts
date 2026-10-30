@@ -22,12 +22,12 @@ import type { Frame } from '../../game/frame';
 import type { Occurrence } from '../../game/occurrences';
 import { speakerName } from '../../game/portraits';
 import { settings } from '../../game/settings';
-import type { LineId } from '../../strings';
+import { LINES, type LineId } from '../../strings';
 import { type Point, type Rect, pageRect } from '../live/layout';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import { preloadArt, resolveArt } from '../plates';
 import { provideHudSection } from './hook';
-import { COLORS, FONT } from './layout';
+import { COLORS, FONT, FONT_SANS } from './layout';
 import {
   CAM_ART,
   CAM_BACKDROP_KEY,
@@ -100,7 +100,7 @@ interface Face {
 
 export class LuxCamView implements LiveView {
   readonly zone = 'cam' as const;
-  readonly budget: LiveBudget = { objects: 15, texts: 2 };
+  readonly budget: LiveBudget = { objects: 17, texts: 3 };
   /** Texture swaps and crossfades started so far (tests: only on a mood change). */
   readonly counts = { swaps: 0, fades: 0 };
 
@@ -125,6 +125,12 @@ export class LuxCamView implements LiveView {
   private recDot: Phaser.GameObjects.Arc | null = null;
   private badge: Phaser.GameObjects.Image | null = null;
   private bars: Phaser.GameObjects.Rectangle[] = [];
+  /**
+   * Lux's words while she talks, as a caption along the bottom of her lens on a dark strip. The call
+   * cams are for the others (Rolando, 30 Oct 2026), so her lines show here instead.
+   */
+  private caption: Phaser.GameObjects.Text | null = null;
+  private captionBack: Phaser.GameObjects.Rectangle | null = null;
 
   /** The cam's state, the view it steps on (refilled every frame) and the bus facts. */
   private state: CamState = initialCam();
@@ -247,6 +253,23 @@ export class LuxCamView implements LiveView {
     if (this.badge) this.objects.push(this.badge);
     this.objects.push(this.recDot, rec);
     this.objects.push(...this.bars);
+    const cap = L.lens;
+    this.captionBack = add
+      .rectangle(cap.x + cap.w / 2, cap.y + cap.h - 6, cap.w - 12, 0, COLORS.ink, 0.82)
+      .setOrigin(0.5, 1)
+      .setVisible(false);
+    this.caption = add
+      .text(cap.x + cap.w / 2, cap.y + cap.h - 12, '', {
+        fontFamily: FONT_SANS,
+        fontSize: '17px',
+        color: COLORS.white,
+        align: 'center',
+        wordWrap: { width: cap.w - 32 },
+        maxLines: 3,
+      })
+      .setOrigin(0.5, 1)
+      .setVisible(false);
+    this.objects.push(this.captionBack, this.caption);
     for (const o of this.objects) (o as unknown as { setDepth(d: number): unknown }).setDepth(CAM_DEPTH);
 
     this.state = initialCam(0);
@@ -275,11 +298,13 @@ export class LuxCamView implements LiveView {
         const hers = speakerName(l.speaker) === 'Lux';
         this.speakingId = hers ? l.id : null;
         ex.luxSpeaking = hers;
+        this.showCaption(this.speakingId);
       }),
       bus.on('lineEnd', (l) => {
         if (l.id !== this.speakingId) return;
         this.speakingId = null;
         ex.luxSpeaking = false;
+        this.showCaption(null);
       }),
       bus.on('drag', (d) => {
         ex.dragging = d.kind !== null;
@@ -511,6 +536,7 @@ export class LuxCamView implements LiveView {
       frameArt: this.frameImg ? CAM_FRAME_KEY : null,
       fading: this.fadeAt !== null,
       speaking: this.extras.luxSpeaking,
+      caption: this.speakingId ? LINES[this.speakingId].text : null,
       dragging: this.extras.dragging,
       motion: this.reduced ? 'reduced' : 'full',
       history: this.history.map((h) => ({ ...h })),
@@ -519,6 +545,20 @@ export class LuxCamView implements LiveView {
       face: page(this.front ? { ...this.front.crop.visible } : zero),
       backdrop: page(this.backdrop ? { ...this.backdropCrop.visible } : zero),
     };
+  }
+
+  /** Lux's line as the lens caption, or hidden. Once per line, so nothing allocates per frame. */
+  private showCaption(id: LineId | null): void {
+    const t = this.caption;
+    const back = this.captionBack;
+    if (!t || !back) return;
+    if (id === null) {
+      t.setVisible(false);
+      back.setVisible(false);
+      return;
+    }
+    t.setText(LINES[id].text).setVisible(true);
+    back.setSize(back.width, t.height + 12).setVisible(true);
   }
 
   shutdown(): void {
@@ -535,6 +575,8 @@ export class LuxCamView implements LiveView {
     this.recDot = null;
     this.badge = null;
     this.bars = [];
+    this.caption = null;
+    this.captionBack = null;
     this.layout = null;
     this.host = null;
     this.canvas = null;

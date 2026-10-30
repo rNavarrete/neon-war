@@ -91,7 +91,7 @@ export function avatarFor(who: string): string | null {
 
 // ---- the LIVE CHAT panel (chat-4): how a row looks and where it sits ----
 
-/** The rows' body inside ZONES.chat (src/scenes/hud/layout.ts RIGHT.chatBody: x 1545-1890, y 840-1060). */
+/** The rows' body inside ZONES.chat (src/scenes/hud/layout.ts RIGHT.chatBody: x 1465-1890, y 360-1050). */
 export const CHAT_BODY = Object.freeze({ ...RIGHT.chatBody });
 
 /** The header strip over the body: ZONES.chat's top 40 px; a click there toggles BLOCK ONLY. */
@@ -103,19 +103,20 @@ export const CHAT_HEADER = Object.freeze({
 });
 
 /** A row's badge (a painted avatar for residents, a ring for viewers), in px. */
-export const ROW_AVATAR = 32;
+export const ROW_AVATAR = 36;
 /** The words start this far right of the body's left edge (tick, badge, gap). */
-export const ROW_TEXT_X = 48;
-/** The name line, then each 14 px message line. */
-export const ROW_NAME_H = 15;
-export const ROW_LINE_H = 17;
+export const ROW_TEXT_X = 54;
+/** The name line, then each 16 px message line (bigger since the chat got its own column). */
+export const ROW_NAME_H = 17;
+export const ROW_LINE_H = 20;
 /** Space under each row. */
-export const ROW_GAP = 4;
+export const ROW_GAP = 6;
 /**
- * A message this long or shorter fits one line of the 297 px column at 14 px; a longer one wraps to
- * two, never more (the view sets maxLines from rowLines). Conservative, so a one-line row never wraps.
+ * A message this long or shorter fits one line of the 316 px column at 16 px (the slim A2 chat); a
+ * longer one wraps to two, never more (the view sets maxLines from rowLines). Conservative, so a
+ * one-line row never wraps.
  */
-export const ONE_LINE_CHARS = 34;
+export const ONE_LINE_CHARS = 31;
 
 /** The handles viewers post under in Lux's stream (05-comms "Live chat"). */
 export const VIEWER_HANDLES: readonly string[] = [
@@ -158,14 +159,14 @@ export function rowLines(text: string): 1 | 2 {
   return text.length <= ONE_LINE_CHARS ? 1 : 2;
 }
 
-/** A row's height in the panel, gap included: 36 for one line (the badge's height), 53 for two. */
+/** A row's height in the panel, gap included: 43 for one line, 63 for two. */
 export function rowHeight(text: string): number {
   return Math.max(ROW_AVATAR, ROW_NAME_H + rowLines(text) * ROW_LINE_H) + ROW_GAP;
 }
 
 /**
  * The newest rows that fit the body, oldest first: walking back from the newest, take rows while
- * their heights fit `bodyH`, at most `max`. Four or five rows in practice.
+ * their heights fit `bodyH`, at most `max`. About fourteen rows in the tall column.
  */
 export function fitRows<T extends { readonly text: string }>(
   rows: readonly T[],

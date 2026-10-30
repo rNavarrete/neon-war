@@ -164,12 +164,13 @@ describe('the per-zone budget table in docs/LIVE.md', () => {
     return out;
   }
 
-  it('gives every zone a text budget, and they sum to the global 110', () => {
+  // 144 since layout A2's sixteen-row chat and Lux's cam caption (Rolando, 30 Oct 2026: a chat about half the screen); 110 before.
+  it('gives every zone a text budget, and they sum to the global 144', () => {
     const r = rows();
     const total = r.find((x) => x.name.includes('Total'))!;
     const zones = r.filter((x) => x !== total);
-    expect(total.texts).toBe(110);
-    expect(zones.reduce((n, x) => n + x.texts, 0)).toBe(110);
+    expect(total.texts).toBe(144);
+    expect(zones.reduce((n, x) => n + x.texts, 0)).toBe(144);
     for (const z of [
       'title',
       'alert',

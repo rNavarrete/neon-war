@@ -46,7 +46,14 @@ import {
 } from '../src/sim/grid';
 import { blockCentre, cellQuad, nodeAt } from '../src/scenes/board/cells';
 import { edgeBlocked, orthogonal, traceNodes } from '../src/scenes/board/lattice';
-import { ZONES, rectToArea } from '../src/scenes/live/layout';
+import {
+  FEED_VIEW,
+  FEED_WORLD,
+  ZONES,
+  boardToScreen,
+  rectToArea,
+  screenToBoard,
+} from '../src/scenes/live/layout';
 import { LOCKED_KINDS, lockedReason, trayCards } from '../src/scenes/board/tray';
 import { dropLegal, padState, targetState } from '../src/scenes/board/layout';
 import { BROWNOUT_RULES } from '../src/sim/brownout';
@@ -219,10 +226,19 @@ describe('board layout', () => {
   });
 
   it('maps game space to page pixels through the canvas rect', () => {
+    // Since layout A (Rolando, 30 Oct 2026) toPage takes board-space points and shows them through
+    // the feed's view first, so these screen points go in as the board points that land on them.
     const rect = { left: 0, top: 0, width: 1280, height: 720 };
-    expect(toPage({ x: 1920, y: 1080 }, rect, { width: 1920, height: 1080 })).toEqual({ x: 1280, y: 720 });
+    expect(toPage(screenToBoard({ x: 1920, y: 1080 }), rect, { width: 1920, height: 1080 })).toEqual({
+      x: 1280,
+      y: 720,
+    });
     expect(
-      toPage({ x: 960, y: 540 }, { ...rect, left: 100, top: 20 }, { width: 1920, height: 1080 }),
+      toPage(
+        screenToBoard({ x: 960, y: 540 }),
+        { ...rect, left: 100, top: 20 },
+        { width: 1920, height: 1080 },
+      ),
     ).toEqual({
       x: 740,
       y: 380,
@@ -280,8 +296,11 @@ describe('feed geometry (board-1)', () => {
   };
 
   it('draws the feed zone of the Live screen', () => {
-    expect(BOARD_AREA).toEqual(rectToArea(ZONES.feed));
+    // The board draws in its own space and the feed's view shows it in ZONES.feed (layout A, Rolando,
+    // 30 Oct 2026): the area is that space, the box the table was painted for.
+    expect(BOARD_AREA).toEqual(rectToArea(FEED_WORLD));
     expect(BOARD_AREA).toEqual({ left: 455, right: 1910, top: 110, bottom: 640 });
+    expect(FEED_VIEW.screen).toEqual(ZONES.feed);
   });
 
   it('projects the table with a narrow far edge at y 222 and a wide near edge at y 612', () => {
@@ -430,21 +449,24 @@ describe('feed geometry (board-1)', () => {
 
   it('anchors a part or a cell for the HUD, and nothing else', () => {
     const board = { parts: Object.freeze([gateway, database, lb, server('server-p1', SERVER_SLOTS[3])]) };
-    expect(partAnchor(board, 'gateway')).toEqual(GATEWAY);
-    expect(partAnchor(board, 'database')).toEqual(DATABASE);
-    expect(partAnchor(board, 'lb')).toEqual(partCentre(lb));
-    expect(partAnchor(board, 'server-p1')).toEqual(partCentre(server('x', SERVER_SLOTS[3])));
+    // Anchors are screen points for the HUD, so they come through the feed's view (layout A).
+    expect(partAnchor(board, 'gateway')).toEqual(boardToScreen(GATEWAY));
+    expect(partAnchor(board, 'database')).toEqual(boardToScreen(DATABASE));
+    expect(partAnchor(board, 'lb')).toEqual(boardToScreen(partCentre(lb)!));
+    expect(partAnchor(board, 'server-p1')).toEqual(boardToScreen(partCentre(server('x', SERVER_SLOTS[3]))!));
     const c = parseCell(SERVER_SLOTS[1])!;
-    expect(partAnchor(board, SERVER_SLOTS[1])).toEqual(blockCentre(c.col, c.row, 1, 1));
+    expect(partAnchor(board, SERVER_SLOTS[1])).toEqual(boardToScreen(blockCentre(c.col, c.row, 1, 1)));
     expect(partAnchor({ parts: [] }, 'lb')).toBeNull();
     expect(partAnchor(board, 'server-p9')).toBeNull();
     expect(partAnchor({ parts: [server('lost', 'nowhere')] }, 'lost')).toBeNull();
     for (const id of ['gateway', 'database', 'lb', 'server-p1', SERVER_SLOTS[0], SERVER_SLOTS[5]]) {
+      // On screen, so inside the feed's zone (layout A).
       const p = partAnchor(board, id)!;
-      expect(p.x).toBeGreaterThanOrEqual(BOARD_AREA.left);
-      expect(p.x).toBeLessThanOrEqual(BOARD_AREA.right);
-      expect(p.y).toBeGreaterThanOrEqual(BOARD_AREA.top);
-      expect(p.y).toBeLessThanOrEqual(BOARD_AREA.bottom);
+      const feed = rectToArea(ZONES.feed);
+      expect(p.x).toBeGreaterThanOrEqual(feed.left);
+      expect(p.x).toBeLessThanOrEqual(feed.right);
+      expect(p.y).toBeGreaterThanOrEqual(feed.top);
+      expect(p.y).toBeLessThanOrEqual(feed.bottom);
     }
   });
 });

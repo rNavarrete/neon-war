@@ -861,6 +861,8 @@ export interface LuxCamTestState {
   fading: boolean;
   /** Lux's line is on the band now (bus line.speaker, until its lineEnd). */
   speaking: boolean;
+  /** Lux's words captioned on her lens while she talks (layout A2), or null. */
+  caption: string | null;
   /** A card or wire is in hand (bus drag). */
   dragging: boolean;
   /** 'reduced' with reduce flicker on: no blink, shake, breath, roll or parallax. */

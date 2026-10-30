@@ -15,7 +15,7 @@ import {
   priceChip,
   trayCards,
 } from '../src/scenes/board/tray';
-import { ZONES, rectToArea } from '../src/scenes/live/layout';
+import { TRAY_VIEW, TRAY_WORLD, ZONES, rectToArea } from '../src/scenes/live/layout';
 import { BOARD_CELLS, findSpot, roomFor } from '../src/sim/grid';
 import { SERVER_SLOTS } from '../src/sim/tick';
 
@@ -41,7 +41,11 @@ const TERMS = script
 
 describe('inventory row', () => {
   it('draws the inventory zone of the Live screen', () => {
-    expect(TRAY_AREA).toEqual(rectToArea(ZONES.inventory));
+    // The tray draws in its own space and its view shows it in ZONES.inventory at 1:1 (layout A,
+    // Rolando, 30 Oct 2026).
+    expect(TRAY_AREA).toEqual(rectToArea(TRAY_WORLD));
+    expect(TRAY_VIEW.screen).toEqual(ZONES.inventory);
+    expect(TRAY_VIEW.scale).toBe(1);
     expect(TRAY_AREA).toEqual({ left: 455, right: 1510, top: 800, bottom: 965 });
   });
 

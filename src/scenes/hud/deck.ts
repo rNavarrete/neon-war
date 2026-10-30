@@ -115,6 +115,15 @@ export function pressActs(s: DeckState, key: KeyName): boolean {
   return !s.blocked && keyLit(s, key);
 }
 
+/**
+ * Whether a key shows at all (Rolando, 30 Oct 2026: "get rid of those two boxes at the bottom"): only
+ * while it has something to offer or to report, so the deck is empty most of the night. Regroup
+ * shows once Mika hands it over (never in Session 0); the laundry cut in its surge window and as done.
+ */
+export function keyShown(s: DeckState, key: KeyName): boolean {
+  return key === 'one' ? s.regroup !== 'hidden' : s.cut !== 'hidden';
+}
+
 /** A key's alpha as drawn: lit keys at full (Regroup's pulse), done keys half, the rest dim. */
 export function keyAlpha(s: DeckState, key: KeyName): number {
   if (key === 'one') {
@@ -137,7 +146,7 @@ export function cutDoneWord(): string {
   return `CUT · -${BROWNOUT.demand.laundryCut}/s`;
 }
 
-/** The keys' boxes in game pixels, 80x64 centred at (1272, 1022) and (1360, 1022). */
+/** The keys' boxes in game pixels, 120x96 stacked in the deck's narrow zone (layout.ts BOTTOM.keys). */
 export function keyRects(): Record<KeyName, Rect> {
   const box = (i: number): Rect => {
     const k = BOTTOM.keys[i];

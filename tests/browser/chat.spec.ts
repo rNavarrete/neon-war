@@ -3,7 +3,8 @@ import { BROWNOUT } from '../../src/sim/brownout';
 import { CHAT_PACE } from '../../src/scenes/hud/chatEngine';
 import { LINES } from '../../src/strings';
 import type { HudTestState } from '../../src/scenes/hud/hook';
-import { type ChatTraceTestState, chatArtOf } from '../../src/scenes/hud/ChatFeedView';
+import { type ChatTraceTestState, chatArtOf, chatPlateFor } from '../../src/scenes/hud/ChatFeedView';
+import { ZONES } from '../../src/scenes/live/layout';
 import type { AudienceTestState, ChatTestState } from '../../src/scenes/live/views/chat';
 import { hud, openBoard, reach, shot, snap } from './live/reach';
 
@@ -53,14 +54,15 @@ test('the chat opens with the phone messages, reacts to the first serve and togg
   // stream rows: a hype burst (Rolando's 30 Oct pack) can scroll it out of those before this read.
   expect(c.feed.find((r) => r.id === 'C1.chat.02')?.chat).toBe('stream');
   expect(LINES['C1.chat.02'].text).toBe('first try lol');
-  // Four or five rows, bottom-up inside the body (y 840-1060), none over the header.
+  // Bottom-up inside the body, none over the header: four or five rows in the old 220 px body, up to
+  // sixteen in layout A2's tall chat column (y 430-1050, Rolando 30 Oct 2026).
   expect(c.shown).toBe(c.rows.length);
   expect(c.rows.length).toBeGreaterThanOrEqual(4);
-  expect(c.rows.length).toBeLessThanOrEqual(5);
+  expect(c.rows.length).toBeLessThanOrEqual(16);
   const last = c.rows[c.rows.length - 1];
-  expect(last.y + last.h).toBe(1060);
+  expect(last.y + last.h).toBe(1050);
   for (const r of c.rows) {
-    expect(r.y, r.id).toBeGreaterThanOrEqual(840);
+    expect(r.y, r.id).toBeGreaterThanOrEqual(430);
     // chat-6: the viewers' discs have landed, so a stream row shows its painted avatar, not the cyan ring.
     if (r.chat === 'stream') {
       expect(r).toMatchObject({ ring: null, nameColor: 'cyan' });
@@ -70,9 +72,10 @@ test('the chat opens with the phone messages, reacts to the first serve and togg
   // The panel sits in its zone (hud.bounds, page pixels) and the zone is no placeholder any more.
   const panel = h.bounds.find((b) => b.id === 'chat');
   expect(panel?.visible).toBe(true);
-  // chat-6: Rolando's picks draw (the wide plate, the viewers' discs, the system glyph), and nothing
-  // on screen draws Phaser's missing texture.
-  expect(h.chatArt).toEqual({ plate: 'wide', streamAvatars: true, systemGlyph: true });
+  // chat-6: Rolando's picks draw (the viewers' discs, the system glyph), and nothing on screen draws
+  // Phaser's missing texture. The layout A2 column (410x680, Rolando 30 Oct 2026) is too tall for the
+  // wide plate to fill without upscaling, so it draws the see-through code glass in its colours.
+  expect(h.chatArt).toEqual({ plate: 'glass', streamAvatars: true, systemGlyph: true });
   const drawn = await page.evaluate(
     () => (window.__neonTest!.state as unknown as { art?: { missing: string[] } }).art?.missing ?? null,
   );
@@ -213,7 +216,11 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
   const first = await openBoard(page, { speed: 4 });
   let log = new ChatLog();
   const art = await page.evaluate(() => window.__neonTest!.state.hud?.chatArt ?? null);
-  expect(art).toEqual(chatArtOf());
+  // Layout A2 (Rolando, 30 Oct): the tall left chat column is taller than the wide painted plate can
+  // fill without upscaling, so the plate the chat draws is the one chatPlateFor picks for its zone.
+  const want = chatArtOf();
+  expect(art).toEqual({ ...want, plate: chatPlateFor(want.plate, ZONES.chat) });
+  expect(art?.plate).toBe('glass');
 
   // C1: the autopilot places the first server; a stream reaction to it posts within 6 s, and the
   // first served packets post C1.chat.01 and C1.chat.02.

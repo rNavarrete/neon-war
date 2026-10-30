@@ -11,7 +11,6 @@ import type Phaser from 'phaser';
 import type { Frame } from '../../game/frame';
 import type { LiveBudget, LiveClock, LiveHost, LiveView } from '../live/view';
 import {
-  GAUGE_ART_K,
   GAUGE_FACE_KEY,
   GAUGE_MAX,
   GAUGE_NEEDLE_KEY,
@@ -195,20 +194,24 @@ export class GaugeView implements LiveView {
     this.plate = plate;
 
     this.dial = add.graphics();
-    // The painted needle at GAUGE_ART_K of its file, pivoting on its hub at the arc's centre.
+    // The painted needle at the layout's k of its file, pivoting on its hub at the arc's centre.
     const needleTex = loaded(GAUGE_NEEDLE_KEY);
     this.needle =
       needleTex !== null && typeof add.image === 'function'
         ? add
             .image(L.centre.x, L.centre.y, needleTex)
             .setOrigin(NEEDLE_PIVOT.x, NEEDLE_PIVOT.y)
-            .setScale(GAUGE_ART_K)
+            .setScale(L.k)
             .setRotation(needleRotation(0))
         : null;
     this.shownNeedle = NaN;
 
     const text = (x: number, y: number, s: string, size: number, color: string): Phaser.GameObjects.Text =>
-      add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color });
+      add.text(x, y, s, {
+        fontFamily: FONT,
+        fontSize: `${Math.round(size * (size > 15 ? L.text : 1))}px`,
+        color,
+      });
     this.title = text(L.title.x, L.title.y, LABELS.gauge.title, 15, COLORS.dim);
     this.readout = text(L.readout.x, L.readout.y, '', 44, COLORS.amberText).setOrigin(0.5, 0);
     const room = this.headroom.create(scene, L.room, host.bus);
@@ -293,7 +296,7 @@ export class GaugeView implements LiveView {
       this.roomTag.setVisible(roomX > 0);
       if (roomX > 0) {
         const L = this.layout;
-        const p = arcPoint(L, Math.min(st.capacity, GAUGE_MAX), L.inner - 66);
+        const p = arcPoint(L, Math.min(st.capacity, GAUGE_MAX), L.inner - Math.round(66 * L.text));
         this.roomTag.setPosition(p.x, p.y);
       }
     }
@@ -375,7 +378,7 @@ export class GaugeView implements LiveView {
       ticks: this.numbers.map((t) => t.text),
       panel: panelSnapshot(this.plate),
       face: this.face && this.plate?.state.pieces.includes(GAUGE_FACE_KEY) ? GAUGE_FACE_KEY : null,
-      needleArt: this.needle ? { key: GAUGE_NEEDLE_KEY, scale: GAUGE_ART_K } : null,
+      needleArt: this.needle ? { key: GAUGE_NEEDLE_KEY, scale: this.layout.k } : null,
     };
   }
 

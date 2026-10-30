@@ -151,7 +151,9 @@ export function clockLayout(z: Rect): ClockLayout {
     plate: { x: z.x, y: z.y, w: right - z.x, h: z.h },
     clock: { x: z.x + 16, y: z.y + 12 },
     countdown: { x: z.x + 18, y: z.y + 64 },
-    icon: { x: right - 36, y: z.y + 36, size: 40 },
+    // On the countdown's row, just past its 16 characters and left of the pause button (OverlayScene's,
+    // at the zone's right end).
+    icon: { x: Math.min(right - 16, z.x + 18 + 16 * 12.5 + 24), y: z.y + 76, size: 28 },
   };
 }
 

@@ -1,6 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import { artRequest, isPicked } from '../../src/game/artManifest';
 import type { CommsTestState } from '../../src/scenes/live/views/comms';
+import { ZONES } from '../../src/scenes/live/layout';
 import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 
 // The comms band (comms-2, comms-3): every bark shows in ZONES.comms with its speaker, tag and typed
@@ -786,11 +787,13 @@ test('comms-9 (M4): the band draws the picked plate, four round badges and the H
   const c = await comms(page);
   for (const key of COMMS_ART) expect(isPicked(artRequest(key)!), key).toBe(true);
 
-  // The plate: the pick, at its file's size, inside the band.
-  expect(c.art.plate.use).toBe('picked');
-  expect(c.art.plate.texture).toBe('art:hud/comms-plate');
-  expect(c.art.plate.source).toEqual({ w: 1455, h: 149 });
-  expect(c.art.plate.size).toEqual({ w: 1455, h: 149 });
+  // The plate. Layout A2 (Rolando, 30 Oct) moved comms into the right caller column, which the
+  // picked 1455 x 149 strip can't fill without stretching, so the call panel draws its plate in
+  // code at the zone's size, inside the zone. The strip stays picked in the manifest.
+  expect(c.art.plate.use).toBe('code');
+  expect(c.art.plate.texture).toBeNull();
+  expect(c.art.plate.source).toBeNull();
+  expect(c.art.plate.size).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
   expect(insideRect(c.art.plate.drawn, c.rect)).toBe(true);
 
   // The four badges: picked, baked once into 84 px round avatars.
@@ -842,7 +845,8 @@ test('comms-9 (M4): with the band art absent the code fallback draws without err
 
   expect(['reuse', 'code']).toContain(c.art.plate.use);
   expect(c.art.plate.source).toBeNull();
-  expect(c.art.plate.size).toEqual({ w: 1455, h: 150 });
+  // Layout A2 (Rolando, 30 Oct): the plate fills the caller column (was the 1455 x 150 band).
+  expect(c.art.plate.size).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
   for (const f of c.art.faces) expect(f.use, f.key).not.toBe('picked');
   expect(c.art.house.chips.map((h) => h.use)).toEqual(['code', 'code']);
   expect(c.art.house.drawn).toBe('glyph');

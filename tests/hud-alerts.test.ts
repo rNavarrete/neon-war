@@ -424,13 +424,14 @@ describe('the surge sound', () => {
 });
 
 describe('the band layout', () => {
-  it('keeps every piece inside ZONES.alert, the headline from x 540 and the well at the right end', () => {
+  // The headline starts 80 px into the band: x 530 since layout A2 (Rolando, 30 Oct 2026), 540 before.
+  it('keeps every piece inside ZONES.alert, the headline from x 530 and the well at the right end', () => {
     const z = ZONES.alert;
     const L = alertLayout(z);
     expect(L.plate).toEqual(z);
     expect(inside(L.well, z)).toBe(true);
     expect(L.well.x + L.well.w).toBe(z.x + z.w);
-    expect(L.headline.x).toBe(540);
+    expect(L.headline.x).toBe(530);
     expect(L.headline.x + L.headline.w).toBeLessThan(L.chip.right);
     expect(L.chip.right).toBeLessThan(L.well.x);
     expect(L.sub.x + L.sub.w).toBeLessThanOrEqual(L.well.x);

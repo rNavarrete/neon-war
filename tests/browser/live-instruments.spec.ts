@@ -50,7 +50,8 @@ test('the DEMAND gauge: NO CAPACITY YET before the first build, in the real term
   // Batch 5: the painted face is baked into the plate and the painted needle turns with it. Half size
   // until Rolando picked the one bigger gauge (30 Oct 2026); now at the bigger dial's 0.7.
   expect(h.gauge.face).toBe('hud/gauge-face');
-  expect(h.gauge.needleArt).toEqual({ key: 'hud/gauge-needle', scale: 0.7 });
+  // Layout A2 (Rolando, 30 Oct) shrank the gauge to 0.72 of that to fit the right column.
+  expect(h.gauge.needleArt).toEqual({ key: 'hud/gauge-needle', scale: 0.504 });
   expect(h.gauge.panel!.maxScale).toBeLessThanOrEqual(1);
   expectGaugeMatchesSim(h);
   expectCrewWords(h.gauge);

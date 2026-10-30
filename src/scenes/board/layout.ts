@@ -25,7 +25,7 @@ import {
   partCells,
   portNode,
 } from '../../sim/grid';
-import { ZONES, rectToArea } from '../live/layout';
+import { FEED_WORLD, TRAY_WORLD, boardToScreen, rectToArea } from '../live/layout';
 import { anchorAt, blockCentre, blockQuad, nodePoint } from './cells';
 import { type Block, traceNodes } from './lattice';
 
@@ -40,10 +40,13 @@ export interface Box extends Point {
   readonly h: number;
 }
 
-/** The feed zone as edges: {left 455, right 1910, top 110, bottom 640}. */
-export const BOARD_AREA = rectToArea(ZONES.feed);
-/** The inventory zone as edges: {left 455, right 1510, top 800, bottom 965}. */
-export const TRAY_AREA = rectToArea(ZONES.inventory);
+/**
+ * The feed in the board's own space, as edges: {left 455, right 1910, top 110, bottom 640}. The
+ * board draws here and its feed camera shows it in ZONES.feed (src/scenes/live/layout.ts FEED_VIEW).
+ */
+export const BOARD_AREA = rectToArea(FEED_WORLD);
+/** The tray in the board's own space, as edges: {left 455, right 1510, top 800, bottom 965}. */
+export const TRAY_AREA = rectToArea(TRAY_WORLD);
 
 /** The table top: its far edge (y 222, x 575-1790) and its near edge (y 612, x 462-1903). */
 export const TABLE = {
@@ -260,17 +263,21 @@ export function targetState(
 }
 
 /**
- * Where a part or a cell sits on screen (projected game pixels), for the HUD's dip mark and its
- * leader lines: a part's centre by part id, or a cell's centre by cell id. Null when the id names
- * neither, or the part has nowhere to stand.
+ * Where a part or a cell sits on screen (game pixels, through the feed's view), for the HUD's dip
+ * mark and its leader lines: a part's centre by part id, or a cell's centre by cell id. Null when
+ * the id names neither, or the part has nowhere to stand.
  */
 export function partAnchor(
   board: { readonly parts: readonly Pick<Part, 'id' | 'kind' | 'slot'>[] },
   id: string,
 ): Point | null {
-  for (const p of board.parts) if (p.id === id) return partCentre(p);
+  for (const p of board.parts) {
+    if (p.id !== id) continue;
+    const c = partCentre(p);
+    return c ? boardToScreen(c) : null;
+  }
   const c = parseCell(id);
-  return c ? blockCentre(c.col, c.row, 1, 1) : null;
+  return c ? boardToScreen(blockCentre(c.col, c.row, 1, 1)) : null;
 }
 
 // Wires run like traces on a circuit board, along the painted grid's lines: straight runs and right
@@ -475,9 +482,12 @@ export function toPage(
   rect: { left: number; top: number; width: number; height: number },
   game: { width: number; height: number },
 ): Point {
-  const r = (n: number) => Math.round(n * 10) / 10;
+  // `+ 0` turns a rounded -0 (a point a hair left of the screen edge) into 0.
+  const r = (n: number) => Math.round(n * 10) / 10 + 0;
+  // The board's own space shows through its views (src/scenes/live/layout.ts): screen first.
+  const q = boardToScreen(p);
   return {
-    x: r(rect.left + (p.x * rect.width) / game.width),
-    y: r(rect.top + (p.y * rect.height) / game.height),
+    x: r(rect.left + (q.x * rect.width) / game.width),
+    y: r(rect.top + (q.y * rect.height) / game.height),
   };
 }

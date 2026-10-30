@@ -51,6 +51,9 @@ describe('comms-9: the picked band art, drawn at its own size', () => {
   });
 
   it('draws the 1455x149 plate at its own size, centred in the 1455x150 band on whole pixels', () => {
+    // The band the plate was picked for: the strip before layout A (Rolando, 30 Oct 2026). The call
+    // panel that replaced it is taller and draws a code plate (CommsView).
+    const band = { x: 455, y: 645, w: 1455, h: 150 };
     const cut = artRequest(COMMS_PLATE)!.cut!;
     expect(cut).toEqual({ w: 1455, h: 149 });
     const at = fitCentred(cut.w, cut.h, band);

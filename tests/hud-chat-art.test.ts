@@ -11,7 +11,6 @@ import {
   nineSliceScales,
 } from '../src/scenes/hud/ChatFeedView';
 import { CHAT_BODY, CHAT_HEADER, ROW_AVATAR } from '../src/scenes/hud/chat';
-import { ZONES } from '../src/scenes/live/layout';
 import { BLOCK_AVATARS, STREAM_AVATARS } from '../src/scenes/avatars';
 
 // chat-6 with the picks landed: every painted piece draws at its display size or smaller than its
@@ -20,10 +19,14 @@ import { BLOCK_AVATARS, STREAM_AVATARS } from '../src/scenes/avatars';
 describe('the landed chat art draws at display size, never upscaled (chat-6)', () => {
   const plate = artRequest(CHAT_PLATE_WIDE)!;
 
+  // The plate was requested for the 385x275 chat zone. The layout A column (465x750, Rolando 30 Oct
+  // 2026) is too tall for it, so the column draws the code glass (hud-chat.test.ts); where the plate
+  // does draw, it is at that request size.
+  const PAINTED = { w: 385, h: 275 };
   it('nine-slices the 770x485 wide plate into the 385x275 zone with every region scaled down', () => {
     expect(plate.cut).toEqual({ w: 770, h: 485 });
-    expect(plate.display).toEqual({ w: ZONES.chat.w, h: ZONES.chat.h });
-    const s = nineSliceScales(plate.cut!, ZONES.chat, CHAT_PLATE_K, CHAT_PLATE_SLICE);
+    expect(plate.display).toEqual(PAINTED);
+    const s = nineSliceScales(plate.cut!, PAINTED, CHAT_PLATE_K, CHAT_PLATE_SLICE);
     for (const [part, v] of Object.entries(s)) {
       expect(v, part).toBeGreaterThan(0);
       expect(v, part).toBeLessThanOrEqual(1);
@@ -33,8 +36,8 @@ describe('the landed chat art draws at display size, never upscaled (chat-6)', (
     const [l, r, t, b] = CHAT_PLATE_SLICE;
     expect(l + r).toBeLessThan(plate.cut!.w);
     expect(t + b).toBeLessThan(plate.cut!.h);
-    expect((l + r) * CHAT_PLATE_K).toBeLessThan(ZONES.chat.w);
-    expect((t + b) * CHAT_PLATE_K).toBeLessThan(ZONES.chat.h);
+    expect((l + r) * CHAT_PLATE_K).toBeLessThan(PAINTED.w);
+    expect((t + b) * CHAT_PLATE_K).toBeLessThan(PAINTED.h);
   });
 
   it('keeps the painted header band unstretched inside the 40 px header strip, above the rows', () => {
@@ -63,7 +66,8 @@ describe('the landed chat art draws at display size, never upscaled (chat-6)', (
     });
   });
 
-  it('draws the 32 px row discs and the 20 px system glyph from larger files', () => {
+  // 36 px since the layout A chat's bigger rows (Rolando, 30 Oct 2026); 32 before.
+  it('draws the 36 px row discs and the 20 px system glyph from larger files', () => {
     for (const key of [...STREAM_AVATARS, BLOCK_AVATARS['unnamed neighbour']]) {
       const r = artRequest(key)!;
       expect(r.display, key).toEqual({ w: ROW_AVATAR, h: ROW_AVATAR });

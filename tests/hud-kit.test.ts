@@ -31,6 +31,7 @@ import {
 import {
   FACE_FILE,
   GAUGE_ART_K,
+  GAUGE_COMPACT,
   GAUGE_FACE_KEY,
   GAUGE_NEEDLE_KEY,
   NEEDLE_FILE,
@@ -142,7 +143,8 @@ describe('cornerStamps: the four-bracket set, one quadrant per corner', () => {
 
 describe('panelStamps', () => {
   it('draws the base first, then dividers, frame, tab and corners, all inside the rect and at or under 1:1', () => {
-    const r: Rect = ZONES.map;
+    // The stamps are zone-agnostic: this is the map's rect before layout A (Rolando, 30 Oct 2026).
+    const r: Rect = { x: 16, y: 110, w: 408, h: 310 };
     const st = panelStamps(r, {
       base: KIT.cityGrid,
       frame: true,
@@ -168,8 +170,9 @@ describe('panelStamps', () => {
     expect(st[2]).toMatchObject({ w: (1040 - ALERT_ENDS.right) / 2, stretch: false });
     expect(st[1].stretch).toBe(true);
     expect(maxScale(st)).toBe(0.5);
+    // The alert band ends at x 1520 since layout A2 (Rolando, 30 Oct 2026).
     const cap = alertEndcap(ZONES.alert);
-    expect(cap).toEqual({ x: 1500 - 68, y: 8, w: 68, h: 84 });
+    expect(cap).toEqual({ x: 1520 - 68, y: 8, w: 68, h: 84 });
     const panel = panelStamps(ZONES.alert, { alert: { endcap: true } });
     expect(stampKeys(panel)).toEqual([KIT.alertPlate, KIT.alertEndcap]);
     expect(maxScale(panel)).toBeLessThanOrEqual(1);
@@ -375,7 +378,11 @@ describe('the gauges lane views with the kit loaded', () => {
     const { scene, rec } = bakingScene();
     const v = new MapView();
     v.create(scene as never, host(ZONES.map));
-    expect(rec.stamps.some((s) => s.texture === artTexture(KIT.cityGrid) && s.scaleX === 0.5)).toBe(true);
+    // The city grid fills the map at its own shape: half its 816 x 620 file before layout A, 212 x 160
+    // since (Rolando, 30 Oct 2026), so about 0.26 both ways and never above 1:1.
+    const grid = rec.stamps.find((s) => s.texture === artTexture(KIT.cityGrid))!;
+    expect(grid.scaleX).toBeCloseTo(212 / 816, 6);
+    expect(Math.abs(grid.scaleY - grid.scaleX)).toBeLessThan(0.005);
     expect(rec.images.some((i) => i.key === artTexture(KIT.chip))).toBe(true);
     const h = hudSection({} as HudTestState);
     expect(h.map!.base).toBe('hud/city-grid');
@@ -403,9 +410,11 @@ describe('batch 5: the painted gauge face and needle', () => {
     expect(at.y + at.h).toBeLessThanOrEqual(z.y + z.h);
     expect(at.w).toBeLessThanOrEqual(FACE_FILE.w);
     expect(at.h).toBeLessThanOrEqual(FACE_FILE.h);
-    // Its painted hub lands within a pixel of the arc's centre.
-    expect(Math.abs(at.x + 241 * GAUGE_ART_K - L.centre.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(at.y + 225 * GAUGE_ART_K - L.centre.y)).toBeLessThanOrEqual(1);
+    // Its painted hub lands within a pixel of the arc's centre (at the layout's art scale: 0.7, or
+    // 0.7 x GAUGE_COMPACT in layout A's smaller gauge, Rolando 30 Oct 2026).
+    expect(L.k).toBeCloseTo(GAUGE_ART_K * GAUGE_COMPACT, 9);
+    expect(Math.abs(at.x + 241 * L.k - L.centre.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(at.y + 225 * L.k - L.centre.y)).toBeLessThanOrEqual(1);
     // As a stamp in the plate: inside it and at or under 1:1.
     const st = panelStamps(z, { face: { key: KIT.gaugeFace, ...at } });
     expect(st).toHaveLength(1);
@@ -422,7 +431,9 @@ describe('batch 5: the painted gauge face and needle', () => {
     expect(needleRotation(123)).toBeCloseTo(gaugeAngle(123) + Math.PI / 2, 9);
   });
 
+  // At 0.7 x GAUGE_COMPACT (about 0.5) in layout A's smaller gauge (Rolando, 30 Oct 2026); 0.7 before.
   it('GaugeView bakes the face into its plate at 0.7 and draws the needle at 0.7, inside its budget', () => {
+    const k = GAUGE_ART_K * GAUGE_COMPACT;
     const { scene, rec, made } = bakingScene();
     const v = new GaugeView();
     v.create(scene as never, {
@@ -433,14 +444,15 @@ describe('batch 5: the painted gauge face and needle', () => {
     });
     const face = rec.stamps.filter((x) => x.texture === artTexture(GAUGE_FACE_KEY));
     expect(face).toHaveLength(1);
-    expect(face[0].scaleX).toBe(0.7);
-    expect(face[0].scaleY).toBeLessThanOrEqual(0.71);
+    expect(face[0].scaleX).toBeCloseTo(k, 2);
+    expect(face[0].scaleY).toBeLessThanOrEqual(k + 0.01);
     expect(rec.images.filter((i) => i.key === artTexture(GAUGE_NEEDLE_KEY))).toHaveLength(1);
     expect(made.filter((m) => m.kind !== 'MadeGraphics').length).toBeLessThanOrEqual(v.budget.objects);
     v.update(readFrame(new Run()), { now: 1, dt: 0.016 });
     const g = hudSection({} as HudTestState).gauge!;
     expect(g.face).toBe(GAUGE_FACE_KEY);
-    expect(g.needleArt).toEqual({ key: GAUGE_NEEDLE_KEY, scale: 0.7 });
+    expect(g.needleArt!.key).toBe(GAUGE_NEEDLE_KEY);
+    expect(g.needleArt!.scale).toBeCloseTo(k, 9);
     expect(g.panel!.pieces).toContain(GAUGE_FACE_KEY);
     expect(g.panel!.maxScale).toBeLessThanOrEqual(1);
     v.shutdown();
@@ -470,6 +482,7 @@ describe('batch 5: the lit city painting on the map', () => {
   const midnight = (held: boolean): Partial<Frame> =>
     ({ midnight: { held, dropped: 0, servers: 3, waste: false } }) as Partial<Frame>;
 
+  // At the map's own shape since layout A (212 x 160, Rolando 30 Oct 2026): about 0.26, half before.
   it('bakes the lit painting as a second plate at half its 816 x 620 file, hidden before midnight', () => {
     expect(artRequest(CITY_GRID_LIT_KEY)!.cut).toEqual({ w: 816, h: 620 });
     const { scene, rec } = bakingScene();
@@ -481,9 +494,8 @@ describe('batch 5: the lit city painting on the map', () => {
       flags: { lite: false },
     });
     expect(rec.textures).toContain(panelTexture('map-lit'));
-    expect(rec.stamps.some((s) => s.texture === artTexture(CITY_GRID_LIT_KEY) && s.scaleX === 0.5)).toBe(
-      true,
-    );
+    const lit = rec.stamps.find((s) => s.texture === artTexture(CITY_GRID_LIT_KEY))!;
+    expect(lit.scaleX).toBeCloseTo(212 / 816, 6);
     v.update(at(C.c7 - 5), { now: 1, dt: 0.016 });
     expect(hudSection({} as HudTestState).map!.lit).toEqual({ key: CITY_GRID_LIT_KEY, alpha: 0 });
     v.shutdown();

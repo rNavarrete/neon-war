@@ -36,6 +36,7 @@ import {
   cutDoneWord,
   emptyDeck,
   keyAlpha,
+  keyShown,
   keyLit,
   keyRects,
   keyWords,
@@ -65,6 +66,8 @@ export interface DeckKeyTestState {
   interactive: boolean;
   /** The picked keycap drawn now (idle, ready, or pressed just after a press that acted); null in code. */
   cap?: KeyCap | null;
+  /** Whether the key shows at all (only while it can act or reports done). */
+  shown?: boolean;
 }
 
 /** One press of a key, by click or keyboard, and whether it acted. */
@@ -134,6 +137,8 @@ interface KeyParts {
   shownLit: boolean | null;
   alpha: number;
   word0: string;
+  /** Whether the key shows (deck.ts keyShown): hidden keys leave the zone empty. */
+  shown: boolean;
 }
 
 export class DeckView implements LiveView {
@@ -206,12 +211,8 @@ export class DeckView implements LiveView {
     }
     const caps = Object.keys(this.capTexture).length === 3;
     // One opaque backing under the keys, never dimmed, so the HUD's own keys never show through.
+    // Drawn under the keys that show (drawBack), so a hidden key leaves the zone empty.
     const back = add.graphics();
-    back.fillStyle(COLORS.ink, 1);
-    for (const name of KEY_NAMES) {
-      const r = rects[name];
-      back.fillRoundedRect(r.x, r.y, r.w, r.h, 6);
-    }
     back.setDepth(GAUGES_DEPTH);
     this.back = back;
     for (const name of KEY_NAMES) {
@@ -257,6 +258,7 @@ export class DeckView implements LiveView {
         shownLit: null,
         alpha: -1,
         word0: words.word,
+        shown: true,
       };
     }
     this.ring = add.graphics().setDepth(GAUGES_DEPTH);
@@ -355,8 +357,8 @@ export class DeckView implements LiveView {
     const word = name === 'two' && this.deck.cut === 'done' ? CUT_DONE : k.word0;
     if (lit !== k.shownLit || word !== k.word.text) {
       k.shownLit = lit;
-      k.lit?.setVisible(lit);
-      k.dim?.setVisible(!lit);
+      k.lit?.setVisible(k.shown && lit);
+      k.dim?.setVisible(k.shown && !lit);
       const color = lit ? COLORS.heroText : COLORS.dim;
       k.digit.setColor(color);
       if (word !== k.word.text) k.word.setText(word).setFontSize(word.length > 8 ? 11 : 12);
@@ -372,6 +374,14 @@ export class DeckView implements LiveView {
         if (t) k.cap.setTexture(t).setDisplaySize(k.rect.w, k.rect.h);
       }
     }
+    const shown = keyShown(this.deck, name);
+    if (shown !== k.shown) {
+      k.shown = shown;
+      for (const o of [k.cap, k.digit, k.word]) o?.setVisible(shown);
+      k.dim?.setVisible(shown && !lit);
+      k.lit?.setVisible(shown && lit);
+      this.drawBack();
+    }
     const alpha = keyAlpha(this.deck, name);
     if (alpha !== k.alpha) {
       k.alpha = alpha;
@@ -380,6 +390,18 @@ export class DeckView implements LiveView {
       k.lit?.setAlpha(alpha);
       k.digit.setAlpha(alpha);
       k.word.setAlpha(alpha);
+    }
+  }
+
+  /** The opaque backing under the keys that show. */
+  private drawBack(): void {
+    const g = this.back;
+    if (!g) return;
+    g.clear();
+    g.fillStyle(COLORS.ink, 1);
+    for (const name of KEY_NAMES) {
+      const k = this.keys[name];
+      if (k?.shown) g.fillRoundedRect(k.rect.x, k.rect.y, k.rect.w, k.rect.h, 6);
     }
   }
 
@@ -449,6 +471,7 @@ export class DeckView implements LiveView {
         lit: keyLit(d, name),
         alpha: k?.alpha ?? 0,
         interactive: k?.zone?.input?.enabled ?? false,
+        shown: k?.shown ?? false,
         cap: k?.shownCap ?? null,
       };
     }

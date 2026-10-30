@@ -12,8 +12,9 @@ import { openBoard, reach, shot } from './live/reach';
 /** The registry's zones: every zone but the board's own two (feed, inventory). */
 const REGISTERED = ZONE_IDS.filter((z) => z !== 'feed' && z !== 'inventory');
 const OBJECTS_MAX = 750;
-const TEXTS_MAX = 110;
-/** The board's share of the 110 (docs/LIVE.md "Perf budget"). */
+/** 144 since layout A2's sixteen-row chat and Lux's cam caption (Rolando, 30 Oct 2026); 110 before. */
+const TEXTS_MAX = 144;
+/** The board's share of the 144 (docs/LIVE.md "Perf budget"). */
 const BOARD_TEXTS_MAX = 28;
 const PACKETS_MAX = 160;
 
@@ -71,7 +72,7 @@ function describe(p: PerfSection): string {
   );
 }
 
-test('perf: every view within its budget, the totals within 750 / 110 and the packet pool steady, at C4 and midnight', async ({
+test('perf: every view within its budget, the totals within 750 / 144 and the packet pool steady, at C4 and midnight', async ({
   page,
 }, testInfo) => {
   test.setTimeout(120_000);

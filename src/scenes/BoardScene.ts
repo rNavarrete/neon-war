@@ -58,7 +58,18 @@ import { dipPhase } from '../sim/failures';
 import { blockCentre, blockQuad, cellQuad, cellSize, nodeAt } from './board/cells';
 import { register as registerLocate } from './hud/locate';
 import { registerPool } from './live/hook';
-import { ZONES, pageRect } from './live/layout';
+import {
+  FEED_SHOWN,
+  FEED_VIEW,
+  type Rect,
+  TRAY_VIEW,
+  TRAY_WORLD,
+  type View,
+  boardRectToScreen,
+  boardToScreen,
+  pageRect,
+  screenToBoard,
+} from './live/layout';
 import {
   HOT_SPEED,
   PACKETS_PER_REQUEST,
@@ -777,6 +788,11 @@ export class BoardScene extends Phaser.Scene {
       .setDepth(40)
       .setVisible(false);
 
+    // The feed and the tray draw in the board's own space; a camera shows each in its zone.
+    for (const cam of this.cameras.cameras.slice(1)) this.cameras.remove(cam);
+    this.fitView(this.cameras.main, FEED_VIEW);
+    this.fitView(this.cameras.add(), TRAY_VIEW);
+
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.onDown, this);
     this.input.on('pointermove', this.onMove, this);
@@ -802,11 +818,11 @@ export class BoardScene extends Phaser.Scene {
     });
     this.director?.destroy();
     this.director = new Director();
-    // Where the comms band's leader line may point on the board (game px, made once): the
-    // inventory's SERVER card and the channel's mouth.
+    // Where the comms band's leader line may point on the board (screen px through the views, made
+    // once): the inventory's SERVER card and the channel's mouth.
     const serverCard = trayCards(false).find((c) => c.id === 'server');
-    const cardAt = serverCard ? { x: serverCard.x, y: serverCard.y } : null;
-    const mouthAt = { x: CHANNEL.mouth.x, y: (CHANNEL.mouth.top + CHANNEL.mouth.bottom) / 2 };
+    const cardAt = serverCard ? boardToScreen({ x: serverCard.x, y: serverCard.y }) : null;
+    const mouthAt = boardToScreen({ x: CHANNEL.mouth.x, y: (CHANNEL.mouth.top + CHANNEL.mouth.bottom) / 2 });
     const offLocate = [registerLocate('inventory', () => cardAt), registerLocate('channel', () => mouthAt)];
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       for (const off of offLocate) off();
@@ -852,8 +868,8 @@ export class BoardScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05070f, 1).setOrigin(0);
 
     // The feed: the city's skyline across the top of the zone, its horizon just behind the table's
-    // far edge, cropped to the zone and dimmed a little so the board reads first.
-    const feed = ZONES.feed;
+    // far edge, cropped to what the feed's camera shows and dimmed a little so the board reads first.
+    const feed = FEED_SHOWN;
     const sky = this.add.image(feed.x, 0, 'sky').setOrigin(0);
     const scale = feed.w / sky.width;
     const top = SKY_HORIZON.screen - SKY_HORIZON.art * sky.height * scale;
@@ -2446,18 +2462,27 @@ export class BoardScene extends Phaser.Scene {
     this.emitDrag();
   }
 
+  /** Show a box of the board's space in its zone: the camera's viewport is the zone, at the view's scale. */
+  private fitView(cam: Phaser.Cameras.Scene2D.Camera, v: View): void {
+    cam.setViewport(v.screen.x, v.screen.y, v.screen.w, v.screen.h);
+    cam.setZoom(v.scale);
+    cam.centerOn(v.world.x + v.world.w / 2, v.world.y + v.world.h / 2);
+  }
+
   /** Whether a press at (x, y) lands on a round button that is showing. */
   private onButton(btn: Phaser.GameObjects.Container, x: number, y: number): boolean {
     return btn.visible && Math.hypot(x - btn.x, y - btn.y) <= BUTTON_RADIUS + 4;
   }
 
-  private onDown(p: Phaser.Input.Pointer): void {
+  private onDown(ptr: Phaser.Input.Pointer): void {
+    // The board draws in its own space; the pointer comes in screen pixels (its two views).
+    const p = screenToBoard(ptr);
     this.pointer.x = p.x;
     this.pointer.y = p.y;
     const r = run();
     const parts = r.session.board.parts;
 
-    if (p.rightButtonDown()) {
+    if (ptr.rightButtonDown()) {
       const part = partAt(parts, p.x, p.y);
       if (part) this.decommission(part.id);
       return;
@@ -2526,7 +2551,9 @@ export class BoardScene extends Phaser.Scene {
     return best ? best.key : null;
   }
 
-  private onMove(p: Phaser.Input.Pointer): void {
+  private onMove(ptr: Phaser.Input.Pointer): void {
+    // The board draws in its own space; the pointer comes in screen pixels (its two views).
+    const p = screenToBoard(ptr);
     this.pointer.x = p.x;
     this.pointer.y = p.y;
     const d = this.drag;
@@ -2556,7 +2583,9 @@ export class BoardScene extends Phaser.Scene {
     if (d.moved) this.updateWireTo(p.x, p.y, d.from);
   }
 
-  private onUp(p: Phaser.Input.Pointer): void {
+  private onUp(ptr: Phaser.Input.Pointer): void {
+    // The board draws in its own space; the pointer comes in screen pixels (its two views).
+    const p = screenToBoard(ptr);
     this.pointer.x = p.x;
     this.pointer.y = p.y;
     const d = this.drag;
@@ -2685,7 +2714,7 @@ export class BoardScene extends Phaser.Scene {
   private makeAnimObjects(): void {
     this.bakeHaze();
     this.animG = this.add.graphics().setDepth(4.5);
-    const feed = ZONES.feed;
+    const feed = FEED_SHOWN;
     this.shade = this.add
       .rectangle(feed.x, feed.y, feed.w, feed.h, 0x000000, 1)
       .setOrigin(0)
@@ -3068,7 +3097,7 @@ export class BoardScene extends Phaser.Scene {
     const lbView = lb ? this.views.get(lb.id) : undefined;
     if (cable && lbView) {
       const end = lbView.img.y - lbView.img.displayHeight / 2 + 6;
-      const shown = Math.max(0, end - ZONES.feed.y);
+      const shown = Math.max(0, end - FEED_SHOWN.y);
       const h = this.cableImg.height;
       const cropH = Math.min(h, shown / CABLE_SCALE);
       this.cableImg
@@ -3159,9 +3188,10 @@ export class BoardScene extends Phaser.Scene {
       this.particles.emit('ember', at.x, at.y, EMBER_SIZE);
       return;
     }
-    const feed = ZONES.feed;
+    // In the sky the feed shows above the table.
+    const feed = FEED_SHOWN;
     const x = feed.x + feed.w * (0.3 + 0.45 * ((n * 0.618) % 1));
-    const y = feed.y + 70 + 50 * (n % 3);
+    const y = feed.y + 160 + 70 * (n % 3);
     this.particles.emit('firework', x, y, FIREWORK_SIZE);
   }
 
@@ -3196,8 +3226,10 @@ export class BoardScene extends Phaser.Scene {
     const f = this.snap.current ?? frame(run());
     const board = { parts: f.parts, credits: f.credits };
     const rect = this.game.canvas.getBoundingClientRect();
+    // Board-space boxes show through the feed's or the tray's view (src/scenes/live/layout.ts).
+    const boardPageRect = (r: Rect, c: DOMRect) => pageRect(boardRectToScreen(r), c);
     const page = (x: number, y: number) => toPage({ x, y }, rect, { width: GAME_WIDTH, height: GAME_HEIGHT });
-    const pageBox = (b: Box) => pageRect({ x: b.x - b.w / 2, y: b.y - b.h / 2, w: b.w, h: b.h }, rect);
+    const pageBox = (b: Box) => boardPageRect({ x: b.x - b.w / 2, y: b.y - b.h / 2, w: b.w, h: b.h }, rect);
     const offline = [...f.offline];
     const footBox = (kind: Part['kind'], anchor: string) => {
       const q = footprintQuad(kind, anchor)!;
@@ -3205,7 +3237,7 @@ export class BoardScene extends Phaser.Scene {
       const ys = q.map((p) => p.y);
       const x0 = Math.min(...xs);
       const y0 = Math.min(...ys);
-      return pageRect({ x: x0, y: y0, w: Math.max(...xs) - x0, h: Math.max(...ys) - y0 }, rect);
+      return boardPageRect({ x: x0, y: y0, w: Math.max(...xs) - x0, h: Math.max(...ys) - y0 }, rect);
     };
     const slots = SERVER_SPOTS.map((id) => {
       const c = parseCell(id)!;
@@ -3219,14 +3251,15 @@ export class BoardScene extends Phaser.Scene {
       };
     });
     const round = (n: number) => Math.round(n * 1000) / 1000;
-    const feed = ZONES.feed;
+    // All the feed's camera shows, the sky above the table included (layout A2).
+    const feed = FEED_SHOWN;
     const skyShown = this.sky.visible && this.sky.alpha > 0;
     return {
-      area: pageRect(feed, rect),
+      area: boardPageRect(feed, rect),
       backdrop: {
         // The band between the feed's top and the table's far edge, where only the city shows.
         skyline: skyShown
-          ? pageRect({ x: feed.x, y: feed.y, w: feed.w, h: TABLE.far.y - feed.y }, rect)
+          ? boardPageRect({ x: feed.x, y: feed.y, w: feed.w, h: TABLE.far.y - feed.y }, rect)
           : null,
         goggles:
           this.textures.exists('goggles') ||
@@ -3247,7 +3280,7 @@ export class BoardScene extends Phaser.Scene {
         price: c.price,
       })),
       inventory: {
-        area: pageRect(ZONES.inventory, rect),
+        area: boardPageRect(TRAY_WORLD, rect),
         counts: { ...this.counts },
         frames: Object.fromEntries(
           this.cards.filter((c) => c.main).map((c) => [c.id, this.inventory.frameOf(c.id)]),
@@ -3256,12 +3289,12 @@ export class BoardScene extends Phaser.Scene {
       art: {
         picked: [...this.picked],
         table: this.table.art,
-        tableRect: pageRect(this.table.place, rect),
+        tableRect: boardPageRect(this.table.place, rect),
         tableScale: round(this.table.place.scale),
-        channelPlate: this.channelPlate ? pageRect(this.channelPlate, rect) : null,
+        channelPlate: this.channelPlate ? boardPageRect(this.channelPlate, rect) : null,
         midnightPlate: this.midnightPlate
           ? {
-              rect: pageRect(this.midnightPlate.place, rect),
+              rect: boardPageRect(this.midnightPlate.place, rect),
               scale: round(this.midnightPlate.place.scale),
               alpha: round(this.midnightShown),
             }

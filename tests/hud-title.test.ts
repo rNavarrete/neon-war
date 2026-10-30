@@ -158,11 +158,15 @@ describe('where the title and the clock sit', () => {
       expect(inside(r, ZONES.clock)).toBe(true);
       expect(r.x + r.w).toBeLessThanOrEqual(1800);
     }
-    // The clock's 40 px text (8 characters) ends before the icon; the countdown runs under it.
+    // The clock's 40 px text (8 characters) ends before the icon. Since layout A's narrower clock
+    // (Rolando, 30 Oct 2026) the icon sits on the countdown's row, right of it, and every piece
+    // stays left of the overlay's pause button at the zone's right end (x - 40, about 30 wide).
     const L = clockLayout(ZONES.clock);
     expect(L.clock.x + 8 * 25).toBeLessThan(L.icon.x - L.icon.size / 2);
-    expect(L.countdown.y).toBeGreaterThanOrEqual(L.icon.y + L.icon.size / 2);
+    expect(L.countdown.x + 16 * 12.5).toBeLessThan(L.icon.x - L.icon.size / 2);
     expect(L.countdown.x + 16 * 12.5).toBeLessThan(1800);
+    const pauseLeft = ZONES.clock.x + ZONES.clock.w - 40 - 30;
+    expect(L.icon.x + L.icon.size / 2).toBeLessThan(pauseLeft);
   });
 });
 

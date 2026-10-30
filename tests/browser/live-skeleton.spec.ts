@@ -40,7 +40,8 @@ test('the Live skeleton: zones on the page, ten placeholders, perf numbers and l
 
   const { live, perf } = await sections(page);
   expect(live.layoutVersion).toBe(LAYOUT_VERSION);
-  expect(live.layoutVersion).toBe(1);
+  // LAYOUT_VERSION 2: layout A2 (Rolando, 30 Oct 2026) moved every zone.
+  expect(live.layoutVersion).toBe(2);
   expect(Object.keys(live.zones)).toEqual(ZONE_IDS);
   for (const zone of ZONE_IDS) expect(live.zones[zone], zone).toEqual(pageRect(ZONES[zone], canvas));
   // Every zone lands inside the canvas.

@@ -66,31 +66,36 @@ describe('hud layout owner-fixed internals', () => {
 
   it("has no chart: the gauge took the scope's space (Rolando, 30 Oct 2026)", () => {
     expect(Object.keys(ZONES)).not.toContain('scope');
-    expect(ZONES.gauge).toEqual({ x: 16, y: 710, w: 408, h: 360 });
+    // Smaller and in the right column, under the callers, since layout A2 (Rolando, 30 Oct 2026).
+    expect(ZONES.gauge).toEqual({ x: 1566, y: 580, w: 344, h: 260 });
   });
 
-  it('merges both chats into one column with the body at x 1545-1890, y 840-1060', () => {
+  // Layout A2 (Rolando, 30 Oct 2026): the chat is the tall slim left column, up to sixteen rows.
+  it('merges both chats into one column with the body at x 26-396, y 430-1050', () => {
     expect(RIGHT.chat).toEqual(ZONES.chat);
     const b = RIGHT.chatBody;
-    expect([b.x, b.x + b.w, b.y, b.y + b.h]).toEqual([1545, 1890, 840, 1060]);
-    expect(b.rows).toBe(5);
+    expect([b.x, b.x + b.w, b.y, b.y + b.h]).toEqual([26, 396, 430, 1050]);
+    expect(b.rows).toBe(16);
   });
 
-  it('keeps the comms band’s five slots r 42 at y 720, x 517 + 98 i', () => {
+  // Along the bottom of the layout A2 caller column, overlapping like a call's participants
+  // (Rolando, 30 Oct 2026).
+  it('keeps the caller column’s five slots r 42 at y 506, x 1616 + 61 i', () => {
     expect(BOTTOM.slots).toEqual(
       ['TRIAGE', 'REI', 'MIKA', 'OZZIE', 'HOUSE'].map((name, i) => ({
         name,
-        x: 517 + 98 * i,
-        y: 720,
+        x: 1616 + 61 * i,
+        y: 506,
         r: 42,
       })),
     );
   });
 
-  it('puts the keys 80x64 at (1272, 1022) and (1360, 1022) labelled 1 REGROUP and 2 CUT 3F', () => {
+  // Side by side in the strip under the tray since layout A2 (Rolando, 30 Oct 2026).
+  it('puts the keys 120x52 at (924, 1041.5) and (1056, 1041.5) labelled 1 REGROUP and 2 CUT 3F', () => {
     expect(BOTTOM.keys.map((k) => [k.x, k.y, k.w, k.h])).toEqual([
-      [1272, 1022, 80, 64],
-      [1360, 1022, 80, 64],
+      [924, 1041.5, 120, 52],
+      [1056, 1041.5, 120, 52],
     ]);
     expect(BOTTOM.keys.map((k) => `${k.digit} ${k.word}`)).toEqual(['1 REGROUP', '2 CUT 3F']);
     expect(KEY).toEqual({ regroup: 0, cut: 1 });
