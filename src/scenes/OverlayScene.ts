@@ -48,6 +48,8 @@ export interface ShellTestState {
   titleMusicPlaying: boolean;
   /** The title loop's volume as last set (it follows the anime opening's fades). */
   titleMusicVolume: number;
+  /** The level the title loop sits at when no opening is fading it (the music level under the mixer). */
+  titleMusicLevel: number;
   settings: {
     volume: number;
     textSpeed: string;
@@ -381,6 +383,7 @@ export class OverlayScene extends Phaser.Scene {
       titleMusicPlaying: this.titleMusicOn && this.titleMusic !== null,
       // The volume the game last set (the audio thread's gain.value lags it, and stalls without a device).
       titleMusicVolume: this.titleMusic ? volumeSet(this.titleMusic) : 0,
+      titleMusicLevel: MUSIC_LEVEL * mixer.gain('music'),
       settings: {
         volume: s.volume,
         textSpeed: s.textSpeed,

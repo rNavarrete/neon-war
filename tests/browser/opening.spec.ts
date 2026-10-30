@@ -30,13 +30,36 @@ async function videoAdvances(page: Page): Promise<void> {
     .toBeGreaterThan(0.5);
 }
 
+/**
+ * Wait until the opening is over and the title music is back at its level (shell.titleMusicLevel, read in
+ * the same frame), checked in the page on every frame. The short test idle starts the next fade 2 s after
+ * the title is back, so a poll from outside can land after it has begun on a slow runner; this cannot.
+ */
+async function backOnTitle(page: Page, timeout: number): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      const s = window.__neonTest!.state;
+      return (
+        s.opening!.playing === false &&
+        s.scene === 'title' &&
+        document.querySelector('video') === null &&
+        Math.abs(s.shell!.titleMusicVolume - s.shell!.titleMusicLevel) < 5e-4
+      );
+    },
+    undefined,
+    { timeout, polling: 'raf' },
+  );
+}
+
 test('idle fades the title and its music through black into the opening; a key fades back to the title', async ({
   page,
 }) => {
   await page.goto('/?test&attract=2');
   await waitForScene(page, 'title');
   await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying, { timeout: 10_000 }).toBe(true);
-  const full = (await state(page)).shell!.titleMusicVolume;
+  // The title loop's own level, not a volume sampled now: on a slow runner the 2 s test idle can already
+  // have begun the fade by this point (CI, 30 Oct 2026, read 0.86 and 0.63 of it).
+  const full = (await state(page)).shell!.titleMusicLevel;
   expect(full).toBeGreaterThan(0);
   // (START's spot, read while the title lists its buttons: the paused title lists none.)
   const start = (await state(page)).shell!.buttons.start;
@@ -58,10 +81,7 @@ test('idle fades the title and its music through black into the opening; a key f
   await page.keyboard.press('Space');
   await expect.poll(async () => (await opening(page)).phase).toBe('exit');
   await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying, { timeout: 5_000 }).toBe(true);
-  await expect.poll(async () => (await opening(page)).playing, { timeout: 5_000 }).toBe(false);
-  expect(await page.locator('video').count()).toBe(0);
-  expect((await state(page)).scene).toBe('title');
-  await expect.poll(async () => (await state(page)).shell!.titleMusicVolume).toBeCloseTo(full, 3);
+  await backOnTitle(page, 5_000);
 
   // Idle again brings it back; a click skips it, and the release presses nothing on the menu under it.
   await expect.poll(async () => (await opening(page)).phase, { timeout: 10_000 }).toBe('video');
@@ -77,13 +97,9 @@ test('an input during the fade in calls it off and brings the title music straig
   await page.goto('/?test&attract=2');
   await waitForScene(page, 'title');
   await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying, { timeout: 10_000 }).toBe(true);
-  const full = (await state(page)).shell!.titleMusicVolume;
   await expect.poll(async () => (await opening(page)).titleMusicGain, { timeout: 10_000 }).toBeLessThan(0.8);
   await page.keyboard.press('Enter');
-  await expect.poll(async () => (await opening(page)).playing, { timeout: 2_000 }).toBe(false);
-  expect(await page.locator('video').count()).toBe(0);
-  expect((await state(page)).scene).toBe('title');
-  await expect.poll(async () => (await state(page)).shell!.titleMusicVolume).toBeCloseTo(full, 3);
+  await backOnTitle(page, 2_000);
 });
 
 test('input keeps the opening away: idle counts from the last input', async ({ page }) => {
