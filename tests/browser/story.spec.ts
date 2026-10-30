@@ -80,7 +80,7 @@ test('the cold open waits for a click on every line, then hands over to the boar
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.01');
   expect(s.nameplate).toBe('Lux');
-  expect(s.portrait).toBe('portrait:lux/faces-room/grieving');
+  expect(s.portrait).toBe('portrait:lux/vn/photo');
   expect(s.chat).toEqual([]);
 
   // The phone lights up with the block's four messages as TRIAGE wakes.

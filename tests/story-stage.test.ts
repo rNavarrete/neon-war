@@ -20,14 +20,17 @@ describe('story stage', () => {
   it('stands a tall sprite on the bottom edge at SPRITE_H, never upscaled', () => {
     expect(frameFor(1500, 620, 1080)).toEqual({ x: 620, bottom: 1080, scale: SPRITE_H / 1500 });
     expect(frameFor(800, 620, 1080).scale).toBe(1);
+    // The two Lux sprites are cut at 927 px so the speaker's 3% step lands on their own size.
+    expect(frameFor(927, 620, 1080).scale * 1.03).toBeCloseTo(1, 2);
     // Its head is in the upper sixth of the frame.
     const f = frameFor(1536, 620, 1080);
     expect(f.bottom - 1536 * f.scale).toBeLessThanOrEqual(1080 / 6);
   });
 
-  it('sinks a bust behind the text box at its own size, so its cut edge never shows', () => {
+  it('sinks a bust behind the text box near its own size, so its cut edge never shows', () => {
     const f = frameFor(440, 620, 1080);
-    expect(f.scale).toBe(1);
+    // The speaker steps forward 3%, which must not upscale the art.
+    expect(f.scale * 1.03).toBeLessThanOrEqual(1);
     expect(f.bottom).toBeGreaterThan(BOX_TOP);
     expect(f.bottom - 440).toBeLessThan(BOX_TOP);
   });

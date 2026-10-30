@@ -21,6 +21,7 @@ Notes:
 | `art/hud/icons/` | credits (372x360), trust (333x366), clock (404x300), warning (347x327), power-dip (175x395), overheat (192x382), lock (323x359), bin (317x365), packet (336x249), pause (298x335), settings (345x325), cut (346x339) | ui-icons-a, ui-icons-b |
 | `art/chars/triage/` | eager (238x290), thinking (235x289), proud (238x289), panic (285x291), sheepish (235x290), happy (238x290) | triage-moods |
 | `art/chars/lux/faces-board/` | tense (425x457), determined (436x429), deadpan (410x449), shocked (417x456), smirk (427x455), triumphant (506x453) | lux-faces-board-v2b |
+| `art/chars/lux/vn/` | neutral (515x927), photo (601x927) | vn-lux-b-2-shirt, vn-lux-a-2-shirt (tall story sprites; the text box covers below the waist) |
 | `art/chars/lux/faces-room/` | grieving (442x440), composing (493x438), startled (452x441), relieved (412x429), exhausted (460x431), frightened (400x423) | lux-faces-room-v2 |
 | `art/chars/lux/poses/` | reach (459x893), point (353x885), swipe (678x826), tap-drag (423x963), cheer (535x824), rest (468x541), hug-knees (553x683), goggles-up (382x953), look-back (396x927) | lux-poses-board, lux-poses-room, lux-poses-room-v2, lux-poses-win-v2 |
 | `art/chars/rei/faces/` | smirk (420x449), stern (392x440), impressed (403x432), grading (421x443), laugh (400x450), annoyed (408x439) | rei-faces |

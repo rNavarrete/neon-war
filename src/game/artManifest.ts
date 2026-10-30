@@ -181,7 +181,8 @@ const scaled = (cut: Size, k: number): Size => size(Math.round(cut.w * k), Math.
 const fit = (cut: Size, w: number, h: number): Size => scaled(cut, Math.min(1, w / cut.w, h / cut.h));
 
 /** The story scenes draw portraits at 0.8, and the speaker at 0.8 x 1.03 (src/story/view.ts). */
-const PORTRAIT_K = 0.8 * 1.03;
+/** A bust in a story scene (src/story/stage.ts): 0.97, and 1.0 while it speaks. */
+const PORTRAIT_K = 0.97 * 1.03;
 
 const portrait = (path: string, cut: Size): PickedArt => ({
   file: `art/chars/${path}.webp`,
@@ -189,6 +190,15 @@ const portrait = (path: string, cut: Size): PickedArt => ({
   display: scaled(cut, PORTRAIT_K),
   zone: 'story',
   use: 'speaker portrait in the story scenes; the bark face (124 px) and the COMMS slot crop',
+});
+
+/** A tall story sprite, cut at 927 px: 900 px on stage and 927 (its own size) while it speaks. */
+const sprite = (path: string, cut: Size, use: string): PickedArt => ({
+  file: `art/chars/${path}.webp`,
+  cut,
+  display: scaled(cut, 1),
+  zone: 'story',
+  use,
 });
 
 /** The locked parts' scrap tier in the inventory's padlocked drawer: 40x72 minis, art at 72% x 70%. */
@@ -486,6 +496,12 @@ export const PICKED_ART: readonly PickedArt[] = [
   portrait('lux/faces-board/shocked', size(417, 456)),
   portrait('lux/faces-board/smirk', size(427, 455)),
   portrait('lux/faces-board/triumphant', size(506, 453)),
+  sprite(
+    'lux/vn/neutral',
+    size(515, 927),
+    "Lux's story sprite, standing behind the text box (vn-lux-b take 2)",
+  ),
+  sprite('lux/vn/photo', size(601, 927), "Lux looking at Akemi's photo in the cold open (vn-lux-a take 2)"),
   portrait('lux/faces-room/composing', size(493, 438)),
   portrait('lux/faces-room/grieving', size(442, 440)),
   portrait('lux/faces-room/relieved', size(412, 429)),

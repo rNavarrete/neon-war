@@ -20,7 +20,7 @@ const portrait = (path: string): Portrait => ({ key: `portrait:${path}`, file: `
 
 /** Default faces for the crew and Lux, by where the line is shown. */
 const FACES: Record<string, { board: string; room: string }> = {
-  Lux: { board: 'lux/faces-board/determined', room: 'lux/faces-room/composing' },
+  Lux: { board: 'lux/faces-board/determined', room: 'lux/vn/neutral' },
   Rei: { board: 'rei/faces/smirk', room: 'rei/faces/grading' },
   Mika: { board: 'mika/faces/calm', room: 'mika/faces/reassure' },
   Ozzie: { board: 'ozzie/faces/smug', room: 'ozzie/faces/half-smile' },

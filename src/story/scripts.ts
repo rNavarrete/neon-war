@@ -58,13 +58,13 @@ const COLD_OPEN: SceneScript = {
     { lineId: 'C0.tv.01' },
     { lineId: 'C0.tv.02' },
     { lineId: 'C0.grandma.01' },
-    { lineId: 'C0.lux.01', face: 'lux/faces-room/grieving', cue: 'flicker' },
+    { lineId: 'C0.lux.01', face: 'lux/vn/photo', cue: 'flicker' },
     { lineId: 'C0.chat.01' },
     { lineId: 'C0.chat.02' },
     { lineId: 'C0.chat.03' },
     { lineId: 'C0.chat.04' },
     { lineId: 'C0.triage.01' },
-    { lineId: 'C0.lux.02', face: 'lux/faces-room/composing', cue: 'goggles' },
+    { lineId: 'C0.lux.02', face: 'lux/vn/neutral', cue: 'goggles' },
   ],
 };
 

@@ -78,6 +78,6 @@ describe('story scripts', () => {
 
   it('only overrides faces with picked portrait files', () => {
     for (const f of scriptFaces())
-      expect(f).toMatch(/^(lux\/faces-(board|room)|rei\/faces|mika\/faces|ozzie\/faces)\//);
+      expect(f).toMatch(/^(lux\/faces-(board|room)|lux\/vn|rei\/faces|mika\/faces|ozzie\/faces)\//);
   });
 });

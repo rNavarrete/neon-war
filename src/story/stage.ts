@@ -11,6 +11,8 @@ export const SPRITE_H = 900;
 const SPRITE_MIN = 700;
 /** How far a bust sinks behind the text box, so its cut edge never shows. */
 const BUST_SINK = 60;
+/** A bust's scale when not speaking: the speaker's 3% step forward then lands on its own size, never above. */
+const BUST_SCALE = 0.97;
 
 /**
  * Slot centres, left to right, for 1 to 5 people. Alone: on the left third line, the way a single
@@ -36,10 +38,10 @@ export function slotsFor(count: number): readonly number[] {
 
 /**
  * How art `h` pixels tall stands at slot `x`: its bottom centre and its scale. A full sprite is scaled
- * down to SPRITE_H (never up) and stands on the bottom edge; a bust is drawn at its own size with its
- * cut edge just behind the text box.
+ * down to SPRITE_H (never up) and stands on the bottom edge; a bust is drawn near its own size with
+ * its cut edge just behind the text box.
  */
 export function frameFor(h: number, x: number, frameH: number): { x: number; bottom: number; scale: number } {
   if (h >= SPRITE_MIN) return { x, bottom: frameH, scale: Math.min(1, SPRITE_H / h) };
-  return { x, bottom: BOX_TOP + BUST_SINK, scale: 1 };
+  return { x, bottom: BOX_TOP + BUST_SINK, scale: BUST_SCALE };
 }
