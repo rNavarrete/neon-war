@@ -96,7 +96,7 @@ describe('voice manifest', () => {
     // Two more since the idle-server nudges (30 Oct 2026), both still to record.
     expect(voicedLines()).toHaveLength(131);
     const KNOWN_GAPS = knownGaps();
-    expect(KNOWN_GAPS.ja.size).toBe(46);
+    expect(KNOWN_GAPS.ja.size).toBe(20);
     for (const lang of LANGS) {
       const listed = new Set(manifest[lang]);
       const gaps = voicedLines().filter((id) => !listed.has(id));

@@ -44,8 +44,11 @@ export const READ_LEAD = 1;
 export const READ_TAIL = 1.5;
 /** Lines waiting at most. */
 export const COMMS_QUEUE_MAX = 5;
-/** Shown lines the model remembers (the hook's history). */
-export const COMMS_HISTORY = BARK_HISTORY;
+/**
+ * Shown lines the model remembers (the hook's history): two bark histories, so the night's opening
+ * lines are still there at the C4 surge now Lux talks the player through it (30 Oct 2026).
+ */
+export const COMMS_HISTORY = 2 * BARK_HISTORY;
 /** A queued HINT, CREW or HOUSE line goes stale after this long. */
 export const STALE_SECONDS = 12;
 /** ...or this long for a line that follows another by a delay (its cue `follows` something). */

@@ -1,6 +1,6 @@
 # Recorded voices
 
-Every spoken line of Session 0 (85 lines: the scene lines and the barks of `docs/SCRIPT.md`) has
+Every spoken line of Session 0 recorded so far (111 lines: the scene lines and the barks of `docs/SCRIPT.md`) has
 a recorded clip in Japanese and in English. This page covers where the clips come from, how to
 re-record one and which takes are out of date. How the game plays them (channels, the duck, one
 voice at a time, lazy groups) is in `docs/AUDIO.md`.
@@ -20,6 +20,9 @@ as delivery, not as words). `log.jsonl` there records one row per take.
   every line's `en` take, TRIAGE's included (`src/game/voice.ts`).
 - `tests/fixtures/voice-recorded-lines.json` is a copy of the `lines.json` the takes were made
   from. Refresh it whenever you re-record.
+
+Lux's 26 board lines (30 Oct 2026, `C1.lux.placed` to `C7.lux.count`) were recorded the same way, with the
+same Lux voices, from the project's cloud session at Rolando's request.
 
 ## The manifest
 
@@ -120,32 +123,6 @@ lists them in `shell.voice.missing`) until they are recorded and added to the ma
 - `C5.lux.nudge.behind`
 - `C5.triage.nudge.replace.1`
 - `C5.lux.nudge.replace`
-- `C1.lux.placed`
-- `C1.lux.live`
-- `C1.lux.chat`
-- `C1.lux.goodcall`
-- `C1.lux.moved`
-- `C2.lux.headroom`
-- `C3.lux.climbing`
-- `C3.lux.watch`
-- `C3.lux.father`
-- `C3.lux.near`
-- `C3.lux.over`
-- `C3.lux.eyes`
-- `C3.lux.scaledup`
-- `C3.lux.broke`
-- `C3.lux.tip`
-- `C3.lux.thanks`
-- `C4.lux.forecast`
-- `C4.lux.forecast2`
-- `C4.lux.dark`
-- `C4.lux.retry`
-- `C4.lux.okafor`
-- `C5.lux.recover`
-- `C6.lux.spare`
-- `C6.lux.countdown`
-- `C6.lux.midnight`
-- `C7.lux.count`
 
 ## Speaker changed
 

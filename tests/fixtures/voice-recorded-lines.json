@@ -373,5 +373,156 @@
     "rei",
     "Arcade under the rail line. Tomorrow, midnight. Don't be late.",
     "アーケード、高架下。明日の真夜中。遅れるなよ。"
+  ],
+  [
+    "C1.lux.placed",
+    "lux",
+    "[encouraging, dry] Good. Now give it a wire, or it's just a very expensive box.",
+    "[励ますように、淡々と] いいね。次は配線。じゃないと、ただの高い箱だよ。"
+  ],
+  [
+    "C1.lux.live",
+    "lux",
+    "[relieved, warm] There. Hi, block. Missed you.",
+    "[ほっとして、優しく] ほら。ただいま、みんな。会いたかった。"
+  ],
+  [
+    "C1.lux.chat",
+    "lux",
+    "[embarrassed, laughing] Chat, I literally plugged in one cable. Calm down. ...Thank you.",
+    "[照れ笑い] チャットのみんな、ケーブル一本挿しただけだから。落ち着いて。……ありがと。"
+  ],
+  [
+    "C1.lux.goodcall",
+    "lux",
+    "[grudging] ...Fine. Good call. Don't let it go to your lens.",
+    "[しぶしぶ] ……まあね。いい判断。調子に乗らないでよ。"
+  ],
+  ["C1.lux.moved", "lux", "[satisfied] Tidy board, tidy mind.", "[満足げに] ボードが整えば、頭も整う。"],
+  [
+    "C2.lux.headroom",
+    "lux",
+    "[dry] Plenty of room. Enjoy it. It never lasts.",
+    "[淡々と] 余裕はたっぷり。今のうちに楽しんで。長くは続かないから。"
+  ],
+  [
+    "C3.lux.climbing",
+    "lux",
+    "[uneasy] Uh-oh. More requests coming in. Everyone's waking up for midnight.",
+    "[不安げに] うわ。リクエストが増えてきた。みんな年越しに起きてきたんだ。"
+  ],
+  [
+    "C3.lux.watch",
+    "lux",
+    "[focused] Watch the dial. If the needle passes the line, we're in trouble.",
+    "[集中して] メーターを見て。針が線を越えたら、まずいよ。"
+  ],
+  [
+    "C3.lux.father",
+    "lux",
+    "[gentle, determined] You'll make your call. I promise.",
+    "[優しく、決意を込めて] 電話、ちゃんとつながるから。約束する。"
+  ],
+  [
+    "C3.lux.near",
+    "lux",
+    "[tense] We're close to the limit. I need more room before it tips.",
+    "[緊張して] 限界が近い。あふれる前に、もっと余裕がいる。"
+  ],
+  [
+    "C3.lux.over",
+    "lux",
+    "[urgent] Too many! Calls are bouncing. I need more capacity, now.",
+    "[切迫して] 多すぎる！つながらない人が出てる。今すぐ容量を増やさないと。"
+  ],
+  [
+    "C3.lux.eyes",
+    "lux",
+    "[firm, deadpan] TRIAGE. Eyes. Normal. Now.",
+    "[きっぱりと、無表情に] トリアージ。目。普通に。今すぐ。"
+  ],
+  [
+    "C3.lux.scaledup",
+    "lux",
+    "[thoughtful] Bigger server, same spot. That buys us time. Not forever.",
+    "[考えながら] 大きいサーバー、場所はそのまま。時間は稼げる。ずっとじゃないけど。"
+  ],
+  [
+    "C3.lux.broke",
+    "lux",
+    "[sheepish] I'm broke. Chat, I'm not begging. ...I'm a little bit begging.",
+    "[気まずそうに] お金ない。チャットのみんな、おねだりじゃないよ。……ちょっとだけ、おねだり。"
+  ],
+  [
+    "C3.lux.tip",
+    "lux",
+    "[grateful, excited] Thank you! That's going straight into servers.",
+    "[感謝して、うれしそうに] ありがとう！全部サーバーに使うね。"
+  ],
+  [
+    "C3.lux.thanks",
+    "lux",
+    "[surprised, delighted] Whoa. Okay. Somebody's getting a shout-out at midnight.",
+    "[驚いて、うれしそうに] うわ。すごい。年越しの瞬間に名前呼ぶからね。"
+  ],
+  [
+    "C4.lux.forecast",
+    "lux",
+    "[serious] Big wave coming. Build before it hits, not after.",
+    "[真剣に] 大きい波が来る。来てからじゃなくて、来る前に組んで。"
+  ],
+  [
+    "C4.lux.forecast2",
+    "lux",
+    "[under her breath, tense] Five seconds. Come on, come on...",
+    "[小声で、緊張して] あと五秒。お願い、お願い……"
+  ],
+  [
+    "C4.lux.dark",
+    "lux",
+    "[alarmed but steady] Lost one! Everybody stay calm. That includes you, TRIAGE.",
+    "[驚きつつも落ち着いて] 一台落ちた！みんな落ち着いて。トリアージ、あなたもね。"
+  ],
+  [
+    "C4.lux.retry",
+    "lux",
+    "[exasperated] Right. Every refresh is one more request. Stop it, guys!",
+    "[呆れて] そう。更新するたびにリクエストが一つ増えるの。やめてってば！"
+  ],
+  [
+    "C4.lux.okafor",
+    "lux",
+    "[reassuring] Hang on, Mrs Okafor. Lift's next.",
+    "[安心させるように] オカフォーさん、待ってて。次はエレベーターだから。"
+  ],
+  [
+    "C5.lux.recover",
+    "lux",
+    "[shaky relief] Okay. Okay. We're back. Breathe.",
+    "[震える声で、ほっとして] よし。よし。戻った。深呼吸。"
+  ],
+  [
+    "C6.lux.spare",
+    "lux",
+    "[satisfied, a little smug] See? That's why you keep a spare.",
+    "[満足げに、少し得意げに] ほらね。だから予備を置いとくの。"
+  ],
+  [
+    "C6.lux.countdown",
+    "lux",
+    "[soft, emotional] Ten seconds. Baachan, if you're watching... watch this.",
+    "[静かに、感情を込めて] あと十秒。ばあちゃん、見てるなら……見てて。"
+  ],
+  [
+    "C6.lux.midnight",
+    "lux",
+    "[joyful, warm] Happy New Year, block. Lights stay on.",
+    "[うれしそうに、温かく] あけましておめでとう、みんな。明かりは消えないよ。"
+  ],
+  [
+    "C7.lux.count",
+    "lux",
+    "[teasing] I built you, and you still can't count.",
+    "[からかうように] あなたを作ったの私なのに、まだ数えられないんだね。"
   ]
 ]
