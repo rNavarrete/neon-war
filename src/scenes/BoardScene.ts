@@ -61,6 +61,7 @@ import { registerPool } from './live/hook';
 import {
   FEED_SHOWN,
   FEED_VIEW,
+  ZONES,
   type Rect,
   TRAY_VIEW,
   TRAY_WORLD,
@@ -3255,7 +3256,8 @@ export class BoardScene extends Phaser.Scene {
     const feed = FEED_SHOWN;
     const skyShown = this.sky.visible && this.sky.alpha > 0;
     return {
-      area: boardPageRect(feed, rect),
+      // What the feed camera shows is exactly the feed zone (FEED_SHOWN fitted into it).
+      area: pageRect(ZONES.feed, rect),
       backdrop: {
         // The band between the feed's top and the table's far edge, where only the city shows.
         skyline: skyShown

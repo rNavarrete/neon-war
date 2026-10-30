@@ -15,9 +15,22 @@ const ART: readonly [string, string][] = [
   ['shell:button-pressed', 'art/hud/button-pressed.webp'],
 ];
 
-/** Queue the button art unless another scene already loaded it. */
+/**
+ * The button art each game's texture manager already has queued. Two scenes preload in the same
+ * frame (the title and the overlay), before either load lands, so `exists` alone let both queue it
+ * and the second add warned "Texture key already in use".
+ */
+const queued = new WeakMap<Phaser.Textures.TextureManager, Set<string>>();
+
+/** Queue the button art unless another scene already loaded or queued it. */
 export function preloadButtons(scene: Phaser.Scene): void {
-  for (const [key, file] of ART) if (!scene.textures.exists(key)) scene.load.image(key, file);
+  let keys = queued.get(scene.textures);
+  if (!keys) queued.set(scene.textures, (keys = new Set()));
+  for (const [key, file] of ART) {
+    if (scene.textures.exists(key) || keys.has(key)) continue;
+    keys.add(key);
+    scene.load.image(key, file);
+  }
 }
 
 export interface ShellButton {

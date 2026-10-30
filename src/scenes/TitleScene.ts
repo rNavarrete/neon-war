@@ -110,6 +110,8 @@ export class TitleScene extends Phaser.Scene {
   private speakerG: Phaser.GameObjects.Graphics | null = null;
   private speakerHover = false;
   private gate: Phaser.GameObjects.Text | null = null;
+  /** True for the frame the gate opens on, so the press that opened it doesn't also toggle the music. */
+  private gateOpening = false;
 
   constructor() {
     super(SCENES.title);
@@ -204,9 +206,11 @@ export class TitleScene extends Phaser.Scene {
       this.input.keyboard?.off(Phaser.Input.Keyboard.Events.ANY_KEY_DOWN, open);
       this.gate.destroy();
       this.gate = null;
+      this.gateOpening = true;
       // The menu shows on the next frame, so the release that opened it can't also press a button
       // that appears under the pointer.
       this.time.delayedCall(1, () => {
+        this.gateOpening = false;
         for (const b of this.menu) b.setVisible(!this.creditsOpen);
       });
     };
@@ -299,6 +303,9 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private toggleMusic(): void {
+    // A first press on the speaker (or M) while sound is still locked only opens the gate and lets the
+    // music start: toggling it too would mute music the player never heard.
+    if (this.gate || this.gateOpening) return;
     updateSettings({ musicMuted: !settings().musicMuted });
     bus.emit('sfx', { key: 'ui-click' });
     this.drawSpeaker();

@@ -140,6 +140,10 @@ test('the title plays its own music; the speaker icon mutes it, shows it muted a
 test('while the browser holds sound, the title opens on a press-any-key gate; the press shows the menu and plays the music', async ({
   page,
 }) => {
+  const warnings: string[] = [];
+  page.on('console', (m) => {
+    if (/already in use/i.test(m.text())) warnings.push(m.text());
+  });
   // Under the test hook the gate shows only with ?gate, as it does on a real first visit.
   await page.goto('/?test&gate');
   await waitForScene(page, 'title');
@@ -164,6 +168,21 @@ test('while the browser holds sound, the title opens on a press-any-key gate; th
   await page.keyboard.press('Space');
   await expect.poll(async () => (await state(page)).title!.gate).toBe(false);
   await expect.poll(async () => (await state(page)).shell!.buttons.start ?? null).not.toBeNull();
+
+  // A first click on the speaker only opens the gate: the music starts and stays unmuted (Rolando,
+  // 30 Oct 2026: it used to unlock the sound and mute it in the same click). The next click mutes.
+  await page.reload();
+  await waitForScene(page, 'title');
+  expect((await state(page)).title!.gate).toBe(true);
+  const sp = (await state(page)).title!.speaker;
+  await page.mouse.click(canvas.x + (sp.x + sp.w / 2) * k, canvas.y + (sp.y + sp.h / 2) * k);
+  await expect.poll(async () => (await state(page)).title!.gate).toBe(false);
+  expect((await state(page)).title!.speaker.muted).toBe(false);
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying).toBe(true);
+  await page.mouse.click(canvas.x + (sp.x + sp.w / 2) * k, canvas.y + (sp.y + sp.h / 2) * k);
+  await expect.poll(async () => (await state(page)).title!.speaker.muted).toBe(true);
+  // No texture is loaded twice (the shell button art used to be queued by two scenes at once).
+  expect(warnings).toEqual([]);
 });
 
 test('Esc and the pause button open Pause; the sim clock holds still while paused', async ({ page }) => {

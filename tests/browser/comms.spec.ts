@@ -342,8 +342,11 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
     const r = artRequest(key);
     return !!r && isPicked(r);
   };
-  expect(c.art.plate.use).toBe(pickedKey('hud/comms-plate') ? 'picked' : 'reuse');
-  expect(c.art.plate.texture).not.toBeNull();
+  // Layout A2 (Rolando, 30 Oct 2026): the caller column draws its plate in code (the painted plate
+  // is a 1455 x 149 strip); the strip stays picked in the manifest.
+  expect(pickedKey('hud/comms-plate')).toBe(true);
+  expect(c.art.plate.use).toBe('code');
+  expect(c.art.plate.texture).toBeNull();
   expect(c.art.faces.map((f) => [f.slot, f.key])).toEqual([
     ['TRIAGE', 'chars/comms/triage'],
     ['REI', 'chars/comms/rei'],
