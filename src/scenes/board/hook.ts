@@ -97,6 +97,11 @@ export interface BoardTestState {
      * it is not loaded.
      */
     midnightPlate: { rect: Rect; scale: number; alpha: number } | null;
+    /**
+     * How far the board has crossed into midnight (0 before, 1 once in), whichever way it is shown:
+     * the midnight plate's fade, or the day plate's tint now table D has no midnight plate.
+     */
+    midnight: number;
     /** The packets' texture ('art:board/packet-cube' once picked, else the code 'packet') and draw scale. */
     packet: { texture: string; scale: number };
     pingMarks: number;

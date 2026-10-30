@@ -1365,7 +1365,7 @@ test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behi
 /** The board's art keys (src/scenes/board/art.ts BOARD_ART_KEYS), each a picked file under public/art. */
 const BOARD_ART = [
   'board/table-plate',
-  'board/table-plate-midnight',
+  // No midnight plate since table D (Rolando, 30 Oct 2026): it was painted for the old table.
   'board/channel-plate',
   'board/packet-cube',
   'board/server-dark',
@@ -1402,21 +1402,22 @@ test('board-12: the painted table, channel, cards and marks draw from public/art
   }
   expect(art.missing).toEqual([]);
 
-  // The table is the painted plate, never drawn above its file's size, inside the feed and centred
-  // under the table's trapezoid; the channel plate sits on the mouth inside the feed.
+  // The table is the painted plate, never drawn above its file's size. Since table D (Rolando,
+  // 30 Oct 2026) the plate is the whole rooftop scene, so it covers the feed rather than sitting
+  // inside it; the channel plate sits on the mouth inside the feed.
   expect(b.art.table).toBe('plate');
   expect(b.art.tableScale).toBeLessThanOrEqual(1);
-  expectInside(b.art.tableRect, b.area, 'the table plate');
+  const tr = b.art.tableRect;
+  expect(tr.x).toBeLessThanOrEqual(b.area.x + 0.1);
+  expect(tr.y).toBeLessThanOrEqual(b.area.y + 0.1);
+  expect(tr.x + tr.w).toBeGreaterThanOrEqual(b.area.x + b.area.w - 0.1);
+  expect(tr.y + tr.h).toBeGreaterThanOrEqual(b.area.y + b.area.h - 0.1);
   expectInside(b.art.channelPlate!, b.area, 'the channel plate');
-  // Batch 5: the midnight plate waits, hidden, at its own size inside the day plate; the packets
-  // are the painted cube inside its 24 x 18 box, never above its file's size.
-  const mp = b.art.midnightPlate!;
-  expect(mp).not.toBeNull();
-  expect(mp.alpha).toBe(0);
-  expect(mp.scale).toBe(1);
-  expectInside(mp.rect, b.area, 'the midnight plate');
-  expect(mp.rect.x).toBeGreaterThan(b.art.tableRect.x);
-  expect(mp.rect.x + mp.rect.w).toBeLessThan(b.art.tableRect.x + b.art.tableRect.w);
+  // Batch 5's midnight plate was painted for the old table: table D has none, and its cold tint
+  // waits at 0 until midnight. The packets are the painted cube inside its 24 x 18 box, never
+  // above its file's size.
+  expect(b.art.midnightPlate).toBeNull();
+  expect(b.art.midnight).toBe(0);
   expect(b.art.packet.texture).toBe('art:board/packet-cube');
   expect(b.art.packet.scale).toBeLessThanOrEqual(1);
   expect(59 * b.art.packet.scale).toBeLessThanOrEqual(24);

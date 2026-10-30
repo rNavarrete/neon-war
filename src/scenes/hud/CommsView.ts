@@ -1107,7 +1107,7 @@ export class CommsView implements LiveView {
     const cps = TEXT_CPS[settings().textSpeed];
     const scale = canvas.width / 1920;
     const speaking = c ? slotOf(LINES[c.id].speaker) : null;
-    const houseArt = this.faces[COMMS_SLOTS.indexOf('HOUSE')]?.visible === true;
+    const houseArt = this.chips[this.houseShown]?.texture != null;
     const present = this.shownPresent === true;
     const b = this.root?.getBounds();
     const typed = c ? typedOf(c, this.clock, cps) : 0;
@@ -1178,7 +1178,9 @@ export class CommsView implements LiveView {
         house: {
           shown: this.houseShown === 0 ? 'door' : 'tv',
           chips: this.chips.map((c) => ({ key: c.key, use: c.use })),
-          drawn: this.faces[COMMS_SLOTS.indexOf('HOUSE')]?.visible ? 'art' : 'glyph',
+          // The chip the band would draw: since the caller column hides the roster (30 Oct 2026) the
+          // picked art can be chosen yet not on screen, so this reads the choice, not the visibility.
+          drawn: this.chips[this.houseShown]?.texture ? 'art' : 'glyph',
           source: houseArt ? (this.chipSource[this.houseShown] ?? null) : null,
           size: houseArt ? (this.chipSize[this.houseShown] ?? null) : null,
         },

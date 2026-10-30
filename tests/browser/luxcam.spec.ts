@@ -433,17 +433,18 @@ test.describe('luxcam-5 at 1920x1080', () => {
           expect(c.art).toBe('portrait:lux/cam/cheer');
           expect(within(c.face, c.lens)).toBe(true);
           await camShots(page, 'cheer');
-          // Batch 5 at the held midnight: the lit city painting fades in on the map, and the board's
-          // midnight plate over the day plate (each within a couple of seconds).
+          // Batch 5 at the held midnight: the lit city painting fades in on the map, and the board
+          // goes cold (each within a couple of seconds). Since table D (Rolando, 30 Oct 2026) there is
+          // no midnight plate, painted for the old table: the scene's cold tint comes in instead.
           await expect
             .poll(
               () =>
                 page.evaluate(() => {
                   const st = window.__neonTest!.state as unknown as {
                     hud?: { map?: { lit: { alpha: number } | null } };
-                    board?: { art: { midnightPlate: { alpha: number } | null } };
+                    board?: { art: { midnight: number } };
                   };
-                  return [st.hud?.map?.lit?.alpha ?? null, st.board?.art.midnightPlate?.alpha ?? null];
+                  return [st.hud?.map?.lit?.alpha ?? null, st.board?.art.midnight ?? null];
                 }),
               { timeout: 3_000, intervals: [50] },
             )

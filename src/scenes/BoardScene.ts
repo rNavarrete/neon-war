@@ -64,7 +64,6 @@ import {
   ZONES,
   type Rect,
   TRAY_VIEW,
-  TRAY_WORLD,
   type View,
   boardRectToScreen,
   boardToScreen,
@@ -3427,7 +3426,8 @@ export class BoardScene extends Phaser.Scene {
         price: c.price,
       })),
       inventory: {
-        area: boardPageRect(TRAY_WORLD, rect),
+        // What the tray camera shows is exactly the inventory zone (TRAY_WORLD fitted into it).
+        area: pageRect(ZONES.inventory, rect),
         counts: { ...this.counts },
         frames: Object.fromEntries(
           this.cards.filter((c) => c.main).map((c) => [c.id, this.inventory.frameOf(c.id)]),
@@ -3446,6 +3446,8 @@ export class BoardScene extends Phaser.Scene {
               alpha: round(this.midnightShown),
             }
           : null,
+        // How far the midnight change has come (the plate's fade, or table D's cold tint), 0 to 1.
+        midnight: round(this.midnightShown),
         packet: { texture: this.packetTex, scale: round(this.packetScaleNow) },
         pingMarks: this.pingIcons.filter((i) => i.visible).length,
         stamps: board.parts
