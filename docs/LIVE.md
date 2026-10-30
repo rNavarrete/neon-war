@@ -313,6 +313,7 @@ Every top-level section of `window.__neonTest.state` (each `provideTestState` ca
 | `art` | `src/scenes/plates.ts` | the art manifest's resolutions |
 | `debriefSeen` | DebriefScene | the debrief's "you saw it at" lines |
 | `settingsScreen` | SettingsScene | the settings screen's controls |
+| `opening` | `src/scenes/opening.ts` | the anime opening: `playing`, `reason` (`attract`: after 20 s idle on the title) |
 
 `tests/browser/live-tour.spec.ts` reads at least one field of every zone's section (`hud.title`,
 `hud.alert`, `hud.clock`, `hud.map`, `hud.luxCam`, `hud.gauge`, `hud.chart`, `hud.comms`,
