@@ -1453,27 +1453,11 @@ export class BoardScene extends Phaser.Scene {
   // footprint would cover light green (it fits) or red (blocked); while the board waits for a
   // build, one good spot pulses; at midnight the rack that loses power goes dark.
 
-  /** The grid's layers, and its static drawing: the rack bands with their labels. */
+  /** The grid's layers. */
   private drawGrid(): void {
-    const g = (this.rackG = this.add.graphics().setDepth(0.6));
-    for (let k = 0; k < RACKS.length; k++) {
-      const r = RACKS[k];
-      const q = blockQuad(r.from, 0, r.to - r.from + 1, GRID.rows);
-      // Every other rack a faint wash, so the four power feeds read as bands.
-      if (k % 2 === 1) g.fillStyle(CYAN, 0.04).fillPoints(asVectors(q), true);
-      if (k > 0) g.lineStyle(2, CYAN, 0.3).lineBetween(q[0].x, q[0].y, q[3].x, q[3].y);
-      addLabel(this, (q[0].x + q[1].x) / 2, q[0].y - 3, `rack-${r.id}`, `${LABELS.board.rack} ${r.id}`, {
-        fontFamily: 'monospace',
-        fontSize: '13px',
-        fontStyle: 'bold',
-        color: '#7fe9ff',
-        stroke: '#05070f',
-        strokeThickness: 3,
-      })
-        .setOrigin(0.5, 1)
-        .setAlpha(0.75)
-        .setDepth(0.62);
-    }
+    // No rack bands or RACK labels (Rolando, 30 Oct 2026: just capacity and the servers covering it,
+    // as in an interview). The layer stays for the grid's static drawing.
+    this.rackG = this.add.graphics().setDepth(0.6);
     this.dipG = this.add.graphics().setDepth(0.64).setVisible(false);
     this.suggestG = this.add.graphics().setDepth(0.66).setVisible(false);
     this.heldG = this.add.graphics().setDepth(0.68).setVisible(false);
