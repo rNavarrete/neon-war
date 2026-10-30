@@ -90,6 +90,12 @@ export function musicWanted(view: { boardOpen: boolean; sceneOpen: boolean }): b
   return view.boardOpen && !view.sceneOpen;
 }
 
+/**
+ * The music's level under the master volume, so the title track and the board loop sit under the
+ * voices and effects (Rolando, 30 Oct 2026: the default volume was too high).
+ */
+export const MUSIC_LEVEL = 0.6;
+
 /** The title music plays while the title is on screen, unless the player muted the music. */
 export function titleMusicWanted(view: { titleOpen: boolean; muted: boolean }): boolean {
   return view.titleOpen && !view.muted;

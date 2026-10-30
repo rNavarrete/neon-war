@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   MUSIC_FILES,
   MUSIC_KEY,
+  MUSIC_LEVEL,
   SFX_KEYS,
   TITLE_MUSIC_FADE,
   TITLE_MUSIC_FILES,
@@ -181,11 +182,14 @@ export class OverlayScene extends Phaser.Scene {
     for (const key of bundledLiveSfx()) this.load.audio(key, sfxPath(key));
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       if (this.cache.audio.exists(TITLE_MUSIC_KEY)) {
-        this.titleMusic = this.sound.add(TITLE_MUSIC_KEY, { loop: true, volume: mixer.gain('music') });
+        this.titleMusic = this.sound.add(TITLE_MUSIC_KEY, {
+          loop: true,
+          volume: MUSIC_LEVEL * mixer.gain('music'),
+        });
         if (this.titleMusicOn) this.playTitleMusic(true);
       }
       if (!this.cache.audio.exists(MUSIC_KEY)) return;
-      this.music = this.sound.add(MUSIC_KEY, { loop: true, volume: mixer.gain('music') });
+      this.music = this.sound.add(MUSIC_KEY, { loop: true, volume: MUSIC_LEVEL * mixer.gain('music') });
       if (this.musicOn) this.playMusic(true);
     });
     this.load.start();
@@ -249,8 +253,9 @@ export class OverlayScene extends Phaser.Scene {
       },
       setGain: (channel, gain) => {
         if (channel === 'music') {
-          (this.music as Phaser.Sound.WebAudioSound | null)?.setVolume?.(gain);
-          if (this.titleMusicOn) (this.titleMusic as Phaser.Sound.WebAudioSound | null)?.setVolume?.(gain);
+          const level = MUSIC_LEVEL * gain;
+          (this.music as Phaser.Sound.WebAudioSound | null)?.setVolume?.(level);
+          if (this.titleMusicOn) (this.titleMusic as Phaser.Sound.WebAudioSound | null)?.setVolume?.(level);
           return;
         }
         this.sfxGain = gain;
@@ -310,7 +315,7 @@ export class OverlayScene extends Phaser.Scene {
     try {
       this.tweens.killTweensOf(m);
       if (on) {
-        m.setVolume(mixer.gain('music'));
+        m.setVolume(MUSIC_LEVEL * mixer.gain('music'));
         m.play();
       } else if (m.isPlaying) {
         this.tweens.add({

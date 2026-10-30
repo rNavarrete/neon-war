@@ -61,7 +61,9 @@ would be the wrong voice.
 Lines whose words changed in `src/strings.ts` since they were recorded. Words are compared without
 the performance tags, the stage directions in brackets and quotes.
 
-None. Every take says the words the script says now.
+- `C0.grandma.01`: "Lux? Your show's starting, love." became "Lux, it's almost midnight, love. Come
+  downstairs." (Rolando, 30 Oct 2026). The old take still plays until it is re-recorded; the
+  Japanese line for the take is ルクス、もうすぐ年越しよ。下りておいで。
 
 Two lines differ only in stage directions written into the text (`C5.rei.cut` has "(beat)",
 `C5.rei.04` has "(to Lux)"); the spoken words match the takes.

@@ -27,7 +27,7 @@ plays on a timer. The run's clock holds at 23:51:30 until the goggles come down,
 | --- | --- | --- | --- | --- |
 | C0.tv.01 | scene | TV downstairs | first line, under the rain | "...and Halation, we are five minutes from midnight!" |
 | C0.tv.02 | scene | TV downstairs | click | "Get your people close. Get your cameras ready!" |
-| C0.grandma.01 | scene | Grandma (through the door) | click | "Lux? Your show's starting, love." |
+| C0.grandma.01 | scene | Grandma (through the door) | click | "Lux, it's almost midnight, love. Come downstairs." |
 | C0.lux.01 | scene | Lux | click, still looking at the photo; the clock flickers to 02:14 | "In a minute, Baachan." |
 | C0.chat.01 | chat | block: kenji | click: the phone lights up, all four at once | lux the net's doing the thing again |
 | C0.chat.02 | chat | block: young father | with C0.chat.01 | I need to call my son at midnight!! |

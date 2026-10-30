@@ -1,5 +1,6 @@
 import {
   AudioDirector,
+  MUSIC_LEVEL,
   EVENT_SFX,
   SFX_KEYS,
   isSfxKey,
@@ -10,7 +11,7 @@ import {
   sfxPath,
   titleMusicWanted,
 } from '../src/game/audio';
-import { DEFAULT_SETTINGS, parseSettings } from '../src/game/settings';
+import { DEFAULT_SETTINGS, SETTINGS_VERSION, parseSettings } from '../src/game/settings';
 import { Bus } from '../src/game/bus';
 
 describe('sound keys', () => {
@@ -99,5 +100,20 @@ describe('AudioDirector', () => {
     });
     expect(() => bus.emit('sfx', { key: 'ui-click' })).not.toThrow();
     expect(director.lastSfx).toBe('ui-click');
+  });
+});
+
+describe('the default volume (Rolando, 30 Oct 2026: "kind of high")', () => {
+  it('starts at half volume, with the music under the voices and effects', () => {
+    expect(DEFAULT_SETTINGS.volume).toBe(0.5);
+    expect(MUSIC_LEVEL).toBeGreaterThan(0);
+    expect(MUSIC_LEVEL).toBeLessThan(1);
+  });
+
+  it('gives settings saved with the old 0.8 default the new one, once', () => {
+    expect(parseSettings(JSON.stringify({ volume: 0.8 })).volume).toBe(0.5);
+    // A level the player chose, or one saved after the change, is kept.
+    expect(parseSettings(JSON.stringify({ volume: 0.6 })).volume).toBe(0.6);
+    expect(parseSettings(JSON.stringify({ volume: 0.8, version: SETTINGS_VERSION })).volume).toBe(0.8);
   });
 });

@@ -29,7 +29,8 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  volume: 0.8,
+  // 0.5 since 30 Oct 2026 (Rolando: the default was "kind of high"); it was 0.8.
+  volume: 0.5,
   textSpeed: 'normal',
   reduceFlicker: false,
   voices: 'ja',
@@ -41,6 +42,13 @@ export const DEFAULT_SETTINGS: Settings = {
 export const TEXT_CPS: Record<TextSpeed, number> = { slow: 25, normal: 50, fast: 120 };
 
 const KEY = 'neon-war.settings';
+
+/**
+ * Written with every save. Settings saved before version 2 that still hold the old 0.8 default
+ * volume were never turned down by the player, so they take the new default once.
+ */
+export const SETTINGS_VERSION = 2;
+const OLD_DEFAULT_VOLUME = 0.8;
 
 const unit = (v: unknown, fallback: number): number =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : fallback;
@@ -59,8 +67,10 @@ export function parseSettings(raw: string | null): Settings {
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
+  const version = (v as { version?: unknown }).version;
+  const oldDefault = version !== SETTINGS_VERSION && v.volume === OLD_DEFAULT_VOLUME;
   return {
-    volume: unit(v.volume, DEFAULT_SETTINGS.volume),
+    volume: oldDefault ? DEFAULT_SETTINGS.volume : unit(v.volume, DEFAULT_SETTINGS.volume),
     textSpeed: v.textSpeed === 'slow' || v.textSpeed === 'fast' ? v.textSpeed : 'normal',
     reduceFlicker: v.reduceFlicker === true,
     voices: (VOICE_SETTINGS as readonly unknown[]).includes(v.voices)
@@ -89,7 +99,7 @@ export function settings(): Readonly<Settings> {
 export function updateSettings(patch: Partial<Settings>): Settings {
   current = { ...settings(), ...patch };
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(current));
+    window.localStorage.setItem(KEY, JSON.stringify({ ...current, version: SETTINGS_VERSION }));
   } catch {
     // Storage unavailable: the change still applies for this visit.
   }

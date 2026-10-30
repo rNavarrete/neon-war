@@ -232,7 +232,8 @@ test('settings change volume, text speed and reduce flicker; volume and reduce f
 }) => {
   await page.goto('/?test');
   await waitForScene(page, 'title');
-  expect((await state(page)).shell!.settings).toMatchObject({ volume: 0.8, reduceFlicker: false });
+  // The default volume is 0.5 since 30 Oct 2026 (Rolando: 0.8 was "kind of high").
+  expect((await state(page)).shell!.settings).toMatchObject({ volume: 0.5, reduceFlicker: false });
 
   await press(page, 'settings');
   await waitForScene(page, 'settings');
@@ -245,7 +246,8 @@ test('settings change volume, text speed and reduce flicker; volume and reduce f
   await press(page, 'textSpeed');
   await expect
     .poll(async () => (await state(page)).shell!.settings)
-    .toMatchObject({ volume: 0.6, reduceFlicker: true, textSpeed: 'fast' });
+    // Two steps down from the 0.5 default (it was 0.8 down to 0.6 before 30 Oct 2026).
+    .toMatchObject({ volume: 0.3, reduceFlicker: true, textSpeed: 'fast' });
   await page.screenshot({ path: 'test-results/screens/settings-reduce-flicker.png' });
 
   await press(page, 'back');
@@ -253,7 +255,7 @@ test('settings change volume, text speed and reduce flicker; volume and reduce f
 
   await page.reload();
   await waitForScene(page, 'title');
-  expect((await state(page)).shell!.settings).toMatchObject({ volume: 0.6, reduceFlicker: true });
+  expect((await state(page)).shell!.settings).toMatchObject({ volume: 0.3, reduceFlicker: true });
 });
 
 test('settings opened from pause return to pause', async ({ page }) => {

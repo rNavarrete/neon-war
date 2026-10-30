@@ -23,7 +23,7 @@ export const LINES = {
   'C0.grandma.01': {
     kind: 'scene',
     speaker: 'Grandma (through the door)',
-    text: "Lux? Your show's starting, love.",
+    text: "Lux, it's almost midnight, love. Come downstairs.",
   },
   'C0.lux.01': { kind: 'scene', speaker: 'Lux', text: 'In a minute, Baachan.' },
   'C0.chat.01': { kind: 'chat', speaker: 'block: kenji', text: "lux the net's doing the thing again" },
