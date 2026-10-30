@@ -7,7 +7,7 @@ import { FrameClock } from '../story/view';
 import { attractSeconds, gateForced, provideTestState, testHookEnabled } from '../testHook';
 import { seededRandom } from './hud/chat';
 import { SCENES } from './keys';
-import { ATTRACT_IDLE_S, attractDue, playOpening } from './opening';
+import { ATTRACT_IDLE_S, attractDue, openingPlaying, playOpening } from './opening';
 import {
   CYAN,
   INK,
@@ -200,21 +200,34 @@ export class TitleScene extends Phaser.Scene {
     this.dip = logoDips(this.t, reduce);
     this.logo?.setAlpha(this.dip ? 0.55 : 1);
     this.gate?.setAlpha(gateAlpha(this.t));
-    if (!this.gate && !this.creditsOpen && attractDue(this.lastInput, this.t, this.attractLimit)) {
+    if (
+      !this.gate &&
+      !this.creditsOpen &&
+      !openingPlaying() &&
+      attractDue(this.lastInput, this.t, this.attractLimit)
+    ) {
       this.playOpening();
     }
   }
 
   /**
-   * The anime opening over the canvas (src/scenes/opening.ts). The title pauses underneath, which also
-   * fades its music out; back on the title, the music returns and the idle clock starts again.
+   * The anime opening over the canvas (src/scenes/opening.ts), through black both ways. The title pauses
+   * once it is fully black and silent, and resumes as it fades back up; its music follows the opening's
+   * gain (OverlayScene). Back on the title, the idle clock starts again.
    */
   private playOpening(): void {
-    this.scene.pause();
-    playOpening('attract', { muted: settings().musicMuted, volume: settings().volume }, () => {
-      this.lastInput = this.t;
-      this.scene.resume();
-    });
+    const s = settings();
+    playOpening(
+      'attract',
+      { muted: s.musicMuted, volume: s.volume },
+      {
+        black: () => this.scene.pause(),
+        titleBack: () => this.scene.resume(),
+        done: () => {
+          this.lastInput = this.t;
+        },
+      },
+    );
   }
 
   /** The "press any key" gate (GATE in titleFx.ts): shown in the menu's place while sound is held. */

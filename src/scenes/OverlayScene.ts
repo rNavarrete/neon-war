@@ -21,6 +21,7 @@ import { type VoiceHookFields, voiceHookFields } from '../game/voice';
 import { provideTestState, testHookEnabled } from '../testHook';
 import { ZONES } from './live/layout';
 import { SCENES } from './keys';
+import { titleMusicGain } from './opening';
 import { openPause } from './PauseScene';
 import type { PauseScene } from './PauseScene';
 import type { SettingsScene } from './SettingsScene';
@@ -45,6 +46,8 @@ export interface ShellTestState {
   musicPlaying: boolean;
   /** True while the title music loop is playing (or queued to start once audio unlocks). */
   titleMusicPlaying: boolean;
+  /** The title loop's volume right now (it follows the anime opening's fades). */
+  titleMusicVolume: number;
   settings: {
     volume: number;
     textSpeed: string;
@@ -206,6 +209,15 @@ export class OverlayScene extends Phaser.Scene {
     const muted = settings().musicMuted;
     this.setMusic(musicWanted({ boardOpen, sceneOpen }) && !muted);
     this.setTitleMusic(titleMusicWanted({ titleOpen: sm.isActive(SCENES.title), muted }));
+    // The anime opening fades the title loop out and back in (src/scenes/opening.ts): follow its gain.
+    const tm = this.titleMusic as Phaser.Sound.WebAudioSound | null;
+    if (this.titleMusicOn && tm && !this.tweens.isTweening(tm)) {
+      try {
+        tm.setVolume(MUSIC_LEVEL * mixer.gain('music') * titleMusicGain());
+      } catch {
+        // Locked or missing audio never stops the game.
+      }
+    }
     this.pauseButton?.setVisible(sm.isActive(SCENES.board));
   }
 
@@ -315,7 +327,7 @@ export class OverlayScene extends Phaser.Scene {
     try {
       this.tweens.killTweensOf(m);
       if (on) {
-        m.setVolume(MUSIC_LEVEL * mixer.gain('music'));
+        m.setVolume(MUSIC_LEVEL * mixer.gain('music') * titleMusicGain());
         m.play();
       } else if (m.isPlaying) {
         this.tweens.add({
@@ -354,6 +366,7 @@ export class OverlayScene extends Phaser.Scene {
       voice: { ...v, ...voiceHookFields(v, s), requested: v.requested },
       musicPlaying: this.musicOn && this.music !== null,
       titleMusicPlaying: this.titleMusicOn && this.titleMusic !== null,
+      titleMusicVolume: (this.titleMusic as Phaser.Sound.WebAudioSound | null)?.volume ?? 0,
       settings: {
         volume: s.volume,
         textSpeed: s.textSpeed,
