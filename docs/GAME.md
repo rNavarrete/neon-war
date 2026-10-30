@@ -45,7 +45,8 @@ the player's problem.
 
 ## Cast on the board
 
-- **TRIAGE**: Lux's own home-made assistant AI, living in her camera drone. Its iris is its face. Eager,
+- **TRIAGE**: Lux's own home-made assistant AI, living in her camera drone, a round cat-eared bot with a camera lens
+  on its belly (Rolando's pick, 30 Oct 2026, drawn to work as a kids' toy). Its LED screen is its face. Eager,
   chatty and sometimes wrong: it rounds numbers badly, trusts the Solace banner and panics in the cascade. It
   points and guesses but never gives the answer. Moods: eager, thinking, wrong-and-proud, panicking, sheepish,
   happy.

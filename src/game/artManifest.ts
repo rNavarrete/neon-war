@@ -484,12 +484,12 @@ export const PICKED_ART: readonly PickedArt[] = [
   },
 
   // chars/: the crew's faces and poses, TRIAGE, the block's avatars.
-  portrait('triage/eager', size(238, 290)),
-  portrait('triage/thinking', size(235, 289)),
-  portrait('triage/proud', size(238, 289)),
-  portrait('triage/panic', size(285, 291)),
-  portrait('triage/sheepish', size(235, 290)),
-  portrait('triage/happy', size(238, 290)),
+  portrait('triage/eager', size(231, 290)),
+  portrait('triage/thinking', size(232, 290)),
+  portrait('triage/proud', size(235, 290)),
+  portrait('triage/panic', size(251, 266)),
+  portrait('triage/sheepish', size(233, 290)),
+  portrait('triage/happy', size(235, 290)),
   portrait('lux/faces-board/determined', size(436, 429)),
   portrait('lux/faces-board/tense', size(425, 457)),
   portrait('lux/faces-board/deadpan', size(410, 449)),

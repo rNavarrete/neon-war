@@ -19,7 +19,7 @@ Notes:
 | `art/board/` | server (431x638), server-hot (430x637), server-dead (433x637), gateway (524x612), database (453x423), database-hot (489x506), balancer (449x306), slot-empty (489x294), slot-locked (476x379), block (1002x1431), solace-banner (1431x700), crew-cable (254x1502), overclock-kit (430x467), server-overclocked (466x638), server-overclocked-hot (480x636) | block-cutaway, crew-cable, overclock-kit-b, parts-core, parts-crew, parts-servers, solace-banner, icon-balancer-c (take 3), icon-gateway-c (take 1) |
 | `art/hud/` | button (479x245), button-hover (477x245), button-pressed (482x245), regroup-ready (313x311), regroup-spent (313x311), part-card (289x389), chart-window (1008x454), chat-panel (353x524), textbox (884x184), nameplate (433x108), clock-panel (213x207), warning-bar (537x147), tray (611x216), goggles-overlay (1920x1080), job-card (864x1252), estimate-dial (823x835) | estimate-dial-b, goggles-overlay, job-card-a, ui-buttons, ui-panels |
 | `art/hud/icons/` | credits (372x360), trust (333x366), clock (404x300), warning (347x327), power-dip (175x395), overheat (192x382), lock (323x359), bin (317x365), packet (336x249), pause (298x335), settings (345x325), cut (346x339) | ui-icons-a, ui-icons-b |
-| `art/chars/triage/` | eager (238x290), thinking (235x289), proud (238x289), panic (285x291), sheepish (235x290), happy (238x290) | triage-moods |
+| `art/chars/triage/` | eager (231x290), thinking (232x290), proud (235x290), panic (251x266), sheepish (233x290), happy (235x290) | triage-cat-moods (Rolando's pick, 30 Oct 2026: the cat drone with an LED screen face) |
 | `art/chars/lux/faces-board/` | tense (425x457), determined (436x429), deadpan (410x449), shocked (417x456), smirk (427x455), triumphant (506x453) | lux-faces-board-v2b |
 | `art/chars/lux/vn/` | neutral (515x927), photo (601x927) | vn-lux-b-2-shirt, vn-lux-a-2-shirt (tall story sprites; the text box covers below the waist) |
 | `art/chars/lux/faces-room/` | grieving (442x440), composing (493x438), startled (452x441), relieved (412x429), exhausted (460x431), frightened (400x423) | lux-faces-room-v2 |
@@ -68,6 +68,7 @@ Notes:
 - `hud/live/topbar-strip` is 1536x33, short of the 1920x100 bar. It is drawn 1:1 (its request's display is the file size) and the rest of the bar is filled in code, so it is never stretched.
 - `hud/comms-plate` (1455x149) and `board/table-plate` (1228x416) are drawn at their file size, centred in the band and under the feed.
 - `board/table-plate-midnight` (1061x416) is narrower than the day plate: it is drawn at its own size, centred like the day plate, and cross-fades in at midnight.
+- `chars/comms/triage` is rebuilt from the triage-cat-moods eager face (Rolando's pick, 30 Oct 2026) with its LED screen left blank: the comms band's code iris is drawn on it as the screen's eye.
 - The cam busts `chars/lux/cam/*` are 924x548 with transparent sides; cheer has the same framing as lean-in and relieved.
 - `hud/live/night-shift-sticker` is a blank plate: any words on it are drawn in code.
 

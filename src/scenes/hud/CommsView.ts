@@ -132,9 +132,10 @@ export function fitCentred(w: number, h: number, box: Rect): Rect {
 
 /**
  * Where TRIAGE's lens sits in her picked badge (chars/comms/triage.webp, 244x256), as fractions of
- * the file: the centre of its cyan ring, measured off the pick. The iris is drawn over it.
+ * the file: the centre of her cat drone's LED screen, left blank in the badge so the iris drawn over
+ * it is the screen's eye.
  */
-export const TRIAGE_LENS = { fx: 59 / 244, fy: 132.5 / 256 } as const;
+export const TRIAGE_LENS = { fx: 71.5 / 244, fy: 140.8 / 256 } as const;
 
 /**
  * The lens's offset from the slot's centre, in game px, for a w x h badge round-cropped (as
