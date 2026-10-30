@@ -483,6 +483,13 @@ test('the cold open shows the photo as an insert, then Lux holding it on the lef
   }
   expect(s.chat).toHaveLength(4);
   expect(s.onStage).toEqual(['Lux', 'TRIAGE']);
-  await page.waitForTimeout(600);
+  // The four messages roll in one at a time rather than all at once...
+  expect(s.chatShown.length).toBeLessThan(4);
+  await expect
+    .poll(async () => (await story(page)).chatShown.length, { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(4);
+  expect((await story(page)).chatShown.slice(0, 4)).toEqual(s.chat);
   await page.screenshot({ path: 'test-results/screens/story-triage-chat.png' });
+  // ...and the chat keeps talking while the player reads.
+  await expect.poll(async () => (await story(page)).chatShown.length, { timeout: 10_000 }).toBeGreaterThan(4);
 });

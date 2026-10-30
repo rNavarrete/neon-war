@@ -15,6 +15,7 @@ import { LABELS } from '../story/labels';
 import { SCRIPTS, type SceneScript, type ScriptStep, isChat, stepsFor } from '../story/scripts';
 import { markSeen, wasSeen } from '../story/seen';
 import { playSfx, playVoice, setLiveView, stopSfx, storyEnd, storyState } from '../story/state';
+import { fillerFor } from '../story/chatPanel';
 import { type Drop, ROOM_GLASS, STREAK, type Segment, clipToGlass, fall, seedDrops } from '../story/rain';
 import type { RewindKind } from '../story/rewind';
 import { FrameClock, H, VnView, W, cover, fileKey, preloadView } from '../story/view';
@@ -107,6 +108,7 @@ export class StoryScene extends Phaser.Scene {
     this.view = new VnView(this, {
       where: s.where,
       chat: s.look === 'vn',
+      filler: fillerFor(s.id),
       skippable,
       onClick: () => this.click(),
       onSkip: () => this.finish(),

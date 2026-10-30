@@ -37,6 +37,8 @@ export interface StoryTestState {
   dimmed: string[];
   /** Corner chat lines shown, oldest first. */
   chat: string[];
+  /** What the stream chat has drawn so far, in order: the script's lines as they land one at a time, and the filler between them. */
+  chatShown: string[];
   /** Background file, or null when the scene is drawn over the frozen board. */
   backdrop: string | null;
   look: string | null;
@@ -91,6 +93,7 @@ export const storyState: Omit<StoryTestState, 'runNow' | 'runHeld' | 'seen'> = {
   onStage: [],
   dimmed: [],
   chat: [],
+  chatShown: [],
   backdrop: null,
   look: null,
   click: null,
@@ -116,7 +119,16 @@ declare module '../testHook' {
 /** The fields the visual-novel view reports live, read only when a test asks. */
 export type ViewSnapshot = Pick<
   StoryTestState,
-  'lineId' | 'typingDone' | 'typed' | 'nameplate' | 'portrait' | 'onStage' | 'dimmed' | 'click' | 'skip'
+  | 'lineId'
+  | 'typingDone'
+  | 'typed'
+  | 'nameplate'
+  | 'portrait'
+  | 'onStage'
+  | 'dimmed'
+  | 'click'
+  | 'skip'
+  | 'chatShown'
 >;
 
 let liveView: { snapshot(): ViewSnapshot } | null = null;

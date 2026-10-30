@@ -4,6 +4,11 @@
 // each with the sender's round avatar and a coloured name (block residents amber, stream viewers
 // cyan) over off-white words. Older rows fade; a new row slides up into place. Rows are pooled and
 // redrawn only when a message lands.
+//
+// Messages roll in live (Rolando, 30 Oct 2026: "we have to make sure that we see comments roll in,
+// in real time"): the script's chat lines queue and land one at a time, 0.8 to 2 s apart, without
+// holding the dialogue; and while the scene is up the block and the viewers keep talking, a filler
+// line every 3 to 6 s from the scene's pool (the net flickering in the cold open, gone in the rescue).
 
 import Phaser from 'phaser';
 import {
@@ -13,27 +18,27 @@ import {
   preloadAvatars,
   roundAvatar,
 } from '../scenes/avatars';
-import { CHAT_PLATE_K, CHAT_PLATE_SLICE, CHAT_PLATE_WIDE, streamAvatarFor } from '../scenes/hud/ChatFeedView';
+import { streamAvatarFor } from '../scenes/hud/ChatFeedView';
+import { handleFor, seededRandom } from '../scenes/hud/chat';
+import { LINES, type LineId } from '../strings';
 import { COLORS } from '../scenes/hud/layout';
-import { panel } from '../scenes/hud/panel';
-import { artTexture } from '../scenes/plates';
-import { requestFile } from '../game/artManifest';
 
 /**
- * The panel, game pixels: clear of Lux's slot on the left third and of the window. At most 354 px
- * tall so the wide plate's nine-slice never stretches its glass above the file's own size.
+ * The panel, game pixels: clear of Lux's slot on the left third and of the window, and well above the
+ * text box (Rolando, 30 Oct 2026: "extend it a bit more vertically"). Too tall for the wide plate's
+ * nine-slice without stretching its glass, so the glass is drawn in code in the plate's colours.
  */
-export const CHAT_RECT = { x: 1480, y: 24, w: 416, h: 350 } as const;
+export const CHAT_RECT = { x: 1480, y: 24, w: 416, h: 540 } as const;
 const PAD = 18;
 const HEADER_H = 46;
 const AVATAR = 34;
-const ROWS = 6;
+const ROWS = 10;
 const ROW_GAP = 10;
 const NAME_H = 20;
 const TEXT_X = PAD + AVATAR + 12;
 const TEXT_W = CHAT_RECT.w - TEXT_X - PAD;
 /** Rows older than the newest few sit back. */
-const FRESH = 3;
+const FRESH = 4;
 const OLD_ALPHA = 0.55;
 const FONT = '"Trebuchet MS", "Segoe UI", Arial, sans-serif';
 
@@ -55,11 +60,39 @@ export function avatarFor(msg: StoryChatMessage): string {
   return BLOCK_AVATARS[msg.who.toLowerCase()] ?? streamAvatarFor(msg.who);
 }
 
-/** Queue the plate and the avatars the rows draw. */
+/** Seconds between the script's queued chat lines landing: min and spread. */
+export const ARRIVAL = { min: 0.8, spread: 1.2 } as const;
+/** Seconds between filler lines while the scene is up: min and spread. */
+export const FILLER = { min: 3, spread: 3 } as const;
+
+/** Every line id with this prefix, in script order. Pure. */
+const pool = (prefix: string): LineId[] =>
+  (Object.keys(LINES) as LineId[]).filter((id) => id.startsWith(prefix));
+
+/**
+ * The filler a scene's chat keeps up between script lines: the block grumbling and the viewers
+ * noticing lag while the net flickers (the cold open), or both panicking with it down (the rescue).
+ */
+export function fillerFor(scriptId: string): LineId[] {
+  return scriptId === 'C5'
+    ? [...pool('fill.block.down.'), ...pool('fill.stream.down.')]
+    : [...pool('fill.block.slow.'), ...pool('fill.stream.slow.')];
+}
+
+/**
+ * A filler line as a chat message: block filler carries its resident ("mrs okafor: Lift's stuck
+ * again."); stream filler is posted under the viewer handle the board's chat gives that line. Pure.
+ */
+export function fillerMessage(id: LineId): StoryChatMessage {
+  const { speaker, text } = LINES[id];
+  if (speaker === 'stream') return { who: handleFor(id), source: 'stream', text };
+  const m = /^([^:]+):\s*(.*)$/.exec(text);
+  return m ? { who: m[1]!, source: 'block', text: m[2]! } : { who: 'block', source: 'block', text };
+}
+
+/** Queue the avatars the rows draw. */
 export function preloadChat(scene: Phaser.Scene): void {
   preloadAvatars(scene as unknown as AvatarScene, [...Object.values(BLOCK_AVATARS), ...STREAM_AVATARS]);
-  if (!scene.textures.exists(artTexture(CHAT_PLATE_WIDE)))
-    scene.load.image(artTexture(CHAT_PLATE_WIDE), requestFile(CHAT_PLATE_WIDE));
 }
 
 interface Slot {
@@ -74,9 +107,18 @@ export class StoryChat {
   private readonly root: Phaser.GameObjects.Container;
   private readonly dot: Phaser.GameObjects.Arc;
   private blink = 0;
+  private readonly queue: StoryChatMessage[] = [];
+  private readonly rand = seededRandom(20261030);
+  private arriveIn = 0;
+  private fillIn = 0;
+  private fillNext = 0;
+  private live = false;
+  /** Every message drawn so far, in order ("who: text"), for the test hook. */
+  readonly posted: string[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
+    private readonly filler: readonly LineId[],
     title: string,
     watching: number,
     depth: number,
@@ -84,19 +126,15 @@ export class StoryChat {
     const r = CHAT_RECT;
     const add = scene.add;
     const objects: Phaser.GameObjects.GameObject[] = [];
-    if (scene.textures.exists(artTexture(CHAT_PLATE_WIDE)))
-      objects.push(
-        panel(scene, artTexture(CHAT_PLATE_WIDE), 0, 0, r.w, r.h, {
-          k: CHAT_PLATE_K,
-          slice: [...CHAT_PLATE_SLICE],
-        }),
-      );
-    else
-      objects.push(
-        add.rectangle(0, 0, r.w, r.h, COLORS.ink, 0.8).setOrigin(0).setStrokeStyle(2, COLORS.amber),
-      );
+    // Dark live-stream glass with a thin rim and a lighter header band (no painted plate: see CHAT_RECT).
+    const glass = add.graphics();
+    glass.fillStyle(COLORS.ink, 0.78).fillRoundedRect(0, 0, r.w, r.h, 10);
+    glass.fillStyle(0x1a2238, 0.9).fillRoundedRect(4, 4, r.w - 8, HEADER_H, { tl: 8, tr: 8, bl: 0, br: 0 });
+    glass.lineStyle(1, COLORS.magenta, 0.35).lineBetween(PAD, HEADER_H + 4, r.w - PAD, HEADER_H + 4);
+    glass.lineStyle(2, COLORS.cyan, 0.55).strokeRoundedRect(0, 0, r.w, r.h, 10);
+    objects.push(glass);
 
-    const headY = 14 + HEADER_H / 2 - 6;
+    const headY = 4 + HEADER_H / 2;
     this.dot = add.circle(PAD + 6, headY, 6, COLORS.red);
     const live = add
       .text(PAD + 18, headY, 'LIVE', {
@@ -140,23 +178,51 @@ export class StoryChat {
     this.root = add.container(r.x, r.y, objects).setDepth(depth);
   }
 
-  /** Post a message: it slides in at the bottom and the rows above it move up. */
+  /** Queue a script line: it lands after the ones already waiting, one at a time. */
   post(msg: StoryChatMessage): void {
-    this.shown.push(msg);
-    if (this.shown.length > ROWS) this.shown.shift();
-    this.layout();
+    if (this.queue.length === 0 && this.arriveIn <= 0) this.arriveIn = 0.15;
+    this.queue.push(msg);
   }
 
-  /** Blink the LIVE dot (called each frame with real seconds; no allocation). */
+  /**
+   * Called each frame with real seconds: blinks the LIVE dot, lands the next queued line when its
+   * gap is up, and once the chat has started keeps the filler coming between script lines.
+   */
   update(dt: number): void {
     this.blink = (this.blink + dt) % 1.6;
     this.dot.setAlpha(this.blink < 1.1 ? 1 : 0.25);
+    if (this.queue.length > 0) {
+      this.arriveIn -= dt;
+      if (this.arriveIn <= 0) {
+        this.land(this.queue.shift()!);
+        this.arriveIn = ARRIVAL.min + this.rand() * ARRIVAL.spread;
+        this.live = true;
+        this.fillIn = FILLER.min + this.rand() * FILLER.spread;
+      }
+      return;
+    }
+    if (!this.live || this.filler.length === 0) return;
+    this.fillIn -= dt;
+    if (this.fillIn <= 0) {
+      this.land(fillerMessage(this.filler[this.fillNext % this.filler.length]!));
+      this.fillNext++;
+      this.fillIn = FILLER.min + this.rand() * FILLER.spread;
+    }
+  }
+
+  /** Draw a message now: it slides in at the bottom and the rows above it move up. */
+  private land(msg: StoryChatMessage): void {
+    this.shown.push(msg);
+    if (this.shown.length > ROWS) this.shown.shift();
+    this.posted.push(`${msg.who}: ${msg.text}`);
+    this.blink = 0;
+    this.layout();
   }
 
   private layout(): void {
     const scene = this.scene as unknown as AvatarScene;
     const bottom = CHAT_RECT.h - PAD - 6;
-    const top = 14 + HEADER_H;
+    const top = HEADER_H + 14;
     let y = bottom;
     // Newest first, stacked upward until the body is full.
     for (let i = 0; i < this.slots.length; i++) {

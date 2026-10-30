@@ -76,6 +76,8 @@ export interface VnViewOptions {
   where: 'room' | 'board';
   /** Show the stream chat panel in the top-right corner. */
   chat: boolean;
+  /** The chat's filler between script lines (src/story/chatPanel.ts fillerFor); none by default. */
+  filler?: readonly LineId[];
   /** Show the Skip button (the scene was seen before). */
   skippable: boolean;
   onClick: () => void;
@@ -136,7 +138,7 @@ export class VnView {
       .setVisible(false);
 
     // Lux's stream chat, top right (src/story/chatPanel.ts): the honest tiny audience, as on the board.
-    if (opts.chat) this.chatPanel = new StoryChat(scene, LABELS.chat, 1, 20);
+    if (opts.chat) this.chatPanel = new StoryChat(scene, opts.filler ?? [], LABELS.chat, 1, 20);
 
     if (opts.skippable) {
       const b = scene.add.image(1730, 960, TEX.button[0]).setScale(0.4).setDepth(30).setInteractive();
@@ -256,6 +258,7 @@ export class VnView {
     return {
       lineId: this.lineId,
       typed: Math.max(0, this.shown),
+      chatShown: this.chatPanel ? [...this.chatPanel.posted] : [],
       typingDone: this.typingDone,
       nameplate: this.plateText.visible ? this.plateText.text : null,
       portrait: speaking ? speaking.texture.key : null,
