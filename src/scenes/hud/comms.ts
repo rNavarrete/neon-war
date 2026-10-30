@@ -368,11 +368,30 @@ export function callShows(current: LineId | null, logIsOpen: boolean): boolean {
 }
 
 /**
- * The call panel's alpha `dt` real seconds after `alpha`: toward 1 while there is something to show
- * (a line, or the log open), toward 0 otherwise, over CALL_FADE_SECONDS (at once when steady). Pure.
+ * The caller cam's alpha between lines once someone has called: it stays up, dimmed, on the last
+ * caller and their last line (Rolando, 30 Oct 2026: don't take the last speaker's screen away).
  */
-export function callAlpha(alpha: number, showing: boolean, dt: number, steady: boolean): number {
-  const target = showing ? 1 : 0;
+export const CALL_IDLE_ALPHA = 0.6;
+
+/**
+ * Where the call panel's alpha is heading: 1 while a caller is on the line or the log is open,
+ * CALL_IDLE_ALPHA once anyone has called, 0 before the first call. Pure.
+ */
+export function callTarget(current: LineId | null, logIsOpen: boolean, lastCaller: LineId | null): number {
+  if (callShows(current, logIsOpen)) return 1;
+  return lastCaller !== null ? CALL_IDLE_ALPHA : 0;
+}
+
+/** True for a line the caller cam shows: one spoken by someone other than Lux. Pure. */
+export function isCallerLine(id: LineId): boolean {
+  return slotOf(LINES[id].speaker) !== null;
+}
+
+/**
+ * The call panel's alpha `dt` real seconds after `alpha`, moving toward `target` (callTarget) over
+ * CALL_FADE_SECONDS (at once when steady). Pure.
+ */
+export function callAlpha(alpha: number, target: number, dt: number, steady: boolean): number {
   if (steady) return target;
   const step = dt / CALL_FADE_SECONDS;
   return target > alpha ? Math.min(target, alpha + step) : Math.max(target, alpha - step);

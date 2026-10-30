@@ -40,6 +40,9 @@ import {
   bandAlpha,
   clickLog,
   callShows,
+  callTarget,
+  isCallerLine,
+  CALL_IDLE_ALPHA,
   commsLayout,
   cutShort,
   dwellFor,
@@ -191,6 +194,19 @@ describe('the caller cam (layout A2)', () => {
     expect(callShows('C4.lux.01', false)).toBe(false);
     expect(callShows('C4.lux.01', true)).toBe(true);
     expect(callShows(null, true)).toBe(true);
+  });
+
+  it('keeps the last caller up, dimmed, between lines (Rolando, 30 Oct 2026)', () => {
+    expect(callTarget(null, false, null)).toBe(0);
+    expect(callTarget('C1.triage.02', false, null)).toBe(1);
+    expect(callTarget(null, false, 'C1.triage.02')).toBe(CALL_IDLE_ALPHA);
+    // A Lux line keeps the caller cam on the last caller, dimmed: her words caption her own cam.
+    expect(callTarget('C4.lux.01', false, 'C1.triage.02')).toBe(CALL_IDLE_ALPHA);
+    expect(callTarget(null, true, 'C1.triage.02')).toBe(1);
+    expect(CALL_IDLE_ALPHA).toBeGreaterThan(0);
+    expect(CALL_IDLE_ALPHA).toBeLessThan(1);
+    expect(isCallerLine('C4.grandma.01')).toBe(true);
+    expect(isCallerLine('C4.lux.01')).toBe(false);
   });
 });
 

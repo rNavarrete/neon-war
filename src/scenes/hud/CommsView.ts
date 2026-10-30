@@ -43,6 +43,8 @@ import {
   bandAlpha,
   CALL_SLIDE,
   callAlpha,
+  callTarget,
+  isCallerLine,
   chipArt,
   clickLog,
   commsLayout,
@@ -71,7 +73,6 @@ import {
   swapTick,
   tag,
   TRIAGE_TILE,
-  callShows,
   triageMood,
   typedOf,
 } from './comms';
@@ -349,6 +350,8 @@ export class CommsView implements LiveView {
   private tileBg: Phaser.GameObjects.Graphics | null = null;
   private tileImg: Phaser.GameObjects.Image | null = null;
   private callA = 0;
+  /** The last line a caller (not Lux) spoke, which the caller cam keeps up between lines. */
+  private lastCaller: LineId | null = null;
   private callReal = 0;
   private leaderTry = -Infinity;
   private shownLeaderAlpha = -1;
@@ -643,14 +646,16 @@ export class CommsView implements LiveView {
     }
 
     const c = this.state.current;
-    if (c) {
+    // A Lux line leaves the caller cam on the last caller's words.
+    if (c && !(this.L!.tile && !isCallerLine(c.id))) {
       const typed = typedOf(c, clock.now, cps);
       if (typed !== this.shownTyped) {
         this.shownTyped = typed;
         this.lineText!.setText(LINES[c.id].text.slice(0, typed));
       }
     }
-    const alpha = bandAlpha(this.state, clock.now);
+    // The caller cam dims as a whole between lines (callTarget), so its last words stay readable.
+    const alpha = this.L!.tile && this.lastCaller ? 1 : bandAlpha(this.state, clock.now);
     if (alpha !== this.shownAlpha) {
       this.shownAlpha = alpha;
       this.nameText!.setAlpha(alpha);
@@ -931,6 +936,9 @@ export class CommsView implements LiveView {
     this.emitted.push(`line:${id}`);
     if (this.emitted.length > EMITTED_MAX) this.emitted.shift();
     this.bus?.emit('line', { id, speaker: l.speaker, tag: tag(id), lesson: isLesson(id), since });
+    // The caller cam keeps the last caller up between lines; Lux's own lines caption her cam.
+    if (this.L?.tile && !isCallerLine(id)) return;
+    if (this.L?.tile) this.lastCaller = id;
     this.drawLine(id);
     if (slotOf(l.speaker) === 'TRIAGE') {
       this.bus?.emit('sfx', { key: tag(id) === 'WARNING' ? 'triage-panic' : 'triage-blip' });
@@ -946,8 +954,8 @@ export class CommsView implements LiveView {
     if (!L.tile) return;
     const dt = Math.min(0.1, Math.max(0, this.real - this.callReal));
     this.callReal = this.real;
-    const showing = callShows(this.state.current?.id ?? null, logOpen(this.log, this.real));
-    const a = callAlpha(this.callA, showing, dt, this.steady());
+    const target = callTarget(this.state.current?.id ?? null, logOpen(this.log, this.real), this.lastCaller);
+    const a = callAlpha(this.callA, target, dt, this.steady());
     if (a !== this.callA) {
       this.callA = a;
       this.root!.setAlpha(a);
@@ -1171,6 +1179,7 @@ export class CommsView implements LiveView {
         lens: { ...this.lens },
       },
       alpha: bandAlpha(this.state, this.clock),
+      call: { alpha: this.callA, last: this.lastCaller },
       rect: pageRect(r, canvas),
       drawn: b ? pageRect({ x: b.x, y: b.y, w: b.width, h: b.height }, canvas) : pageRect(r, canvas),
       emitted: [...this.emitted],

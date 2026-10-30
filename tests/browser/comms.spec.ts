@@ -461,7 +461,8 @@ test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both
   await expect.poll(async () => (await hook(page)).settingsScreen!.voiceVolume).toBe(0.9);
   // The old rows keep working beside the new ones.
   await press(page, 'volumeDown');
-  await expect.poll(async () => (await hook(page)).shell!.settings.volume).toBe(0.7);
+  // One step down from the 0.5 default (0.8 down to 0.7 before 30 Oct 2026).
+  await expect.poll(async () => (await hook(page)).shell!.settings.volume).toBe(0.4);
   s = await hook(page);
   expect(s.settingsScreen!.labels).toEqual({ voices: 'OFF', voiceVolume: '90%' });
   // The shell section mirrors both settings, and the mixer's hook reads them too.
@@ -471,7 +472,7 @@ test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both
   const stored = await page.evaluate(() =>
     JSON.parse(window.localStorage.getItem('neon-war.settings') ?? '{}'),
   );
-  expect(stored).toMatchObject({ voices: 'off', voiceVolume: 0.9, volume: 0.7 });
+  expect(stored).toMatchObject({ voices: 'off', voiceVolume: 0.9, volume: 0.4 });
   await shot(page, 'comms-settings-voices');
 
   await press(page, 'back');
@@ -480,7 +481,7 @@ test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both
   await waitScene(page, 'title');
   s = await hook(page);
   expect(s.settingsScreen).toMatchObject({ open: false, voices: 'off', voiceVolume: 0.9 });
-  expect(s.shell!.settings.volume).toBe(0.7);
+  expect(s.shell!.settings.volume).toBe(0.4);
   expect(errors).toEqual([]);
 });
 
@@ -868,5 +869,23 @@ test('comms-9 (M4): with the band art absent the code fallback draws without err
     path: 'test-results/screens/m4-comms-fallback.png',
     clip: { x: c.rect.x, y: c.rect.y, width: c.rect.w, height: c.rect.h },
   });
+  expect(errors).toEqual([]);
+});
+
+// Rolando, 30 Oct 2026: the caller cam keeps the last speaker on screen after they finish talking.
+test('the caller cam stays up, dimmed, on the last caller after their line ends', async ({ page }) => {
+  test.setTimeout(60_000);
+  const { errors } = await openBoard(page, { speed: 4, autopilot: false });
+  await dismissJobCard(page);
+  await expect
+    .poll(async () => (await comms(page)).line?.id ?? null, { timeout: 40_000, intervals: [50] })
+    .toBe('C1.triage.02');
+  await expect.poll(async () => (await comms(page)).call.alpha, { timeout: 5_000 }).toBe(1);
+  // The line ends; the panel dims to its idle alpha and never goes away.
+  await expect.poll(async () => (await comms(page)).line, { timeout: 30_000, intervals: [50] }).toBeNull();
+  const idle = await comms(page);
+  expect(idle.call.last).toMatch(/^C1\.triage\./);
+  await expect.poll(async () => (await comms(page)).call.alpha, { timeout: 5_000 }).toBeCloseTo(0.6, 2);
+  await shot(page, 'comms-last-caller');
   expect(errors).toEqual([]);
 });
