@@ -45,3 +45,28 @@ export function frameFor(h: number, x: number, frameH: number): { x: number; bot
   if (h >= SPRITE_MIN) return { x, bottom: frameH, scale: Math.min(1, SPRITE_H / h) };
   return { x, bottom: BOX_TOP + BUST_SINK, scale: BUST_SCALE };
 }
+
+/**
+ * Characters that fly rather than stand: TRIAGE, Lux's camera drone. A whole drone sunk behind the
+ * text box loses half of itself, so a flyer takes no slot and hovers beside the first person's
+ * shoulder (companions in visual novels and Persona float at head height next to their partner),
+ * bobbing gently; alone, it hovers on the left third like anyone else.
+ */
+export const HOVERING: ReadonlySet<string> = new Set(['TRIAGE']);
+/** A flyer's bottom edge: its body at the standing characters' shoulder height, well above the box. */
+export const HOVER_BOTTOM = 720;
+/** How far right of the first person's slot a flyer hovers. */
+const HOVER_OFFSET = 430;
+/** The bob: amplitude in px and period in seconds. */
+export const HOVER_BOB = { amp: 5, period: 2.4 } as const;
+
+/** Where a flyer hovers, given the slots of the people standing (left to right). Pure. */
+export function hoverFor(standing: readonly number[]): { x: number; bottom: number; scale: number } {
+  const x = standing.length > 0 ? standing[0]! + HOVER_OFFSET : SLOTS[1]![0]!;
+  return { x, bottom: HOVER_BOTTOM, scale: BUST_SCALE };
+}
+
+/** The bob's offset in px at `t` seconds. Pure. */
+export function bobAt(t: number): number {
+  return Math.sin((t / HOVER_BOB.period) * Math.PI * 2) * HOVER_BOB.amp;
+}

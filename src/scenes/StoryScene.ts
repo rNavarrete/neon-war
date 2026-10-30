@@ -12,7 +12,7 @@ import { settings } from '../game/settings';
 import { BROWNOUT } from '../sim/brownout';
 import type { DebriefResults } from '../story/debrief';
 import { LABELS } from '../story/labels';
-import { SCRIPTS, type SceneScript, type ScriptStep, chatText, isChat, stepsFor } from '../story/scripts';
+import { SCRIPTS, type SceneScript, type ScriptStep, isChat, stepsFor } from '../story/scripts';
 import { markSeen, wasSeen } from '../story/seen';
 import { playSfx, playVoice, setLiveView, stopSfx, storyEnd, storyState } from '../story/state';
 import { type Drop, ROOM_GLASS, STREAK, type Segment, clipToGlass, fall, seedDrops } from '../story/rain';
@@ -166,7 +166,7 @@ export class StoryScene extends Phaser.Scene {
       const step = this.steps[this.next++];
       this.cue(step);
       if (isChat(step.lineId)) {
-        this.view.chat(chatText(step.lineId));
+        this.view.chat(step.lineId);
         continue;
       }
       this.view.say(step.lineId, step.face);

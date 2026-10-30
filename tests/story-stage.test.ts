@@ -1,4 +1,13 @@
-import { BOX_TOP, SPRITE_H, frameFor, slotsFor } from '../src/story/stage';
+import {
+  BOX_TOP,
+  HOVERING,
+  HOVER_BOB,
+  SPRITE_H,
+  bobAt,
+  frameFor,
+  hoverFor,
+  slotsFor,
+} from '../src/story/stage';
 
 // Story characters stand the way visual novels stage them: slots by head count, on the bottom of the
 // frame behind the text box, big enough to read.
@@ -33,5 +42,19 @@ describe('story stage', () => {
     expect(f.scale * 1.03).toBeLessThanOrEqual(1);
     expect(f.bottom).toBeGreaterThan(BOX_TOP);
     expect(f.bottom - 440).toBeLessThan(BOX_TOP);
+  });
+});
+
+describe('flyers', () => {
+  it('hovers TRIAGE beside the first person, fully above the text box, and bobs a few px', () => {
+    expect(HOVERING.has('TRIAGE')).toBe(true);
+    const f = hoverFor(slotsFor(1));
+    expect(f.x).toBeGreaterThan(slotsFor(1)[0]!);
+    // The drone art is ~290 px tall; all of it stays above the box even at the bottom of its bob.
+    expect(f.bottom + HOVER_BOB.amp).toBeLessThan(BOX_TOP);
+    expect(f.bottom - 290).toBeGreaterThan(0);
+    expect(hoverFor([]).x).toBe(slotsFor(1)[0]);
+    expect(Math.abs(bobAt(0.6))).toBeLessThanOrEqual(HOVER_BOB.amp);
+    expect(bobAt(0)).toBeCloseTo(bobAt(HOVER_BOB.period));
   });
 });

@@ -476,4 +476,13 @@ test('the cold open shows the photo as an insert, then Lux holding it on the lef
   expect(s.onStage).toEqual(['Lux']);
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'test-results/screens/story-lux-staged.png' });
+  // The phone lights up: four rows in the stream chat, and TRIAGE hovers beside Lux.
+  while (s.lineId !== 'C0.triage.01') {
+    if (!s.typingDone) await clickStory(page);
+    s = await clickStory(page);
+  }
+  expect(s.chat).toHaveLength(4);
+  expect(s.onStage).toEqual(['Lux', 'TRIAGE']);
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: 'test-results/screens/story-triage-chat.png' });
 });
