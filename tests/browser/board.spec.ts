@@ -188,16 +188,23 @@ test('clicking a wire and choosing cut removes it; decommissioning refunds half 
   await openBoard(page);
   const s1 = await placeServer(page, SERVER_SLOTS[0]);
   const s2 = await placeServer(page, SERVER_SLOTS[1]);
+  // s1 serves before it is sold, so it refunds half; a server that never served refunds in full
+  // (the idle-server fix after Rolando's C3 playtest, 30 Oct 2026), which s2 checks below.
   await wire(page, 'gateway', s1);
-  await expect.poll(async () => (await board(page)).wires.length).toBe(1);
+  await wire(page, s1, 'database');
+  await expect.poll(async () => (await board(page)).wires.length).toBe(2);
+  await waitOnline(page, s1);
+  await expect
+    .poll(async () => (await board(page)).parts.find((p) => p.id === s1)?.load ?? 0)
+    .toBeGreaterThan(0);
 
-  const w = (await board(page)).wires[0];
+  const w = (await board(page)).wires.find((x) => x.key.startsWith(`${s1}>`))!;
   await page.mouse.click(w.x, w.y);
   await expect.poll(async () => (await board(page)).selectedWire).toBe(w.key);
   const cut = (await board(page)).cutButton!;
   expect(cut).not.toBeNull();
   await page.mouse.click(cut.x, cut.y);
-  await expect.poll(async () => (await board(page)).wires.length).toBe(0);
+  await expect.poll(async () => (await board(page)).wires.length).toBe(1);
 
   // Click a server, then its bin button.
   const before = (await board(page)).credits;
@@ -216,6 +223,8 @@ test('clicking a wire and choosing cut removes it; decommissioning refunds half 
   await page.mouse.click(p2.x, p2.y, { button: 'right' });
   await expect.poll(async () => (await part(page, s2))?.id).toBeUndefined();
   expect((await board(page)).credits).toBeGreaterThan(after + 39);
+  // s2 never served: the whole 80 comes back.
+  expect((await board(page)).credits).toBeGreaterThanOrEqual(after + 80);
 });
 
 test('dropping the overclock kit on a server makes it 120 req/s, spends 60 and reboots it for 3 s', async ({

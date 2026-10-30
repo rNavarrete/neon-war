@@ -171,9 +171,9 @@ async function expectRestaged(page: Page, moment: string, read?: Hud): Promise<B
   const { bounds } = read ?? (await hudState(page));
   // 15 legacy pieces until the HUD stopped drawing its own title cluster and clock (TitleView and
   // ClockView draw them now), 11 until the estimate step went with the dial, the sizing prompt and
-  // key 3: the alert, the scope, the chat, the comms band, the two deck keys, the job card and the
-  // banner are left.
-  expect(bounds.length, moment).toBeGreaterThanOrEqual(8);
+  // key 3, 8 until Rolando dropped the LAST 60 s chart (30 Oct 2026: one demand widget, the gauge):
+  // the alert, the chat, the comms band, the two deck keys, the job card and the banner are left.
+  expect(bounds.length, moment).toBeGreaterThanOrEqual(7);
   const eps = 1;
   const shown = bounds.filter((b) => b.visible);
   for (const b of shown) {

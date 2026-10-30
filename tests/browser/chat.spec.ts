@@ -1,5 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import { BROWNOUT } from '../../src/sim/brownout';
+import { CHAT_PACE } from '../../src/scenes/hud/chatEngine';
 import type { HudTestState } from '../../src/scenes/hud/hook';
 import { type ChatTraceTestState, chatArtOf } from '../../src/scenes/hud/ChatFeedView';
 import type { AudienceTestState, ChatTestState } from '../../src/scenes/live/views/chat';
@@ -173,9 +174,9 @@ class ChatLog {
   }
 
   /** The most rows posted in any `seconds` of chat clock, counting rows from `from` on. */
-  maxInWindow(seconds: number, from: number): number {
+  maxInWindow(seconds: number, from: number, paced = false): number {
     const at = this.rows
-      .filter((r) => r.at >= from)
+      .filter((r) => r.at >= from && (!paced || r.cause !== 'hype'))
       .map((r) => r.at)
       .sort((a, b) => a - b);
     let most = 0;
@@ -277,9 +278,11 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
   expect(warnings).toEqual([]);
   expect(first.errors).toEqual([]);
   expect(errors).toEqual([]);
-  // Across the surge the chat never posts more than 10 rows (one of tolerance) in any 30 s of chat
-  // clock, scripted rows included. Last, so every check above has run when it fails.
-  expect(log.maxInWindow(30, surgeClock - 30), log.ids()).toBeLessThanOrEqual(11);
+  // Across the surge the paced chat never posts more than its window cap (one of tolerance) in any
+  // 30 s of chat clock, scripted rows included. Changed with Rolando's hype pack (30 Oct 2026): the cap
+  // went from 10 to CHAT_PACE.windowMax (14) and a hype burst's W rows sit on top of the paced feed,
+  // so they are not counted. Last, so every check above has run when it fails.
+  expect(log.maxInWindow(30, surgeClock - 30, true), log.ids()).toBeLessThanOrEqual(CHAT_PACE.windowMax + 1);
 });
 
 test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers', async ({ page }) => {
