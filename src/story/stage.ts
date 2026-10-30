@@ -15,6 +15,29 @@ export const TEXT_POS = { x: 470, y: 896 } as const;
 /** Body text size and line gap, so a test can check that three lines fit inside the frame. */
 export const TEXT_LINE = { size: 32, gap: 6 } as const;
 
+/**
+ * Who stands where, and which way they face. Every tall sprite is painted facing right, so Lux, the
+ * player's character, always takes the leftmost slot and faces into the scene, and whoever shares the
+ * stage with her is mirrored to face her (the visual-novel rule: the two talking turn to each other).
+ * Lux herself is never mirrored: her NIRVANA / NEVERMIND shirt would print backwards. The crew's art
+ * has no readable text, so mirroring them is safe.
+ */
+export const LEAD = 'Lux';
+
+/** The people on stage in slot order, left to right: Lux first, everyone else in the order they came on. Pure. */
+export function standOrder(names: readonly string[]): string[] {
+  return names.includes(LEAD) ? [LEAD, ...names.filter((n) => n !== LEAD)] : [...names];
+}
+
+/**
+ * Whether `who`, standing at `x`, is mirrored to face left. With Lux on stage everyone but her turns to
+ * face her; without her, whoever stands right of the middle turns in toward the scene. Pure.
+ */
+export function facesLeft(who: string, x: number, leadOnStage: boolean): boolean {
+  if (who === LEAD) return false;
+  return leadOnStage || x > 960;
+}
+
 /** How tall a full sprite (cut at the waist or thighs) is drawn: its head in the upper sixth of the frame. */
 export const SPRITE_H = 900;
 /** Art at least this tall is a full sprite and stands on the bottom edge; shorter art is a bust. */
@@ -70,7 +93,7 @@ export function frameFor(h: number, x: number, frameH: number): { x: number; bot
 /**
  * Characters that fly rather than stand: TRIAGE, Lux's camera drone. A whole drone sunk behind the
  * text box loses half of itself, so a flyer takes no slot and hovers beside the first person's
- * shoulder (companions in visual novels and Persona float at head height next to their partner),
+ * shoulder, on the side toward the middle (the first person is Lux whenever she is on stage: standOrder) (companions in visual novels and Persona float at head height next to their partner),
  * bobbing gently; alone, it hovers on the left third like anyone else.
  */
 export const HOVERING: ReadonlySet<string> = new Set(['TRIAGE']);

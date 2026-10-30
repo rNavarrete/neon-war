@@ -7,10 +7,12 @@ import {
   TEXT_LINE,
   TEXT_POS,
   bobAt,
+  facesLeft,
   frameFor,
   hoverFor,
   slotsBetween,
   slotsFor,
+  standOrder,
 } from '../src/story/stage';
 
 // Story characters stand the way visual novels stage them: slots by head count, on the bottom of the
@@ -77,5 +79,33 @@ describe('flyers', () => {
     expect(TEXT_POS.y - TEXT_FRAME.top).toBeGreaterThanOrEqual(20);
     const threeLines = 3 * TEXT_LINE.size * 1.25 + 2 * TEXT_LINE.gap;
     expect(TEXT_POS.y + threeLines).toBeLessThanOrEqual(TEXT_FRAME.bottom - 15);
+  });
+});
+
+describe('who stands where and which way they face', () => {
+  it('Lux always takes the left slot, whoever came on first; the rest keep their order', () => {
+    expect(standOrder(['Rei', 'Lux'])).toEqual(['Lux', 'Rei']);
+    expect(standOrder(['Mika', 'TRIAGE', 'Lux', 'Ozzie'])).toEqual(['Lux', 'Mika', 'TRIAGE', 'Ozzie']);
+    expect(standOrder(['Rei', 'Mika'])).toEqual(['Rei', 'Mika']);
+  });
+
+  it('Lux is never mirrored (her shirt would print backwards); everyone with her turns to face her', () => {
+    for (const x of [300, 620, 1560]) expect(facesLeft('Lux', x, true)).toBe(false);
+    const xs = slotsFor(3);
+    const order = standOrder(['Rei', 'Mika', 'Lux']);
+    expect(order.map((who, i) => facesLeft(who, xs[i]!, true))).toEqual([false, true, true]);
+  });
+
+  it('without Lux, whoever stands right of the middle turns in toward the scene', () => {
+    expect(facesLeft('Rei', 560, false)).toBe(false);
+    expect(facesLeft('Mika', 1260, false)).toBe(true);
+  });
+
+  it("TRIAGE hovers off Lux's shoulder on the middle side when she shares the stage", () => {
+    const xs = slotsFor(2);
+    const h = hoverFor(xs);
+    expect(standOrder(['Rei', 'Lux'])[0]).toBe('Lux');
+    expect(h.x).toBeGreaterThan(xs[0]!);
+    expect(h.x).toBeLessThan(xs[1]!);
   });
 });

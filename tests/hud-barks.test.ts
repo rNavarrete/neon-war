@@ -91,13 +91,16 @@ function play(views: CueView[]): LineId[] {
 }
 
 describe('bark and chat cues', () => {
-  it('C1: TRIAGE guesses 480 two seconds after the card closes', () => {
+  it('C1: TRIAGE raises the alarm about the lights two seconds after the card closes, with no sums', () => {
     const fired = play([view(), view({ cardClosed: true }), view({ cardClosed: true, now: C.c1 + 2 })]);
     expect(fired).toEqual(['C1.triage.01', 'C1.triage.02']);
-    expect(LINES['C1.triage.02'].text).toBe("480 a second! I'm great at math.");
+    expect(LINES['C1.triage.01'].text).toBe('Lux! The lights are going out all over the block!');
+    // The opening is the hook (Rolando, 30 Oct 2026): none of C1's spoken lines asks for a sum.
+    for (const id of ['C1.triage.01', 'C1.triage.02', 'C1.lux.01', 'C1.triage.05', 'C1.triage.03'] as const)
+      expect(LINES[id].text, id).not.toMatch(/\d|math|multipl|divide|req\/s/i);
   });
 
-  it('C1: Lux corrects the 480, then the scrap box line; TRIAGE owns up to 30 only once a box is live', () => {
+  it('C1: Lux steadies, then the build line; the lights-are-back line waits for a live box', () => {
     const closed = { cardClosed: true };
     const fired = play([0, 2, 4, 6, 8].map((s) => view({ ...closed, now: C.c1 + s })));
     expect(fired).toEqual(['C1.triage.01', 'C1.triage.02', 'C1.lux.01', 'C1.triage.05']);

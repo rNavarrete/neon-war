@@ -143,9 +143,9 @@ export const CUES: readonly Cue[] = [
   // C1: job card and first server.
   { id: 'C1.triage.01', when: (v) => v.cardClosed && v.now < C.c3 },
   { id: 'C1.triage.02', follows: ['C1.triage.01'], when: (v, f) => after(f, 'C1.triage.01', 2, at(v)) },
-  // Lux corrects TRIAGE's 480 and TRIAGE says how to build; she owns up to 30 once the first box is
-  // live and the gauge reads the real line (never before the first wire: learning-5 (d)). There is
-  // no estimate step (C1.triage.04, the wrong-guess reply, is not played).
+  // TRIAGE panics about the lights, Lux steadies and TRIAGE says how to build; the lights coming back
+  // waits for the first live box, so the gauge reads the real line (never before the first wire:
+  // learning-5 (d)). No sums in C1 (Rolando, 30 Oct 2026); C1.triage.04 is not played.
   { id: 'C1.lux.01', follows: ['C1.triage.02'], when: (v, f) => after(f, 'C1.triage.02', 2, at(v)) },
   {
     id: 'C1.triage.05',

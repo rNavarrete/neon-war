@@ -12,7 +12,7 @@ const C = BROWNOUT.challenges;
 // ZONES.cam with the face and the backdrop only inside the 388x230 lens, its art is the texture on
 // the front face, REC blinks on the HUD clock (steady with reduce flicker) and the talk bars follow
 // Lux's lines. Short on purpose: speed 20 with the autopilot for the first two, and a third page at
-// speed 4 without it, where Lux answers TRIAGE's 480 (C1.lux.01) on the band.
+// speed 4 without it, where Lux steadies herself after TRIAGE's alarm (C1.lux.01) on the band.
 
 async function cam(page: Page): Promise<LuxCamTestState> {
   const c = await page.evaluate(() => window.__neonTest?.state?.hud?.luxCam ?? null);
@@ -104,7 +104,7 @@ test('the talk bars: speaking is true exactly while Lux’s line is on the band'
   test.setTimeout(60_000);
   const { errors } = await openBoard(page, { speed: 4, autopilot: false });
   await dismissJobCard(page);
-  // Lux answers TRIAGE's 480 (C1.lux.01) once the band is free.
+  // Lux steadies herself after TRIAGE's alarm (C1.lux.01) once the band is free.
   const seen = { lux: 0, other: 0, quiet: 0 };
   const deadline = Date.now() + 40_000;
   let luxDone = false;

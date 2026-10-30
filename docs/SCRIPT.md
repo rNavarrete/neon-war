@@ -43,20 +43,22 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| C1.card.title | ui | Job card | card opens | THE BLOCK. TONIGHT. |
-| C1.card.who | ui | Job card | | Who: 120 flats on one line. |
-| C1.card.what | ui | Job card | | What must work: calls, streams, the lift, the heating alarms. |
-| C1.card.bar | ui | Job card | | The bar: nobody goes dark at midnight. |
-| C1.card.rate | ui | Job card | | Each flat pings the net about every 4 seconds. |
-| C1.triage.01 | bark | TRIAGE (eager) | card closes | "Ooh, a card! How many requests a second? I'll guess first." |
-| C1.triage.02 | bark | TRIAGE (wrong-and-proud) | 2 s later | "480 a second! I'm great at math." |
-| C1.lux.01 | bark | Lux | 2 s after TRIAGE's 480 | "You multiplied. Divide." |
-| C1.triage.03 | bark | TRIAGE (sheepish) | first server live, 2 s or more after Lux | "...30. That's what I meant. Obviously." |
+| C1.card.title | ui | Job card | card opens | THE LIGHTS ARE GOING OUT! |
+| C1.card.step1 | ui | Job card | | Drag a SERVER onto the grid. |
+| C1.card.step2 | ui | Job card | | Wire the GATEWAY to your server. |
+| C1.card.step3 | ui | Job card | | Wire your server to the DATABASE. |
+| C1.card.goal | ui | Job card | | Keep the block lit till midnight! |
+| C1.card.go | ui | Job card | the card's button | LET'S GO! |
+| C1.card.bar | ui | Job card | the alert band when midnight is held | Nobody went dark at midnight. |
+| C1.triage.01 | bark | TRIAGE (eager) | card closes | "Lux! The lights are going out all over the block!" |
+| C1.triage.02 | bark | TRIAGE (eager) | 2 s later | "Mrs Okafor's stuck in the lift! Kenji's stream froze!" |
+| C1.lux.01 | bark | Lux | 2 s after TRIAGE's alarm | "Okay. Breathe. I know this one." |
+| C1.triage.03 | bark | TRIAGE (wrong-and-proud) | first server live, 2 s or more after Lux | "The lights are back! I knew my plan would work!" |
 | C1.triage.04 | bark | TRIAGE (thinking) | not played (the estimate step is gone; the take stays recorded) | "Hm. Let's watch the real line and see who's right." |
-| C1.triage.05 | bark | TRIAGE (eager) | 2 s after Lux, tray glows | "One scrap server does 60 req/s. Wire it: gateway, server, database." |
+| C1.triage.05 | bark | TRIAGE (eager) | 2 s after Lux, tray glows | "Server on the grid, then wire it up. Go go go!" |
 | C1.chat.01 | chat | block: mrs okafor | server goes live | It's back! Bless you Lux |
 | C1.chat.02 | chat | stream: viewer | server goes live | first try lol |
-| C1.triage.06 | bark | TRIAGE (happy) | 10 s at 30 against 60 | "30 requests a second, capacity 60. Look at all that headroom." |
+| C1.triage.06 | bark | TRIAGE (happy) | 10 s at 30 against 60 | "See the gauge? Your server's barely trying. That's headroom." |
 | C1.triage.nudge.place.1 | bark | TRIAGE (eager) | coach: no server on the grid 8 s after the card closes, SERVER card lit | "SERVER card, from the tray, onto the grid. Go on!" |
 | C1.triage.nudge.place.2 | bark | TRIAGE (thinking) | coach: still no server, 9 s later | "Lux? Still dark. A server goes on the grid first." |
 | C1.lux.nudge.place | bark | Lux | coach: still no server, 12 s later (then again every 25 s while stuck) | "Right. Server card, onto the table." |
@@ -239,7 +241,7 @@ dropped" are not set yet, so a ticket that needs exact numbers stops and asks.
 
 | ID | Kind | Group | Line |
 | --- | --- | --- | --- |
-| C8.terms.sizing | ui | Sizing | **Requirements** (the job card). **Requests per second** (120 flats every 4 s = 30). **Capacity** (one server did 60). **Back-of-the-envelope estimate** (flats times calls, before you build). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening). |
+| C8.terms.sizing | ui | Sizing | **Requirements** (keep the block lit till midnight). **Requests per second** (your block sent about 30). **Capacity** (one server did 60). **Back-of-the-envelope estimate** (120 flats, each calling every 4 s, is about 30: a quick sum before you build). **Headroom** (don't run at 100%). **Peak vs average** (midnight, not the evening). |
 | C8.terms.scaling | ui | Scaling | **Scaling up** (the bigger server: quick, but it has a ceiling and goes dark while it swaps). **Scaling out** (more servers). **Load balancer** with **health checks** (splits traffic, skips dark servers). **Scaling down** (turning them off after). |
 | C8.terms.failure | ui | Failure | **Single point of failure** (one big server). **Cascading failure** (one part falls, the next follows). **Retry storm** (everyone hitting refresh). **Load shedding** (cutting the laundry loose). **Redundancy, N+1** (the peak plus one spare). |
 
@@ -378,8 +380,8 @@ band, with no number. Wording is a draft until the owner approves it (decision D
 | fill.stream.unplugged.02 | stream | stream | the coach nudges about a wire | chat she forgot a cable |
 | fill.stream.unplugged.03 | stream | stream | the coach nudges about a wire | plug it in plug it in plug it in |
 | fill.stream.unplugged.04 | stream | stream | the coach nudges about a wire | triage is trying its best |
-| fill.stream.math.01 | stream | stream | TRIAGE's 480 guess | triage pls |
-| fill.stream.math.02 | stream | stream | TRIAGE's 480 guess | triage can't math lmao |
+| fill.stream.panic.01 | stream | stream | TRIAGE's alarm about the lift | LUX GO GO GO |
+| fill.stream.panic.02 | stream | stream | TRIAGE's alarm about the lift | not the lift again |
 | fill.stream.banner.01 | stream | stream | the Solace banner slides in | ugh solace ads on NYE |
 | fill.stream.banner.02 | stream | stream | the Solace banner slides in | solace popup lmao |
 | fill.stream.banner.03 | stream | stream | the Solace banner slides in | solace really said 'deserves better' huh |

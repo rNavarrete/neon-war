@@ -178,7 +178,7 @@ test('3. a missed line can be reread from the band log, and the log stays open a
   const ids = c.log.lines.map((l) => l.id);
   expect(ids).toContain('C1.triage.01');
   for (const l of c.log.lines) expect(l.text).toBe(LINES[l.id].text);
-  // A new line (Lux's answer to the 480) arrives under the hover: the log stays open and takes it in.
+  // A new line (Lux steadying herself) arrives under the hover: the log stays open and takes it in.
   await page.mouse.move(c.log.outside.x, c.log.outside.y);
   await page.mouse.move(c.log.band.x, c.log.band.y);
   await expect

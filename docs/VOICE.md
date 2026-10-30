@@ -57,6 +57,12 @@ the performance tags, the stage directions in brackets and quotes.
 
 - `C1.triage.01`: "Ooh, a dial!" became "Ooh, a card!" when the estimate dial was removed. The
   old take still plays until it is re-recorded.
+- `C1.triage.02`: "480 a second!" became TRIAGE's alarm about the lift when the opening dropped its
+  sums (30 Oct 2026).
+- `C1.lux.01`: "You multiplied. Divide." became "Okay. Breathe. I know this one." (same change).
+- `C1.triage.03`: "...30. That's what I meant." became TRIAGE taking credit for the lights coming
+  back (same change). `C1.triage.01`, `C1.triage.05` and `C1.triage.06` changed again in it too.
+  These old takes say different words, so the six C1 lines want new takes first.
 - `C0.tv.01`: "ten minutes from midnight" became "five minutes" when the countdown was shortened
   (29 Oct 2026).
 - `C3.triage.01`: "The kit makes a box bigger..." became "A bigger box, or a second box..." when

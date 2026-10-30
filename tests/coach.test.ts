@@ -313,11 +313,11 @@ describe('the chat answers the coach, the band and the countdown', () => {
     expect(out.posts.map((r) => [r.id, r.cause])).toEqual([['fill.stream.unplugged.01', 'coach']]);
   });
 
-  it("TRIAGE's 480 gets laughed at", () => {
-    expect(LINE_REACTIONS['C1.triage.02']).toEqual(['math']);
+  it("TRIAGE's alarm about the lift gets the chat panicking", () => {
+    expect(LINE_REACTIONS['C1.triage.02']).toEqual(['panic']);
     const s = initialChat(0, rand);
     const out = stepChat(s, { ...calm, clock: 1 }, [{ kind: 'line', id: 'C1.triage.02' }], rand);
-    expect(out.posts.map((r) => r.id)).toEqual(['fill.stream.math.01']);
+    expect(out.posts.map((r) => r.id)).toEqual(['fill.stream.panic.01']);
   });
 
   it('a minute out, everyone counts down', () => {

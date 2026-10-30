@@ -44,16 +44,16 @@ test('the band shows C1.triage.02 with its speaker and tag, five slots inside it
   c = h.comms!;
   // hud.bark keeps the ids and text it always had.
   expect(h.bark.current).toBe('C1.triage.02');
-  expect(h.bark.text).toBe("480 a second! I'm great at math.");
+  expect(h.bark.text).toBe("Mrs Okafor's stuck in the lift! Kenji's stream froze!");
   expect(h.bark.history).toEqual(['C1.triage.01', 'C1.triage.02']);
   expect(h.paused).toBe(false);
 
   const line = c.line!;
   expect(line.id).toBe('C1.triage.02');
-  expect(line.speaker).toBe('TRIAGE (wrong-and-proud)');
+  expect(line.speaker).toBe('TRIAGE (eager)');
   expect(line.name).toBe('TRIAGE');
   expect(line.tag).toBe('HINT');
-  expect(line.text).toBe("480 a second! I'm great at math.");
+  expect(line.text).toBe("Mrs Okafor's stuck in the lift! Kenji's stream froze!");
   expect(line.until - line.since).toBeGreaterThanOrEqual(4 - 1e-6);
   expect(line.typed).toBeGreaterThanOrEqual(0);
   expect(line.typed).toBeLessThanOrEqual(line.text.length);
@@ -66,10 +66,10 @@ test('the band shows C1.triage.02 with its speaker and tag, five slots inside it
   // One line at a time: the first ended before the second started.
   expect(c.history).toEqual(['C1.triage.01', 'C1.triage.02']);
   expect(c.emitted.slice(0, 3)).toEqual(['line:C1.triage.01', 'lineEnd:C1.triage.01', 'line:C1.triage.02']);
-  expect(c.triage).toEqual({ mood: 'wrong-and-proud' });
+  expect(c.triage).toEqual({ mood: 'eager' });
   expect(c.slots.find((s) => s.name === 'TRIAGE')!.speaking).toBe(true);
   // comms-4: her iris wears the line's mood, and her ring pulses amber (reduce flicker is off).
-  expect(c.iris.mood).toBe('wrong-and-proud');
+  expect(c.iris.mood).toBe('eager');
   expect(c.iris.motion).toBe('full');
   expect(c.glow).toMatchObject({ slot: 'TRIAGE', color: 'amber', motion: 'pulse', others: 0.25 });
   expect(c.crew.light).toBe(0);
@@ -132,7 +132,7 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
     expect(c.log.open).toBe(true);
     expect(c.log.lines.map((l) => l.id)).toEqual(['C1.triage.01', 'C1.triage.02']);
     expect(c.log.lines.map((l) => l.name)).toEqual(['TRIAGE', 'TRIAGE']);
-    // A click off the band, then Lux answers TRIAGE's 480 while the log stays pinned.
+    // A click off the band, then Lux steadies herself while the log stays pinned.
     await page.mouse.click(c.log.outside.x, c.log.outside.y);
     await expect
       .poll(async () => (await comms(page)).history, { timeout: 30_000, intervals: [50] })
@@ -141,7 +141,11 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
     expect(c.log.pinned).toBe(true);
     expect(c.log.open).toBe(true);
     expect(c.log.lines.map((l) => l.id)).toEqual(c.history.slice(-3));
-    expect(c.log.lines).toContainEqual({ id: 'C1.lux.01', name: 'LUX', text: 'You multiplied. Divide.' });
+    expect(c.log.lines).toContainEqual({
+      id: 'C1.lux.01',
+      name: 'LUX',
+      text: 'Okay. Breathe. I know this one.',
+    });
     await shot(page, 'comms-log');
   });
 

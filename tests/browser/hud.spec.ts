@@ -99,7 +99,7 @@ test('the session opens on the job card, and clicking it away starts C1', async 
     .poll(async () => (await hud(page)).bark.current, { timeout: 40_000, intervals: [50] })
     .toBe('C1.triage.02');
   h = await hud(page);
-  expect(h.bark.text).toBe("480 a second! I'm great at math.");
+  expect(h.bark.text).toBe("Mrs Okafor's stuck in the lift! Kenji's stream froze!");
   expect(h.paused).toBe(false);
 });
 

@@ -166,7 +166,7 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
 
 /** The debrief terms each line shows before they are named. Lines not listed teach nothing on their own. */
 export const TEACHES: Readonly<Partial<Record<LineId, readonly TermKey[]>>> = {
-  // 120 flats every 4 s is 30 a second: the job card's sum, owned up to as the gauge reads it.
+  // The lights coming back as the gauge first reads the block's real line: the debrief names the sum.
   'C1.triage.03': ['requirements', 'requestsPerSecond', 'estimate'],
   'C1.triage.06': ['capacity', 'headroom'],
   'C2.triage.after': ['headroom'],

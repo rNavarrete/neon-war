@@ -120,7 +120,7 @@ export type ReactionKey =
   | 'waitingBlock'
   | 'waitingStream'
   | 'unplugged'
-  | 'math'
+  | 'panic'
   | 'bannerBlock'
   | 'bannerStream'
   | 'countdownBlock'
@@ -197,7 +197,7 @@ export const REACTIONS: Readonly<Record<ReactionKey, Reaction>> = Object.freeze(
   waitingStream: R('fill.stream.waiting.', null, 20),
   unplugged: R('fill.stream.unplugged.', null, 15),
   // Lines on the band the chat answers (LINE_REACTIONS).
-  math: R('fill.stream.math.', null, Infinity),
+  panic: R('fill.stream.panic.', null, Infinity),
   bannerBlock: R('fill.block.banner.', null, Infinity),
   bannerStream: R('fill.stream.banner.', null, Infinity),
   // The countdown: a minute out and ten seconds out (COUNTDOWN_MARKS).
@@ -209,9 +209,9 @@ export const REACTIONS: Readonly<Record<ReactionKey, Reaction>> = Object.freeze(
   scaledDownStream: R('fill.stream.scaledown.', null, 30),
 });
 
-/** Band lines the chat answers when they start: TRIAGE's 480 and the Solace banner. */
+/** Band lines the chat answers when they start: TRIAGE's alarm about the lift and the Solace banner. */
 export const LINE_REACTIONS: Readonly<Partial<Record<LineId, readonly ReactionKey[]>>> = Object.freeze({
-  'C1.triage.02': ['math'],
+  'C1.triage.02': ['panic'],
   'C2.triage.01': ['bannerStream', 'bannerBlock'],
 });
 
@@ -286,7 +286,7 @@ const CAUSE_OF: Readonly<Record<ReactionKey, ChatCause>> = {
   waitingBlock: 'coach',
   waitingStream: 'coach',
   unplugged: 'coach',
-  math: 'line',
+  panic: 'line',
   bannerBlock: 'line',
   bannerStream: 'line',
   countdownBlock: 'countdown',

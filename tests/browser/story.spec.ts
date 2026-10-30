@@ -156,6 +156,12 @@ test('the rescue plays as a scene over the immersive backdrop and returns to the
   expect(s.lineId).toBe('C5.lux.01');
   expect(s.portrait).toBe('portrait:lux/vn/board-shocked');
   expect(s.dimmed).toEqual(['TRIAGE', 'Rei']);
+  // Rei came on first, but Lux stands on the left facing in (never mirrored: her shirt has words on
+  // it) and Rei, on the right, is mirrored to face her.
+  expect(s.figures.Lux!.left).toBeLessThan(s.figures.Rei!.left);
+  expect(s.figures.Lux!.facesLeft).toBe(false);
+  expect(s.figures.Rei!.facesLeft).toBe(true);
+  await page.screenshot({ path: 'test-results/screens/rescue-facing.png' });
 
   const seen: string[] = [];
   while (s.active && s.lineId !== 'C5.rei.cut') {
@@ -371,6 +377,8 @@ test('the debrief grades the night, names the terms, ends with the interview car
   // Rei stands tall beside the results panel (x 90 to 710) and the interview card (to 950), not behind them.
   expect(s.figures.Rei!.left).toBeGreaterThan(950);
   expect(s.figures.Rei!.right).toBeLessThanOrEqual(1920);
+  // Alone right of the middle, she turns in toward the results.
+  expect(s.figures.Rei!.facesLeft).toBe(true);
   await page.screenshot({ path: 'test-results/screens/debrief.png' });
 
   const grades = [s.lineId];

@@ -9,7 +9,19 @@ import { LINES, type LineId } from '../strings';
 import { LABELS } from './labels';
 import { StoryChat, chatMessage, preloadChat } from './chatPanel';
 import { chatText, scriptFaces, typedChars } from './scripts';
-import { HOVERING, TEXT_LINE, TEXT_POS, bobAt, frameFor, hoverFor, slotsBetween, slotsFor } from './stage';
+import {
+  HOVERING,
+  LEAD,
+  TEXT_LINE,
+  TEXT_POS,
+  bobAt,
+  facesLeft,
+  frameFor,
+  hoverFor,
+  slotsBetween,
+  slotsFor,
+  standOrder,
+} from './stage';
 import { type PagePoint, type ViewSnapshot, playVoice, storyState } from './state';
 
 export const W = 1920;
@@ -189,20 +201,24 @@ export class VnView {
   }
 
   /**
-   * Stands everyone on stage in the slots for that many people, in the order they came on, at their
-   * art's frame (src/story/stage.ts). The speaker is a touch bigger and lit; the others dim.
+   * Stands everyone on stage in the slots for that many people, Lux on the left and the rest in the
+   * order they came on, at their art's frame, each facing into the scene (src/story/stage.ts). The
+   * speaker is a touch bigger and lit; the others dim. Runs once per line, never per frame.
    */
   private stage(): void {
-    let standing = 0;
-    for (const who of this.portraits.keys()) if (!HOVERING.has(who)) standing++;
+    const order = standOrder([...this.portraits.keys()]);
+    const standing = order.filter((who) => !HOVERING.has(who)).length;
+    const lead = order.includes(LEAD);
     const zone = this.opts.stage;
     const xs = zone ? slotsBetween(standing, zone.from, zone.to) : slotsFor(standing);
     let i = 0;
     this.flyers = [];
-    for (const [who, img] of this.portraits) {
+    for (const who of order) {
+      const img = this.portraits.get(who)!;
       const f = HOVERING.has(who) ? hoverFor(xs) : frameFor(img.height, xs[i++]!, H);
       const speaking = who === this.speaking;
       img.setPosition(f.x, f.bottom).setScale(f.scale * (speaking ? SPEAKER_SCALE : 1));
+      img.setFlipX(!HOVERING.has(who) && facesLeft(who, f.x, lead));
       if (HOVERING.has(who)) this.flyers.push({ img, baseY: f.bottom });
       if (speaking) img.clearTint().setAlpha(1);
       else img.setTint(DIM).setAlpha(0.85);
@@ -270,7 +286,8 @@ export class VnView {
       figures: Object.fromEntries(
         [...this.portraits].map(([who, img]) => {
           const b = img.getBounds();
-          return [who, { left: Math.round(b.left), right: Math.round(b.right), top: Math.round(b.top) }];
+          const fig = { left: Math.round(b.left), right: Math.round(b.right), top: Math.round(b.top) };
+          return [who, { ...fig, facesLeft: img.flipX }];
         }),
       ),
       click: toPage(this.scene, W / 2, 945),
