@@ -288,7 +288,8 @@ describe('roundAvatar: one baked texture per key and size', () => {
     expect(dt).toMatchObject({ key: 'avatar:chars/comms/rei@84', w: 84, h: 84, forceEven: false });
     // Stamp the bust, erase the corners, render once: the mask exists for this one render only.
     expect(dt.calls.map((c) => c[0])).toEqual(['stamp', 'erase', 'render']);
-    const crop = faceCrop(240, 256, 84, FULL);
+    // 236 wide since the rei badge was swapped for the right face (30 Oct 2026); it was 240.
+    const crop = faceCrop(236, 256, 84, FULL);
     // The picked badge, shown whole: its centred square lands on the 84 x 84 bake.
     expect(dt.calls[0]).toEqual([
       'stamp',
