@@ -77,13 +77,13 @@ const RESCUE: SceneScript = {
   steps: [
     { lineId: 'C5.triage.01' },
     { lineId: 'C5.rei.01' },
-    { lineId: 'C5.lux.01', face: 'lux/faces-board/shocked' },
+    { lineId: 'C5.lux.01', face: 'lux/vn/board-shocked' },
     { lineId: 'C5.rei.02' },
     { lineId: 'C5.mika.01' },
     { lineId: 'C5.mika.02', face: 'mika/faces/explain' },
     { lineId: 'C5.rei.03', cue: 'cable' },
     { lineId: 'C5.rei.cut', onlyIf: 'laundryCut', face: 'rei/faces/impressed' },
-    { lineId: 'C5.lux.cut', onlyIf: 'laundryCut', face: 'lux/faces-board/deadpan' },
+    { lineId: 'C5.lux.cut', onlyIf: 'laundryCut', face: 'lux/vn/board-deadpan' },
     { lineId: 'C5.ozzie.01', face: 'ozzie/faces/sums' },
     { lineId: 'C5.ozzie.02' },
     { lineId: 'C5.mika.03', face: 'mika/faces/focused' },
@@ -99,7 +99,7 @@ const REWIND_REPLAY: SceneScript = {
   backdrop: null,
   where: 'board',
   look: 'vhs',
-  steps: [{ lineId: 'C3.triage.rewind' }, { lineId: 'C3.lux.rewind', face: 'lux/faces-board/deadpan' }],
+  steps: [{ lineId: 'C3.triage.rewind' }, { lineId: 'C3.lux.rewind', face: 'lux/vn/board-deadpan' }],
 };
 
 /** Rei's rewind when trust hits zero in the surge. */

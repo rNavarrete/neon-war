@@ -154,7 +154,7 @@ test('the rescue plays as a scene over the immersive backdrop and returns to the
 
   s = await nextLine(page);
   expect(s.lineId).toBe('C5.lux.01');
-  expect(s.portrait).toBe('portrait:lux/faces-board/shocked');
+  expect(s.portrait).toBe('portrait:lux/vn/board-shocked');
   expect(s.dimmed).toEqual(['TRIAGE', 'Rei']);
 
   const seen: string[] = [];

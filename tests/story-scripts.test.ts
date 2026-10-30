@@ -1,5 +1,6 @@
 import script from '../docs/SCRIPT.md?raw';
 import { SCRIPTS, chatText, isChat, scriptFaces, stepsFor, typedChars } from '../src/story/scripts';
+import { portraitFor } from '../src/game/portraits';
 import { LINES } from '../src/strings';
 
 // The line IDs of a scene's table in docs/SCRIPT.md, in the order the rows are written.
@@ -79,5 +80,17 @@ describe('story scripts', () => {
   it('only overrides faces with picked portrait files', () => {
     for (const f of scriptFaces())
       expect(f).toMatch(/^(lux\/faces-(board|room)|lux\/vn|rei\/faces|mika\/faces|ozzie\/faces)\//);
+  });
+
+  it('stands Lux up in every story scene: her faces there are the tall sprites, goggles down on the board', () => {
+    const luxFaces = Object.values(SCRIPTS).flatMap((sc) =>
+      sc.steps
+        .filter((st) => LINES[st.lineId].speaker === 'Lux')
+        .map((st) => st.face ?? portraitFor('Lux', sc.where)?.key.replace('portrait:', '')),
+    );
+    expect(luxFaces.length).toBeGreaterThan(3);
+    for (const f of luxFaces) expect(f).toMatch(/^lux\/vn\//);
+    expect(portraitFor('Lux', 'board')?.file).toBe('art/chars/lux/vn/board-determined.webp');
+    expect(SCRIPTS.C5.steps.find((st) => st.lineId === 'C5.lux.01')?.face).toBe('lux/vn/board-shocked');
   });
 });

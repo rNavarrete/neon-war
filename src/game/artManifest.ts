@@ -502,6 +502,58 @@ export const PICKED_ART: readonly PickedArt[] = [
     "Lux's story sprite, standing behind the text box (vn-lux-b take 2)",
   ),
   sprite('lux/vn/photo', size(601, 927), "Lux looking at Akemi's photo in the cold open (vn-lux-a take 2)"),
+  sprite(
+    'lux/vn/composing',
+    size(538, 927),
+    "Lux's composing story sprite, goggles round her neck (vn-lux-composing)",
+  ),
+  sprite(
+    'lux/vn/exhausted',
+    size(538, 927),
+    "Lux's exhausted story sprite, goggles round her neck (vn-lux-exhausted)",
+  ),
+  sprite(
+    'lux/vn/frightened',
+    size(538, 927),
+    "Lux's frightened story sprite, goggles round her neck (vn-lux-frightened)",
+  ),
+  sprite(
+    'lux/vn/grieving',
+    size(538, 927),
+    "Lux's grieving story sprite, goggles round her neck (vn-lux-grieving)",
+  ),
+  sprite(
+    'lux/vn/relieved',
+    size(538, 927),
+    "Lux's relieved story sprite, goggles round her neck (vn-lux-relieved)",
+  ),
+  sprite(
+    'lux/vn/startled',
+    size(538, 927),
+    "Lux's startled story sprite, goggles round her neck (vn-lux-startled)",
+  ),
+  sprite(
+    'lux/vn/board-deadpan',
+    size(538, 927),
+    "Lux's deadpan story sprite, goggles down (vn-lux-board-deadpan)",
+  ),
+  sprite(
+    'lux/vn/board-determined',
+    size(538, 927),
+    "Lux's determined story sprite, goggles down (vn-lux-board-determined)",
+  ),
+  sprite(
+    'lux/vn/board-shocked',
+    size(538, 927),
+    "Lux's shocked story sprite, goggles down (vn-lux-board-shocked)",
+  ),
+  sprite('lux/vn/board-smirk', size(538, 927), "Lux's smirk story sprite, goggles down (vn-lux-board-smirk)"),
+  sprite('lux/vn/board-tense', size(538, 927), "Lux's tense story sprite, goggles down (vn-lux-board-tense)"),
+  sprite(
+    'lux/vn/board-triumphant',
+    size(538, 927),
+    "Lux's triumphant story sprite, goggles down (vn-lux-board-triumphant)",
+  ),
   portrait('lux/faces-room/composing', size(493, 438)),
   portrait('lux/faces-room/grieving', size(442, 440)),
   portrait('lux/faces-room/relieved', size(412, 429)),
