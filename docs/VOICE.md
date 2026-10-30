@@ -111,6 +111,8 @@ lists them in `shell.voice.missing`) until they are recorded and added to the ma
 - `C1.lux.nudge.store`
 - `C3.triage.nudge.choose.1`
 - `C3.triage.nudge.choose.2`
+- `C3.triage.nudge.idle`
+- `C3.lux.nudge.idle`
 - `C5.triage.nudge.splitter`
 - `C5.lux.nudge.splitter`
 - `C5.triage.nudge.behind.1`

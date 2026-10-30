@@ -58,6 +58,11 @@ export interface TipFacts {
   readonly held: boolean;
   /** Before midnight: a help tip still matters. */
   readonly beforeMidnight: boolean;
+  /**
+   * What the move that would help costs: a bigger server while the gateway can feed only one (no
+   * load balancer yet, a server still without the kit), else another server. Missing means a server.
+   */
+  readonly helpPrice?: number;
 }
 
 /** The same seed and tip number always give the same pick of n. */
@@ -117,8 +122,8 @@ export function stepTips(s: TipState, f: TipFacts): { state: TipState; given: re
   if (f.rescued) give('rescue', T.milestone.rescue);
   if (f.held) give('midnight', T.milestone.midnight);
 
-  // Failing and broke: a viewer covers a server, plus a little.
-  const price = BROWNOUT.server.cost;
+  // Failing and broke: a viewer covers the move that would help, plus a little.
+  const price = f.helpPrice ?? BROWNOUT.server.cost;
   if (
     f.beforeMidnight &&
     failing &&

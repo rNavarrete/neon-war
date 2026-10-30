@@ -107,7 +107,9 @@ describe('coachProblem: what counts as stuck', () => {
     expect(p).toBe(null);
   });
 
-  it('before the crew, a second box the gateway cannot feed is not nagged about (that is C3s lesson)', () => {
+  it('before the crew, a second box the gateway cannot feed is lit with the sell-it-back nudge', () => {
+    // It was left alone as C3's lesson until Rolando got stuck on three idle boxes and no credits
+    // (30 Oct 2026): the box still idles (the lesson), and the coach now says how to get out.
     const p = coachProblem(
       input({
         waitingForFirstBuild: false,
@@ -116,7 +118,9 @@ describe('coachProblem: what counts as stuck', () => {
         wires: [w('gateway', 's1'), w('s1', 'database')],
       }),
     );
-    expect(p).toBe(null);
+    expect(p?.step).toBe('idle');
+    expect(p?.parts).toEqual(['s22']);
+    expect(p?.lines).toEqual(['C3.triage.nudge.idle', 'C3.lux.nudge.idle']);
   });
 
   it('after the crew, the gateway must feed the splitter', () => {
@@ -289,7 +293,8 @@ describe('the nudges themselves', () => {
 
   it('are ten words or fewer, every one (short enough to read at a glance mid-drag)', () => {
     const all = [...Object.values(NUDGES).flat(), ...FEED_SPLITTER];
-    expect(all.length).toBe(18);
+    // 20 since the idle-server nudges (30 Oct 2026).
+    expect(all.length).toBe(20);
     const long = all.filter((id) => LINES[id].text.split(/\s+/).length > 10);
     expect(long).toEqual([]);
   });

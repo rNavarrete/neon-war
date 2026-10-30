@@ -96,3 +96,21 @@ describe('viewer tips', () => {
     expect(JSON.stringify(s)).toBe(copy);
   });
 });
+
+describe('the help tip pays for the move that would help', () => {
+  it('covers the given price (the bigger server before the load balancer), plus a little', () => {
+    const s = run(NO_TIPS, 0, 10, (t) => ({
+      served: 30,
+      errorShare: t > 1 ? 0.5 : 0,
+      credits: 53,
+      helpPrice: 60,
+    }));
+    const help = s.tips.filter((x) => x.kind === 'help');
+    expect(help).toHaveLength(1);
+    expect(53 + help[0].amount).toBeGreaterThanOrEqual(60);
+    expect(53 + help[0].amount).toBeLessThan(BROWNOUT.server.cost + T.help.extra);
+    // With the bigger server in reach, nobody sends help.
+    const fine = run(NO_TIPS, 0, 10, () => ({ served: 30, errorShare: 0.5, credits: 65, helpPrice: 60 }));
+    expect(fine.tips.filter((x) => x.kind === 'help')).toEqual([]);
+  });
+});

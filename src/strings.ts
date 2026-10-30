@@ -189,6 +189,12 @@ export const LINES = {
     speaker: 'TRIAGE (thinking)',
     text: "Scale up, or scale out? I'm not saying. I'm pointing.",
   },
+  'C3.triage.nudge.idle': {
+    kind: 'bark',
+    speaker: 'TRIAGE (thinking)',
+    text: 'That one gets nothing. Right-click it: full refund!',
+  },
+  'C3.lux.nudge.idle': { kind: 'bark', speaker: 'Lux', text: 'Sell the spare. Make the first one bigger.' },
   'C3.triage.rewind': {
     kind: 'scene',
     speaker: 'TRIAGE (sheepish)',

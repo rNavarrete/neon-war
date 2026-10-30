@@ -32,7 +32,7 @@ import type { LineId } from '../../strings';
 
 const C = BROWNOUT.challenges;
 
-export type CoachStep = 'place' | 'feed' | 'store' | 'behind' | 'replace' | 'choose';
+export type CoachStep = 'place' | 'feed' | 'store' | 'behind' | 'replace' | 'choose' | 'idle';
 
 /** What the coach lights up for a step. */
 export interface CoachTargets {
@@ -100,6 +100,7 @@ export const NUDGES: Readonly<Record<CoachStep, readonly LineId[]>> = {
   behind: ['C5.triage.nudge.behind.1', 'C5.triage.nudge.behind.2', 'C5.lux.nudge.behind'],
   replace: ['C5.triage.nudge.replace.1', 'C5.lux.nudge.replace'],
   choose: ['C3.triage.nudge.choose.1', 'C3.triage.nudge.choose.2'],
+  idle: ['C3.triage.nudge.idle', 'C3.lux.nudge.idle'],
 };
 
 /** The gateway-to-splitter nudge: the feed step after the crew arrive. */
@@ -113,6 +114,7 @@ export const COACH_HINT: Readonly<Record<CoachStep, LineId | null>> = {
   behind: 'C5.alert.behind',
   replace: 'C5.alert.replace',
   choose: null,
+  idle: null,
 };
 
 const NO_IDS: readonly string[] = Object.freeze([]);
@@ -195,6 +197,13 @@ export function coachProblem(f: CoachInput): CoachProblem | null {
     for (const s of servers) {
       if (f.dead.includes(s.id)) return problem('replace', `replace:${s.id}`, ['server'], [s.id], null);
     }
+  }
+
+  // Before the crew: a second box the gateway cannot reach does nothing. Sell it back (in full,
+  // it never carried a request) and the credits buy the bigger server instead.
+  if (!lb && gwTo !== null) {
+    const idle = live.find((s) => s.id !== gwTo && !f.offline.includes(s.id));
+    if (idle) return problem('idle', `idle:${idle.id}`, NO_IDS, [idle.id], null);
   }
 
   // C3: the box the gateway feeds is over its limit and drops calls, with no bigger box yet.

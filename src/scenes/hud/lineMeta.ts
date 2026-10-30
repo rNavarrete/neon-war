@@ -156,6 +156,8 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
   'C1.lux.nudge.store': 'part:database',
   'C3.triage.nudge.choose.1': 'zone:inventory',
   'C3.triage.nudge.choose.2': 'zone:inventory',
+  'C3.triage.nudge.idle': 'part:idle',
+  'C3.lux.nudge.idle': 'part:idle',
   'C5.triage.nudge.splitter': 'part:balancer',
   'C5.lux.nudge.splitter': 'part:balancer',
   'C5.triage.nudge.behind.1': 'part:balancer',

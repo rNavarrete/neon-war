@@ -98,6 +98,8 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C3.chat.03 | chat | stream: viewer | server dies | F |
 | C3.triage.nudge.choose.1 | bark | TRIAGE (thinking) | coach: the one server over its limit and dropping calls, both tray cards lit | "Too much for one server! The tray has two ideas." |
 | C3.triage.nudge.choose.2 | bark | TRIAGE (thinking) | coach: still over, 9 s later (then again every 25 s) | "Scale up, or scale out? I'm not saying. I'm pointing." |
+| C3.triage.nudge.idle | bark | TRIAGE (thinking) | coach: before the crew, a second server the gateway cannot feed, the idle server lit | "That one gets nothing. Right-click it: full refund!" |
+| C3.lux.nudge.idle | bark | Lux | coach: still idle, 9 s later (then again every 25 s) | "Sell the spare. Make the first one bigger." |
 | C3.triage.rewind | scene | TRIAGE (sheepish) | a failure in C1 to C3 | "I recorded the last minute. Want to try that again?" |
 | C3.lux.rewind | scene | Lux | rewind accepted | "Yeah. Rewind." |
 

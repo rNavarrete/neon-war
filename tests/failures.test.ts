@@ -1128,3 +1128,19 @@ describe('ac12: pure functions', () => {
     expectSame(fast, slow);
   });
 });
+
+describe('selling back a server that never carried a request (30 Oct 2026)', () => {
+  it('pays its full price; one that has served pays half', () => {
+    // throughC3 with an idle second server: the gateway feeds server-p1 only.
+    const p = throughC3({ idleSecond: true });
+    expect(p.used).toContain('server-p1');
+    expect(p.used).not.toContain('server-p2');
+    const before = p.session.board.credits;
+    const idle = ok(decommissionServer(p, 'server-p2'));
+    expect(idle.session.board.credits).toBe(before + BROWNOUT.server.cost);
+    const busy = ok(decommissionServer(p, 'server-p1'));
+    expect(busy.session.board.credits).toBe(
+      before + Math.floor(BROWNOUT.server.cost * BROWNOUT.decommissionRefund),
+    );
+  });
+});
