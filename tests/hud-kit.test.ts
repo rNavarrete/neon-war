@@ -381,7 +381,9 @@ describe('the gauges lane views with the kit loaded', () => {
     // The city grid fills the map at its own shape: half its 816 x 620 file before layout A, 212 x 160
     // since (Rolando, 30 Oct 2026), so about 0.26 both ways and never above 1:1.
     const grid = rec.stamps.find((s) => s.texture === artTexture(KIT.cityGrid))!;
-    expect(grid.scaleX).toBeCloseTo(212 / 816, 6);
+    // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): 344 x 260
+    // now, about 0.42 both ways.
+    expect(grid.scaleX).toBeCloseTo(344 / 816, 6);
     expect(Math.abs(grid.scaleY - grid.scaleX)).toBeLessThan(0.005);
     expect(rec.images.some((i) => i.key === artTexture(KIT.chip))).toBe(true);
     const h = hudSection({} as HudTestState);
@@ -495,7 +497,7 @@ describe('batch 5: the lit city painting on the map', () => {
     });
     expect(rec.textures).toContain(panelTexture('map-lit'));
     const lit = rec.stamps.find((s) => s.texture === artTexture(CITY_GRID_LIT_KEY))!;
-    expect(lit.scaleX).toBeCloseTo(212 / 816, 6);
+    expect(lit.scaleX).toBeCloseTo(344 / 816, 6);
     v.update(at(C.c7 - 5), { now: 1, dt: 0.016 });
     expect(hudSection({} as HudTestState).map!.lit).toEqual({ key: CITY_GRID_LIT_KEY, alpha: 0 });
     v.shutdown();

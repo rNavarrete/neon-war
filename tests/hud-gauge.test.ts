@@ -224,7 +224,9 @@ describe('the layout', () => {
     // The dial fills the column's width since the chart went (30 Oct 2026), the readout under it.
     // Layout A2's smaller gauge (Rolando, 30 Oct 2026, 344x260) draws it at GAUGE_COMPACT (0.72).
     // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the gauge moved down to y 645, same size.
-    expect(L.centre).toEqual({ x: 1738, y: 786 });
+    // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the gauge
+    // moved up to y 545 to make room for the bigger map.
+    expect(L.centre).toEqual({ x: 1738, y: 686 });
     expect(L.outer).toBe(111);
     expect(L.needle).toBe(89);
     expect(gaugeLayout({ x: 16, y: 710, w: 408, h: 360 })).toMatchObject({

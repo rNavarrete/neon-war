@@ -52,7 +52,8 @@ const centred = (cx: number, cy: number, w: number, h: number): Rect => ({
  *
  * Rolando, 30 Oct 2026 ("too much wasted space", option 2): the clock sits on its painted plate at
  * the top of the right column, and the caller cam, the gauge and the map fill the column down to the
- * bottom edge, the cam taller so the last caller stays big on screen.
+ * bottom edge, the cam taller so the last caller stays big on screen. Later the same day the map grew
+ * to the gauge's size, so the caller cam gave up 100 px of height.
  */
 export const ZONES = {
   /** Top-left: Lux's avatar, the stream title and the viewer count. */
@@ -63,17 +64,18 @@ export const ZONES = {
   clock: { x: 1566, y: 0, w: 344, h: 125 },
   /**
    * Right column, bottom: the city map with the block's dots, at its painting's shape (816x620 at
-   * about 0.26) so the city is never squashed.
+   * about 0.42) so the city is never squashed. Rolando, 30 Oct 2026: as big as the demand gauge
+   * above it, so the two panels stack as one column.
    */
-  map: { x: 1632, y: 913, w: 212, h: 160 },
+  map: { x: 1566, y: 813, w: 344, h: 260 },
   /** Left column, top: Lux's cam frame, above her chat like a streamer's webcam. */
   cam: { x: 6, y: 110, w: 410, h: 270 },
   /** Right column, under the callers: the demand gauge, the one demand widget (smaller since A2). */
-  gauge: { x: 1566, y: 645, w: 344, h: 260 },
+  gauge: { x: 1566, y: 545, w: 344, h: 260 },
   /** Middle: the board itself, Lux's feed of the block's traffic, with the sky above the table. */
   feed: { x: 426, y: 102, w: 1128, h: 790 },
   /** Right column, top: the cam of whoever is talking to Lux, popping in and out with their line. */
-  comms: { x: 1566, y: 135, w: 344, h: 500 },
+  comms: { x: 1566, y: 135, w: 344, h: 400 },
   /** Middle, under the board: the board's inventory (the tray of parts). */
   inventory: { x: 426, y: 904, w: 1000, h: 156 },
   /** Middle, right of the tray: the deck's keys, stacked, shown only while one can be pressed. */

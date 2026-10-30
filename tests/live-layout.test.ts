@@ -45,11 +45,13 @@ describe('live layout contract', () => {
       // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the clock on its painted plate, then the taller
       // caller cam, the gauge and the map down to the bottom edge.
       clock: { x: 1566, y: 0, w: 344, h: 125 },
-      map: { x: 1632, y: 913, w: 212, h: 160 },
+      // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the map is the
+      // gauge's size and the caller cam 100 px shorter.
+      map: { x: 1566, y: 813, w: 344, h: 260 },
       cam: { x: 6, y: 110, w: 410, h: 270 },
-      gauge: { x: 1566, y: 645, w: 344, h: 260 },
+      gauge: { x: 1566, y: 545, w: 344, h: 260 },
       feed: { x: 426, y: 102, w: 1128, h: 790 },
-      comms: { x: 1566, y: 135, w: 344, h: 500 },
+      comms: { x: 1566, y: 135, w: 344, h: 400 },
       inventory: { x: 426, y: 904, w: 1000, h: 156 },
       deck: { x: 1434, y: 904, w: 120, h: 156 },
       chat: { x: 6, y: 390, w: 410, h: 680 },

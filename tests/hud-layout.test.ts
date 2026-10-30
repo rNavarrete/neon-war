@@ -68,7 +68,9 @@ describe('hud layout owner-fixed internals', () => {
     expect(Object.keys(ZONES)).not.toContain('scope');
     // Smaller and in the right column, under the callers, since layout A2 (Rolando, 30 Oct 2026).
     // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the right column runs clock, caller cam, gauge, map to the bottom edge.
-    expect(ZONES.gauge).toEqual({ x: 1566, y: 645, w: 344, h: 260 });
+    // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the map below
+    // grew to the gauge's size, so the gauge sits 100 px higher.
+    expect(ZONES.gauge).toEqual({ x: 1566, y: 545, w: 344, h: 260 });
   });
 
   // Layout A2 (Rolando, 30 Oct 2026): the chat is the tall slim left column, up to sixteen rows.
@@ -82,12 +84,14 @@ describe('hud layout owner-fixed internals', () => {
   // Along the bottom of the layout A2 caller column, overlapping like a call's participants
   // (Rolando, 30 Oct 2026).
   // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the taller caller column puts them at y 571.
-  it('keeps the caller column’s five slots r 42 at y 571, x 1616 + 61 i', () => {
+  // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the shorter
+  // caller column (400 tall) puts them at y 471.
+  it('keeps the caller column’s five slots r 42 at y 471, x 1616 + 61 i', () => {
     expect(BOTTOM.slots).toEqual(
       ['TRIAGE', 'REI', 'MIKA', 'OZZIE', 'HOUSE'].map((name, i) => ({
         name,
         x: 1616 + 61 * i,
-        y: 571,
+        y: 471,
         r: 42,
       })),
     );

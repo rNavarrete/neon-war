@@ -28,11 +28,11 @@ Twelve rects `{x, y, w, h}` in game pixels. No two overlap; all lie inside 1920x
 | `title`     |    0 |   0 |  440 | 100 | gauges  | Lux's avatar, the stream title, the viewer count           |
 | `alert`     |  450 |   8 | 1070 |  84 | gauges  | The one-at-a-time alert band: surge, fall, dip             |
 | `clock`     | 1566 |   0 |  344 | 125 | gauges  | The in-world clock on its painted plate, the pause button  |
-| `map`       | 1632 | 913 |  212 | 160 | gauges  | The city map with the block's dots, under the gauge        |
+| `map`       | 1566 | 813 |  344 | 260 | gauges  | The city map with the block's dots, under the gauge        |
 | `cam`       |    6 | 110 |  410 | 270 | luxcam  | Lux's cam frame, her lines captioned on it                 |
-| `gauge`     | 1566 | 645 |  344 | 260 | gauges  | The demand gauge, the one demand widget (smaller since A2) |
+| `gauge`     | 1566 | 545 |  344 | 260 | gauges  | The demand gauge, the one demand widget (smaller since A2) |
 | `feed`      |  426 | 102 | 1128 | 790 | board   | The board on Lux's rooftop (table D), the skyline above it |
-| `comms`     | 1566 | 135 |  344 | 500 | comms   | The cam of whoever is talking to Lux, popping in and out   |
+| `comms`     | 1566 | 135 |  344 | 400 | comms   | The cam of whoever is talking to Lux, popping in and out   |
 | `inventory` |  426 | 904 | 1000 | 156 | board   | The tray of parts, down to the bottom edge                 |
 | `deck`      | 1434 | 904 |  120 | 156 | gauges  | The deck's keys, stacked right of the tray, shown when live |
 | `chat`      |    6 | 390 |  410 | 680 | chat    | Lux's stream chat, nearly full height                      |
@@ -45,8 +45,9 @@ gone: a key shows only while it can be pressed, and Lux's own lines are captione
 
 Option 2 (Rolando, 30 Oct 2026, "too much wasted space"): the clock sits on its painted plate
 (`art/hud/clock-plate.webp`, his pick) at the top of the right column, and the caller cam, now
-500 tall with a 250 tall tile that keeps the last caller up, the gauge and the map fill the column
-to the bottom edge. The board is table D, his pick: the table standing on Lux's wet rooftop, painted
+400 tall with a 230 tall tile that keeps the last caller up, the gauge and the map fill the column
+to the bottom edge. Later that day he asked for the city map to match the gauge, so it is 344x260 like
+the gauge and the caller cam gave up 100 px. The board is table D, his pick: the table standing on Lux's wet rooftop, painted
 from a steeper camera, the whole scene covering the feed and the grid drawn in code on its glass
 (`src/scenes/board/glass.ts`, `cells.ts`). The tray runs to the bottom edge with the deck's keys
 stacked right of it.

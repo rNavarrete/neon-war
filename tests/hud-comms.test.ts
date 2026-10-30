@@ -139,13 +139,15 @@ describe('comms tags and slots', () => {
     // tile takes the extra height (250 tall), the words and slots moving down with it.
     // Rolando, 30 Oct 2026 ("I don't think we need these avatars here"): the roster of round faces
     // is not drawn in the column, so the cam takes its space too (330 tall) and the words follow.
+    // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the map grew to
+    // 344x260, so the column is 400 tall and the cam tile 230, everything under it 100 px higher.
     expect(l.roster).toBe(false);
-    expect(l.tile).toEqual({ x: 1574, y: 143, w: 328, h: 330 });
+    expect(l.tile).toEqual({ x: 1574, y: 143, w: 328, h: 230 });
     expect(l.slots.map((s) => s.x)).toEqual([1616, 1677, 1738, 1799, 1860]);
-    expect(l.slots.every((s) => s.y === 571)).toBe(true);
-    expect(l.name).toEqual({ x: 1582, y: 481 });
-    expect(l.text).toEqual({ x: 1582, y: 509, w: 312 });
-    expect(l.log.map((r) => r.y)).toEqual([481, 517, 553]);
+    expect(l.slots.every((s) => s.y === 471)).toBe(true);
+    expect(l.name).toEqual({ x: 1582, y: 381 });
+    expect(l.text).toEqual({ x: 1582, y: 409, w: 312 });
+    expect(l.log.map((r) => r.y)).toEqual([381, 417, 453]);
     const z = ZONES.comms;
     expect(inside(l.tile!, z)).toBe(true);
     expect(l.name.y).toBeGreaterThanOrEqual(l.tile!.y + l.tile!.h);
