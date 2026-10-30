@@ -1,5 +1,6 @@
 import { bestPlay } from '../src/game/autopilot';
 import { SERVER_SLOTS } from '../src/sim/tick';
+import { tipTotal } from '../src/sim/tips';
 import { Run } from '../src/game/run';
 import { BROWNOUT } from '../src/sim/brownout';
 
@@ -38,7 +39,8 @@ describe('the live run', () => {
     playTo(r, C.c6);
     expect(r.play.failure).toBeNull();
     expect(r.rescued).toBe(true);
-    const beforeMidnight = r.session.board.credits;
+    // The economy's ledger, with the viewers' tips (src/sim/tips.ts) on top.
+    const beforeMidnight = r.session.board.credits - tipTotal(r.play.tips);
     expect(beforeMidnight).toBeGreaterThan(120);
     expect(beforeMidnight).toBeLessThan(180);
     playTo(r, C.c8);

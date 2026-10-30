@@ -14,8 +14,8 @@ const LANE_SECONDS = 150;
 
 const C = BROWNOUT.challenges;
 
-/** Where the four reads sit: the gauge (DEMAND against CAPACITY), the scope and the deck's HEADROOM bar. */
-const READOUT = [ZONES.gauge, ZONES.scope, ZONES.deck] as const;
+/** Where the reads sit: the gauge (DEMAND against CAPACITY) and the deck's HEADROOM bar. */
+const READOUT = [ZONES.gauge, ZONES.deck] as const;
 
 /**
  * Run the night on until `done` holds, clicking the job card away and every story scene on (Skip

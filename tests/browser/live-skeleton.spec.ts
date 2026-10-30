@@ -234,9 +234,11 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
   await test.step('C1: straight to the build, no dial card', async () => {
     const h = await hudState(page);
     const ids = (await expectRestaged(page, 'C1')).map((b) => b.id);
-    for (const id of ['scope', 'chat', 'comms']) {
+    for (const id of ['chat', 'comms']) {
       expect(ids, id).toContain(id);
     }
+    // The LAST 60 s chart is gone (30 Oct 2026).
+    expect(ids).not.toContain('scope');
     expect(ids).not.toContain('dial');
     expect(ids).not.toContain('sizing');
     // The legacy title cluster and clock are gone; the gauges views draw them in their zones.

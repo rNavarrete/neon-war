@@ -120,7 +120,7 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
   'C1.triage.03': 'zone:gauge',
   'C1.triage.05': 'zone:inventory',
   'C1.triage.06': 'zone:gauge',
-  'C2.triage.pay': 'zone:scope',
+  'C2.triage.pay': 'zone:gauge',
   'C2.triage.after': 'zone:gauge',
   'C3.triage.01': 'zone:inventory',
   'C3.triage.02': 'part:idle',
@@ -136,7 +136,7 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
   'C4.triage.cut': 'zone:gauge',
   'C5.triage.03': 'zone:gauge',
   'C5.rei.05': 'part:balancer',
-  'C5.mika.05': 'zone:scope',
+  'C5.mika.05': 'zone:gauge',
   // The midnight forecast and its outage sub-line.
   'C6.rei.01': 'zone:alert',
   'C6.triage.01': 'zone:alert',

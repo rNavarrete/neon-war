@@ -177,7 +177,7 @@ describe('the per-zone budget table in docs/LIVE.md', () => {
       'map',
       'cam',
       'gauge',
-      'scope',
+      // No 'scope': the LAST 60 s chart is gone (30 Oct 2026); its 5 texts went to the tip alert.
       'comms',
       'deck',
       'chat',

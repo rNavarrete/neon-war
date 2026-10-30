@@ -5,6 +5,9 @@
 
 import { BROWNOUT } from '../../sim/brownout';
 import type { Rect } from '../live/layout';
+import type { Tip } from '../../sim/tips';
+import { LINES, type LineId, line } from '../../strings';
+import { VIEWER_HANDLES } from './chat';
 
 // ---- the LIVE dot ----
 
@@ -150,4 +153,59 @@ export function clockLayout(z: Rect): ClockLayout {
     countdown: { x: z.x + 18, y: z.y + 64 },
     icon: { x: right - 36, y: z.y + 36, size: 40 },
   };
+}
+
+// ---- viewer tips (src/sim/tips.ts): the Twitch-style alert and the credits pop ----
+
+/** The tip alert, top-centre over the board's sky, clear of the alert band and the table. */
+export const TIP_ALERT = {
+  x: 980,
+  y: 150,
+  w: 560,
+  h: 84,
+  /** Seconds it slides in, holds and fades out. */
+  inSeconds: 0.25,
+  holdSeconds: 3,
+  outSeconds: 0.35,
+} as const;
+
+/** The pop over the credits chip: changes at least this big in one frame (a tip, a buy, a refund). */
+export const CREDIT_POP_MIN = 5;
+/** Seconds the pop rises and fades. */
+export const CREDIT_POP_SECONDS = 1.2;
+
+const TIP_MESSAGES: readonly LineId[] = (Object.keys(LINES) as LineId[]).filter((id) =>
+  id.startsWith('C1.tip.'),
+);
+/** The message a viewer bailing Lux out sends. */
+const HELP_MESSAGE: LineId = 'C1.tip.07';
+
+/** Who sent tip `n` and what it says: a stream regular, a message, the line the alert shows. */
+export function tipAlertOf(tip: Pick<Tip, 'n' | 'amount' | 'kind'>): {
+  who: string;
+  line: string;
+  message: string;
+} {
+  const who = VIEWER_HANDLES[(tip.n * 7 + 3) % VIEWER_HANDLES.length];
+  const id = tip.kind === 'help' ? HELP_MESSAGE : TIP_MESSAGES[(tip.n * 5 + 1) % TIP_MESSAGES.length];
+  return { who, line: `${who} tipped 💰 ${tip.amount}!`, message: line(id) };
+}
+
+/** The credits pop's words for a change of `delta` in one frame, or null for a drip of upkeep. */
+export function creditPop(delta: number): string | null {
+  const d = Math.round(delta);
+  if (Math.abs(d) < CREDIT_POP_MIN) return null;
+  return d > 0 ? `+${d}` : `${d}`;
+}
+
+/** The tip alert's alpha and y offset `age` seconds after it starts, or null once it has gone. */
+export function tipAlertAt(age: number): { alpha: number; dy: number } | null {
+  const { inSeconds, holdSeconds, outSeconds } = TIP_ALERT;
+  if (age < 0 || age >= inSeconds + holdSeconds + outSeconds) return null;
+  if (age < inSeconds) {
+    const k = age / inSeconds;
+    return { alpha: k, dy: -24 * (1 - k) };
+  }
+  if (age < inSeconds + holdSeconds) return { alpha: 1, dy: 0 };
+  return { alpha: 1 - (age - inSeconds - holdSeconds) / outSeconds, dy: 0 };
 }

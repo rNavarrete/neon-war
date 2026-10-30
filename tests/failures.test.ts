@@ -1,5 +1,6 @@
 import { type Board, type Part, capacityOf, route } from '../src/sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../src/sim/brownout';
+import { tipTotal } from '../src/sim/tips';
 import {
   DIP_SCRIPT,
   blockDemand,
@@ -554,8 +555,9 @@ describe('ac6: the rescue trigger', () => {
       ticks++;
       if (p.session.trust < 30) underAgain++;
       expect(p.rescue).toBe(first);
-      expect(p.session.board.credits).toBeLessThanOrEqual(credits); // Ozzie fronts once
-      credits = p.session.board.credits;
+      // Ozzie fronts once (the viewers' tips aside: src/sim/tips.ts).
+      expect(p.session.board.credits - tipTotal(p.tips)).toBeLessThanOrEqual(credits);
+      credits = p.session.board.credits - tipTotal(p.tips);
     }
     expect(p.failure).toBeNull();
     expect(p.t).toBe(275);
@@ -588,7 +590,9 @@ describe('ac7: after the rescue', () => {
     );
     expect(p.session.board.wires.filter((w) => w.from === 'gateway')).toHaveLength(1);
     // Ozzie's 100, less one 0.1 s tick of upkeep for one server (5 a minute).
-    expect(p.session.board.credits).toBeCloseTo(before.session.board.credits + 100 - 0.1 / 12, 9);
+    // (Plus the rescue's milestone tip from the viewers: src/sim/tips.ts.)
+    const tipped = tipTotal(p.tips) - tipTotal(before.tips);
+    expect(p.session.board.credits).toBeCloseTo(before.session.board.credits + 100 - 0.1 / 12 + tipped, 9);
     expect(p.session.ozzie.fronted).toBe(true);
     // The fried server serves its stock 60 at once, behind the balancer.
     const flow = routePlay(p, 120, p.t);
@@ -707,7 +711,8 @@ describe('ac9: rewinds', () => {
     // The 3 s boot dropped every call (30 trust), and 27 s of calm since won 27 of it back.
     expect(r.session.trust).toBeCloseTo(97, 9);
     // 400 − 80 for the server − 30 s of its upkeep at 5 a minute.
-    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 30 / 12, 9);
+    // (Plus the viewers' tips so far: src/sim/tips.ts.)
+    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 30 / 12 + tipTotal(r.tips), 9);
     expect(r.session.board.parts.some((q) => q.id === 'server-p1')).toBe(true);
   });
 
@@ -721,7 +726,7 @@ describe('ac9: rewinds', () => {
     const r = ok(rewind(p));
     expectRestored(r, atC3);
     expect(r.t).toBe(90);
-    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 75 / 12, 9);
+    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 75 / 12 + tipTotal(r.tips), 9);
     expect(r.heat.dead).toEqual([]);
   });
 
@@ -730,7 +735,7 @@ describe('ac9: rewinds', () => {
     expect(atC4.t).toBe(165);
     expect(atC4.session.trust).toBe(100);
     // 400 − 80 (server) − 60 (bigger box) − 150 s of one server's upkeep at 5 a minute.
-    expect(atC4.session.board.credits).toBeCloseTo(400 - 80 - 60 - 150 / 12, 9);
+    expect(atC4.session.board.credits).toBeCloseTo(400 - 80 - 60 - 150 / 12 + tipTotal(atC4.tips), 9);
     // No build at all: the crew arrives on trust under 30, then trust runs out in the surge.
     const p = untilFailure(atC4, C.c6);
     expect(p.failure).toMatchObject({ cause: 'trust', by: 'rei', rewindTo: 165 });
@@ -744,7 +749,7 @@ describe('ac9: rewinds', () => {
     expectRestored(r, atC4);
     expect(r.t).toBe(165);
     expect(r.session.trust).toBe(100);
-    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 60 - 150 / 12, 9);
+    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 60 - 150 / 12 + tipTotal(r.tips), 9);
     expect(r.session.board.parts.find((q) => q.id === 'server-p1')?.boost).toBe(2);
     expect(r.crewMet).toBe(true);
     expect(r.rescue).toBeNull();
@@ -929,10 +934,14 @@ describe('ac11: the whole session, headless', () => {
     expect(p.failure).toBeNull();
     // Ledger: 400 − 80 − 60 + 100 (Ozzie) − 160, less upkeep at 5 a minute: one server from 15 to
     // the rescue, three from the rescue to 275.
-    const beforeMidnight = p.session.board.credits;
+    // The viewers' tips (src/sim/tips.ts) come on top of the ledger.
+    const beforeMidnight = p.session.board.credits - tipTotal(p.tips);
     expect(beforeMidnight).toBeCloseTo(200 - (rescuedAt - 15) / 12 - ((275 - rescuedAt) * 3) / 12, 6);
     expect(beforeMidnight).toBeGreaterThanOrEqual(120);
     expect(beforeMidnight).toBeLessThanOrEqual(180);
+    // A normal run earns a couple of hundred in tips (milestones and the trickle).
+    expect(tipTotal(p.tips)).toBeGreaterThanOrEqual(100);
+    expect(tipTotal(p.tips)).toBeLessThanOrEqual(400);
     p = ok(rackServer(p, 's4')); // a 4th for the dip
     p = stepTo(p, 335);
     expect(p.midnight).toEqual({ held: true, dropped: 0, servers: 4, waste: false });
@@ -948,7 +957,10 @@ describe('ac11: the whole session, headless', () => {
     expect(p.session.trust).toBe(100);
     expect(liveServers(p)).toBe(2);
     // − 80 for the 4th, four servers' upkeep 275 to 355, + 40 back for each of two, two servers 355 to 365.
-    expect(p.session.board.credits).toBeCloseTo(beforeMidnight - 80 - (80 * 4) / 12 + 80 - (10 * 2) / 12, 6);
+    expect(p.session.board.credits - tipTotal(p.tips)).toBeCloseTo(
+      beforeMidnight - 80 - (80 * 4) / 12 + 80 - (10 * 2) / 12,
+      6,
+    );
     expect(debriefNumbers(p)).toMatchObject({
       wastedCredits: 0,
       trust: 100,

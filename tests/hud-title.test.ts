@@ -19,7 +19,14 @@ import {
   trustRed,
   watchingFrom,
   watchingText,
+  CREDIT_POP_MIN,
+  TIP_ALERT,
+  creditPop,
+  tipAlertAt,
+  tipAlertOf,
 } from '../src/scenes/hud/title';
+import { VIEWER_HANDLES } from '../src/scenes/hud/chat';
+import { line } from '../src/strings';
 import { dismissJobCard, openJobCard } from '../src/scenes/hud/jobCard';
 import { type Rect, ZONES, inside } from '../src/scenes/live/layout';
 import type { LiveHost } from '../src/scenes/live/view';
@@ -309,7 +316,8 @@ describe('TitleView: round avatar and held under a paused HUD', () => {
     const r = titleLayout(ZONES.title).avatar.r;
     expect(title().avatar).toBe(`avatar:hud/live/avatar-luxnet@${2 * r}`);
     expect(made.length).toBe(view.budget.objects);
-    expect(made.filter((m) => m.kind === 'Image').length).toBe(3);
+    // The face, the two chip icons, and the tip alert's coin (Rolando, 30 Oct 2026: viewer tips).
+    expect(made.filter((m) => m.kind === 'Image').length).toBe(4);
     view.shutdown();
   });
 
@@ -344,5 +352,32 @@ describe('TitleView: round avatar and held under a paused HUD', () => {
 
     view.shutdown();
     expect(events.count()).toBe(0);
+  });
+});
+
+describe('viewer tips on the title (Rolando, 30 Oct 2026: donations like on Twitch)', () => {
+  it('a tip alert names a regular, the amount and a message; a bail-out says you got this', () => {
+    const a = tipAlertOf({ n: 0, amount: 25, kind: 'trickle' });
+    expect(VIEWER_HANDLES).toContain(a.who);
+    expect(a.line).toBe(`${a.who} tipped 💰 25!`);
+    expect(a.message.length).toBeGreaterThan(0);
+    expect(tipAlertOf({ n: 3, amount: 90, kind: 'help' }).message).toBe(line('C1.tip.07'));
+    // Different tips, different regulars.
+    const who = new Set([0, 1, 2, 3, 4, 5].map((n) => tipAlertOf({ n, amount: 5, kind: 'trickle' }).who));
+    expect(who.size).toBeGreaterThan(3);
+  });
+
+  it('the credits pop shows tips, buys and refunds, never the drip of upkeep', () => {
+    expect(creditPop(25)).toBe('+25');
+    expect(creditPop(-80)).toBe('-80');
+    expect(creditPop(-0.4)).toBeNull();
+    expect(creditPop(CREDIT_POP_MIN - 1)).toBeNull();
+  });
+
+  it('the alert slides in, holds 3 s and fades out', () => {
+    expect(tipAlertAt(0)).toEqual({ alpha: 0, dy: -24 });
+    expect(tipAlertAt(1)).toEqual({ alpha: 1, dy: 0 });
+    expect(tipAlertAt(TIP_ALERT.inSeconds + TIP_ALERT.holdSeconds + TIP_ALERT.outSeconds)).toBeNull();
+    expect(tipAlertAt(-1)).toBeNull();
   });
 });

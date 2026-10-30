@@ -1,9 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { GaugeTestState } from '../../src/scenes/hud/GaugeView';
-import type { ScopeTestState } from '../../src/scenes/hud/ChartView';
 import type { HudTestState } from '../../src/scenes/hud/hook';
-import { BROWNOUT } from '../../src/sim/brownout';
-import { forecastAt } from '../../src/sim/demand';
 import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 
 // The instrument panel in the left column (docs/LIVE.md): the COMING /s gauge in ZONES.gauge
@@ -131,41 +128,16 @@ test('the DEMAND gauge at speed 5: needle on demand, OVER BY in the raid', async
   expect(errors).toEqual([]);
 });
 
-// gauges-6: the scope in ZONES.scope keeps hud.chart and adds the wired line and the forecast region.
-test('the scope: wired room, a forecast region exactly while a rise is forecast', async ({ page }) => {
+// The LAST 60 s chart is gone (Rolando, 30 Oct 2026: three widgets measured the same thing; the
+// gauge stays). hud.chart keeps the demand and capacity it mirrored, now straight from the sim.
+test('no scope: the gauge is the one demand widget, and hud.chart reads the sim', async ({ page }) => {
   test.setTimeout(90_000);
   const { errors } = await openBoard(page, { speed: 20, autopilot: true });
   await reach(page, 'c1');
-  let c = (await hud(page)).chart as ScopeTestState;
-  expect(c.plot.h).toBeGreaterThanOrEqual(140);
-  expect(c.plot).toEqual({ w: 354, h: 145 });
-  expect(c.title).toBe('LAST 60 s');
-  expect(c.ceiling).toBeLessThanOrEqual(400);
-  for (const w of [c.title, c.legend]) expect(w, w).not.toMatch(BANNED_ON_SCREEN);
-
-  // Every read on the way to the C3 climb: the region shows exactly while forecastAt(now) is non-null.
-  let forecastReads = 0;
-  let quietReads = 0;
-  let shotTaken = false;
-  for (let guard = 0; guard < 4_000; guard++) {
-    const h = await hud(page);
-    c = h.chart as ScopeTestState;
-    expect(c.forecast !== null, `chart.now ${c.now}`).toBe(forecastAt(c.now) !== null);
-    expect(c.wiredCapacity).toBeLessThanOrEqual(c.capacity + 0.5);
-    if (c.forecast) {
-      forecastReads++;
-      expect(c.forecast.startsAt).toBe(forecastAt(c.now)!.startsAt);
-      if (!shotTaken) {
-        await shot(page, 'live-m2-scope');
-        shotTaken = true;
-      }
-    } else quietReads++;
-    if (c.now >= BROWNOUT.challenges.c3 + 2) break;
-    await page.waitForTimeout(20);
-  }
-  expect(forecastReads).toBeGreaterThan(0);
-  expect(quietReads).toBeGreaterThan(0);
-  expect(c.now).toBeGreaterThanOrEqual(BROWNOUT.challenges.c3 + 2);
-  expect(c.forecast).toBeNull();
+  const h = await hud(page);
+  const c = h.chart as { demand: number; capacity: number; ceiling: number; plot?: unknown };
+  expect(c.plot).toBeUndefined();
+  expect(c.ceiling).toBe(400);
+  expect(Math.abs(c.capacity - h.sim.capacity)).toBeLessThanOrEqual(1);
   expect(errors).toEqual([]);
 });

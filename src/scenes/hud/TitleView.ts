@@ -29,9 +29,16 @@ import {
   releasePanel,
 } from './panel';
 import { preloadArt, resolveArt } from '../plates';
+import type { Tip } from '../../sim/tips';
+import { LABELS } from './labels';
 import {
+  CREDIT_POP_SECONDS,
   type LiveDot,
   LIVE_WORDS,
+  TIP_ALERT,
+  creditPop,
+  tipAlertAt,
+  tipAlertOf,
   clockLayout,
   countdownRed,
   creditsRed,
@@ -62,6 +69,14 @@ export interface TitleTestState {
   pill?: boolean;
   /** The baked plate: which picked kit pieces it draws, at what largest scale (m4 panel kit). */
   panel?: PanelTestState | null;
+  /** The words over the trust and credits chips. */
+  labels?: { trust: string; credits: string };
+  /** The credits pop's words while it shows (+25, -80), else null. */
+  pop?: string | null;
+  /** The tip alert on show: who, the line, the message, the amount and why; null while none shows. */
+  tip?: { who: string; line: string; message: string; amount: number; kind: string } | null;
+  /** How many of the run's tips the view has heard. */
+  tipsSeen?: number;
 }
 
 declare module './hook' {
@@ -140,7 +155,8 @@ function fitRight(text: Phaser.GameObjects.Text, maxRight: number): void {
 
 export class TitleView implements LiveView {
   readonly zone = 'title' as const;
-  readonly budget: LiveBudget = { objects: 11, texts: 5 };
+  /** 11 for the cluster, 2 chip labels, the credits pop, and the tip alert's plate, coin and 2 lines. */
+  readonly budget: LiveBudget = { objects: 18, texts: 10 };
   private objects: Phaser.GameObjects.GameObject[] = [];
   private dot: Phaser.GameObjects.Arc | null = null;
   private plate: BakedPanel | null = null;
@@ -166,6 +182,23 @@ export class TitleView implements LiveView {
   /** The HUD scene is paused (a story scene or the pause menu over the board). */
   private scenePaused = false;
   private avatarTexture: string | null = null;
+  /** The credits pop (+25, -80) over the chip, and when it started (HUD seconds). */
+  private pop: Phaser.GameObjects.Text | null = null;
+  private popAt = -Infinity;
+  private popY = 0;
+  private lastCredits = NaN;
+  /** The tip alert: its plate, coin and two lines, kept out of `objects` (it draws outside the zone). */
+  private tipObjects: Phaser.GameObjects.GameObject[] = [];
+  private tipPlate: Phaser.GameObjects.Graphics | null = null;
+  private tipLine: Phaser.GameObjects.Text | null = null;
+  private tipMessage: Phaser.GameObjects.Text | null = null;
+  private coin: Phaser.GameObjects.Image | null = null;
+  private chipCentre = { x: 0, y: 0 };
+  /** Tips heard and not yet shown, the one on show and when it started, and how many the run has. */
+  private tipQueue: Tip[] = [];
+  private tipShowing: Tip | null = null;
+  private tipAt = 0;
+  private tipsSeen = 0;
 
   preload(scene: Phaser.Scene): void {
     preloadAvatars(scene as unknown as AvatarScene, [TITLE_AVATAR]);
@@ -262,6 +295,38 @@ export class TitleView implements LiveView {
     const [creditsIcon, creditsText] = chip(L.credits, ICON_KEYS.credits);
     this.trustText = trustText;
     this.creditsText = creditsText;
+    // Each chip says what it counts (Rolando, 30 Oct 2026: "where are my credits displayed?").
+    const label = (c: typeof L.trust, word: string): Phaser.GameObjects.Text =>
+      add
+        .text(c.x + 6, c.y - 7, word, { fontFamily: FONT, fontSize: '11px', color: COLORS.dim })
+        .setOrigin(0, 0.5);
+    const trustLabel = label(L.trust, LABELS.title.trust);
+    const creditsLabel = label(L.credits, LABELS.title.credits);
+    this.chipCentre = { x: L.credits.x + L.credits.w / 2, y: L.credits.y + L.credits.h / 2 };
+    this.popY = L.credits.y + L.credits.h + 4;
+    this.pop = add
+      .text(this.chipCentre.x, this.popY, '', { fontFamily: FONT, fontSize: '20px', color: COLORS.heroText })
+      .setOrigin(0.5, 0)
+      .setVisible(false);
+
+    // The tip alert, Twitch style: a plate, the coin, who tipped how much, and their message.
+    const A = TIP_ALERT;
+    const tipPlate = add.graphics();
+    tipPlate.fillStyle(COLORS.ink, 0.94);
+    tipPlate.fillRoundedRect(-A.w / 2, -A.h / 2, A.w, A.h, 12);
+    tipPlate.lineStyle(2, COLORS.hero, 1);
+    tipPlate.strokeRoundedRect(-A.w / 2, -A.h / 2, A.w, A.h, 12);
+    this.tipPlate = tipPlate;
+    this.coin = add.image(0, 0, ICON_KEYS.credits);
+    this.coin.setScale(44 / Math.max(this.coin.width, this.coin.height, 1));
+    this.tipLine = add
+      .text(0, 0, '', { fontFamily: FONT, fontSize: '26px', color: COLORS.heroText })
+      .setOrigin(0, 0.5);
+    this.tipMessage = add
+      .text(0, 0, '', { fontFamily: FONT, fontSize: '18px', color: COLORS.white })
+      .setOrigin(0, 0.5);
+    this.tipObjects = [tipPlate, this.coin, this.tipLine, this.tipMessage];
+    for (const o of this.tipObjects) (o as unknown as { setVisible(v: boolean): void }).setVisible(false);
 
     this.objects = [
       plate.object,
@@ -275,8 +340,17 @@ export class TitleView implements LiveView {
       trustText,
       creditsIcon,
       creditsText,
+      trustLabel,
+      creditsLabel,
+      this.pop,
     ];
-    for (const o of this.objects) (o as unknown as { setDepth(d: number): void }).setDepth(GAUGES_DEPTH);
+    for (const o of [...this.objects, ...this.tipObjects])
+      (o as unknown as { setDepth(d: number): void }).setDepth(GAUGES_DEPTH + 1);
+    this.tipQueue = [];
+    this.tipShowing = null;
+    this.tipsSeen = 0;
+    this.lastCredits = NaN;
+    this.popAt = -Infinity;
 
     this.watching = null;
     this.shownWatching = -1;
@@ -339,6 +413,71 @@ export class TitleView implements LiveView {
         .setColor(creditsRed(credits) ? COLORS.redText : COLORS.white);
       if (this.creditsText) fitRight(this.creditsText, this.creditsRight);
     }
+    this.updatePop(frame.credits, clock.now);
+    this.updateTips(frame.tips, clock.now);
+  }
+
+  /** Pop +N / -N over the credits chip on a change big enough to be a tip, a buy or a refund. */
+  private updatePop(credits: number, now: number): void {
+    const pop = this.pop;
+    if (!pop) return;
+    const words = Number.isNaN(this.lastCredits) ? null : creditPop(credits - this.lastCredits);
+    this.lastCredits = credits;
+    if (words) {
+      this.popAt = now;
+      pop.setText(words).setColor(words.startsWith('+') ? COLORS.heroText : COLORS.redText);
+    }
+    const age = now - this.popAt;
+    const on = age >= 0 && age < CREDIT_POP_SECONDS;
+    if (pop.visible !== on) pop.setVisible(on);
+    if (on) pop.setY(this.popY + 18 * (age / CREDIT_POP_SECONDS)).setAlpha(1 - age / CREDIT_POP_SECONDS);
+  }
+
+  /** Queue the run's new tips and play the alert for one at a time, the coin flying to the chip. */
+  private updateTips(tips: readonly Tip[], now: number): void {
+    if (tips.length < this.tipsSeen) {
+      // A rewind took tips back: forget what it undid.
+      this.tipsSeen = tips.length;
+      this.tipQueue = [];
+    }
+    for (let i = this.tipsSeen; i < tips.length; i++) this.tipQueue.push(tips[i]!);
+    this.tipsSeen = tips.length;
+    if (!this.tipShowing && this.tipQueue.length > 0) {
+      const tip = this.tipQueue.shift()!;
+      this.tipShowing = tip;
+      this.tipAt = now;
+      const a = tipAlertOf(tip);
+      this.tipLine?.setText(a.line);
+      this.tipMessage?.setText(a.message);
+    }
+    if (!this.tipShowing) return;
+    const age = now - this.tipAt;
+    const look = tipAlertAt(age);
+    if (!look) {
+      this.tipShowing = null;
+      for (const o of this.tipObjects) (o as unknown as { setVisible(v: boolean): void }).setVisible(false);
+      return;
+    }
+    const A = TIP_ALERT;
+    const y = A.y + look.dy;
+    const left = A.x - A.w / 2;
+    this.tipPlate?.setPosition(A.x, y).setAlpha(look.alpha).setVisible(true);
+    this.tipLine
+      ?.setPosition(left + 76, y - 15)
+      .setAlpha(look.alpha)
+      .setVisible(true);
+    this.tipMessage
+      ?.setPosition(left + 76, y + 18)
+      .setAlpha(look.alpha)
+      .setVisible(true);
+    // The coin sits by the words, then flies into the credits chip.
+    const fly = Math.min(1, Math.max(0, (age - 0.6) / 0.6));
+    const cx = left + 40 + (this.chipCentre.x - left - 40) * fly;
+    const cy = y + (this.chipCentre.y - y) * fly * fly;
+    this.coin
+      ?.setPosition(cx, cy)
+      .setVisible(fly < 1)
+      .setAlpha(fly < 1 ? 1 : 0);
   }
 
   /** Draw the LIVE dot and its word for `live` (the word only on a change) at HUD time `now`. */
@@ -367,6 +506,12 @@ export class TitleView implements LiveView {
       scenePaused: this.scenePaused,
       pill: this.pill?.visible ?? false,
       panel: panelSnapshot(this.plate),
+      labels: { trust: LABELS.title.trust, credits: LABELS.title.credits },
+      pop: this.pop?.visible ? this.pop.text : null,
+      tip: this.tipShowing
+        ? { ...tipAlertOf(this.tipShowing), amount: this.tipShowing.amount, kind: this.tipShowing.kind }
+        : null,
+      tipsSeen: this.tipsSeen,
     };
   }
 
@@ -375,6 +520,15 @@ export class TitleView implements LiveView {
     this.off = [];
     const plate = this.plate?.object;
     for (const o of this.objects) if (o !== plate) o.destroy();
+    for (const o of this.tipObjects) o.destroy();
+    this.tipObjects = [];
+    this.tipPlate = null;
+    this.tipLine = null;
+    this.tipMessage = null;
+    this.coin = null;
+    this.pop = null;
+    this.tipQueue = [];
+    this.tipShowing = null;
     releasePanel(this.plate);
     this.plate = null;
     this.pill = null;

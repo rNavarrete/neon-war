@@ -365,6 +365,18 @@ header has no lines yet. UI micro-copy (labels, key caps) is not a line and stay
 | C1.alert.place | ui | Alert | C1 after the job card closes, until the first server is on the board | drag a SERVER card onto the grid |
 | C1.alert.feed | ui | Alert | coach: the gateway feeds no server | drag from the GATEWAY onto your SERVER |
 | C1.alert.store | ui | Alert | coach: a fed server has no wire to the database | drag from your SERVER onto the DATABASE |
+| C1.tip.01 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | for the noodle cam 🍜 |
+| C1.tip.02 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | buy triage a snack 🐱 |
+| C1.tip.03 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | W stream, take my coins |
+| C1.tip.04 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | keep the lights on lux 💡 |
+| C1.tip.05 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | from floor six with love ❤️ |
+| C1.tip.06 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | triage tax 💸 |
+| C1.tip.07 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | you got this lux 💙 |
+| C1.tip.08 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | my lift works!! here 🛗 |
+| C1.tip.09 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | happy almost new year 🎆 |
+| C1.tip.10 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | for the server fund 🤖 |
+| C1.tip.11 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | first donation ever!! |
+| C1.tip.12 | ui | Tip | a viewer's tip alert (the HUD picks one per tip) | cable money 🔌 |
 | C5.alert.splitter | ui | Alert | coach: the gateway does not feed the load balancer | drag from the GATEWAY onto the LOAD BALANCER |
 | C5.alert.behind | ui | Alert | coach: a server outside the load balancer | drag from the LOAD BALANCER onto each SERVER |
 | C5.alert.replace | ui | Alert | coach: a dead server waits | click the dead server and press REPLACE |

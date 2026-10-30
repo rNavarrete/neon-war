@@ -11,6 +11,7 @@ import { type PowerDip, type RescueCause, darkParts, laundryCutAvailable } from 
 import type { Failure, Midnight, Play, Rewind } from '../sim/play';
 import { type SurgeWarning, fallForecastAt, surgeWarningAt } from '../scenes/hud/warnings';
 import type { Run } from './run';
+import type { Tip } from '../sim/tips';
 
 /** The power dip whose 2 s flicker warning is showing: the part it takes and the sim time it goes dark. */
 export interface UpcomingDip {
@@ -44,6 +45,8 @@ export interface Frame {
   readonly parts: readonly Part[];
   readonly wires: readonly Wire[];
   readonly credits: number;
+  /** The viewers' tips so far (src/sim/tips.ts), oldest first. */
+  readonly tips: readonly Tip[];
   readonly trust: number;
   /** Parts booting or rebooting, by id: the sim time they come back. */
   readonly offlineUntil: Readonly<Record<string, number>>;
@@ -161,6 +164,7 @@ export function readFrame(r: Run): Frame {
     parts: board.parts,
     wires: board.wires,
     credits: board.credits,
+    tips: play.tips.tips,
     trust: r.session.trust,
     offlineUntil: r.session.offlineUntil,
     flow,

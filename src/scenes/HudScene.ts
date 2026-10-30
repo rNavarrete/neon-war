@@ -11,7 +11,7 @@ import type { BannerChoice } from '../sim/economy';
 import { LINES, type LineId, line } from '../strings';
 import { provideTestState } from '../testHook';
 import { CommsView } from './hud/CommsView';
-import { type ChartView, scopeViewOf } from './hud/ChartView';
+import { DEMAND_SCALE_MAX } from './hud/thresholds';
 import { ChatFeedView } from './hud/ChatFeedView';
 import { chatOf } from './hud/chat';
 import {
@@ -156,7 +156,6 @@ export class HudScene extends Phaser.Scene {
   };
 
   // Views, built in create().
-  private chart!: ChartView;
   /** The comms band (the registry's comms view): every bark the cue table fires goes to it. */
   private comms: CommsView | null = null;
   /** The alert band and the deck (registry views): hud.bounds and hud.laundry/regroup read them. */
@@ -242,7 +241,6 @@ export class HudScene extends Phaser.Scene {
       v.create(this, this.hostFor(v));
     }
     this.building = null;
-    this.chart = scopeViewOf(this.views);
     this.buildDipMark();
     this.cardTexts = [];
     this.dressedFor = null;
@@ -373,7 +371,6 @@ export class HudScene extends Phaser.Scene {
     this.firedCues = [];
     this.lastSurgeAt = -1;
     if (this.ready) {
-      this.chart.ring.clear();
       if (jobCardDue(r)) {
         this.cardOpen = true;
         openJobCard(r);
@@ -654,12 +651,9 @@ export class HudScene extends Phaser.Scene {
       clock: f.clock,
       countdown: countdownText(f.now),
       jobCard: { open: this.cardOpen, x: ok.x, y: ok.y },
+      // The LAST 60 s chart is gone (the gauge is the one demand widget); hud.chart keeps its now.
       chart: built
-        ? {
-            demand: this.chart.ring.lastDemand,
-            capacity: this.chart.ring.lastCapacity,
-            ceiling: this.chart.ceiling,
-          }
+        ? { demand: r.demand, capacity: r.capacity, ceiling: DEMAND_SCALE_MAX }
         : { demand: 0, capacity: 0, ceiling: 0 },
       sim: {
         demand: r.demand,
@@ -741,8 +735,6 @@ export class HudScene extends Phaser.Scene {
     ];
     // Views can be shut down (quit to title) while the hook is still read. The alert band and the
     // deck's keys are AlertView's and DeckView's now; they are listed under the same ids.
-    const scope = this.chart.builtPanel;
-    if (scope) pieces.unshift(['scope', 'scope', scope]);
     const alert = this.alertView?.container;
     if (alert) pieces.unshift(['alert', 'alert', alert]);
     const keys = this.deckView?.keyHits() ?? [];

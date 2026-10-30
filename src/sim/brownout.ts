@@ -49,6 +49,21 @@ export const BROWNOUT = {
 
   ozzie: { front: 100, coverCap: 200 },
 
+  /**
+   * Viewer tips, the stream's donations (Rolando, 30 Oct 2026: earn credits the way streamers do).
+   * Milestones: the first serve, the lights back after a failing spell, the rescue, a held midnight.
+   * A trickle every 20 to 40 s while nothing fails. And when the block is failing and a server is out
+   * of reach, a viewer sends what it takes plus a little, so the player is never left with no move.
+   */
+  tips: {
+    milestone: { first: 40, recovered: 30, rescue: 50, midnight: 100 },
+    /** Errors held this long, then calm this long, earn the recovered tip (at most once per cooldown). */
+    recover: { spellSeconds: 3, calmSeconds: 3, cooldownSeconds: 30 },
+    trickle: { minSeconds: 20, maxSeconds: 40, min: 5, max: 20, step: 5 },
+    /** Failing this long with less than a server's price: a viewer covers it, plus `extra`. */
+    help: { afterSeconds: 4, extra: 10, cooldownSeconds: 20 },
+  },
+
   solace: {
     cost: 200,
     durationSeconds: 60,

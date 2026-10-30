@@ -147,12 +147,11 @@ type Chart = {
 const chart = (): Chart => (hudSection({} as HudTestState) as unknown as { chart: Chart }).chart;
 
 describe('the scope', () => {
-  it('is the registry’s scope line, and the HUD finds it there', () => {
+  it('is off the Live screen: the gauge is the one demand widget (Rolando, 30 Oct 2026)', () => {
     const views = createViews();
-    const v = views.find((x) => x.zone === 'scope');
-    expect(v).toBeInstanceOf(ChartView);
-    expect(scopeViewOf(views)).toBe(v);
-    expect(() => scopeViewOf([])).toThrow();
+    expect(views.find((x) => x.zone === 'scope')).toBeUndefined();
+    expect(views.some((x) => x instanceof ChartView)).toBe(false);
+    expect(() => scopeViewOf(views)).toThrow();
   });
 
   it('plots on 354 x 145 inside ZONES.scope, at least 140 px tall, the same plot as LEFT.plot', () => {

@@ -46,6 +46,7 @@ import {
   updateRetries,
   withRetries,
 } from './failures';
+import { NO_TIPS, type TipState, stepTips } from './tips';
 
 const C = BROWNOUT.challenges;
 const REGROUP = BROWNOUT.regroup;
@@ -100,6 +101,8 @@ export interface Play {
   readonly failure: Failure | null;
   /** Requests dropped this run. */
   readonly dropped: number;
+  /** Viewer tips so far (src/sim/tips.ts): the session's income. */
+  readonly tips: TipState;
   /** The state at the start of the challenge a failure rewinds to. */
   readonly checkpoint: { readonly at: number; readonly play: Play } | null;
   // Kept across rewinds:
@@ -145,6 +148,7 @@ export function createPlay(init: {
     midnight: null,
     failure: null,
     dropped: 0,
+    tips: NO_TIPS,
     checkpoint: null,
     crewMet: false,
     regroup: { charges: 0, handedOver: false, left: 0 },
@@ -330,7 +334,26 @@ function advance(play: Play, dt: number): Play {
     };
     if (!held) return failed(next, 'dark-at-midnight', 'rei');
   }
-  return next;
+  return tipped(play, next, flow.served, share);
+}
+
+/** The viewers' tips for this tick, paid into the credits. */
+function tipped(before: Play, next: Play, served: number, share: number): Play {
+  const { state, given } = stepTips(next.tips, {
+    t: next.t,
+    seed: next.seed,
+    served,
+    errorShare: share,
+    credits: next.session.board.credits,
+    rescued: next.rescue !== null && before.rescue === null,
+    held: next.midnight !== null && next.midnight.held && before.midnight === null,
+    beforeMidnight: next.t < C.c7,
+  });
+  if (given.length === 0 && state === next.tips) return next;
+  let gain = 0;
+  for (const g of given) gain += g.amount;
+  const board = { ...next.session.board, credits: next.session.board.credits + gain };
+  return { ...next, tips: state, session: { ...next.session, board } };
 }
 
 /**

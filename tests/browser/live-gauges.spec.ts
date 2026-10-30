@@ -142,7 +142,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
   test.setTimeout(150_000);
   const { errors } = await openBoard(page, { speed: 20, autopilot: true });
 
-  await test.step('C1: the gauge and the scope read the real line, the room bar fills', async () => {
+  await test.step('C1: the gauge reads the real line, the room bar fills', async () => {
     await reach(page, 'c1');
     await expect.poll(async () => (await lane(page)).title.live, { timeout: 5_000 }).toBe('live');
     let h = await lane(page);
@@ -200,17 +200,15 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(room.label).toMatch(/^HEADROOM -?\d+% · \d+ of \d+$/);
     expect(room.right).toBeLessThanOrEqual(1232);
 
-    expect(h.chart.wiredCapacity).toBeGreaterThan(0);
-    expect(h.chart.racked).toBe(false);
-    expect(h.chart.plot).toEqual({ w: 354, h: 145 });
-    expect(h.chart.title).toBe('LAST 60 s');
+    // No LAST 60 s chart any more (30 Oct 2026): the gauge is the one demand widget.
+    expect(h.chart.plot).toBeUndefined();
 
     expect(h.map.raid).toBe(false);
     expect(h.map.neighboursCut).toBe(false);
     expect(h.map.laundryDark).toBe(false);
     expect(h.map.midnight).toBe(false);
     expect(h.map.litFloors).toBeGreaterThan(0);
-    expectCrewWordsOnly([g.title, g.readout, g.sub, g.strip, room.label, h.chart.title, h.chart.legend]);
+    expectCrewWordsOnly([g.title, g.readout, g.sub, g.strip, room.label]);
     await shot(page, 'live-gauges-c1');
 
     // M4 frame kit: each panel is one baked texture of picked pieces, none drawn above its file's size.
@@ -218,7 +216,6 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     const panels = {
       title: kit.title.panel,
       gauge: kit.gauge.panel,
-      scope: kit.chart.panel,
       map: kit.map.panel,
       headroom: kit.headroom.panel,
     };
@@ -231,7 +228,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       expect(p!.maxScale, name).toBeGreaterThan(0);
       expect(p!.maxScale, name).toBeLessThanOrEqual(1);
     }
-    for (const name of ['gauge', 'scope', 'map'] as const)
+    for (const name of ['gauge', 'map'] as const)
       expect(panels[name]!.pieces, name).toContain('hud/live/label-tab');
     for (const name of ['gauge', 'headroom'] as const)
       expect(panels[name]!.pieces, name).toContain('hud/live/divider');

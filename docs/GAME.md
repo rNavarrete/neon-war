@@ -137,6 +137,7 @@ behind it and **health-checks** them: a server that is dark, dead or still booti
 | Server upkeep           | 5 credits per running server per minute                                                     |
 | Load balancer           | free, given by the crew at the rescue                                                       |
 | Ozzie's tab             | at the rescue Ozzie fronts 100 credits, then covers any shortfall at midnight up to 200 more, as a debt shown in the debrief; every path stays finishable |
+| Viewer tips             | the stream's donations, the session's income (Rolando, 30 Oct 2026): +40 at the first serve, +30 when the lights come back after a failing spell (at most every 30 s), +50 at the rescue, +100 at a held midnight; 5 to 20 every 20 to 40 s while nothing fails; and when the block is failing for 4 s and a server is out of reach, a viewer sends the price plus 10 (at most every 20 s). Each tip pops up over the board as a tip alert, its coin flying into the CREDITS chip (`src/sim/tips.ts`) |
 | Solace banner           | 200 credits for 60 s of extra capacity                                                      |
 | Estimate                | no dial and nothing to set: the job card gives the sum (120 flats every 4 s = 30 req/s), the gauge shows 30/s, and the crew correct TRIAGE's 480 out loud; C6 is graded on the servers built (Final sizing) |
 | Trust                   | drains 10 per second at a 100% error rate (scaled by the error share); recovers 1 per second while there are no errors; stays between 0 and 100 |

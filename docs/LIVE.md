@@ -135,6 +135,7 @@ Every `Frame` field (`tests/live-docs.test.ts` checks this list against the inte
 | `parts` | The parts on the board |
 | `wires` | The wires on the board |
 | `credits` | Credits in hand |
+| `tips` | The viewers' tips so far (`src/sim/tips.ts`), oldest first: TitleView plays each as a tip alert |
 | `trust` | The block's trust |
 | `offlineUntil` | Parts booting or rebooting, by id: the sim time they come back |
 | `flow` | The routing of this frame's demand over the board, read once |
@@ -366,13 +367,12 @@ against the built views):
 
 | Zone / owner                                         | Texts | Objects (declared) |
 | ---------------------------------------------------- | ----: | -----------------: |
-| `title` (TitleView)                                  |     5 |                 11 |
+| `title` (TitleView)                                  |    10 |                 18 |
 | `alert` (AlertView)                                  |     4 |                 10 |
 | `clock` (ClockView)                                  |     2 |                  4 |
 | `map` (MapView)                                      |     3 |                 10 |
 | `cam` (LuxCamView)                                   |     2 |                 15 |
 | `gauge` (GaugeView)                                  |    10 |                 13 |
-| `scope` (ChartView)                                  |     5 |                  7 |
 | `comms` (CommsView, with the leader line)            |    13 |                 29 |
 | `deck` (DeckView with HeadroomView)                  |     8 |                 21 |
 | `chat` (ChatFeedView)                                |    17 |                 31 |
