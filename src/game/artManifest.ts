@@ -498,6 +498,7 @@ export const PICKED_ART: readonly PickedArt[] = [
   portrait('triage/panic', size(251, 266)),
   portrait('triage/sheepish', size(233, 290)),
   portrait('triage/happy', size(235, 290)),
+  portrait('triage/worried', size(280, 290)),
   portrait('lux/faces-board/determined', size(436, 429)),
   portrait('lux/faces-board/tense', size(425, 457)),
   portrait('lux/faces-board/deadpan', size(410, 449)),

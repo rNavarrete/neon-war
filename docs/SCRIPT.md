@@ -20,7 +20,7 @@ two differ, GAME.md wins on rules and numbers, and this file wins on wording.
 ## C0 Cold open (23:51:30, click to advance)
 
 Rain, test fireworks, Lux alone on her bed with her mum's photo; the clock flickers to 02:14 for one frame; the
-phone lights up; the drone wakes; goggles down. Every line waits for a click, like every other scene; nothing
+drone wakes and checks on her; the phone lights up; goggles down. Every line waits for a click, like every other scene; nothing
 plays on a timer. The run's clock holds at 23:51:30 until the goggles come down, then C1 starts at 23:51:45.
 
 | ID | Kind | Speaker | When | Line |
@@ -29,11 +29,13 @@ plays on a timer. The run's clock holds at 23:51:30 until the goggles come down,
 | C0.tv.02 | scene | TV downstairs | click | "Get your people close. Get your cameras ready!" |
 | C0.grandma.01 | scene | Grandma (through the door) | click | "Lux, it's almost midnight, love. Come downstairs." |
 | C0.lux.01 | scene | Lux | click, still looking at the photo; the clock flickers to 02:14 | "In a minute, Baachan." |
-| C0.chat.01 | chat | block: kenji | click: the phone lights up, all four at once | lux the net's doing the thing again |
+| C0.triage.01 | bark | TRIAGE (worried) | click, the drone wakes and sees her teary over the photo | "Hey... you okay, Lux?" |
+| C0.lux.03 | scene | Lux | click, wiping her eyes (composing face) | "Yeah. I'm fine." |
+| C0.chat.01 | chat | block: kenji | click: the phone lights up, the four messages roll in one by one | lux the net's doing the thing again |
 | C0.chat.02 | chat | block: young father | with C0.chat.01 | I need to call my son at midnight!! |
 | C0.chat.03 | chat | block: mrs okafor | with C0.chat.01 | Countdown stream keeps freezing. Is it you or the rain? |
 | C0.chat.04 | chat | block: kenji | with C0.chat.01 | lux pls |
-| C0.triage.01 | bark | TRIAGE (eager) | same click, drone iris lights up | "Recording! Oh. Oh, it's the net again, isn't it." |
+| C0.triage.02 | bark | TRIAGE (thinking) | same click, reading the chat as it rolls in | "Uh... your chat's blowing up. The block's net is dropping again." |
 | C0.lux.02 | scene | Lux | click, goggles down; the next click starts the board | "Yeah. Let's go look." |
 
 ## C1 to C3: the board, alone with TRIAGE (23:51:45 to 23:56:30)

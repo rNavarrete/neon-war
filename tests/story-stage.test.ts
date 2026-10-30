@@ -101,6 +101,21 @@ describe('who stands where and which way they face', () => {
     expect(facesLeft('Mika', 1260, false)).toBe(true);
   });
 
+  it("beside Lux alone, TRIAGE's face hovers at her eye level with room between them", () => {
+    // Rolando, 30 Oct 2026: "he should be eye level to Lux and give me a bit more space".
+    const lux = frameFor(927, slotsFor(1)[0]!, 1080);
+    const h = hoverFor(slotsFor(1));
+    // Lux's eyes sit about 146 px down her 927 px art; the drone's screen about 100 px down its 290.
+    const luxEyes = lux.bottom - (927 - 146) * lux.scale;
+    const droneTop = h.bottom - 290 * h.scale;
+    const droneFace = droneTop + 100 * h.scale;
+    expect(Math.abs(droneFace - luxEyes)).toBeLessThan(15);
+    // Clear of her: Lux is ~538 px wide at her scale and the drone ~230, with at least 100 px of air.
+    expect(h.x - 115 * h.scale - (lux.x + 269 * lux.scale)).toBeGreaterThan(100);
+    // ...and clear of the story chat panel on the right (x 1480).
+    expect(h.x + 115 * h.scale).toBeLessThan(1480);
+  });
+
   it("TRIAGE hovers off Lux's shoulder on the middle side when she shares the stage", () => {
     const xs = slotsFor(2);
     const h = hoverFor(xs);

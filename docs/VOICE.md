@@ -73,7 +73,12 @@ Two lines differ only in stage directions written into the text (`C5.rei.cut` ha
 Spoken lines added since the last recording session. They show as text with no voice (the mixer
 lists them in `shell.voice.missing`) until they are recorded and added to the manifest.
 
-None.
+- `C0.triage.01` (TRIAGE, worried): "Hey... you okay, Lux?" / ねえ……ルクス、大丈夫？ Rewritten with the
+  cold open's new check-in beat (Rolando, 30 Oct 2026); the old take ("Recording! ... it's the net
+  again") said something else entirely, so it was removed rather than left to play as a stale take.
+- `C0.lux.03` (Lux, wiping her eyes): "Yeah. I'm fine." / うん。平気。
+- `C0.triage.02` (TRIAGE, reading the chat): "Uh... your chat's blowing up. The block's net is dropping
+  again." / えっと……チャットが大騒ぎ。またブロックのネットが落ちてる。
 
 ## Speaker changed
 

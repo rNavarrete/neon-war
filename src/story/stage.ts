@@ -97,17 +97,27 @@ export function frameFor(h: number, x: number, frameH: number): { x: number; bot
  * bobbing gently; alone, it hovers on the left third like anyone else.
  */
 export const HOVERING: ReadonlySet<string> = new Set(['TRIAGE']);
-/** A flyer's bottom edge: its body at the standing characters' shoulder height, well above the box. */
+/** A flyer's bottom edge in a crowd: its body at the standing characters' shoulder height, clear of their faces. */
 export const HOVER_BOTTOM = 720;
-/** How far right of the first person's slot a flyer hovers. */
+/** How far right of the first person's slot a flyer hovers in a crowd. */
 const HOVER_OFFSET = 430;
+/**
+ * Beside one person (Lux alone in her room), the drone's face hovers at her eye level with air between
+ * them (Rolando, 30 Oct 2026: "eye level to Lux and give me a bit more space"). A full sprite's eyes sit
+ * about y 322; the drone's screen is about 97 px below the top of its ~281 px art, so its bottom edge
+ * lands at 322 - 97 + 281.
+ */
+export const HOVER_EYE_BOTTOM = 506;
+const HOVER_EYE_OFFSET = 520;
 /** The bob: amplitude in px and period in seconds. */
 export const HOVER_BOB = { amp: 5, period: 2.4 } as const;
 
 /** Where a flyer hovers, given the slots of the people standing (left to right). Pure. */
 export function hoverFor(standing: readonly number[]): { x: number; bottom: number; scale: number } {
-  const x = standing.length > 0 ? standing[0]! + HOVER_OFFSET : SLOTS[1]![0]!;
-  return { x, bottom: HOVER_BOTTOM, scale: BUST_SCALE };
+  if (standing.length === 0) return { x: SLOTS[1]![0]!, bottom: HOVER_BOTTOM, scale: BUST_SCALE };
+  if (standing.length === 1)
+    return { x: standing[0]! + HOVER_EYE_OFFSET, bottom: HOVER_EYE_BOTTOM, scale: BUST_SCALE };
+  return { x: standing[0]! + HOVER_OFFSET, bottom: HOVER_BOTTOM, scale: BUST_SCALE };
 }
 
 /** The bob's offset in px at `t` seconds. Pure. */

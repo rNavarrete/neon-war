@@ -45,8 +45,9 @@ export interface SceneScript {
 }
 
 /**
- * C0, the cold open: one line per click in the order of docs/SCRIPT.md. The block's four chat lines
- * land together with TRIAGE waking up; the last click brings the goggles down and ends the scene.
+ * C0, the cold open: one line per click in the order of docs/SCRIPT.md. TRIAGE wakes and checks on
+ * Lux first; once she says she's fine the block's four chat lines roll in and TRIAGE reads them out
+ * (Rolando, 30 Oct 2026: "it's the net again" had no setup). The last click brings the goggles down.
  */
 const COLD_OPEN: SceneScript = {
   id: 'C0',
@@ -59,11 +60,13 @@ const COLD_OPEN: SceneScript = {
     { lineId: 'C0.tv.02' },
     { lineId: 'C0.grandma.01' },
     { lineId: 'C0.lux.01', face: 'lux/vn/photo', cue: 'flicker' },
+    { lineId: 'C0.triage.01' },
+    { lineId: 'C0.lux.03', face: 'lux/vn/composing' },
     { lineId: 'C0.chat.01' },
     { lineId: 'C0.chat.02' },
     { lineId: 'C0.chat.03' },
     { lineId: 'C0.chat.04' },
-    { lineId: 'C0.triage.01' },
+    { lineId: 'C0.triage.02' },
     { lineId: 'C0.lux.02', face: 'lux/vn/neutral', cue: 'goggles' },
   ],
 };

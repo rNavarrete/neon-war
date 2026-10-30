@@ -18,12 +18,6 @@
     "[ドア越しに呼ぶ] ルクス？配信始まるよ。"
   ],
   ["C0.lux.01", "lux", "[distracted, quiet] In a minute, Baachan.", "[上の空で、小声] 今行く、ばあちゃん。"],
-  [
-    "C0.triage.01",
-    "triage",
-    "[excited] Recording! [deflates] Oh. Oh, it's the net again, isn't it.",
-    "[興奮して] 録画開始！ [しょんぼり] あ。あー、また回線か。"
-  ],
   ["C0.lux.02", "lux", "Yeah. Let's go look.", "うん。見に行こう。"],
   [
     "C1.triage.01",

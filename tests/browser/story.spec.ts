@@ -83,9 +83,18 @@ test('the cold open waits for a click on every line, then hands over to the boar
   expect(s.portrait).toBe('portrait:lux/vn/photo');
   expect(s.chat).toEqual([]);
 
-  // The phone lights up with the block's four messages as TRIAGE wakes.
+  // TRIAGE wakes and checks on her before the phone lights up (Rolando, 30 Oct 2026: the old "it's the
+  // net again" came before the chat had said anything), so the chat stays empty for two more lines.
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.triage.01');
+  expect(s.chat).toEqual([]);
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.lux.03');
+  expect(s.chat).toEqual([]);
+
+  // The phone lights up with the block's four messages as TRIAGE reads them out.
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.triage.02');
   expect(s.chat).toHaveLength(4);
   expect(s.chat[0]).toBe("kenji: lux the net's doing the thing again");
   await page.screenshot({ path: 'test-results/screens/cold-open.png' });
@@ -487,8 +496,9 @@ test('the cold open shows the photo as an insert, then Lux holding it on the lef
   expect(s.onStage).toEqual(['Lux']);
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'test-results/screens/story-lux-staged.png' });
-  // The phone lights up: four rows in the stream chat, and TRIAGE hovers beside Lux.
-  while (s.lineId !== 'C0.triage.01') {
+  // The phone lights up: four rows in the stream chat, and TRIAGE hovers beside Lux. Since the check-in
+  // beat (Rolando, 30 Oct 2026) that is C0.triage.02, after TRIAGE asks if she's okay.
+  while (s.lineId !== 'C0.triage.02') {
     if (!s.typingDone) await clickStory(page);
     s = await clickStory(page);
   }

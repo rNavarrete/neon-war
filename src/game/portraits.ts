@@ -13,6 +13,7 @@ const TRIAGE_MOODS: Record<string, string> = {
   'wrong-and-proud': 'proud',
   panicking: 'panic',
   sheepish: 'sheepish',
+  worried: 'worried',
   happy: 'happy',
 };
 

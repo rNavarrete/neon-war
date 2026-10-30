@@ -494,12 +494,13 @@ describe('comms reread log', () => {
 describe('comms-4: iris, glow and crew light-up', () => {
   const T = Array.from({ length: 241 }, (_, i) => i * 0.0371);
 
-  it("lists TRIAGE's six moods, the same set docs/SCRIPT.md brackets her lines with", () => {
+  // Seven since the worried face for the cold open's "you okay, Lux?" (Rolando's pick, 30 Oct 2026).
+  it("lists TRIAGE's seven moods, the same set docs/SCRIPT.md brackets her lines with", () => {
     const used = new Set(
       (Object.keys(LINES) as LineId[]).map(triageMood).filter((m): m is string => m !== null),
     );
     expect([...used].sort()).toEqual([...TRIAGE_MOODS].sort());
-    expect(TRIAGE_MOODS).toHaveLength(6);
+    expect(TRIAGE_MOODS).toHaveLength(7);
   });
 
   it("irisFor('panicking', t, true) is still (dx = dy = 0) at every t and the widest of the six", () => {
@@ -537,7 +538,8 @@ describe('comms-4: iris, glow and crew light-up', () => {
       const i = irisFor(m, 0.5, true);
       return `${i.dx},${i.dy},${i.r}`;
     });
-    expect(new Set(looks).size).toBe(6);
+    // Seven with worried (Rolando's pick, 30 Oct 2026).
+    expect(new Set(looks).size).toBe(7);
     for (const m of TRIAGE_MOODS) {
       const reduced = T.map((t) => irisFor(m, t, true));
       // Under reduce flicker nothing moves and the lid stays open.

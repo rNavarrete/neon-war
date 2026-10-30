@@ -26,6 +26,8 @@ export const LINES = {
     text: "Lux, it's almost midnight, love. Come downstairs.",
   },
   'C0.lux.01': { kind: 'scene', speaker: 'Lux', text: 'In a minute, Baachan.' },
+  'C0.triage.01': { kind: 'bark', speaker: 'TRIAGE (worried)', text: 'Hey... you okay, Lux?' },
+  'C0.lux.03': { kind: 'scene', speaker: 'Lux', text: "Yeah. I'm fine." },
   'C0.chat.01': { kind: 'chat', speaker: 'block: kenji', text: "lux the net's doing the thing again" },
   'C0.chat.02': { kind: 'chat', speaker: 'block: young father', text: 'I need to call my son at midnight!!' },
   'C0.chat.03': {
@@ -34,10 +36,10 @@ export const LINES = {
     text: 'Countdown stream keeps freezing. Is it you or the rain?',
   },
   'C0.chat.04': { kind: 'chat', speaker: 'block: kenji', text: 'lux pls' },
-  'C0.triage.01': {
+  'C0.triage.02': {
     kind: 'bark',
-    speaker: 'TRIAGE (eager)',
-    text: "Recording! Oh. Oh, it's the net again, isn't it.",
+    speaker: 'TRIAGE (thinking)',
+    text: "Uh... your chat's blowing up. The block's net is dropping again.",
   },
   'C0.lux.02': { kind: 'scene', speaker: 'Lux', text: "Yeah. Let's go look." },
   'C1.card.title': { kind: 'ui', speaker: 'Job card', text: 'THE LIGHTS ARE GOING OUT!' },

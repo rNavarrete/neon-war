@@ -362,6 +362,7 @@ export const TRIAGE_TILE: Readonly<Record<TriageMood, string>> = {
   happy: 'art/chars/triage/happy.webp',
   thinking: 'art/chars/triage/thinking.webp',
   sheepish: 'art/chars/triage/sheepish.webp',
+  worried: 'art/chars/triage/worried.webp',
   'wrong-and-proud': 'art/chars/triage/proud.webp',
   panicking: 'art/chars/triage/panic.webp',
 };
@@ -453,12 +454,16 @@ export function onRect(r: CommsRect, x: number, y: number): boolean {
 
 // ---- TRIAGE's iris, the speaker's glow, the crew light-up (comms-4) ----
 
-/** TRIAGE's six moods as docs/SCRIPT.md writes them in her speaker brackets. */
+/**
+ * TRIAGE's moods as docs/SCRIPT.md writes them in her speaker brackets: six, then seven with worried
+ * for the cold open's "you okay, Lux?" (Rolando's pick, 30 Oct 2026).
+ */
 export const TRIAGE_MOODS = [
   'eager',
   'happy',
   'thinking',
   'sheepish',
+  'worried',
   'wrong-and-proud',
   'panicking',
 ] as const;
@@ -501,6 +506,8 @@ const IRIS: Readonly<Record<TriageMood, IrisSpec>> = {
   thinking: { x: -5, y: -5, r: 9, ax: 2, ay: 1, hz: 0.3, blink: 5.1 },
   // Down and away, small.
   sheepish: { x: 5, y: 6, r: 8, ax: 1, ay: 0, hz: 0.4, blink: 2.9 },
+  // Looking up at her, soft and a little unsteady.
+  worried: { x: 0, y: -2, r: 9, ax: 1, ay: 0, hz: 1.1, blink: 3.3 },
   // Chin up, steady.
   'wrong-and-proud': { x: 0, y: -4, r: 12, ax: 0, ay: 0, hz: 0, blink: 4.7 },
   // Blown wide and shaking; she never blinks.
