@@ -6,7 +6,7 @@
 // LAYOUT_VERSION is bumped only by a tech PR that moves a zone; views and tests read it from the
 // hook (live.layoutVersion) so a stale screenshot or spec can be told from a real regression.
 
-export const LAYOUT_VERSION = 2;
+export const LAYOUT_VERSION = 3;
 
 /** The game's drawing surface. The board and HUD are built at this size and scaled to fit. */
 export const SCREEN = { width: 1920, height: 1080 } as const;
@@ -49,6 +49,10 @@ const centred = (cx: number, cy: number, w: number, h: number): Rect => ({
  * the city's sky above it, and the tray under it. Right: the cams of whoever is talking to Lux, popping
  * in and out (the comms zone), with the smaller gauge and the city map under them. The deck's keys
  * show only while one can be pressed (the laundry cut, in the surge).
+ *
+ * Rolando, 30 Oct 2026 ("too much wasted space", option 2): the clock sits on its painted plate at
+ * the top of the right column, and the caller cam, the gauge and the map fill the column down to the
+ * bottom edge, the cam taller so the last caller stays big on screen.
  */
 export const ZONES = {
   /** Top-left: Lux's avatar, the stream title and the viewer count. */
@@ -56,20 +60,20 @@ export const ZONES = {
   /** Top centre, over the board: the one-at-a-time alert band (surge, fall, dip). */
   alert: { x: 450, y: 8, w: 1070, h: 84 },
   /** Top-right: the in-world clock, the countdown and the pause button. */
-  clock: { x: 1530, y: 0, w: 380, h: 100 },
+  clock: { x: 1566, y: 0, w: 344, h: 125 },
   /**
    * Right column, bottom: the city map with the block's dots, at its painting's shape (816x620 at
    * about 0.26) so the city is never squashed.
    */
-  map: { x: 1632, y: 850, w: 212, h: 160 },
+  map: { x: 1632, y: 913, w: 212, h: 160 },
   /** Left column, top: Lux's cam frame, above her chat like a streamer's webcam. */
   cam: { x: 6, y: 110, w: 410, h: 270 },
   /** Right column, under the callers: the demand gauge, the one demand widget (smaller since A2). */
-  gauge: { x: 1566, y: 580, w: 344, h: 260 },
+  gauge: { x: 1566, y: 645, w: 344, h: 260 },
   /** Middle: the board itself, Lux's feed of the block's traffic, with the sky above the table. */
   feed: { x: 426, y: 120, w: 1128, h: 706 },
   /** Right column, top: the cam of whoever is talking to Lux, popping in and out with their line. */
-  comms: { x: 1566, y: 110, w: 344, h: 460 },
+  comms: { x: 1566, y: 135, w: 344, h: 500 },
   /** Middle, under the board: the board's inventory (the tray of parts). */
   inventory: { x: 426, y: 834, w: 1055, h: 165 },
   /** Middle, under the tray: the deck's keys, shown only while one can be pressed. */

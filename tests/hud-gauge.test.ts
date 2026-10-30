@@ -223,7 +223,8 @@ describe('the layout', () => {
     const L = gaugeLayout(z);
     // The dial fills the column's width since the chart went (30 Oct 2026), the readout under it.
     // Layout A2's smaller gauge (Rolando, 30 Oct 2026, 344x260) draws it at GAUGE_COMPACT (0.72).
-    expect(L.centre).toEqual({ x: 1738, y: 721 });
+    // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the gauge moved down to y 645, same size.
+    expect(L.centre).toEqual({ x: 1738, y: 786 });
     expect(L.outer).toBe(111);
     expect(L.needle).toBe(89);
     expect(gaugeLayout({ x: 16, y: 710, w: 408, h: 360 })).toMatchObject({

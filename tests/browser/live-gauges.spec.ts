@@ -11,7 +11,7 @@ const MIDNIGHT = BROWNOUT.clock.midnight;
 // The gauges lane's Live views (docs/LIVE.md), asserted on window.__neonTest.state.hud: the title
 // cluster and the clock (gauges-1), and the clear top right of the feed now the dial card is gone.
 
-test('the title cluster: waiting for the first build, then live; WATCHING has no number yet; clock left of x 1800', async ({
+test('the title cluster: waiting for the first build, then live; WATCHING has no number yet; clock left of x 1840', async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -22,10 +22,12 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
   await expect.poll(async () => (await hud(page)).title?.live, { timeout: 5_000 }).toBe('waiting');
   let h = await hud(page);
   expect(h.title!.watching).toBe(h.audience?.watching ?? null);
-  // Nothing of the title is drawn outside its zone, and nothing of the clock past x 1800.
+  // Nothing of the title is drawn outside its zone, and nothing of the clock past x 1840 (1800 before
+  // Rolando's painted clock plate, 30 Oct 2026).
   expect(h.title!.right).toBeLessThanOrEqual(440);
   expect(h.title!.clockRight).not.toBeNull();
-  expect(h.title!.clockRight!).toBeLessThanOrEqual(1800);
+  // Rolando, 30 Oct 2026 (clock plate 1): the painted plate moved the limit from x 1800 to 1840.
+  expect(h.title!.clockRight!).toBeLessThanOrEqual(1840);
   await shot(page, 'live-m2-title');
   expect(first.errors).toEqual([]);
 
@@ -154,7 +156,8 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(h.title.watching).toBe(h.audience?.watching ?? null);
     expect(h.title.right).toBeLessThanOrEqual(440);
     expect(h.title.clockRight).not.toBeNull();
-    expect(h.title.clockRight!).toBeLessThanOrEqual(1800);
+    // Rolando, 30 Oct 2026 (clock plate 1): the painted plate moved the limit from x 1800 to 1840.
+    expect(h.title.clockRight!).toBeLessThanOrEqual(1840);
 
     // The room band, the needle and the bar settle on one frame.
     await expect

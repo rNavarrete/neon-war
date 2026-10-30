@@ -90,11 +90,10 @@ declare module './hook' {
 const SCENE_PAUSE = 'pause';
 const SCENE_RESUME = 'resume';
 
-const ICON_KEYS = { trust: 'hud:icon-trust', credits: 'hud:icon-credits', clock: 'hud:icon-clock' } as const;
+const ICON_KEYS = { trust: 'hud:icon-trust', credits: 'hud:icon-credits' } as const;
 const ICON_FILES = {
   trust: 'art/hud/icons/trust.webp',
   credits: 'art/hud/icons/credits.webp',
-  clock: 'art/hud/icons/clock.webp',
 } as const;
 
 function loadOnce(scene: Phaser.Scene, key: string, file: string): void {
@@ -136,11 +135,18 @@ function clockRight(): number | null {
   return right;
 }
 
-/** The right-most game x anything of the clock view is drawn at, by the pause button's rule. */
-const CLOCK_MAX_RIGHT = 1796;
+/** The clock's painted plate (Rolando's pick, 30 Oct 2026: plate 1). */
+const CLOCK_PLATE_KEY = 'hud/clock-plate';
+const CLOCK_PLATE_FILE = 'art/hud/clock-plate.webp';
 
 /** The title's bracket corners (kit.ts). */
 const TITLE_CORNERS = 22;
+
+/** Shrinks a centred text so it fits `room` px wide. Runs only when the text changes. */
+function fitWidth(text: Phaser.GameObjects.Text, room: number): void {
+  text.setScale(1);
+  if (text.width > room && text.width > 0) text.setScale(room / text.width);
+}
 
 /**
  * Shrinks a text so its right edge stays at or left of maxRight. Glyph widths depend on which
@@ -546,37 +552,49 @@ export class TitleView implements LiveView {
 
 export class ClockView implements LiveView {
   readonly zone = 'clock' as const;
-  readonly budget: LiveBudget = { objects: 4, texts: 2 };
+  /** The painted plate and the two lit lines in its window. */
+  readonly budget: LiveBudget = { objects: 3, texts: 2 };
   private objects: Phaser.GameObjects.GameObject[] = [];
   private clockText: Phaser.GameObjects.Text | null = null;
   private countdown: Phaser.GameObjects.Text | null = null;
+  private room = 0;
   private shownSecond = -1;
   private shownRed: boolean | null = null;
 
   preload(scene: Phaser.Scene): void {
-    loadOnce(scene, ICON_KEYS.clock, ICON_FILES.clock);
+    loadOnce(scene, CLOCK_PLATE_KEY, CLOCK_PLATE_FILE);
   }
 
   create(scene: Phaser.Scene, host: LiveHost): void {
     const L = clockLayout(host.rect);
     const add = scene.add;
-    const plate = add.graphics();
-    plate.fillStyle(COLORS.ink, 0.96);
-    plate.fillRect(L.plate.x, L.plate.y, L.plate.w, L.plate.h);
-    this.clockText = add.text(L.clock.x, L.clock.y, '', {
-      fontFamily: FONT,
-      fontSize: '40px',
-      color: COLORS.cyanText,
-    });
-    this.countdown = add.text(L.countdown.x, L.countdown.y, '', {
-      fontFamily: FONT,
-      fontSize: '20px',
-      color: COLORS.heroText,
-    });
-    const icon = add.image(L.icon.x, L.icon.y, ICON_KEYS.clock);
-    icon.setScale(L.icon.size / Math.max(icon.width, icon.height));
-    icon.setAlpha(0.85);
-    this.objects = [plate, this.clockText, this.countdown, icon];
+    // The painted plate at its drawn size; without its file (a stub scene), a dark plate in its place.
+    const plate: Phaser.GameObjects.GameObject =
+      typeof add.image === 'function' && scene.textures?.exists?.(CLOCK_PLATE_KEY)
+        ? add
+            .image(L.plate.x, L.plate.y, CLOCK_PLATE_KEY)
+            .setOrigin(0, 0)
+            .setDisplaySize(L.plate.w, L.plate.h)
+        : add.graphics().fillStyle(COLORS.ink, 0.96).fillRect(L.plate.x, L.plate.y, L.plate.w, L.plate.h);
+    // Lit in the plate's window like a neon sign: the time in cyan with a glow, the countdown under it.
+    this.clockText = add
+      .text(L.clock.x, L.clock.y, '', {
+        fontFamily: FONT,
+        fontSize: '34px',
+        fontStyle: 'bold',
+        color: COLORS.cyanText,
+        shadow: { offsetX: 0, offsetY: 0, color: COLORS.cyanText, blur: 12, fill: true },
+      })
+      .setOrigin(0.5);
+    this.countdown = add
+      .text(L.countdown.x, L.countdown.y, '', {
+        fontFamily: FONT,
+        fontSize: '15px',
+        color: COLORS.heroText,
+      })
+      .setOrigin(0.5);
+    this.room = L.window.w - 12;
+    this.objects = [plate, this.clockText, this.countdown];
     for (const o of this.objects) (o as unknown as { setDepth(d: number): void }).setDepth(GAUGES_DEPTH);
     this.shownSecond = -1;
     this.shownRed = null;
@@ -590,8 +608,8 @@ export class ClockView implements LiveView {
       this.shownSecond = second;
       this.clockText.setText(twelveHour(frame.clock));
       this.countdown.setText(`midnight in ${countdownText(frame.now)}`);
-      fitRight(this.clockText, CLOCK_MAX_RIGHT);
-      fitRight(this.countdown, CLOCK_MAX_RIGHT);
+      fitWidth(this.clockText, this.room);
+      fitWidth(this.countdown, this.room);
     }
     const red = countdownRed(frame.now);
     if (red !== this.shownRed) {

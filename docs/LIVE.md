@@ -27,12 +27,12 @@ Twelve rects `{x, y, w, h}` in game pixels. No two overlap; all lie inside 1920x
 | ----------- | ---: | --: | ---: | --: | ------- | ---------------------------------------------------------- |
 | `title`     |    0 |   0 |  440 | 100 | gauges  | Lux's avatar, the stream title, the viewer count           |
 | `alert`     |  450 |   8 | 1070 |  84 | gauges  | The one-at-a-time alert band: surge, fall, dip             |
-| `clock`     | 1530 |   0 |  380 | 100 | gauges  | The in-world clock, the countdown and the pause button     |
-| `map`       | 1632 | 850 |  212 | 160 | gauges  | The city map with the block's dots, under the gauge        |
+| `clock`     | 1566 |   0 |  344 | 125 | gauges  | The in-world clock on its painted plate, the pause button  |
+| `map`       | 1632 | 913 |  212 | 160 | gauges  | The city map with the block's dots, under the gauge        |
 | `cam`       |    6 | 110 |  410 | 270 | luxcam  | Lux's cam frame, her lines captioned on it                 |
-| `gauge`     | 1566 | 580 |  344 | 260 | gauges  | The demand gauge, the one demand widget (smaller since A2) |
+| `gauge`     | 1566 | 645 |  344 | 260 | gauges  | The demand gauge, the one demand widget (smaller since A2) |
 | `feed`      |  426 | 120 | 1128 | 706 | board   | The board with the city's sky above it                     |
-| `comms`     | 1566 | 110 |  344 | 460 | comms   | The cam of whoever is talking to Lux, popping in and out   |
+| `comms`     | 1566 | 135 |  344 | 500 | comms   | The cam of whoever is talking to Lux, popping in and out   |
 | `inventory` |  426 | 834 | 1055 | 165 | board   | The tray of parts                                          |
 | `deck`      |  426 | 1005 | 1128 |  65 | gauges  | The deck of keys, each shown only while it can be pressed  |
 | `chat`      |    6 | 390 |  410 | 680 | chat    | Lux's stream chat, nearly full height                      |
@@ -42,6 +42,11 @@ chat fill a slim left column; the board sits in the middle with the city's sky a
 and keys under it; the cam of whoever is talking to Lux pops in and out at the top of the right
 column, over the smaller gauge and the city map. The comms strip, and the REGROUP and CUT boxes, are
 gone: a key shows only while it can be pressed, and Lux's own lines are captioned on her cam.
+
+Option 2 (Rolando, 30 Oct 2026, "too much wasted space"): the clock sits on its painted plate
+(`art/hud/clock-plate.webp`, his pick) at the top of the right column, and the caller cam, now
+500 tall with a 250 tall tile that keeps the last caller up, the gauge and the map fill the column
+to the bottom edge.
 
 The board draws in its own space, the boxes its table was painted for: `FEED_WORLD`
 `{x: 455, y: 110, w: 1455, h: 530}` and `TRAY_WORLD` `{x: 455, y: 800, w: 1055, h: 165}`. Two
@@ -379,7 +384,7 @@ against the built views):
 | ---------------------------------------------------- | ----: | -----------------: |
 | `title` (TitleView)                                  |    10 |                 18 |
 | `alert` (AlertView)                                  |     4 |                 10 |
-| `clock` (ClockView)                                  |     2 |                  4 |
+| `clock` (ClockView)                                  |     2 |                  3 |
 | `map` (MapView)                                      |     3 |                 10 |
 | `cam` (LuxCamView, with Lux's caption)               |     3 |                 17 |
 | `gauge` (GaugeView with HeadroomView)                |    11 |                 14 |

@@ -283,9 +283,13 @@ export function commsLayout(r: CommsRect) {
     // can call along the bottom, its discs overlapping like a call's participant stack.
     const step = (r.w - 16 - 84) / (COMMS_SLOTS.length - 1);
     const tx = r.x + 16;
+    // The cam takes what the words and the roster leave (Rolando, 30 Oct 2026: a big caller cam):
+    // 210 tall in a 460 column, 250 in the 500 one.
+    const tile = { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: r.h - 250 };
+    const under = tile.y + tile.h;
     return {
       title: { x: r.x + 16, y: r.y + 14 },
-      tile: { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: 210 },
+      tile,
       slots: COMMS_SLOTS.map((name, i) => ({
         name,
         x: Math.round(r.x + 8 + 42 + step * i),
@@ -295,14 +299,14 @@ export function commsLayout(r: CommsRect) {
       slotLabelY: r.y + r.h - 20,
       /** No divider in the column: the tile sits above the words. */
       divider: { x: r.x + 8, top: r.y + 8, bottom: r.y + 8 },
-      name: { x: tx, y: r.y + 226 },
+      name: { x: tx, y: under + 8 },
       /** The tag pill, right of the nameplate. */
-      tag: { x: tx, y: r.y + 226, h: 20 },
-      text: { x: tx, y: r.y + 254, w: r.w - 32 },
+      tag: { x: tx, y: under + 8, h: 20 },
+      text: { x: tx, y: under + 36, w: r.w - 32 },
       /** The reread log's three rows, oldest first. */
-      log: [r.y + 226, r.y + 262, r.y + 298].map((y) => ({ x: tx, y, w: r.w - 32 - 76 })),
+      log: [under + 8, under + 44, under + 80].map((y) => ({ x: tx, y, w: r.w - 32 - 76 })),
       /** The replay glyph, right of the newest row. */
-      replay: { x: right - 76, y: r.y + 298, w: 60, h: 34 },
+      replay: { x: right - 76, y: under + 80, w: 60, h: 34 },
     };
   }
   if (r.h >= 200) {

@@ -40,8 +40,9 @@ test('the Live skeleton: zones on the page, ten placeholders, perf numbers and l
 
   const { live, perf } = await sections(page);
   expect(live.layoutVersion).toBe(LAYOUT_VERSION);
-  // LAYOUT_VERSION 2: layout A2 (Rolando, 30 Oct 2026) moved every zone.
-  expect(live.layoutVersion).toBe(2);
+  // LAYOUT_VERSION 2: layout A2 (Rolando, 30 Oct 2026) moved every zone. 3: option 2 (Rolando,
+  // 30 Oct 2026, "too much wasted space") moved the right column's zones.
+  expect(live.layoutVersion).toBe(3);
   expect(Object.keys(live.zones)).toEqual(ZONE_IDS);
   for (const zone of ZONE_IDS) expect(live.zones[zone], zone).toEqual(pageRect(ZONES[zone], canvas));
   // Every zone lands inside the canvas.
@@ -247,7 +248,8 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     for (const id of ['title', 'clock.text', 'clock.countdown', 'clock.panel'])
       expect(all, id).not.toContain(id);
     expect(h.title!.right).toBeLessThanOrEqual(440);
-    expect(h.title!.clockRight!).toBeLessThanOrEqual(1800);
+    // Rolando, 30 Oct 2026 (clock plate 1): the painted plate moved the limit from x 1800 to 1840.
+    expect(h.title!.clockRight!).toBeLessThanOrEqual(1840);
     for (const id of ['deck.1', 'deck.2']) expect(ids, id).toContain(id);
     expect(all).not.toContain('deck.3');
     expect(ids).not.toContain('jobCard');

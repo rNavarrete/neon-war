@@ -135,12 +135,14 @@ describe('comms tags and slots', () => {
     // bottom, overlapping like a call's participant stack.
     const l = commsLayout(ZONES.comms);
     expect(l.slots.map((s) => ({ name: s.name, x: s.x, y: s.y, r: s.r }))).toEqual(BOTTOM.slots);
-    expect(l.tile).toEqual({ x: 1574, y: 118, w: 328, h: 210 });
+    // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the column is 344x500 from y 135 and the cam
+    // tile takes the extra height (250 tall), the words and slots moving down with it.
+    expect(l.tile).toEqual({ x: 1574, y: 143, w: 328, h: 250 });
     expect(l.slots.map((s) => s.x)).toEqual([1616, 1677, 1738, 1799, 1860]);
-    expect(l.slots.every((s) => s.y === 506)).toBe(true);
-    expect(l.name).toEqual({ x: 1582, y: 336 });
-    expect(l.text).toEqual({ x: 1582, y: 364, w: 312 });
-    expect(l.log.map((r) => r.y)).toEqual([336, 372, 408]);
+    expect(l.slots.every((s) => s.y === 571)).toBe(true);
+    expect(l.name).toEqual({ x: 1582, y: 401 });
+    expect(l.text).toEqual({ x: 1582, y: 429, w: 312 });
+    expect(l.log.map((r) => r.y)).toEqual([401, 437, 473]);
     const z = ZONES.comms;
     expect(inside(l.tile!, z)).toBe(true);
     expect(l.name.y).toBeGreaterThanOrEqual(l.tile!.y + l.tile!.h);

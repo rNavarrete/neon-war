@@ -105,8 +105,16 @@ export function countdownRed(now: number): boolean {
 
 // ---- where the pieces sit ----
 
-/** Nothing of the clock cluster is drawn right of this x: the pause button (1850, 52) is OverlayScene's. */
-export const CLOCK_RIGHT_LIMIT = 1800;
+/**
+ * Nothing of the clock cluster is drawn right of this x: the pause button (OverlayScene's, at the
+ * clock zone's right end) starts here. 1800 until the clock's painted plate (Rolando, 30 Oct 2026).
+ */
+export const CLOCK_RIGHT_LIMIT = 1840;
+
+/** The clock's painted plate (art/hud/clock-plate.webp, Rolando's pick) at its drawn size. */
+export const CLOCK_PLATE = { w: 272, h: 112 } as const;
+/** The plate's dark window, where the time is lit, as fractions of the plate. */
+const CLOCK_WINDOW = { x0: 0.1, y0: 0.17, x1: 0.9, y1: 0.8 } as const;
 
 export interface TitleLayout {
   /** The opaque plate behind the cluster: the whole zone. */
@@ -136,24 +144,35 @@ export function titleLayout(z: Rect): TitleLayout {
 }
 
 export interface ClockLayout {
-  /** The opaque plate behind the clock: the zone, cut at CLOCK_RIGHT_LIMIT. */
+  /** The painted plate, at its file's size. */
   readonly plate: Rect;
+  /** Its window, where the time and the countdown are lit. */
+  readonly window: Rect;
+  /** The time's and the countdown's centres, in the window. */
   readonly clock: { readonly x: number; readonly y: number };
   readonly countdown: { readonly x: number; readonly y: number };
-  /** The clock icon, centre and size. */
-  readonly icon: { readonly x: number; readonly y: number; readonly size: number };
 }
 
-/** The clock and the countdown inside their zone's rect (ZONES.clock), never past x 1800. */
+/** The plate and the lit time inside their zone's rect (ZONES.clock), never past CLOCK_RIGHT_LIMIT. */
 export function clockLayout(z: Rect): ClockLayout {
-  const right = Math.min(z.x + z.w, CLOCK_RIGHT_LIMIT);
+  const plate = {
+    x: z.x,
+    y: z.y + Math.round((z.h - CLOCK_PLATE.h) / 2),
+    w: CLOCK_PLATE.w,
+    h: CLOCK_PLATE.h,
+  };
+  const window = {
+    x: plate.x + Math.round(plate.w * CLOCK_WINDOW.x0),
+    y: plate.y + Math.round(plate.h * CLOCK_WINDOW.y0),
+    w: Math.round(plate.w * (CLOCK_WINDOW.x1 - CLOCK_WINDOW.x0)),
+    h: Math.round(plate.h * (CLOCK_WINDOW.y1 - CLOCK_WINDOW.y0)),
+  };
+  const cx = window.x + window.w / 2;
   return {
-    plate: { x: z.x, y: z.y, w: right - z.x, h: z.h },
-    clock: { x: z.x + 16, y: z.y + 12 },
-    countdown: { x: z.x + 18, y: z.y + 64 },
-    // On the countdown's row, just past its 16 characters and left of the pause button (OverlayScene's,
-    // at the zone's right end).
-    icon: { x: Math.min(right - 16, z.x + 18 + 16 * 12.5 + 24), y: z.y + 76, size: 28 },
+    plate,
+    window,
+    clock: { x: cx, y: window.y + Math.round(window.h * 0.38) },
+    countdown: { x: cx, y: window.y + Math.round(window.h * 0.8) },
   };
 }
 

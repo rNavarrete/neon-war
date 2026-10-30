@@ -144,17 +144,17 @@ export class OverlayScene extends Phaser.Scene {
       if (this.musicOn) this.playMusic(true);
     });
 
-    // At the clock zone's right end (layout A put Lux's cam in the top-right corner).
+    // At the clock zone's right end, beside the clock's painted plate (which ends at CLOCK_RIGHT_LIMIT).
     const clock = ZONES.clock;
     this.pauseButton = addButton(
       this,
       'pause',
-      clock.x + clock.w - 40,
-      52,
+      clock.x + clock.w - 36,
+      clock.y + 62,
       'II',
       () => openPause(this),
-      0.2,
-      30,
+      0.13,
+      22,
     );
     this.pauseButton.setVisible(false);
     this.input.keyboard?.on('keydown-ESC', () => this.onEscape());

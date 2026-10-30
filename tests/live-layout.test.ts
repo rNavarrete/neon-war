@@ -31,7 +31,8 @@ import {
 describe('live layout contract', () => {
   // Version 2 is layout A, the streamer column (Rolando, 30 Oct 2026): the zones below moved with it.
   it('is version 2 of a 1920x1080 screen', () => {
-    expect(LAYOUT_VERSION).toBe(2);
+    // 3 since option 2 (Rolando, 30 Oct 2026) moved the right column's zones.
+    expect(LAYOUT_VERSION).toBe(3);
     expect(SCREEN).toEqual({ width: 1920, height: 1080 });
   });
 
@@ -41,12 +42,14 @@ describe('live layout contract', () => {
     expect(ZONES).toEqual({
       title: { x: 0, y: 0, w: 440, h: 100 },
       alert: { x: 450, y: 8, w: 1070, h: 84 },
-      clock: { x: 1530, y: 0, w: 380, h: 100 },
-      map: { x: 1632, y: 850, w: 212, h: 160 },
+      // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the clock on its painted plate, then the taller
+      // caller cam, the gauge and the map down to the bottom edge.
+      clock: { x: 1566, y: 0, w: 344, h: 125 },
+      map: { x: 1632, y: 913, w: 212, h: 160 },
       cam: { x: 6, y: 110, w: 410, h: 270 },
-      gauge: { x: 1566, y: 580, w: 344, h: 260 },
+      gauge: { x: 1566, y: 645, w: 344, h: 260 },
       feed: { x: 426, y: 120, w: 1128, h: 706 },
-      comms: { x: 1566, y: 110, w: 344, h: 460 },
+      comms: { x: 1566, y: 135, w: 344, h: 500 },
       inventory: { x: 426, y: 834, w: 1055, h: 165 },
       deck: { x: 426, y: 1005, w: 1128, h: 65 },
       chat: { x: 6, y: 390, w: 410, h: 680 },

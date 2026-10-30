@@ -363,6 +363,13 @@ export const PICKED_ART: readonly PickedArt[] = [
     nineSlice: { k: 0.85 },
   },
   {
+    file: 'art/hud/clock-plate.webp',
+    cut: size(272, 112),
+    display: size(272, 112),
+    zone: 'clock',
+    use: "the clock's neon-trimmed sign plate (Rolando's pick, plate 1, 30 Oct 2026), the time in its window",
+  },
+  {
     file: 'art/hud/clock-panel.webp',
     cut: size(213, 207),
     display: size(124, 121),
