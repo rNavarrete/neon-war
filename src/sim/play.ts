@@ -46,6 +46,7 @@ import {
   updateRetries,
   withRetries,
 } from './failures';
+import { NO_TIPS, type TipState, stepTips } from './tips';
 
 const C = BROWNOUT.challenges;
 const REGROUP = BROWNOUT.regroup;
@@ -84,7 +85,7 @@ export interface Midnight {
 }
 
 export interface Play {
-  /** Seconds since the clock opened at 23:51:30. */
+  /** Seconds since the clock opened at 23:54:25. */
   readonly t: number;
   /** Picks which server the midnight dip takes; the same seed gives the same dip on every replay. */
   readonly seed: number;
@@ -100,6 +101,13 @@ export interface Play {
   readonly failure: Failure | null;
   /** Requests dropped this run. */
   readonly dropped: number;
+  /** Viewer tips so far (src/sim/tips.ts): the session's income. */
+  readonly tips: TipState;
+  /**
+   * Servers that have carried traffic at least once. One that never has (a box nothing feeds) sells
+   * back at its full price: trying a second server before the load balancer costs nothing.
+   */
+  readonly used: readonly string[];
   /** The state at the start of the challenge a failure rewinds to. */
   readonly checkpoint: { readonly at: number; readonly play: Play } | null;
   // Kept across rewinds:
@@ -145,6 +153,8 @@ export function createPlay(init: {
     midnight: null,
     failure: null,
     dropped: 0,
+    tips: NO_TIPS,
+    used: [],
     checkpoint: null,
     crewMet: false,
     regroup: { charges: 0, handedOver: false, left: 0 },
@@ -222,7 +232,8 @@ function failed(play: Play, cause: FailureCause, by: RewindBy): Play {
 /**
  * The crew break in: the load balancer goes between the gateway and every server, the overclocked
  * server's kit fries (back to stock, revived if it cooked), the surge's power dip ends, the retry
- * pile settles, Ozzie fronts his credits and Mika hands over Regroup (once per session).
+ * pile settles, Ozzie fronts his credits and Mika hands over Regroup (once per session, where the
+ * session has it: Session 0 does not).
  */
 export function applyRescue(play: Play, now: number, by: RescueCause): Play {
   let board = play.session.board;
@@ -254,7 +265,10 @@ export function applyRescue(play: Play, now: number, by: RescueCause): Play {
     dips: play.dips.map((d) => (d.darkAt <= now && d.endsAt > now ? { ...d, endsAt: now } : d)),
     rescue: { at: now, by },
     crewMet: true,
-    regroup: play.regroup.handedOver ? play.regroup : { charges: REGROUP.charges, handedOver: true, left: 0 },
+    regroup:
+      play.regroup.handedOver || !REGROUP.inSession
+        ? play.regroup
+        : { charges: REGROUP.charges, handedOver: true, left: 0 },
   };
 }
 
@@ -285,6 +299,7 @@ function advance(play: Play, dt: number): Play {
       retry: updateRetries(play.retry, share, dt),
       heat,
       dropped: play.dropped + flow.dropped * dt,
+      used: usedAfter(play.used, flow),
     },
     t,
   );
@@ -326,7 +341,47 @@ function advance(play: Play, dt: number): Play {
     };
     if (!held) return failed(next, 'dark-at-midnight', 'rei');
   }
-  return next;
+  return tipped(play, next, flow.served, share);
+}
+
+/** The servers that have carried traffic, with any that took some this tick; the same list when none is new. */
+function usedAfter(used: readonly string[], flow: Flow): readonly string[] {
+  let out = used;
+  for (const id in flow.load) {
+    if (flow.load[id] > 0 && id.startsWith('server') && !out.includes(id)) out = [...out, id];
+  }
+  return out;
+}
+
+/**
+ * What the move that would help costs: before the load balancer the gateway feeds one server, so a
+ * second one does nothing and the bigger server is the help (while a server is still without it).
+ */
+function helpPrice(board: Board): number {
+  const lb = board.parts.some((p) => p.kind === 'balancer');
+  const kit = BROWNOUT_RULES.upgrade;
+  if (!lb && kit && board.parts.some((p) => p.kind === 'server' && p.boost === undefined)) return kit.cost;
+  return BROWNOUT_RULES.cost.server ?? 0;
+}
+
+/** The viewers' tips for this tick, paid into the credits. */
+function tipped(before: Play, next: Play, served: number, share: number): Play {
+  const { state, given } = stepTips(next.tips, {
+    t: next.t,
+    seed: next.seed,
+    served,
+    errorShare: share,
+    credits: next.session.board.credits,
+    rescued: next.rescue !== null && before.rescue === null,
+    held: next.midnight !== null && next.midnight.held && before.midnight === null,
+    beforeMidnight: next.t < C.c7,
+    helpPrice: helpPrice(next.session.board),
+  });
+  if (given.length === 0 && state === next.tips) return next;
+  let gain = 0;
+  for (const g of given) gain += g.amount;
+  const board = { ...next.session.board, credits: next.session.board.credits + gain };
+  return { ...next, tips: state, session: { ...next.session, board } };
 }
 
 /**
@@ -436,7 +491,11 @@ export function decommissionServer(play: Play, id: string): PlayResult {
     if (!part || part.kind !== 'server') return fail(`no server ${id}`);
     const r = decommission(p.session.board, BROWNOUT_RULES, id);
     if (!r.ok) return r;
-    return { ok: true, play: { ...p, session: { ...p.session, board: r.board }, heat: forget(p.heat, id) } };
+    // A server that never carried a request goes back at its full price, like a return unopened.
+    const cost = BROWNOUT_RULES.cost.server ?? 0;
+    const back = p.used.includes(id) ? 0 : cost - Math.floor(cost * BROWNOUT_RULES.refund);
+    const board = back > 0 ? { ...r.board, credits: r.board.credits + back } : r.board;
+    return { ok: true, play: { ...p, session: { ...p.session, board }, heat: forget(p.heat, id) } };
   });
 }
 

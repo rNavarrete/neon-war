@@ -19,7 +19,7 @@ export function balancerGivenIn(rescued: boolean, parts: readonly Part[]): boole
 
 /** The crew rack their balancer at the rescue, so there is never a second one to place. */
 export function placeBalancer(run: Run): ActionResult {
-  // Refusals print on screen, so they use the crew's word (splitter), not the debrief's name.
+  // Refusals print on screen, in real terms (load balancer).
   if (!balancerGiven(run)) return { ok: false, reason: LABELS.inventory.splitterLocked };
-  return { ok: false, reason: 'the splitter is already racked' };
+  return { ok: false, reason: 'the load balancer is already racked' };
 }

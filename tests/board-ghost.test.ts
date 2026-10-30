@@ -36,7 +36,7 @@ describe('ghostCapacity (board-8)', () => {
     expect(ghostCapacity(board, BROWNOUT_RULES, [], 'server', 's2')).toBe(wired);
     const g = ghostInfo(board, BROWNOUT_RULES, [], 'server', 's2', 's2', 'legal', true)!;
     expect(g).toMatchObject({ legal: true, adds: 0, capacity: 60, wired: 60, tick: null });
-    expect(g.plate).toBe('+0 room · nothing feeds it');
+    expect(g.plate).toBe('+0 capacity · nothing feeds it');
     // The what-if level is the wired room: the same place as the ROOM tick.
     expect(g.whatIf).toBeCloseTo(60 / DEMAND_SCALE_MAX, 9);
   });
@@ -49,8 +49,10 @@ describe('ghostCapacity (board-8)', () => {
     expect(freeFeed(board, BROWNOUT_RULES)).toBe('balancer');
     expect(ghostCapacity(board, BROWNOUT_RULES, [], 'server', 's2')).toBe(120);
     const g = ghostInfo(board, BROWNOUT_RULES, [], 'server', 's2', 's2', 'legal', true)!;
-    expect(g.plate).toBe(`+60 room · boots ${BROWNOUT.server.bootSeconds} s · -${BROWNOUT.server.cost} cr`);
-    expect(g.tick).toBe('ROOM +60');
+    expect(g.plate).toBe(
+      `+60 capacity · boots ${BROWNOUT.server.bootSeconds} s · -${BROWNOUT.server.cost} cr`,
+    );
+    expect(g.tick).toBe('CAPACITY +60');
     expect(g.whatIf).toBeCloseTo(120 / DEMAND_SCALE_MAX, 9);
   });
 
@@ -101,7 +103,7 @@ describe('ghostCapacity (board-8)', () => {
     expect(padState(s2, { parts: board.parts, credits: 400, dead: offline }, 'server', prices)).toBe('dead');
     expect(ghostCapacity(board, BROWNOUT_RULES, offline, 'server', s2)).toBe(120);
     const g = ghostInfo(board, BROWNOUT_RULES, offline, 'server', s2, s2, 'dead', true)!;
-    expect(g).toMatchObject({ legal: true, adds: 60, tick: 'ROOM +60' });
+    expect(g).toMatchObject({ legal: true, adds: 60, tick: 'CAPACITY +60' });
   });
 
   it('the kit doubles a wired box and adds nothing to one nothing feeds', () => {
@@ -112,14 +114,14 @@ describe('ghostCapacity (board-8)', () => {
     expect(ghostCapacity(board, BROWNOUT_RULES, [], 'overclock', 's1')).toBe(120);
     expect(ghostCapacity(board, BROWNOUT_RULES, [], 'overclock', 's2')).toBe(60);
     const g = ghostInfo(board, BROWNOUT_RULES, [], 'overclock', 's2', 's2', 'legal', true)!;
-    expect(g.plate).toBe('+0 room · nothing feeds it');
+    expect(g.plate).toBe('+0 capacity · nothing feeds it');
   });
 
   it('short of credits: the ghost still shows what the box would add, but the drop is not legal', () => {
     const board = { parts: [gw, db], wires: [] };
     const g = ghostInfo(board, BROWNOUT_RULES, [], 'server', 's1', 's1', 'poor', true)!;
-    expect(g).toMatchObject({ legal: false, adds: 60, tick: 'ROOM +60' });
-    expect(g.plate).toBe('+60 room · boots 3 s · -80 cr');
+    expect(g).toMatchObject({ legal: false, adds: 60, tick: 'CAPACITY +60' });
+    expect(g.plate).toBe('+60 capacity · boots 3 s · -80 cr');
   });
 
   it('never invents room: the splitter card and taken pads leave the number alone', () => {

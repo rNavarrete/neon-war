@@ -6,7 +6,7 @@
 // LAYOUT_VERSION is bumped only by a tech PR that moves a zone; views and tests read it from the
 // hook (live.layoutVersion) so a stale screenshot or spec can be told from a real regression.
 
-export const LAYOUT_VERSION = 1;
+export const LAYOUT_VERSION = 3;
 
 /** The game's drawing surface. The board and HUD are built at this size and scaled to fit. */
 export const SCREEN = { width: 1920, height: 1080 } as const;
@@ -41,34 +41,47 @@ const centred = (cx: number, cy: number, w: number, h: number): Rect => ({
 });
 
 /**
- * The twelve zones of the Live screen (frame 54 of the picked mockup). Zones never overlap and
- * together they leave only the gutters between them. Each is owned by one lane (docs/LIVE.md).
+ * The eleven zones of the Live screen. Zones never overlap and together they leave only the gutters
+ * between them. Each is owned by one lane (docs/LIVE.md).
+ *
+ * Version 2 (Rolando, 30 Oct 2026, layout "A2"): three columns. Left, Lux's world: her cam over her
+ * stream chat, slim so the board gets the room. Middle: the board, drawn at FEED_VIEW's scale with
+ * the city's sky above it, and the tray under it. Right: the cams of whoever is talking to Lux, popping
+ * in and out (the comms zone), with the smaller gauge and the city map under them. The deck's keys
+ * show only while one can be pressed (the laundry cut, in the surge).
+ *
+ * Rolando, 30 Oct 2026 ("too much wasted space", option 2): the clock sits on its painted plate at
+ * the top of the right column, and the caller cam, the gauge and the map fill the column down to the
+ * bottom edge, the cam taller so the last caller stays big on screen. Later the same day the map grew
+ * to the gauge's size, so the caller cam gave up 100 px of height.
  */
 export const ZONES = {
   /** Top-left: Lux's avatar, the stream title and the viewer count. */
   title: { x: 0, y: 0, w: 440, h: 100 },
-  /** Top centre: the one-at-a-time alert band (surge, fall, dip). */
-  alert: { x: 460, y: 8, w: 1040, h: 84 },
-  /** Top-right: the in-world clock, the countdown, trust and credits. */
-  clock: { x: 1520, y: 0, w: 400, h: 100 },
-  /** Left column, top: the city map with the block's dots. */
-  map: { x: 16, y: 110, w: 408, h: 310 },
-  /** Left column, middle: Lux's cam frame. */
-  cam: { x: 16, y: 430, w: 408, h: 270 },
-  /** Left column, lower: the demand gauge. */
-  gauge: { x: 16, y: 710, w: 408, h: 170 },
-  /** Left column, bottom: the scope, the chart with the demand and capacity lines. */
-  scope: { x: 16, y: 890, w: 408, h: 180 },
-  /** Centre: the board itself, Lux's feed of the block's traffic. */
-  feed: { x: 455, y: 110, w: 1455, h: 530 },
-  /** Under the feed: the comms band with the crew's slots and the current line. */
-  comms: { x: 455, y: 645, w: 1455, h: 150 },
-  /** Bottom centre: the board's inventory (the tray of parts). */
-  inventory: { x: 455, y: 800, w: 1055, h: 165 },
-  /** Bottom strip under the inventory: the deck of keys and the headroom bar. */
-  deck: { x: 455, y: 970, w: 1055, h: 105 },
-  /** Bottom-right: Lux's stream chat. */
-  chat: { x: 1525, y: 800, w: 385, h: 275 },
+  /** Top centre, over the board: the one-at-a-time alert band (surge, fall, dip). */
+  alert: { x: 450, y: 8, w: 1070, h: 84 },
+  /** Top-right: the in-world clock, the countdown and the pause button. */
+  clock: { x: 1566, y: 0, w: 344, h: 125 },
+  /**
+   * Right column, bottom: the city map with the block's dots, at its painting's shape (816x620 at
+   * about 0.42) so the city is never squashed. Rolando, 30 Oct 2026: as big as the demand gauge
+   * above it, so the two panels stack as one column.
+   */
+  map: { x: 1566, y: 813, w: 344, h: 260 },
+  /** Left column, top: Lux's cam frame, above her chat like a streamer's webcam. */
+  cam: { x: 6, y: 110, w: 410, h: 270 },
+  /** Right column, under the callers: the demand gauge, the one demand widget (smaller since A2). */
+  gauge: { x: 1566, y: 545, w: 344, h: 260 },
+  /** Middle: the board itself, Lux's feed of the block's traffic, with the sky above the table. */
+  feed: { x: 426, y: 102, w: 1128, h: 790 },
+  /** Right column, top: the cam of whoever is talking to Lux, popping in and out with their line. */
+  comms: { x: 1566, y: 135, w: 344, h: 400 },
+  /** Middle, under the board: the board's inventory (the tray of parts). */
+  inventory: { x: 426, y: 904, w: 1000, h: 156 },
+  /** Middle, right of the tray: the deck's keys, stacked, shown only while one can be pressed. */
+  deck: { x: 1434, y: 904, w: 120, h: 156 },
+  /** Left column, under the cam: Lux's stream chat, nearly full height. */
+  chat: { x: 6, y: 390, w: 410, h: 680 },
 } as const satisfies Record<string, Rect>;
 
 export type ZoneId = keyof typeof ZONES;
@@ -76,19 +89,78 @@ export type ZoneId = keyof typeof ZONES;
 /** Every zone id, in the order of the table above. */
 export const ZONE_IDS: readonly ZoneId[] = Object.keys(ZONES) as ZoneId[];
 
+/** The feed's centre line, where the cards over it are centred across. */
+const FEED_CX = ZONES.feed.x + ZONES.feed.w / 2;
+
 /**
- * Cards drawn over the feed only while something asks for them. The banner, job card and dip
- * fallback keep the exact centres today's HudScene uses (src/scenes/hud/layout.ts CENTRE), so every
- * click point tests/browser/hud.spec.ts reads from the hook still lands.
+ * Cards drawn over the feed only while something asks for them, centred across the feed. Tests
+ * click them from the points the hook reports (src/scenes/hud/layout.ts CENTRE).
  */
 export const CARDS = {
-  /** The Solace banner (1431x700 art at 0.45), centred where the HUD slides it in today. */
-  banner: centred(960, 330, 644, 316),
-  /** The C1 job card (864x1252 art at 0.6), centred where the HUD opens it today. */
-  jobCard: centred(960, 532, 518, 752),
+  /** The Solace banner (1431x700 art at 0.45). */
+  banner: centred(FEED_CX, 330, 644, 316),
+  /** The C1 job card (864x1252 art at 0.6). */
+  jobCard: centred(FEED_CX, 532, 518, 752),
   /** Where the power-dip warning sits when the board can't say where the part is. */
-  dipFallback: centred(960, 300, 200, 120),
+  dipFallback: centred(FEED_CX, 300, 200, 120),
 } as const satisfies Record<string, Rect>;
+
+// ---- the board's own space ----
+// BoardScene draws the feed and the tray in their own coordinates (the space the table, the grid and
+// every part's place were painted and measured in), and two cameras show them in their zones. A
+// view maps a box of that space onto a zone at one scale: the feed keeps its painted shape.
+
+/**
+ * The board's drawing space for the feed: the table stands in this box (since option 2, Rolando
+ * 30 Oct 2026, the steeper table B fills its width, its foot on the box's floor).
+ */
+export const FEED_WORLD: Rect = { x: 455, y: 110, w: 1455, h: 760 };
+/**
+ * What the feed's camera shows: FEED_WORLD with a band of the city's sky above it, at the feed
+ * zone's shape (1455 x 1019 onto 1128 x 790).
+ */
+export const FEED_SHOWN: Rect = { x: 455, y: -149, w: 1455, h: 1019 };
+/**
+ * The board's drawing space for the tray of parts, below everything the feed's camera shows (moved
+ * down from y 800 when option 2's taller feed took that space, Rolando 30 Oct 2026).
+ */
+export const TRAY_WORLD: Rect = { x: 455, y: 1000, w: 1055, h: 165 };
+
+/** How a box of the board's space shows on screen: drawn at `scale` with its corner at the zone's. */
+export interface View {
+  readonly world: Rect;
+  readonly screen: Rect;
+  readonly scale: number;
+}
+
+const viewOf = (world: Rect, screen: Rect): View => ({ world, screen, scale: screen.w / world.w });
+
+/** The feed's view: FEED_SHOWN onto ZONES.feed (the same shape, so one scale fits both ways). */
+export const FEED_VIEW: View = viewOf(FEED_SHOWN, ZONES.feed);
+/** The tray's view: TRAY_WORLD onto ZONES.inventory. */
+export const TRAY_VIEW: View = viewOf(TRAY_WORLD, ZONES.inventory);
+
+const within = (r: Rect, x: number, y: number): boolean =>
+  x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+
+/** A point of the board's space on screen: through the tray's view inside TRAY_WORLD, else the feed's. */
+export function boardToScreen(p: Point): Point {
+  const v = within(TRAY_WORLD, p.x, p.y) ? TRAY_VIEW : FEED_VIEW;
+  return { x: v.screen.x + (p.x - v.world.x) * v.scale, y: v.screen.y + (p.y - v.world.y) * v.scale };
+}
+
+/** A screen point in the board's space: through the tray's view over its zone, else the feed's. */
+export function screenToBoard(p: Point): Point {
+  const v = within(TRAY_VIEW.screen, p.x, p.y) ? TRAY_VIEW : FEED_VIEW;
+  return { x: v.world.x + (p.x - v.screen.x) / v.scale, y: v.world.y + (p.y - v.screen.y) / v.scale };
+}
+
+/** A box of the board's space on screen (its corner through boardToScreen, its size at that view's scale). */
+export function boardRectToScreen(r: Rect): Rect {
+  const v = within(TRAY_WORLD, r.x, r.y) ? TRAY_VIEW : FEED_VIEW;
+  const c = boardToScreen(r);
+  return { x: c.x, y: c.y, w: r.w * v.scale, h: r.h * v.scale };
+}
 
 export type CardId = keyof typeof CARDS;
 

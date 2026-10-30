@@ -18,15 +18,15 @@ export const REPLACE_LABEL: string = LABELS.plates.replace;
 
 const r = (n: number) => Math.round(n);
 
-/** The first line: the part's name and its numbers, "SERVER · 45/60 a second · 75%". */
+/** The first line: the part's name and its numbers, "SERVER · 45/60 req/s · 75%". */
 function numbersLine(part: Pick<Part, 'kind'>, look: PartLook): string {
   const name = PLATE_NAMES[part.kind];
   if (look.capacity === null || look.share === null) {
     const what = part.kind === 'gateway' ? 'coming in' : 'passing through';
-    return `${name} · ${r(look.load)} a second ${what}`;
+    return `${name} · ${r(look.load)} req/s ${what}`;
   }
-  if (look.status !== 'online') return `${name} · answers ${look.capacity} a second when up`;
-  return `${name} · ${r(look.load)}/${look.capacity} a second · ${r(look.share * 100)}%`;
+  if (look.status !== 'online') return `${name} · capacity ${look.capacity} req/s when up`;
+  return `${name} · ${r(look.load)}/${look.capacity} req/s · ${r(look.share * 100)}%`;
 }
 
 /** The second line: the state, in the tags' words with their seconds. */
@@ -78,6 +78,8 @@ export function partPlate(part: Pick<Part, 'kind' | 'boost'>, look: PartLook, sk
  */
 export class PlateCache {
   text = '';
+  /** The hover card for the same target, rebuilt with the text. */
+  card: PlateCard | null = null;
   private target = '';
   private status: PartStatus | '' = '';
   private load = NaN;
@@ -115,8 +117,10 @@ export class PlateCache {
     this.dies = dies;
     this.flags = flags;
     const text = partPlate(part, look, skipped);
-    const changed = text !== this.text;
+    const card = partCard(part, look, skipped);
+    const changed = text !== this.text || card.bar !== this.card?.bar;
     this.text = text;
+    this.card = card;
     return changed;
   }
 
@@ -130,6 +134,7 @@ export class PlateCache {
     const text = wirePlate(from, to, rate);
     const changed = text !== this.text;
     this.text = text;
+    this.card = wireCard(from, to, rate);
     return changed;
   }
 
@@ -143,5 +148,112 @@ export class PlateCache {
 
 /** A wire's plate: what it carries, from where to where, and how to cut it. */
 export function wirePlate(from: Pick<Part, 'kind'>, to: Pick<Part, 'kind'>, rate: number): string {
-  return `WIRE · ${r(rate)} a second\n${PLATE_NAMES[from.kind]} to ${PLATE_NAMES[to.kind]}\nclick it, then the cut button or Delete`;
+  return `WIRE · ${r(rate)} req/s\n${PLATE_NAMES[from.kind]} to ${PLATE_NAMES[to.kind]}\nclick it, then the cut button or Delete`;
+}
+
+// ---- the hover card (Rolando, 30 Oct 2026: "a better pop up", option A, the part card) ----------
+
+/** How the card's chip and state line are coloured: fine, busy or waiting, in trouble, or off. */
+export type CardTone = 'ok' | 'info' | 'warn' | 'bad' | 'idle';
+
+/**
+ * What the hover card shows, in reading order: the name and a state chip on the title bar, one big
+ * number (with a smaller unit after it), the load bar while the part has a limit, the state in a
+ * few words when it is not simply running, and one plain sentence of what the part does.
+ */
+export interface PlateCard {
+  name: string;
+  chip: string | null;
+  tone: CardTone;
+  big: string;
+  unit: string;
+  /** load ÷ capacity for the bar, or null for no bar. */
+  bar: number | null;
+  /** The state in words, or null when the chip says it all. */
+  detail: string | null;
+  about: string;
+}
+
+/** The part's sentence without its name in front (the title bar has it). */
+function aboutText(part: Pick<Part, 'kind' | 'boost'>): string {
+  const line = aboutLine(part);
+  const prefix = `${PLATE_NAMES[part.kind]} · `;
+  const rest = line.startsWith(prefix) ? line.slice(prefix.length) : line;
+  // The plate's " · " fragments read as sentences on the card.
+  const sentences = rest.split(' · ').map((t) => t.charAt(0).toUpperCase() + t.slice(1));
+  return `${sentences.join('. ')}.`;
+}
+
+/** The chip and tone for a part's state. */
+function chipOf(look: PartLook, skipped: boolean): { chip: string; tone: CardTone } {
+  const c = LABELS.plates.chips;
+  switch (look.status) {
+    case 'booting':
+    case 'rebooting':
+      return { chip: c.booting, tone: 'info' };
+    case 'dark':
+      return { chip: c.dark, tone: 'bad' };
+    case 'dead':
+      return { chip: c.dead, tone: 'bad' };
+    case 'offline':
+      return { chip: c.off, tone: 'idle' };
+    case 'online':
+      break;
+  }
+  if (skipped) return { chip: c.skipped, tone: 'warn' };
+  if (look.diesIn !== null) return { chip: c.over, tone: 'bad' };
+  if (look.unfed) return { chip: c.unfed, tone: 'warn' };
+  return { chip: c.running, tone: 'ok' };
+}
+
+/** A part's hover card. Pure; the plate text (partPlate) stays the hook's record of the same facts. */
+export function partCard(part: Pick<Part, 'kind' | 'boost'>, look: PartLook, skipped: boolean): PlateCard {
+  const { chip, tone } = chipOf(look, skipped);
+  const running = look.status === 'online';
+  let big: string;
+  let unit: string;
+  let bar: number | null = null;
+  if (look.capacity === null || look.share === null) {
+    big = `${r(look.load)}`;
+    unit = `req/s ${part.kind === 'gateway' ? 'coming in' : 'passing through'}`;
+  } else if (!running) {
+    big = `${look.capacity}`;
+    unit = 'req/s capacity when up';
+  } else {
+    big = `${r(look.load)}`;
+    unit = `of ${look.capacity} req/s · ${r(look.share * 100)}%`;
+    bar = look.share;
+  }
+  const plain = running && tone === 'ok';
+  return {
+    name: PLATE_NAMES[part.kind],
+    chip,
+    tone,
+    big,
+    unit,
+    bar,
+    detail: plain ? null : stateLine(look, skipped),
+    about: aboutText(part),
+  };
+}
+
+/** A wire's hover card: what it carries, from where to where, and how to cut it. */
+export function wireCard(from: Pick<Part, 'kind'>, to: Pick<Part, 'kind'>, rate: number): PlateCard {
+  return {
+    name: 'WIRE',
+    chip: null,
+    tone: 'ok',
+    big: `${r(rate)}`,
+    unit: 'req/s',
+    bar: null,
+    detail: `${PLATE_NAMES[from.kind]} to ${PLATE_NAMES[to.kind]}`,
+    about: 'click it, then the cut button or Delete',
+  };
+}
+
+/** The bar's colour band: cyan with room, amber from 85%, red over 100%. */
+export function cardBarTone(share: number): CardTone {
+  if (share > 1) return 'bad';
+  if (share >= 0.85) return 'warn';
+  return 'info';
 }

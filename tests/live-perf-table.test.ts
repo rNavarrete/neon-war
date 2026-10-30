@@ -3,8 +3,9 @@ import { createViews } from '../src/scenes/live/registry';
 import { PlaceholderView } from '../src/scenes/live/view';
 
 // Cross-lane swap 7: the per-zone table under "### Budgets" in docs/LIVE.md states each built
-// view's declared budget, objects as well as texts (CommsView's 29 with the leader line, the cam's
-// 15), and its texts still sum to the global 110.
+// view's declared budget, objects as well as texts (CommsView's 31 with the leader line and the caller cam's tile, 29 before layout A2, the cam's
+// 15), and its texts still sum to the global 144 (110 until layout A2's sixteen-row chat and Lux's caption, Rolando 30
+// Oct 2026).
 
 interface Row {
   name: string;
@@ -45,15 +46,16 @@ describe('docs/LIVE.md budget table matches the built views', () => {
     expect(checked).toBeGreaterThan(8);
   });
 
-  it('names CommsView at 29 objects', () => {
+  it('names CommsView at 31 objects', () => {
     const comms = rows().find((x) => x.name.startsWith('`comms`'));
-    expect(comms?.objects).toBe(29);
+    // 29 until layout A2's caller cam (Rolando, 30 Oct 2026) added its tile and face.
+    expect(comms?.objects).toBe(31);
   });
 
-  it('keeps the texts total at the global 110', () => {
+  it('keeps the texts total at the global 144', () => {
     const r = rows();
     const total = r.find((x) => x.name.includes('Total'))!;
-    expect(total.texts).toBe(110);
-    expect(r.filter((x) => x !== total).reduce((n, x) => n + x.texts, 0)).toBe(110);
+    expect(total.texts).toBe(144);
+    expect(r.filter((x) => x !== total).reduce((n, x) => n + x.texts, 0)).toBe(144);
   });
 });

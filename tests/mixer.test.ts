@@ -211,11 +211,11 @@ describe('voice groups', () => {
     expect(voiceGroupOf('fill.block.01')).toBeNull();
     expect(challengeAt(0)).toBe(0);
     expect(challengeAt(15)).toBe(1);
-    expect(challengeAt(299.9)).toBe(3);
-    expect(challengeAt(300)).toBe(4);
+    expect(challengeAt(164.9)).toBe(3);
+    expect(challengeAt(165)).toBe(4);
     expect(challengeAt(600)).toBe(8);
     expect(residentGroups(0)).toEqual([0, 1]);
-    expect(residentGroups(200)).toEqual([2, 3, 4]);
+    expect(residentGroups(100)).toEqual([2, 3, 4]);
     expect(residentGroups(600)).toEqual([7, 8]);
     expect(voicePath('C1.triage.02', 'ja')).toBe('audio/voice/ja/C1.triage.02.mp3');
   });
@@ -233,7 +233,7 @@ describe('voice groups', () => {
     expect(mixer.snapshot().loaded).toBe(4);
 
     port.calls.length = 0;
-    mixer.tick(1, 300);
+    mixer.tick(1, 170);
     expect(mixer.snapshot().groups).toEqual([3, 4, 5]);
     expect(port.calls).toEqual([
       'unload voice:ja:C1.triage.01',
@@ -246,16 +246,16 @@ describe('voice groups', () => {
 
     // Ticks inside the same challenge touch nothing.
     port.calls.length = 0;
-    mixer.tick(2, 340);
+    mixer.tick(2, 190);
     expect(port.calls).toEqual([]);
   });
 
   it('re-resolves the groups after a rewind moves now back', () => {
     const { mixer, port } = setup();
-    mixer.tick(0, 470);
+    mixer.tick(0, 290);
     expect(mixer.snapshot().groups).toEqual([5, 6, 7]);
     port.calls.length = 0;
-    mixer.tick(1, 300); // the rewind to C4
+    mixer.tick(1, 170); // the rewind to C4
     expect(mixer.snapshot().groups).toEqual([3, 4, 5]);
     expect(port.calls).toEqual([
       'unload voice:ja:C6.rei.01',
@@ -307,8 +307,10 @@ describe('missing voices', () => {
     const m = bundledVoiceManifest();
     expect(m.ja).toContain('C1.triage.02');
     expect(m.en).toContain('C1.lux.01');
-    expect(m.ja).toHaveLength(85);
-    expect(m.en).toHaveLength(85);
+    // 85 until Lux's 26 board lines were recorded, then 111 until the 20 coach nudges were
+    // (Rolando, 30 Oct 2026): every spoken line now, 133 with the cold open's check-in beat.
+    expect(m.ja).toHaveLength(133);
+    expect(m.en).toHaveLength(133);
   });
 
   it('keeps the last 20 requests', () => {

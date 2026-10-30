@@ -1,5 +1,6 @@
 import { type Board, type Part, capacityOf, route } from '../src/sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../src/sim/brownout';
+import { tipTotal } from '../src/sim/tips';
 import {
   DIP_SCRIPT,
   blockDemand,
@@ -101,7 +102,7 @@ function postRescueAtC6(n: number): Play {
   let p = untilRescue(throughC3({ idleSecond: true }));
   for (let i = 3; i <= n; i++) p = ok(rackServer(p, `s${i}`));
   p = stepTo(p, C.c6);
-  expect(p.t).toBe(450);
+  expect(p.t).toBe(275);
   expect(p.failure).toBeNull();
   expect(liveServers(p)).toBe(n);
   return p;
@@ -109,7 +110,7 @@ function postRescueAtC6(n: number): Play {
 
 /** Play from 23:59 with no action through the end of the midnight dip (or a failure). */
 function throughDip(p: Play): { end: Play; dropped: number } {
-  const end = stepTo(p, 520);
+  const end = stepTo(p, 345);
   return { end, dropped: end.dropped - p.dropped };
 }
 
@@ -196,53 +197,54 @@ describe('ac1: overheating', () => {
   function loneStockServer(): Play {
     let p = stepTo(newPlay(), C.c1);
     p = ok(rackServer(p, 's1'));
-    return stepTo(p, 210);
+    return stepTo(p, 112.5);
   }
 
   it('ac1: played, a lone stock server in the C3 climb dies exactly 8 s after it first goes over 60', () => {
-    // The climb is 30 + (t − 180) req/s: exactly 60 at t = 210, over 60 from the tick after (210.1).
+    // The climb is 30 + 4/3 (t − 90) req/s: exactly 60 at t = 112.5, over 60 from the tick after (112.6).
     let p = loneStockServer();
-    expect(playDemand(p, 210)).toBe(60);
+    expect(playDemand(p, 112.5)).toBe(60);
     p = step(p, 0.1);
     expect(p.heat.overload['server-p1']).toBeUndefined();
     p = step(p, 0.1);
     expect(p.heat.overload['server-p1']).toBeCloseTo(0.1, 9);
-    p = stepTo(p, 218);
+    p = stepTo(p, 120.5);
     expect(p.failure).toBeNull();
     expect(p.heat.dead).toEqual([]);
     expect(p.heat.overload['server-p1']).toBeCloseTo(7.9, 9);
     p = step(p, 0.1);
-    expect(p.t).toBeCloseTo(218.1, 9);
+    expect(p.t).toBeCloseTo(120.6, 9);
     expect(p.heat.dead).toEqual(['server-p1']);
     expect(p.failure).toEqual({ at: p.t, cause: 'server-died', by: 'triage', rewindTo: C.c3 });
   });
 
   it('ac1: played, 7.9 s over load then the paid banner takes it under 100%: it lives, and the count restarts', () => {
-    let p = stepTo(loneStockServer(), 218);
+    let p = stepTo(loneStockServer(), 120.5);
     expect(p.heat.overload['server-p1']).toBeCloseTo(7.9, 9);
     // The Solace banner serves 60 first, so the server's load drops to demand − 60 < 60.
     p = ok(answerBanner(p, 'pay'));
     p = step(p, 0.1);
     expect(p.heat.overload['server-p1']).toBeUndefined();
-    p = stepTo(p, 230);
+    p = stepTo(p, 130);
     expect(p.failure).toBeNull();
     expect(p.heat.dead).toEqual([]);
-    // The banner runs out at 218 + 60 = 278; over load again from then, the server dies 8 s later.
-    p = untilFailure(p, 300);
-    expect(p.failure?.cause).toBe('server-died');
-    expect(p.failure?.at).toBeCloseTo(286, 9);
+    // The banner runs to 120.5 + 60 = 180.5, past the start of the surge: the climb never cooks it.
+    p = untilFailure(p, C.c4);
+    expect(p.failure).toBeNull();
+    expect(p.heat.dead).toEqual([]);
+    expect(p.t).toBe(165);
   });
 
   it('ac1: played, a dead server stays offline until it is replaced', () => {
-    // Two servers behind the balancer at 23:59: the final surge puts both over 60 from 450.1, and
+    // Two servers behind the balancer at 23:59: the final surge puts both over 60 from 275.1, and
     // after the crew a dead server does not freeze the board: it just stays dark.
     let p = postRescueAtC6(2);
-    p = stepTo(p, 458);
+    p = stepTo(p, 283);
     expect(p.heat.dead).toEqual([]);
     p = step(p, 0.1);
-    expect(p.t).toBeCloseTo(458.1, 9);
+    expect(p.t).toBeCloseTo(283.1, 9);
     expect(p.heat.dead).toEqual(['server-p1', 'server-p2']);
-    p = stepTo(p, 460);
+    p = stepTo(p, 285);
     expect(p.failure).toBeNull();
     expect(p.heat.dead).toEqual(['server-p1', 'server-p2']);
     expect(offlineParts(p, p.t)).toEqual(expect.arrayContaining(['server-p1', 'server-p2']));
@@ -266,9 +268,9 @@ describe('ac1: overheating', () => {
       ]),
     );
     // It boots for 3 s, then serves its 60; the unreplaced one stays dead.
-    let q = stepTo(replaced, 462.9);
+    let q = stepTo(replaced, 287.9);
     expect(offlineParts(q, q.t)).toContain('server-p3');
-    q = stepTo(q, 463.1);
+    q = stepTo(q, 288.1);
     expect(q.failure).toBeNull();
     expect(offlineParts(q, q.t)).not.toContain('server-p3');
     expect(routePlay(q, playDemand(q, q.t), q.t).served).toBe(60);
@@ -403,7 +405,7 @@ describe('ac4: the dip schedule', () => {
     expect(midnight).toHaveLength(1);
     expect(midnight[0].target).toBe('seeded');
     expect(midnight[0].darkAt).toBe(BROWNOUT.clock.midnight - 10);
-    expect(midnight[0].darkAt).toBe(500); // 23:59:50
+    expect(midnight[0].darkAt).toBe(325); // 23:59:50
   });
 
   it('the seed decides which server goes dark, the same way every time', () => {
@@ -481,18 +483,18 @@ function holdingPlay(): Play {
 }
 
 describe('ac6: the rescue trigger', () => {
-  it('ac6: fires when trust drops under 30 or 45 s into the surge, whichever comes first', () => {
+  it('ac6: fires when trust drops under 30 or 40 s into the surge, whichever comes first', () => {
     expect(rescueDue(29.9, C.c4 + 10)).toBe('trust');
     expect(rescueDue(30, C.c4 + 10)).toBeNull();
-    expect(rescueDue(100, C.c4 + 44.9)).toBeNull();
-    expect(rescueDue(100, C.c4 + 45)).toBe('time');
-    expect(rescueDue(10, C.c4 + 45)).toBe('trust');
+    expect(rescueDue(100, C.c4 + 39.9)).toBeNull();
+    expect(rescueDue(100, C.c4 + 40)).toBe('time');
+    expect(rescueDue(10, C.c4 + 40)).toBe('trust');
     expect(rescueDue(10, C.c4 - 1)).toBeNull();
   });
 
   it('ac6: trust trigger: the played surge brings the crew on the tick trust drops under 30', () => {
     let p = throughC3();
-    expect(p.t).toBe(300);
+    expect(p.t).toBe(165);
     expect(p.session.trust).toBe(100);
     let ticks = 0;
     let before = p;
@@ -508,12 +510,12 @@ describe('ac6: the rescue trigger', () => {
     expect(before.session.trust).toBeGreaterThanOrEqual(30);
     expect(p.session.trust).toBeLessThan(30);
     expect(p.rescue).toEqual({ at: p.t, by: 'trust' });
-    // Well before the 45 s time trigger: the surge dip takes the only server dark at 305.
-    expect(p.t).toBeGreaterThan(305);
-    expect(p.t).toBeLessThan(345);
+    // Well before the 40 s time trigger: the surge dip takes the only server dark at 170.
+    expect(p.t).toBeGreaterThan(170);
+    expect(p.t).toBeLessThan(205);
   });
 
-  it('ac6: time trigger: a board that keeps trust up still gets the crew 45 s in', () => {
+  it('ac6: time trigger: a board that keeps trust up still gets the crew 40 s in', () => {
     let p = holdingPlay();
     let lowest = Infinity;
     while (!p.rescue && !p.failure) {
@@ -523,17 +525,17 @@ describe('ac6: the rescue trigger', () => {
     expect(p.failure).toBeNull();
     expect(lowest).toBe(100);
     expect(p.rescue?.by).toBe('time');
-    expect(p.rescue?.at).toBe(345);
-    expect(p.t).toBe(345);
+    expect(p.rescue?.at).toBe(205);
+    expect(p.t).toBe(205);
   });
 
   it('ac6: one 30 s step from the start of the surge still brings the crew under 30 before trust runs out', () => {
     const atC4 = throughC3();
     const big = step(atC4, 30);
-    const small = stepTo(atC4, 330);
+    const small = stepTo(atC4, 195);
     // No build after the crew: trust runs out later in the surge, but the crew came first.
     expect(big.rescue?.by).toBe('trust');
-    expect(big.failure).toMatchObject({ cause: 'trust', by: 'rei', rewindTo: 300 });
+    expect(big.failure).toMatchObject({ cause: 'trust', by: 'rei', rewindTo: 165 });
     expect(big.rescue!.at).toBeLessThan(big.failure!.at);
     expectSame(big, small);
   });
@@ -547,18 +549,19 @@ describe('ac6: the rescue trigger', () => {
     let credits = p.session.board.credits;
     let ticks = 0;
     let underAgain = 0;
-    // Through the rest of the surge, past the 45 s time trigger, trust under 30 for a while.
+    // Through the rest of the surge, past the 40 s time trigger, trust under 30 for a while.
     while (p.t < C.c6 - 1e-9 && !p.failure) {
       p = step(p, 0.1);
       ticks++;
       if (p.session.trust < 30) underAgain++;
       expect(p.rescue).toBe(first);
-      expect(p.session.board.credits).toBeLessThanOrEqual(credits); // Ozzie fronts once
-      credits = p.session.board.credits;
+      // Ozzie fronts once (the viewers' tips aside: src/sim/tips.ts).
+      expect(p.session.board.credits - tipTotal(p.tips)).toBeLessThanOrEqual(credits);
+      credits = p.session.board.credits - tipTotal(p.tips);
     }
     expect(p.failure).toBeNull();
-    expect(p.t).toBe(450);
-    expect(ticks).toBeGreaterThan(1000);
+    expect(p.t).toBe(275);
+    expect(ticks).toBeGreaterThan(900);
     expect(underAgain).toBeGreaterThan(0);
     expect(p.session.ozzie.fronted).toBe(true);
   });
@@ -587,7 +590,9 @@ describe('ac7: after the rescue', () => {
     );
     expect(p.session.board.wires.filter((w) => w.from === 'gateway')).toHaveLength(1);
     // Ozzie's 100, less one 0.1 s tick of upkeep for one server (5 a minute).
-    expect(p.session.board.credits).toBeCloseTo(before.session.board.credits + 100 - 0.1 / 12, 9);
+    // (Plus the rescue's milestone tip from the viewers: src/sim/tips.ts.)
+    const tipped = tipTotal(p.tips) - tipTotal(before.tips);
+    expect(p.session.board.credits).toBeCloseTo(before.session.board.credits + 100 - 0.1 / 12 + tipped, 9);
     expect(p.session.ozzie.fronted).toBe(true);
     // The fried server serves its stock 60 at once, behind the balancer.
     const flow = routePlay(p, 120, p.t);
@@ -613,16 +618,30 @@ describe('ac7: after the rescue', () => {
 });
 
 describe('ac8: Regroup', () => {
+  // Session 0 never hands Regroup over (BROWNOUT.regroup.inSession is false); a later session that
+  // does gives the play this charge at the rescue. The mechanic is tested on that state.
+  const withRegroup = (p: Play): Play => ({
+    ...p,
+    regroup: { charges: BROWNOUT.regroup.charges, handedOver: true, left: 0 },
+  });
+
+  it('is never handed over in Session 0', () => {
+    const after = untilRescue(stepTo(throughC3(), C.c4 + 1));
+    expect(after.rescue).not.toBeNull();
+    expect(after.regroup).toEqual({ charges: 0, handedOver: false, left: 0 });
+    expect(useRegroup(after).ok).toBe(false);
+  });
+
   it('is only available after the rescue', () => {
     const before = stepTo(throughC3(), C.c4 + 1);
-    expect(useRegroup(before).ok).toBe(false);
-    const after = untilRescue(before);
+    expect(useRegroup(withRegroup(before)).ok).toBe(false);
+    const after = withRegroup(untilRescue(before));
     expect(after.regroup.charges).toBe(1);
     expect(useRegroup(after).ok).toBe(true);
   });
 
   it('runs the sim at quarter speed for 10 s', () => {
-    let p = ok(rackServer(ok(rackServer(untilRescue(throughC3()), 's2')), 's3'));
+    let p = ok(rackServer(ok(rackServer(withRegroup(untilRescue(throughC3())), 's2')), 's3'));
     const t0 = p.t;
     p = ok(useRegroup(p));
     p = step(p, 1);
@@ -640,7 +659,7 @@ describe('ac8: Regroup', () => {
   });
 
   it('has one charge per session, kept across rewinds', () => {
-    let p = untilRescue(throughC3());
+    let p = withRegroup(untilRescue(throughC3()));
     p = ok(useRegroup(p));
     p = step(p, 10);
     expect(useRegroup(p).ok).toBe(false);
@@ -682,16 +701,18 @@ describe('ac9: rewinds', () => {
     let p = stepTo(newPlay(), C.c1);
     p = ok(rackServer(p, 's1'));
     const atC2 = stepTo(p, C.c2);
-    expect(atC2.t).toBe(90);
+    expect(atC2.t).toBe(45);
     p = ok(decommissionServer(stepTo(atC2, C.c2 + 5), 'server-p1'));
     p = stepTo(p, C.c3);
-    expect(p.failure).toMatchObject({ cause: 'trust', by: 'triage', rewindTo: 90 });
+    expect(p.failure).toMatchObject({ cause: 'trust', by: 'triage', rewindTo: 45 });
     const r = ok(rewind(p));
     expectRestored(r, atC2);
-    expect(r.t).toBe(90);
-    expect(r.session.trust).toBe(100);
-    // 400 − 80 for the server − 75 s of its upkeep at 5 a minute.
-    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 75 / 12, 9);
+    expect(r.t).toBe(45);
+    // The 3 s boot dropped every call (30 trust), and 27 s of calm since won 27 of it back.
+    expect(r.session.trust).toBeCloseTo(97, 9);
+    // 400 − 80 for the server − 30 s of its upkeep at 5 a minute.
+    // (Plus the viewers' tips so far: src/sim/tips.ts.)
+    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 30 / 12 + tipTotal(r.tips), 9);
     expect(r.session.board.parts.some((q) => q.id === 'server-p1')).toBe(true);
   });
 
@@ -699,25 +720,25 @@ describe('ac9: rewinds', () => {
     let p = stepTo(newPlay(), C.c1);
     p = ok(rackServer(p, 's1'));
     const atC3 = stepTo(p, C.c3);
-    expect(atC3.t).toBe(180);
+    expect(atC3.t).toBe(90);
     p = stepTo(atC3, C.c4);
-    expect(p.failure).toMatchObject({ cause: 'server-died', by: 'triage', rewindTo: 180 });
+    expect(p.failure).toMatchObject({ cause: 'server-died', by: 'triage', rewindTo: 90 });
     const r = ok(rewind(p));
     expectRestored(r, atC3);
-    expect(r.t).toBe(180);
-    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 165 / 12, 9);
+    expect(r.t).toBe(90);
+    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 75 / 12 + tipTotal(r.tips), 9);
     expect(r.heat.dead).toEqual([]);
   });
 
   it('ac9: trust reaching 0 in the surge still brings the crew, and the surge restarts', () => {
     const atC4 = throughC3();
-    expect(atC4.t).toBe(300);
+    expect(atC4.t).toBe(165);
     expect(atC4.session.trust).toBe(100);
-    // 400 − 80 (server) − 60 (kit) − 285 s of one server's upkeep at 5 a minute.
-    expect(atC4.session.board.credits).toBeCloseTo(400 - 80 - 60 - 285 / 12, 9);
+    // 400 − 80 (server) − 60 (bigger box) − 150 s of one server's upkeep at 5 a minute.
+    expect(atC4.session.board.credits).toBeCloseTo(400 - 80 - 60 - 150 / 12 + tipTotal(atC4.tips), 9);
     // No build at all: the crew arrives on trust under 30, then trust runs out in the surge.
     const p = untilFailure(atC4, C.c6);
-    expect(p.failure).toMatchObject({ cause: 'trust', by: 'rei', rewindTo: 300 });
+    expect(p.failure).toMatchObject({ cause: 'trust', by: 'rei', rewindTo: 165 });
     expect(p.failure!.at).toBeLessThan(C.c6);
     expect(p.session.trust).toBe(0);
     expect(p.rescue?.by).toBe('trust');
@@ -726,9 +747,9 @@ describe('ac9: rewinds', () => {
 
     const r = ok(rewind(p));
     expectRestored(r, atC4);
-    expect(r.t).toBe(300);
+    expect(r.t).toBe(165);
     expect(r.session.trust).toBe(100);
-    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 60 - 285 / 12, 9);
+    expect(r.session.board.credits).toBeCloseTo(400 - 80 - 60 - 150 / 12 + tipTotal(r.tips), 9);
     expect(r.session.board.parts.find((q) => q.id === 'server-p1')?.boost).toBe(2);
     expect(r.crewMet).toBe(true);
     expect(r.rescue).toBeNull();
@@ -739,36 +760,36 @@ describe('ac9: rewinds', () => {
   });
 
   it('ac9: a surge failure on the tick that reaches 23:59 still rewinds to the surge, not to 23:59', () => {
-    // Best play to 23:58:69.95 with trust back at 100, then every server pulled: with nothing
-    // serving, trust drains 10 a second and runs out on the tick that ends exactly at t = 450.
+    // Best play to 23:58:59.95 with trust back at 100, then every server pulled: with nothing
+    // serving, trust drains 10 a second and runs out on the tick that ends exactly at t = 275.
     let p = untilRescue(throughC3());
     p = ok(rackServer(p, 's2'));
     p = ok(rackServer(p, 's3'));
-    p = stepTo(p, 439.9);
+    p = stepTo(p, 264.9);
     p = step(p, 0.05);
-    expect(p.t).toBeCloseTo(439.95, 9);
+    expect(p.t).toBeCloseTo(264.95, 9);
     expect(p.session.trust).toBe(100);
     for (const id of ['server-p1', 'server-p2', 'server-p3']) p = ok(decommissionServer(p, id));
-    // One step: ticks on the 0.1 s grid, so 0.5 drains by 440, 1 per tick after, the last at 450.
+    // One step: ticks on the 0.1 s grid, so 0.5 drains by 265, 1 per tick after, the last at 275.
     p = step(p, 20);
-    expect(p.failure).toEqual({ at: 450, cause: 'trust', by: 'rei', rewindTo: 300 });
-    expect(p.checkpoint?.at).toBe(300);
+    expect(p.failure).toEqual({ at: 275, cause: 'trust', by: 'rei', rewindTo: 165 });
+    expect(p.checkpoint?.at).toBe(165);
     const r = ok(rewind(p));
-    expect(r.t).toBe(300);
+    expect(r.t).toBe(165);
     expect(r.session.trust).toBe(100);
-    expect(r.rewinds.at(-1)).toEqual({ at: 450, to: 300, by: 'rei', cause: 'trust' });
+    expect(r.rewinds.at(-1)).toEqual({ at: 275, to: 165, by: 'rei', cause: 'trust' });
   });
 
-  it('ac9: a failed midnight goes back to 23:59 (t = 450)', () => {
+  it('ac9: a failed midnight goes back to 23:59 (t = 275)', () => {
     const atC6 = postRescueAtC6(3);
-    expect(atC6.t).toBe(450);
+    expect(atC6.t).toBe(275);
     expect(atC6.session.trust).toBe(100);
     const p = throughDip(atC6).end;
-    expect(p.failure).toEqual({ at: 510, cause: 'dark-at-midnight', by: 'rei', rewindTo: 450 });
+    expect(p.failure).toEqual({ at: 335, cause: 'dark-at-midnight', by: 'rei', rewindTo: 275 });
     expect(p.midnight?.held).toBe(false);
     const r = ok(rewind(p));
     expectRestored(r, atC6);
-    expect(r.t).toBe(450);
+    expect(r.t).toBe(275);
     expect(r.session.trust).toBe(100);
     expect(r.session.board.parts.map((q) => q.id)).toEqual([
       'gateway',
@@ -781,7 +802,7 @@ describe('ac9: rewinds', () => {
     expect(r.heat.dead).toEqual([]);
     expect(r.rescue).not.toBeNull(); // the crew are still there at 23:59
     expect(r.midnight).toBeNull();
-    expect(r.rewinds.at(-1)).toEqual({ at: 510, to: 450, by: 'rei', cause: 'dark-at-midnight' });
+    expect(r.rewinds.at(-1)).toEqual({ at: 335, to: 275, by: 'rei', cause: 'dark-at-midnight' });
     // Rewound, the same choice fails the same way again.
     expect(throughDip(r).end.failure).toEqual(p.failure);
   });
@@ -803,7 +824,7 @@ describe('ac10: midnight sizing', () => {
   it('ac10: 4 healthy servers behind the balancer drop no requests through the dip', () => {
     const { end, dropped } = throughDip(postRescueAtC6(4));
     expect(end.failure).toBeNull();
-    expect(end.t).toBe(520);
+    expect(end.t).toBe(345);
     expect(darkParts(end.dips, DIP_SCRIPT[1].darkAt)).toHaveLength(1);
     expect(dropped).toBe(0);
     expect(end.midnight).toEqual({ held: true, dropped: 0, servers: 4, waste: false });
@@ -812,14 +833,14 @@ describe('ac10: midnight sizing', () => {
   it('ac10: 3 drop requests with no replacement', () => {
     const atC6 = postRescueAtC6(3);
     // Up to the dip, 3 × 60 = 180 covers the climb to 150: nothing dropped.
-    let p = stepTo(atC6, 500);
+    let p = stepTo(atC6, 325);
     expect(p.dropped).toBe(atC6.dropped);
     expect(p.retry).toBe(0);
     // The dip takes one dark; the balancer skips it and the other two take 145 req/s between them.
-    const darkOne = darkParts(p.dips, 500);
+    const darkOne = darkParts(p.dips, 325);
     expect(darkOne).toHaveLength(1);
-    const flow = routePlay(p, playDemand(p, 500), 500);
-    expect(playDemand(p, 500)).toBe(145);
+    const flow = routePlay(p, playDemand(p, 325), 325);
+    expect(playDemand(p, 325)).toBe(145);
     expect(flow.skipped).toEqual([`balancer>${darkOne[0]}`]);
     expect(flow.dropped).toBe(25);
     const live = ['server-p1', 'server-p2', 'server-p3'].filter((id) => id !== darkOne[0]);
@@ -827,23 +848,23 @@ describe('ac10: midnight sizing', () => {
     // The first dark tick drops exactly 25 req/s for 0.1 s.
     const first = step(p, 0.1);
     expect(first.dropped - p.dropped).toBeCloseTo(2.5, 9);
-    // The two live ones run over 100% from 500 and cook 8 s later.
-    p = stepTo(first, 507.9);
+    // The two live ones run over 100% from 325 and cook 8 s later.
+    p = stepTo(first, 332.9);
     expect(p.heat.dead).toEqual([]);
     p = step(p, 0.1);
-    expect(p.t).toBeCloseTo(508, 9);
+    expect(p.t).toBeCloseTo(333, 9);
     expect(p.heat.dead).toEqual(live);
-    const end = stepTo(p, 520);
-    expect(end.failure).toEqual({ at: 510, cause: 'dark-at-midnight', by: 'rei', rewindTo: 450 });
+    const end = stepTo(p, 345);
+    expect(end.failure).toEqual({ at: 335, cause: 'dark-at-midnight', by: 'rei', rewindTo: 275 });
     expect(end.midnight).toMatchObject({ held: false, servers: 1, waste: false });
-    // At least the no-retry shortfall: 25 rising to 30 req/s over the 10 s from 500 to 510.
+    // At least the no-retry shortfall: 25 rising to 30 req/s over the 10 s from 325 to 335.
     expect(end.midnight!.dropped).toBe(end.dropped - atC6.dropped);
     expect(end.midnight!.dropped).toBeGreaterThan(274.75);
   });
 
   it('ac10: 3 drop none when a replacement is placed so its 3 s boot ends by the dip', () => {
     const atC6 = postRescueAtC6(3);
-    let p = stepTo(atC6, 497);
+    let p = stepTo(atC6, 322);
     p = ok(rackServer(p, 's4'));
     const { end } = throughDip(p);
     expect(end.dropped).toBe(atC6.dropped);
@@ -854,7 +875,7 @@ describe('ac10: midnight sizing', () => {
   it('ac10: 3 still drop requests when the replacement goes in only once the dip lands', () => {
     let p = stepTo(postRescueAtC6(3), DIP_SCRIPT[1].darkAt);
     p = ok(rackServer(p, 's4'));
-    // While the new box boots (500 to 503) the two live servers carry 145: 25 req/s dropped.
+    // While the new box boots (325 to 328) the two live servers carry 145: 25 req/s dropped.
     const first = step(p, 0.1);
     expect(first.dropped - p.dropped).toBeCloseTo(2.5, 9);
     const { dropped } = throughDip(p);
@@ -868,16 +889,16 @@ describe('ac10: midnight sizing', () => {
     expect(p.dropped).toBe(atC6.dropped);
     p = step(p, 0.1);
     expect(p.dropped - atC6.dropped).toBeCloseTo(0.005, 9); // 120.05 − 120, for 0.1 s
-    // Both run over 100% from 450.1, so both cook at 458.1; then nothing serves at all.
-    p = stepTo(p, 458.1);
+    // Both run over 100% from 275.1, so both cook at 283.1; then nothing serves at all.
+    p = stepTo(p, 283.1);
     expect(p.heat.dead).toEqual(['server-p1', 'server-p2']);
     const flow = routePlay(p, playDemand(p, p.t), p.t);
     expect(flow.served).toBe(0);
     expect(flow.dropped).toBe(playDemand(p, p.t));
-    const end = stepTo(p, 520);
+    const end = stepTo(p, 345);
     // The block goes dark before midnight: trust runs out in C6.
-    expect(end.failure).toMatchObject({ cause: 'dark-at-midnight', by: 'rei', rewindTo: 450 });
-    expect(end.failure!.at).toBeLessThan(510);
+    expect(end.failure).toMatchObject({ cause: 'dark-at-midnight', by: 'rei', rewindTo: 275 });
+    expect(end.failure!.at).toBeLessThan(335);
     expect(end.session.trust).toBe(0);
     expect(end.dropped - atC6.dropped).toBeGreaterThan(500);
   });
@@ -886,7 +907,7 @@ describe('ac10: midnight sizing', () => {
     const atC6 = postRescueAtC6(5);
     const { end, dropped } = throughDip(atC6);
     expect(end.failure).toBeNull();
-    expect(end.t).toBe(520);
+    expect(end.t).toBe(345);
     expect(dropped).toBe(0);
     expect(end.midnight).toEqual({ held: true, dropped: 0, servers: 5, waste: true });
     expect(debriefNumbers(end).wastedCredits).toBe(80);
@@ -894,45 +915,52 @@ describe('ac10: midnight sizing', () => {
 });
 
 describe('ac11: the whole session, headless', () => {
-  it('ac11: best play from 23:51:30 to 00:01:00: no debt, trust above 0, about 150 credits before midnight', () => {
+  it('ac11: best play from 23:54:25 to 00:00:30: no debt, trust above 0, about 160 credits before midnight', () => {
     // Every move through the product's actions, stepping the clock in 0.1 s ticks from t = 0.
     let p = newPlay();
     expect(p.t).toBe(0);
     p = stepTo(p, 15); // C1: rack one server
     p = ok(rackServer(p, 's1'));
-    p = stepTo(p, 95); // C2: skip the banner
+    p = stepTo(p, 50); // C2: skip the banner
     p = ok(answerBanner(p, 'ignore'));
-    p = stepTo(p, 100); // overclock early
+    p = stepTo(p, 55); // the bigger box early
     p = ok(overclockServer(p, 'server-p1'));
     p = untilRescue(p); // C4: the surge, then the crew
     expect(p.failure).toBeNull();
     const rescuedAt = p.rescue!.at;
     p = ok(rackServer(p, 's2')); // 3 at the rescue
     p = ok(rackServer(p, 's3'));
-    p = stepTo(p, 450); // 23:59
+    p = stepTo(p, 275); // 23:59
     expect(p.failure).toBeNull();
     // Ledger: 400 − 80 − 60 + 100 (Ozzie) − 160, less upkeep at 5 a minute: one server from 15 to
-    // the rescue, three from the rescue to 450.
-    const beforeMidnight = p.session.board.credits;
-    expect(beforeMidnight).toBeCloseTo(200 - (rescuedAt - 15) / 12 - ((450 - rescuedAt) * 3) / 12, 6);
+    // the rescue, three from the rescue to 275.
+    // The viewers' tips (src/sim/tips.ts) come on top of the ledger.
+    const beforeMidnight = p.session.board.credits - tipTotal(p.tips);
+    expect(beforeMidnight).toBeCloseTo(200 - (rescuedAt - 15) / 12 - ((275 - rescuedAt) * 3) / 12, 6);
     expect(beforeMidnight).toBeGreaterThanOrEqual(120);
     expect(beforeMidnight).toBeLessThanOrEqual(180);
+    // A normal run earns a couple of hundred in tips (milestones and the trickle).
+    expect(tipTotal(p.tips)).toBeGreaterThanOrEqual(100);
+    expect(tipTotal(p.tips)).toBeLessThanOrEqual(400);
     p = ok(rackServer(p, 's4')); // a 4th for the dip
-    p = stepTo(p, 510);
+    p = stepTo(p, 335);
     expect(p.midnight).toEqual({ held: true, dropped: 0, servers: 4, waste: false });
-    p = stepTo(p, 530); // fireworks: demand down to 40, scale down to 2
+    p = stepTo(p, 355); // fireworks: demand down to 40, scale down to 2
     p = ok(decommissionServer(p, 'server-p4'));
     p = ok(decommissionServer(p, 'server-p3'));
-    p = stepTo(p, 540); // 00:01:00
+    p = stepTo(p, 365); // 00:00:30
 
-    expect(p.t).toBe(540);
+    expect(p.t).toBe(365);
     expect(p.failure).toBeNull();
     expect(p.rewinds).toEqual([]);
     expect(p.session.ozzie.debt).toBe(0);
     expect(p.session.trust).toBe(100);
     expect(liveServers(p)).toBe(2);
-    // − 80 for the 4th, four servers' upkeep 450 to 530, + 40 back for each of two, two servers 530 to 540.
-    expect(p.session.board.credits).toBeCloseTo(beforeMidnight - 80 - (80 * 4) / 12 + 80 - (10 * 2) / 12, 6);
+    // − 80 for the 4th, four servers' upkeep 275 to 355, + 40 back for each of two, two servers 355 to 365.
+    expect(p.session.board.credits - tipTotal(p.tips)).toBeCloseTo(
+      beforeMidnight - 80 - (80 * 4) / 12 + 80 - (10 * 2) / 12,
+      6,
+    );
     expect(debriefNumbers(p)).toMatchObject({
       wastedCredits: 0,
       trust: 100,
@@ -953,7 +981,7 @@ describe('ac12: pure functions', () => {
     const surge = deepFreeze(stepTo(throughC3(), C.c4 + 1));
     const after = deepFreeze(untilRescue(throughC3()));
     const failed = deepFreeze(stepTo(ok(rackServer(stepTo(newPlay(), C.c1), 's1')), C.c4));
-    const cooked = deepFreeze(stepTo(postRescueAtC6(2), 460)); // two dead servers, board live
+    const cooked = deepFreeze(stepTo(postRescueAtC6(2), 285)); // two dead servers, board live
     expect(failed.failure).not.toBeNull();
     expect(cooked.heat.dead).toHaveLength(2);
     const inputs = [fresh, surge, after, failed, cooked];
@@ -1006,26 +1034,26 @@ describe('ac12: pure functions', () => {
 
   it('ac12: take time as a parameter, never the clock', () => {
     // Time comes in as `now`: the answers are GAME.md's numbers at the times asked for.
-    expect(blockDemand(300, false, false)).toBe(250);
-    expect(blockDemand(320, false, true)).toBe(210);
-    expect(blockDemand(320, true, false)).toBe(120);
-    expect(blockDemand(450, true, false)).toBe(120);
-    expect(blockDemand(510, true, false)).toBe(150);
+    expect(blockDemand(165, false, false)).toBe(250);
+    expect(blockDemand(185, false, true)).toBe(210);
+    expect(blockDemand(185, true, false)).toBe(120);
+    expect(blockDemand(275, true, false)).toBe(120);
+    expect(blockDemand(335, true, false)).toBe(150);
     expect(withRetries(250, 0.5)).toBe(375);
-    expect(rescueDue(100, 344.9)).toBeNull();
-    expect(rescueDue(100, 345)).toBe('time');
-    expect(laundryCutAvailable(359.9, false)).toBe(true);
-    expect(laundryCutAvailable(360, false)).toBe(false);
+    expect(rescueDue(100, 204.9)).toBeNull();
+    expect(rescueDue(100, 205)).toBe('time');
+    expect(laundryCutAvailable(214.9, false)).toBe(true);
+    expect(laundryCutAvailable(215, false)).toBe(false);
     const board: Board = {
       ...oneServerBoard(),
       parts: [...fixed, { id: 'srv', kind: 'server', slot: 's1' }],
     };
     const midnightDip = resolveDip(board, DIP_SCRIPT[1], 5);
-    expect(dipPhase(midnightDip, 497.9)).toBeNull();
-    expect(dipPhase(midnightDip, 498)).toBe('flicker');
-    expect(dipPhase(midnightDip, 500)).toBe('dark');
-    expect(dipPhase(midnightDip, 519.9)).toBe('dark');
-    expect(dipPhase(midnightDip, 520)).toBeNull();
+    expect(dipPhase(midnightDip, 322.9)).toBeNull();
+    expect(dipPhase(midnightDip, 323)).toBe('flicker');
+    expect(dipPhase(midnightDip, 325)).toBe('dark');
+    expect(dipPhase(midnightDip, 344.9)).toBe('dark');
+    expect(dipPhase(midnightDip, 345)).toBeNull();
   });
 
   it('ac12: the sim never reads the clock or randomness: a whole played session runs with them blocked', () => {
@@ -1038,9 +1066,9 @@ describe('ac12: pure functions', () => {
       vi.spyOn(Math, 'random').mockImplementation(blocked),
     ];
     try {
-      const a = stepTo(postRescueAtC6(4), 540);
-      const b = stepTo(postRescueAtC6(4), 540);
-      expect(a.t).toBe(540);
+      const a = stepTo(postRescueAtC6(4), 365);
+      const b = stepTo(postRescueAtC6(4), 365);
+      expect(a.t).toBe(365);
       expect(a.midnight).toEqual({ held: true, dropped: 0, servers: 4, waste: false });
       expect(a).toEqual(b);
     } finally {
@@ -1048,38 +1076,49 @@ describe('ac12: pure functions', () => {
     }
   });
 
-  it('ac12: step(play, 60) through the surge equals 600 steps of 0.1', () => {
-    // The played surge: the dip at 305, the crew on trust under 30, then (no build) trust runs out.
+  it('ac12: step(play, 50) through the surge equals 500 steps of 0.1', () => {
+    // The played surge: the dip at 170, the crew on trust under 30, then (no build) trust runs out.
     const atC4 = throughC3();
     let small = atC4;
-    for (let i = 0; i < 600; i++) small = step(small, 0.1);
-    const big = step(atC4, 60);
+    for (let i = 0; i < 500; i++) small = step(small, 0.1);
+    const big = step(atC4, 50);
     expect(big.failure?.cause).toBe('trust');
     expect(big.rescue?.by).toBe('trust');
     expectSame(big, small);
 
-    // A board that holds: the dip goes dark and comes back, the time trigger at 345, C5 at 360.
+    // A board that holds: the dip goes dark and comes back, the time trigger at 205, C5 at 215.
     const held = stepTo(holdingPlay(), C.c4);
     let ticks = held;
-    for (let i = 0; i < 600; i++) ticks = step(ticks, 0.1);
-    const once = step(held, 60);
-    expect(once.t).toBeCloseTo(360, 9);
-    expect(once.rescue).toEqual({ at: 345, by: 'time' });
+    for (let i = 0; i < 500; i++) ticks = step(ticks, 0.1);
+    const once = step(held, 50);
+    expect(once.t).toBeCloseTo(215, 9);
+    expect(once.rescue).toEqual({ at: 205, by: 'time' });
     expect(once.dips.map((d) => d.id)).toEqual(['surge']);
     expectSame(once, ticks);
   });
 
   it('ac12: one big step lands on an overheat, a boot end and the Regroup end like small steps do', () => {
-    // A lone stock server cooks at 218.1 in the C3 climb, whatever the step size.
+    // A lone stock server cooks at 120.6 in the C3 climb, whatever the step size.
     let p = stepTo(newPlay(), C.c1);
     p = ok(rackServer(p, 's1'));
-    p = stepTo(p, 200);
+    p = stepTo(p, 105);
     const big = step(p, 40);
-    expect(big.failure?.at).toBeCloseTo(218.1, 9);
-    expectSame(big, stepTo(p, 240));
+    expect(big.failure?.at).toBeCloseTo(120.6, 9);
+    expectSame(big, stepTo(p, 145));
 
     // Regroup: a 12 s step slows exactly the 10 s that Regroup lasts.
-    let q = ok(rackServer(ok(rackServer(untilRescue(throughC3()), 's2')), 's3'));
+    // A session that hands Regroup over (Session 0 does not: BROWNOUT.regroup.inSession).
+    let q = ok(
+      rackServer(
+        ok(
+          rackServer(
+            { ...untilRescue(throughC3()), regroup: { charges: 1, handedOver: true, left: 0 } },
+            's2',
+          ),
+        ),
+        's3',
+      ),
+    );
     q = ok(useRegroup(q));
     let slow = q;
     for (let i = 0; i < 120; i++) slow = step(slow, 0.1);
@@ -1087,5 +1126,21 @@ describe('ac12: pure functions', () => {
     expect(fast.t - q.t).toBeCloseTo(2.5 + 2, 9);
     expect(fast.regroup.left).toBe(0);
     expectSame(fast, slow);
+  });
+});
+
+describe('selling back a server that never carried a request (30 Oct 2026)', () => {
+  it('pays its full price; one that has served pays half', () => {
+    // throughC3 with an idle second server: the gateway feeds server-p1 only.
+    const p = throughC3({ idleSecond: true });
+    expect(p.used).toContain('server-p1');
+    expect(p.used).not.toContain('server-p2');
+    const before = p.session.board.credits;
+    const idle = ok(decommissionServer(p, 'server-p2'));
+    expect(idle.session.board.credits).toBe(before + BROWNOUT.server.cost);
+    const busy = ok(decommissionServer(p, 'server-p1'));
+    expect(busy.session.board.credits).toBe(
+      before + Math.floor(BROWNOUT.server.cost * BROWNOUT.decommissionRefund),
+    );
   });
 });

@@ -7,7 +7,21 @@ import { allPortraits, portraitFor, speakerName } from '../game/portraits';
 import { TEXT_CPS, settings } from '../game/settings';
 import { LINES, type LineId } from '../strings';
 import { LABELS } from './labels';
-import { scriptFaces, typedChars } from './scripts';
+import { StoryChat, chatMessage, preloadChat } from './chatPanel';
+import { chatText, scriptFaces, typedChars } from './scripts';
+import {
+  HOVERING,
+  LEAD,
+  TEXT_LINE,
+  TEXT_POS,
+  bobAt,
+  facesLeft,
+  frameFor,
+  hoverFor,
+  slotsBetween,
+  slotsFor,
+  standOrder,
+} from './stage';
 import { type PagePoint, type ViewSnapshot, playVoice, storyState } from './state';
 
 export const W = 1920;
@@ -17,7 +31,6 @@ export const H = 1080;
 export const TEX = {
   textbox: ['story:textbox', 'art/hud/textbox.webp'],
   nameplate: ['story:nameplate', 'art/hud/nameplate.webp'],
-  chat: ['story:chat', 'art/hud/chat-panel.webp'],
   button: ['story:button', 'art/hud/button.webp'],
   buttonHover: ['story:button-hover', 'art/hud/button-hover.webp'],
 } as const;
@@ -25,10 +38,8 @@ export const TEX = {
 /** Texture key for a background or story file under public/. */
 export const fileKey = (file: string): string => `story:${file}`;
 
-/** Where each speaker stands, left to right; the chat panel keeps the top-right corner. */
-const STAGE_X: Record<string, number> = { Lux: 330, TRIAGE: 700, Rei: 1040, Mika: 1320, Ozzie: 1590 };
-const PORTRAIT_FEET = 820;
-const PORTRAIT_SCALE = 0.8;
+/** The speaker steps forward a little; everyone else dims (src/story/stage.ts places them). */
+const SPEAKER_SCALE = 1.03;
 const DIM = 0x55556a;
 
 const BODY_FONT = '"Trebuchet MS", "Segoe UI", Arial, sans-serif';
@@ -38,6 +49,7 @@ export function preloadView(scene: Phaser.Scene, files: readonly string[]): void
   for (const p of allPortraits()) scene.load.image(p.key, p.file);
   for (const f of scriptFaces()) scene.load.image(`portrait:${f}`, `art/chars/${f}.webp`);
   for (const f of files) scene.load.image(fileKey(f), f);
+  preloadChat(scene);
 }
 
 /** Convert a game-space point to CSS pixels on the page, for the test hook. */
@@ -76,8 +88,12 @@ export interface VnViewOptions {
   where: 'room' | 'board';
   /** Show the stream chat panel in the top-right corner. */
   chat: boolean;
+  /** The chat's filler between script lines (src/story/chatPanel.ts fillerFor); none by default. */
+  filler?: readonly LineId[];
   /** Show the Skip button (the scene was seen before). */
   skippable: boolean;
+  /** Stand the cast between these x only (game px), clear of the scene's own panels; the whole stage by default. */
+  stage?: { readonly from: number; readonly to: number };
   onClick: () => void;
   onSkip: () => void;
 }
@@ -89,14 +105,16 @@ export class VnView {
   private readonly plateText: Phaser.GameObjects.Text;
   private readonly body: Phaser.GameObjects.Text;
   private readonly more: Phaser.GameObjects.Text;
-  private readonly chatLines: Phaser.GameObjects.Text | null = null;
+  private readonly chatPanel: StoryChat | null = null;
   private readonly skipButton: Phaser.GameObjects.Image | null = null;
-  private readonly chatShown: string[] = [];
   private full = '';
   private shown = -1;
   private typingFor = 0;
   private speaking: string | null = null;
   private blink = 0;
+  private bobT = 0;
+  /** The flyers on stage and where they hover, refreshed by stage(). */
+  private flyers: { img: Phaser.GameObjects.Image; baseY: number }[] = [];
   lineId: LineId | null = null;
 
   constructor(
@@ -119,12 +137,12 @@ export class VnView {
       .setOrigin(0.5)
       .setDepth(22);
     this.body = scene.add
-      .text(450, 865, '', {
+      .text(TEXT_POS.x, TEXT_POS.y, '', {
         fontFamily: BODY_FONT,
-        fontSize: '32px',
+        fontSize: `${TEXT_LINE.size}px`,
         color: '#f2ecff',
-        wordWrap: { width: 1020 },
-        lineSpacing: 6,
+        wordWrap: { width: 1000 },
+        lineSpacing: TEXT_LINE.gap,
       })
       .setDepth(22);
     this.more = scene.add
@@ -133,22 +151,8 @@ export class VnView {
       .setDepth(22)
       .setVisible(false);
 
-    if (opts.chat) {
-      scene.add.image(1770, 235, TEX.chat[0]).setScale(0.75).setDepth(20);
-      scene.add
-        .text(1770, 62, LABELS.chat, { fontFamily: BODY_FONT, fontSize: '18px', color: '#ff4fd8' })
-        .setOrigin(0.5, 0)
-        .setDepth(21);
-      this.chatLines = scene.add
-        .text(1658, 96, '', {
-          fontFamily: BODY_FONT,
-          fontSize: '18px',
-          color: '#cfe9ff',
-          wordWrap: { width: 228 },
-          lineSpacing: 4,
-        })
-        .setDepth(21);
-    }
+    // Lux's stream chat, top right (src/story/chatPanel.ts): the honest tiny audience, as on the board.
+    if (opts.chat) this.chatPanel = new StoryChat(scene, opts.filler ?? [], LABELS.chat, 1, 20);
 
     if (opts.skippable) {
       const b = scene.add.image(1730, 960, TEX.button[0]).setScale(0.4).setDepth(30).setInteractive();
@@ -182,26 +186,11 @@ export class VnView {
 
     const portrait = name ? (face ? `portrait:${face}` : portraitFor(speaker, this.opts.where)?.key) : null;
     if (name && portrait) {
-      let img = this.portraits.get(name);
-      if (!img) {
-        img = this.scene.add
-          .image(STAGE_X[name] ?? W / 2, PORTRAIT_FEET, portrait)
-          .setOrigin(0.5, 1)
-          .setScale(PORTRAIT_SCALE)
-          .setDepth(10);
-        this.portraits.set(name, img);
-      } else {
-        img.setTexture(portrait);
-      }
+      const img = this.portraits.get(name);
+      if (!img) this.portraits.set(name, this.scene.add.image(0, 0, portrait).setOrigin(0.5, 1).setDepth(10));
+      else img.setTexture(portrait);
     }
-    for (const [who, img] of this.portraits) {
-      if (who === name)
-        img
-          .clearTint()
-          .setAlpha(1)
-          .setScale(PORTRAIT_SCALE * 1.03);
-      else img.setTint(DIM).setAlpha(0.85).setScale(PORTRAIT_SCALE);
-    }
+    this.stage();
 
     // Wrap once up front so words don't jump lines as they type in.
     this.body.setText('');
@@ -211,12 +200,41 @@ export class VnView {
     this.update(0);
   }
 
-  /** Add a line to the corner chat. */
-  chat(text: string): void {
-    this.chatShown.push(text);
-    if (this.chatShown.length > 7) this.chatShown.shift();
-    this.chatLines?.setText(this.chatShown.join('\n'));
-    storyState.chat = [...storyState.chat, text];
+  /**
+   * Stands everyone on stage in the slots for that many people, Lux on the left and the rest in the
+   * order they came on, at their art's frame, each facing into the scene (src/story/stage.ts). The
+   * speaker is a touch bigger and lit; the others dim. Runs once per line, never per frame.
+   */
+  private stage(): void {
+    const order = standOrder([...this.portraits.keys()]);
+    const standing = order.filter((who) => !HOVERING.has(who)).length;
+    const lead = order.includes(LEAD);
+    const zone = this.opts.stage;
+    const xs = zone ? slotsBetween(standing, zone.from, zone.to) : slotsFor(standing);
+    let i = 0;
+    this.flyers = [];
+    for (const who of order) {
+      const img = this.portraits.get(who)!;
+      const f = HOVERING.has(who) ? hoverFor(xs) : frameFor(img.height, xs[i++]!, H);
+      const speaking = who === this.speaking;
+      img.setPosition(f.x, f.bottom).setScale(f.scale * (speaking ? SPEAKER_SCALE : 1));
+      img.setFlipX(!HOVERING.has(who) && facesLeft(who, f.x, lead));
+      if (HOVERING.has(who)) this.flyers.push({ img, baseY: f.bottom });
+      if (speaking) img.clearTint().setAlpha(1);
+      else img.setTint(DIM).setAlpha(0.85);
+    }
+  }
+
+  /** Fade the corner chat out while a full-screen CG is up. */
+  hideChat(ms: number): void {
+    this.chatPanel?.fade(this.scene, false, ms);
+  }
+
+  /** Post a chat line to the corner chat. */
+  chat(id: LineId): void {
+    const { speaker, text } = LINES[id];
+    this.chatPanel?.post(chatMessage(speaker, text));
+    storyState.chat = [...storyState.chat, chatText(id)];
   }
 
   get typingDone(): boolean {
@@ -246,6 +264,14 @@ export class VnView {
       this.body.setText(this.full.slice(0, n));
     }
     this.blink = (this.blink + dt) % 1;
+    this.chatPanel?.update(dt);
+    // Flyers bob where they hover (no allocation: one sin per flyer per frame).
+    this.bobT += dt;
+    const bob = bobAt(this.bobT);
+    for (let i = 0; i < this.flyers.length; i++) {
+      const f = this.flyers[i]!;
+      f.img.setY(f.baseY + bob);
+    }
     this.more.setVisible(this.body.visible && this.typingDone && this.blink < 0.6);
   }
 
@@ -256,11 +282,19 @@ export class VnView {
     return {
       lineId: this.lineId,
       typed: Math.max(0, this.shown),
+      chatShown: this.chatPanel ? [...this.chatPanel.posted] : [],
       typingDone: this.typingDone,
       nameplate: this.plateText.visible ? this.plateText.text : null,
       portrait: speaking ? speaking.texture.key : null,
       onStage,
       dimmed: onStage.filter((w) => !speaking || w !== this.speaking),
+      figures: Object.fromEntries(
+        [...this.portraits].map(([who, img]) => {
+          const b = img.getBounds();
+          const fig = { left: Math.round(b.left), right: Math.round(b.right), top: Math.round(b.top) };
+          return [who, { ...fig, facesLeft: img.flipX }];
+        }),
+      ),
       click: toPage(this.scene, W / 2, 945),
       skip: b ? { visible: b.visible, ...toPage(this.scene, b.x, b.y) } : { visible: false, x: 0, y: 0 },
     };

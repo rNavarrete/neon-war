@@ -1,11 +1,10 @@
 // Session 0's bad weather: overheating, retries, power dips, the laundry-floor cut, the rescue
 // trigger and the midnight sizing table. Pure functions over plain data; time comes in as `now` or
-// `dt` (seconds since the clock opened at 23:51:30). Every number comes from BROWNOUT.
+// `dt` (seconds since the clock opened at 23:54:25). Every number comes from BROWNOUT.
 
 import { type Board, type BoardRules, type Flow, type Part, capacityOf } from './board';
 import { BROWNOUT } from './brownout';
 import { demandAt } from './demand';
-import { rackOf } from './grid';
 
 const C = BROWNOUT.challenges;
 const D = BROWNOUT.demand;
@@ -87,8 +86,8 @@ export function blockDemand(now: number, rescued: boolean, laundryCut: boolean):
 }
 
 /**
- * Who a scripted dip takes dark: the overclocked server (C4), or a seeded pick of the racks that hold
- * a server, every server in it (C6).
+ * Who a scripted dip takes dark: the overclocked server (C4), or one server picked by the seed (C6):
+ * the interview's "lose one, keep serving" (N+1). No racks (Rolando, 30 Oct 2026).
  */
 export type DipTarget = 'overclocked' | 'seeded';
 
@@ -132,23 +131,8 @@ export function dipParts(dip: PowerDip): readonly string[] {
 }
 
 /**
- * The racks that hold a server on this board, in the order their first server was placed (grid.ts
- * rackOf: a column band of the table; an old fixed slot is a rack of its own).
- */
-export function serverRacks(board: Board): string[] {
-  const out: string[] = [];
-  for (const p of board.parts) {
-    const r = p.kind === 'server' ? rackOf(p.slot) : null;
-    if (r !== null && !out.includes(r)) out.push(r);
-  }
-  return out;
-}
-
-/**
  * Pick what a scheduled dip takes dark on this board: the overclocked server in the surge (C4); at
- * midnight (C6) one rack loses power, picked by the seed from the racks that hold a server, and every
- * server anchored in it goes dark. Servers spread over the racks lose one each; servers stacked in
- * one rack all go together.
+ * midnight (C6) one server loses power, picked by the seed, so one spare rides it out (N+1).
  */
 export function resolveDip(board: Board, dip: ScheduledDip, seed: number): PowerDip {
   const servers = board.parts.filter((p) => p.kind === 'server');
@@ -157,10 +141,8 @@ export function resolveDip(board: Board, dip: ScheduledDip, seed: number): Power
     const part: Part | undefined = servers.find((p) => p.boost !== undefined) ?? servers[0];
     return { id: dip.id, part: part?.id ?? null, parts: part ? [part.id] : [], rack: null, ...timing };
   }
-  const racks = serverRacks(board);
-  const rack = racks.length > 0 ? racks[seededIndex(seed, racks.length)] : null;
-  const parts = servers.filter((p) => rack !== null && rackOf(p.slot) === rack).map((p) => p.id);
-  return { id: dip.id, part: parts[0] ?? null, parts, rack, ...timing };
+  const part = servers.length > 0 ? servers[seededIndex(seed, servers.length)] : undefined;
+  return { id: dip.id, part: part?.id ?? null, parts: part ? [part.id] : [], rack: null, ...timing };
 }
 
 export type DipPhase = 'flicker' | 'dark' | null;

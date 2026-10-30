@@ -37,10 +37,10 @@ import { isLesson } from './lineMeta';
 
 export const CHAT_PACE = Object.freeze({
   /** Minimum seconds between two posts, by the block's error state. */
-  minGap: Object.freeze({ ok: 2.5, slow: 1.8, down: 1.2 } as Record<ErrorState, number>),
-  /** At most `windowMax` posts in any `windowSeconds`. */
+  minGap: Object.freeze({ ok: 1.8, slow: 1.5, down: 1.2 } as Record<ErrorState, number>),
+  /** At most `windowMax` posts in any `windowSeconds` (a hype burst's rows do not count). */
   windowSeconds: 30,
-  windowMax: 10,
+  windowMax: 14,
   /** Reactions waiting to post; the oldest is dropped when a fifth arrives. */
   queueMax: 4,
   /** A queued reaction older than this is dropped. */
@@ -48,6 +48,17 @@ export const CHAT_PACE = Object.freeze({
   /** No reaction or filler for this long after a lesson line starts. */
   lessonQuiet: 2,
 });
+
+/**
+ * A hype burst: when something goes right (the first serve, a recovery, the rescue, a held midnight)
+ * the stream pours in `min` to `max` lines from the win pool, one every `every` seconds, then settles,
+ * the way a real stream floods after a big moment (Rolando, 30 Oct 2026: "way more hearts, way more
+ * W's"). Burst rows skip the gap, the quiet and the window: they sit on top of the paced feed.
+ */
+export const HYPE_BURST = Object.freeze({ min: 6, max: 10, every: 0.22, pool: 'fill.stream.win.' });
+/** One filler line in this many is from TRIAGE's fans, in any state: TRIAGE is the stream's mascot. */
+export const TRIAGE_FILLER_EVERY = 5;
+export const TRIAGE_POOL = 'fill.stream.triage.';
 
 /** Error share held this long before the block complains. */
 export const ERRORS_HOLD = 1;
@@ -62,8 +73,8 @@ export const VIEWERS_HEAVY_HOLD = 5;
 export const RETRY_STEPS: readonly number[] = [0.2, 0.4];
 /** Rows the feed keeps as history (the view shows the newest five). */
 export const FEED_MAX = 40;
-/** Rows the view shows. */
-export const VISIBLE_ROWS = 5;
+/** Rows the view shows at most (the tall chat column, layout A); fitRows keeps them inside its body. */
+export const VISIBLE_ROWS = 16;
 
 // ---- causes and reactions ----
 
@@ -79,8 +90,13 @@ export type ChatCause =
   | 'surgeLanded'
   | 'overclock'
   | 'banner'
+  | 'coach'
+  | 'line'
+  | 'countdown'
+  | 'scaledDown'
   | 'seed'
   | 'cue'
+  | 'hype'
   | 'filler';
 
 export type ReactionKey =
@@ -112,7 +128,19 @@ export type ReactionKey =
   | 'surgeStream'
   | 'rescued'
   | 'heldBlock'
-  | 'heldStream';
+  | 'heldStream'
+  | 'waitingBlock'
+  | 'waitingStream'
+  | 'unplugged'
+  | 'panic'
+  | 'bannerBlock'
+  | 'bannerStream'
+  | 'countdownBlock'
+  | 'countdownStream'
+  | 'finalBlock'
+  | 'finalStream'
+  | 'scaledDownBlock'
+  | 'scaledDownStream';
 
 export interface Reaction {
   /** The id prefix of its own lines (chat-2 writes them into the chat anchor). */
@@ -176,7 +204,42 @@ export const REACTIONS: Readonly<Record<ReactionKey, Reaction>> = Object.freeze(
   rescued: R('fill.stream.rescue.', SO, 60),
   heldBlock: R('fill.block.held.', BO, 60),
   heldStream: R('fill.stream.held.', SO, 60),
+  // The tutorial coach's nudges: the block waits on her, the stream ribs her about the cable.
+  waitingBlock: R('fill.block.waiting.', null, 20),
+  waitingStream: R('fill.stream.waiting.', null, 20),
+  unplugged: R('fill.stream.unplugged.', null, 15),
+  // Lines on the band the chat answers (LINE_REACTIONS).
+  panic: R('fill.stream.panic.', null, Infinity),
+  bannerBlock: R('fill.block.banner.', null, Infinity),
+  bannerStream: R('fill.stream.banner.', null, Infinity),
+  // The countdown: a minute out and ten seconds out (COUNTDOWN_MARKS).
+  countdownBlock: R('fill.block.countdown.', null, 30),
+  countdownStream: R('fill.stream.countdown.', null, 30),
+  finalBlock: R('fill.block.final.', null, 30),
+  finalStream: R('fill.stream.final.', null, 30),
+  scaledDownBlock: R('fill.block.scaledown.', null, 60),
+  scaledDownStream: R('fill.stream.scaledown.', null, 30),
 });
+
+/** Band lines the chat answers when they start: TRIAGE's alarm about the lift and the Solace banner. */
+export const LINE_REACTIONS: Readonly<Partial<Record<LineId, readonly ReactionKey[]>>> = Object.freeze({
+  'C1.triage.02': ['panic'],
+  'C2.triage.01': ['bannerStream', 'bannerBlock'],
+});
+
+/** The coach's steps the chat answers, and with what (an empty grid, or a missing wire). */
+export const COACH_REACTIONS: Readonly<Record<string, readonly ReactionKey[]>> = Object.freeze({
+  place: ['waitingBlock', 'waitingStream'],
+  feed: ['unplugged', 'waitingBlock'],
+  store: ['unplugged'],
+  behind: ['unplugged'],
+});
+
+/** Sim seconds the countdown reactions come at: a minute out, then ten seconds out. */
+export const COUNTDOWN_MARKS: readonly { readonly at: number; readonly keys: readonly ReactionKey[] }[] = [
+  { at: BROWNOUT.clock.midnight - 60, keys: ['countdownBlock', 'countdownStream'] },
+  { at: BROWNOUT.clock.midnight - 10, keys: ['finalStream', 'finalBlock'] },
+];
 
 /**
  * Scripted chat ids the script lets go rather than wait when the window is full: none today (every
@@ -232,6 +295,18 @@ const CAUSE_OF: Readonly<Record<ReactionKey, ChatCause>> = {
   rescued: 'rescued',
   heldBlock: 'held',
   heldStream: 'held',
+  waitingBlock: 'coach',
+  waitingStream: 'coach',
+  unplugged: 'coach',
+  panic: 'line',
+  bannerBlock: 'line',
+  bannerStream: 'line',
+  countdownBlock: 'countdown',
+  countdownStream: 'countdown',
+  finalBlock: 'countdown',
+  finalStream: 'countdown',
+  scaledDownBlock: 'scaledDown',
+  scaledDownStream: 'scaledDown',
 };
 
 /** Scripted lines in which a neighbour leaves the chat, and who. Filler never speaks for them. */
@@ -311,6 +386,8 @@ export type ChatEvent =
   | { readonly kind: 'occurrence'; readonly occurrence: Occurrence }
   | { readonly kind: 'line'; readonly id: LineId; readonly lesson?: boolean }
   | { readonly kind: 'action'; readonly type: 'overclock' }
+  | { readonly kind: 'action'; readonly type: 'decommission'; readonly afterMidnight: boolean }
+  | { readonly kind: 'coach'; readonly step: string }
   | { readonly kind: 'action'; readonly type: 'banner'; readonly choice: BannerChoice };
 
 export interface QueuedReaction {
@@ -360,7 +437,13 @@ export interface ChatState {
   readonly retryStep: number;
   readonly surgeAt: number | null;
   readonly surgeLanded: number | null;
+  /** How many of COUNTDOWN_MARKS the clock has passed. */
+  readonly countdown: number;
   readonly rewinds: number;
+  /** Hype-burst rows still to post, when the next is due, and the win lines it has used. */
+  readonly burst: number;
+  readonly burstAt: number;
+  readonly burstUsed: readonly LineId[];
 }
 
 export interface ChatStep {
@@ -399,7 +482,11 @@ export function initialChat(clock: number, rand: () => number, rewinds = 0): Cha
     retryStep: 0,
     surgeAt: null,
     surgeLanded: null,
+    countdown: 0,
     rewinds,
+    burst: 0,
+    burstAt: 0,
+    burstUsed: [],
   };
 }
 
@@ -510,6 +597,19 @@ function enqueue(d: Draft, key: ReactionKey, clock: number): void {
   d.queue = q.length > CHAT_PACE.queueMax ? q.slice(q.length - CHAT_PACE.queueMax) : q;
 }
 
+/** Start a hype burst at `clock` (a burst already running carries on with the larger count). */
+function startBurst(d: Draft, clock: number, rand: () => number): void {
+  if (d.silenced) return;
+  const n = HYPE_BURST.min + Math.floor(rand() * (HYPE_BURST.max - HYPE_BURST.min + 1));
+  if (d.burst > 0) {
+    d.burst = Math.max(d.burst, n);
+    return;
+  }
+  d.burst = n;
+  d.burstAt = clock;
+  d.burstUsed = [];
+}
+
 function post(d: Draft, row: ChatRow, clock: number, rand: () => number): void {
   d.feed = pushFeed(d.feed, row);
   d.recent = [...d.recent.filter((t) => clock - t < CHAT_PACE.windowSeconds - EPS), clock];
@@ -551,7 +651,9 @@ export function stepChat(
     x.retryStep = 0;
     x.surgeAt = null;
     x.surgeLanded = null;
+    x.countdown = 0;
     x.quietUntil = -Infinity;
+    x.burst = 0;
   }
 
   // Events.
@@ -559,11 +661,21 @@ export function stepChat(
     const x = draft();
     if (e.kind === 'line') {
       if (e.lesson ?? isLesson(e.id)) x.quietUntil = Math.max(x.quietUntil, c + CHAT_PACE.lessonQuiet);
+      for (const key of LINE_REACTIONS[e.id] ?? []) enqueue(x, key, c);
+      continue;
+    }
+    if (e.kind === 'coach') {
+      for (const key of COACH_REACTIONS[e.step] ?? []) enqueue(x, key, c);
       continue;
     }
     if (e.kind === 'action') {
       if (e.type === 'overclock') enqueue(x, 'overclock', c);
-      else
+      else if (e.type === 'decommission') {
+        if (e.afterMidnight) {
+          enqueue(x, 'scaledDownStream', c);
+          enqueue(x, 'scaledDownBlock', c);
+        }
+      } else
         enqueue(
           x,
           e.choice === 'pay' ? 'bannerPay' : e.choice === 'ignore' ? 'bannerIgnore' : 'bannerBin',
@@ -579,8 +691,11 @@ export function stepChat(
       case 'died':
       case 'dip':
       case 'skipped':
+        enqueue(x, o.kind, c);
+        break;
       case 'rescued':
         enqueue(x, o.kind, c);
+        startBurst(x, c, rand);
         break;
       case 'laundryCut':
         enqueue(x, 'laundryBlock', c);
@@ -589,6 +704,7 @@ export function stepChat(
       case 'held':
         enqueue(x, 'heldBlock', c);
         enqueue(x, 'heldStream', c);
+        startBurst(x, c, rand);
         break;
       case 'dark':
         if (o.id === undefined) {
@@ -640,12 +756,15 @@ export function stepChat(
     enqueue(x, 'recoveredBlock', c);
     enqueue(x, 'recoveredStream', c);
     if (x.left.length > 0) enqueue(x, 'rejoin', c);
+    startBurst(x, c, rand);
   }
   if (inp.served > 0 && !cur().servedOnce) {
     const x = draft();
     x.servedOnce = true;
     enqueue(x, 'servedBlock', c);
     enqueue(x, 'servedStream', c);
+    // The lights come back for the first time: the stream floods.
+    startBurst(x, c, rand);
   }
   if (inp.servingBoxes > cur().servingMax) {
     const x = draft();
@@ -675,6 +794,17 @@ export function stepChat(
     x.surgeLanded = sa;
     enqueue(x, 'surgeBlock', c);
     enqueue(x, 'surgeStream', c);
+  }
+
+  // The countdown: a minute out, then ten seconds out.
+  const mark = cur().countdown;
+  if (mark < COUNTDOWN_MARKS.length && inp.now >= COUNTDOWN_MARKS[mark].at - EPS) {
+    const x = draft();
+    let n = mark;
+    while (n < COUNTDOWN_MARKS.length && inp.now >= COUNTDOWN_MARKS[n].at - EPS) n++;
+    x.countdown = n;
+    // Only the mark just passed speaks: a clock jumped past both says the later one.
+    for (const key of COUNTDOWN_MARKS[n - 1].keys) enqueue(x, key, c);
   }
 
   // The audience.
@@ -711,7 +841,26 @@ export function stepChat(
       const r = key ? REACTIONS[key] : undefined;
       // A complaint whose errors stopped while it waited would be dishonest now: it goes.
       if (r?.whileErrors && inp.errorShare <= 0) continue;
+      // So would a neighbour who left the chat while her row waited.
+      if (leftBefore(w.id, x.left)) continue;
       (posts ??= []).push(postRow(x, w.id, w.cause, c, rand));
+    }
+  }
+
+  // A hype burst posts on top of everything paced: one win line every HYPE_BURST.every seconds.
+  if (cur().burst > 0 && (cur().silenced || c >= cur().burstAt - EPS)) {
+    const x = draft();
+    if (x.silenced) x.burst = 0;
+    else {
+      const all = linesOf(HYPE_BURST.pool);
+      const pool = all.filter((id) => !x.burstUsed.includes(id));
+      const id = pickFrom(pool.length > 0 ? pool : all, rand);
+      const row = rowFor(id, 'hype', c, false);
+      x.feed = pushFeed(x.feed, row);
+      x.burst -= 1;
+      x.burstAt = c + HYPE_BURST.every;
+      x.burstUsed = [...x.burstUsed, id];
+      (posts ??= []).push(row);
     }
   }
 
@@ -743,9 +892,11 @@ export function stepChat(
     }
   } else if (open && fillerAllowed(st, c)) {
     const x = draft();
-    const chat: ChatKind = x.fillers % 3 === 2 ? 'stream' : 'block';
+    // One in TRIAGE_FILLER_EVERY is TRIAGE's fans; of the rest, the block speaks twice per stream line.
+    const fan = x.fillers % TRIAGE_FILLER_EVERY === TRIAGE_FILLER_EVERY - 1;
+    const chat: ChatKind = fan || x.fillers % 3 === 2 ? 'stream' : 'block';
     const state = chatSetFor(inp.errorShare);
-    const pool = linesOf(`fill.${chat}.${state}.`).filter(
+    const pool = linesOf(fan ? TRIAGE_POOL : `fill.${chat}.${state}.`).filter(
       (id) => id !== x.lastFiller && !speaksForLeaver(id, x.left),
     );
     if (pool.length > 0) {
@@ -777,6 +928,26 @@ function speaksForLeaver(id: LineId, left: readonly string[]): boolean {
 }
 
 // ---- scripted lines, seeding, the filter ----
+
+/** The challenge number of a scripted id (`C4.chat.01` is 4), or null. */
+const challengeOf = (id: LineId): number | null => {
+  const m = /^C(\d)\./.exec(id);
+  return m ? Number(m[1]) : null;
+};
+
+/**
+ * Whether a scripted line is spoken by a neighbour who left in its own challenge or an earlier one:
+ * Mrs Okafor's "it's gone again" (C4) after she left the chat (C4.chat.03).
+ */
+function leftBefore(id: LineId, left: readonly string[]): boolean {
+  if (!speaksForLeaver(id, left)) return false;
+  const at = challengeOf(id);
+  for (const [leave, who] of Object.entries(LEAVERS) as [LineId, string][]) {
+    const from = challengeOf(leave);
+    if (left.includes(who) && from !== null && at !== null && at >= from) return true;
+  }
+  return false;
+}
 
 /** Start a scripted id's reaction cooldown (and drop that reaction from the queue) at `clock`. */
 function coolScripted(d: Draft, id: LineId, clock: number): void {
@@ -815,6 +986,8 @@ export function postScripted(
 ): ChatStep {
   if (s.scripted.includes(id) || chatOf(id) === null) return { state: s, posts: NO_POSTS };
   const d: Draft = { ...s, scripted: [...s.scripted, id] };
+  // A neighbour who has left the chat says nothing more in the scenes after she left, scripted or not.
+  if (leftBefore(id, d.left)) return { state: d, posts: NO_POSTS };
   if (id === SILENCE_ID) {
     d.silenced = true;
     d.queue = [];

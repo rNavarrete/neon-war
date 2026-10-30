@@ -89,6 +89,102 @@ test('the title shows the logo over the skyline with Start, Settings and Credits
   expect((await state(page)).shell!.recentSfx).toContain('ui-click');
 });
 
+test('the title is the picked rooftop art: logo and menu clear of Lux, rain, searchlights and fireworks moving', async ({
+  page,
+}) => {
+  await page.goto('/?test');
+  await waitForScene(page, 'title');
+  const t0 = (await state(page)).title!;
+  expect(t0.art).toBe('bg/title-rooftop');
+  const apart = (a: typeof t0.hero, b: typeof t0.hero) =>
+    a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
+  expect(apart(t0.logo, t0.hero)).toBe(true);
+  expect(apart(t0.menu, t0.hero)).toBe(true);
+  expect(t0.rainDrawn).toBeGreaterThan(100);
+  // Fireworks keep bursting while the title idles, and the searchlights sweep.
+  await expect.poll(async () => (await state(page)).title!.bursts, { timeout: 10_000 }).toBeGreaterThan(2);
+  const t1 = (await state(page)).title!;
+  expect(t1.beams[0]).not.toBeCloseTo(t0.beams[0], 3);
+  await page.screenshot({ path: 'test-results/screens/title-rooftop.png' });
+});
+
+test('the title plays its own music; the speaker icon mutes it, shows it muted and remembers it', async ({
+  page,
+}) => {
+  await page.goto('/?test');
+  await waitForScene(page, 'title');
+  // The loop is asked for at once; a locked browser starts it on the first click or key press.
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying, { timeout: 15_000 }).toBe(true);
+  expect((await state(page)).title!.speaker.muted).toBe(false);
+  await page.screenshot({ path: 'test-results/screens/title-speaker.png' });
+
+  await press(page, 'musicMute');
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying).toBe(false);
+  expect((await state(page)).title!.speaker.muted).toBe(true);
+  expect((await state(page)).shell!.settings.musicMuted).toBe(true);
+  await page.screenshot({ path: 'test-results/screens/title-speaker-muted.png' });
+
+  await page.reload();
+  await waitForScene(page, 'title');
+  expect((await state(page)).shell!.settings.musicMuted).toBe(true);
+  expect((await state(page)).shell!.titleMusicPlaying).toBe(false);
+
+  // M toggles it too, and Start leaves the title music behind.
+  await page.keyboard.press('m');
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying).toBe(true);
+  await press(page, 'start');
+  await expect.poll(async () => (await state(page)).scene, { timeout: 15_000 }).toMatch(/^(story|board)$/);
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying).toBe(false);
+});
+
+test('while the browser holds sound, the title opens on a press-any-key gate; the press shows the menu and plays the music', async ({
+  page,
+}) => {
+  const warnings: string[] = [];
+  page.on('console', (m) => {
+    if (/already in use/i.test(m.text())) warnings.push(m.text());
+  });
+  // Under the test hook the gate shows only with ?gate, as it does on a real first visit.
+  await page.goto('/?test&gate');
+  await waitForScene(page, 'title');
+  expect((await state(page)).title!.gate).toBe(true);
+  // No menu button can be pressed while the gate shows.
+  expect((await state(page)).shell!.buttons.start).toBeUndefined();
+  await page.screenshot({ path: 'test-results/screens/title-gate.png' });
+  // Click where the gate's words sit (over the SETTINGS button's spot): the release opens the
+  // menu and presses nothing.
+  const canvas = (await page.locator('canvas').boundingBox())!;
+  const k = canvas.width / 1920;
+  await page.mouse.click(canvas.x + 640 * k, canvas.y + 660 * k);
+  await expect.poll(async () => (await state(page)).title!.gate).toBe(false);
+  await expect.poll(async () => (await state(page)).shell!.buttons.start ?? null).not.toBeNull();
+  expect((await state(page)).scene).toBe('title');
+  expect((await state(page)).shell!.titleMusicPlaying).toBe(true);
+
+  // A key press opens it too.
+  await page.reload();
+  await waitForScene(page, 'title');
+  expect((await state(page)).title!.gate).toBe(true);
+  await page.keyboard.press('Space');
+  await expect.poll(async () => (await state(page)).title!.gate).toBe(false);
+  await expect.poll(async () => (await state(page)).shell!.buttons.start ?? null).not.toBeNull();
+
+  // A first click on the speaker only opens the gate: the music starts and stays unmuted (Rolando,
+  // 30 Oct 2026: it used to unlock the sound and mute it in the same click). The next click mutes.
+  await page.reload();
+  await waitForScene(page, 'title');
+  expect((await state(page)).title!.gate).toBe(true);
+  const sp = (await state(page)).title!.speaker;
+  await page.mouse.click(canvas.x + (sp.x + sp.w / 2) * k, canvas.y + (sp.y + sp.h / 2) * k);
+  await expect.poll(async () => (await state(page)).title!.gate).toBe(false);
+  expect((await state(page)).title!.speaker.muted).toBe(false);
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying).toBe(true);
+  await page.mouse.click(canvas.x + (sp.x + sp.w / 2) * k, canvas.y + (sp.y + sp.h / 2) * k);
+  await expect.poll(async () => (await state(page)).title!.speaker.muted).toBe(true);
+  // No texture is loaded twice (the shell button art used to be queued by two scenes at once).
+  expect(warnings).toEqual([]);
+});
+
 test('Esc and the pause button open Pause; the sim clock holds still while paused', async ({ page }) => {
   await openBoard(page);
   await page.screenshot({ path: 'test-results/screens/board-pause-button.png' });
@@ -136,7 +232,8 @@ test('settings change volume, text speed and reduce flicker; volume and reduce f
 }) => {
   await page.goto('/?test');
   await waitForScene(page, 'title');
-  expect((await state(page)).shell!.settings).toMatchObject({ volume: 0.8, reduceFlicker: false });
+  // The default volume is 0.5 since 30 Oct 2026 (Rolando: 0.8 was "kind of high").
+  expect((await state(page)).shell!.settings).toMatchObject({ volume: 0.5, reduceFlicker: false });
 
   await press(page, 'settings');
   await waitForScene(page, 'settings');
@@ -149,7 +246,8 @@ test('settings change volume, text speed and reduce flicker; volume and reduce f
   await press(page, 'textSpeed');
   await expect
     .poll(async () => (await state(page)).shell!.settings)
-    .toMatchObject({ volume: 0.6, reduceFlicker: true, textSpeed: 'fast' });
+    // Two steps down from the 0.5 default (it was 0.8 down to 0.6 before 30 Oct 2026).
+    .toMatchObject({ volume: 0.3, reduceFlicker: true, textSpeed: 'fast' });
   await page.screenshot({ path: 'test-results/screens/settings-reduce-flicker.png' });
 
   await press(page, 'back');
@@ -157,7 +255,7 @@ test('settings change volume, text speed and reduce flicker; volume and reduce f
 
   await page.reload();
   await waitForScene(page, 'title');
-  expect((await state(page)).shell!.settings).toMatchObject({ volume: 0.6, reduceFlicker: true });
+  expect((await state(page)).shell!.settings).toMatchObject({ volume: 0.3, reduceFlicker: true });
 });
 
 test('settings opened from pause return to pause', async ({ page }) => {

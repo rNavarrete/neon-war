@@ -11,7 +11,6 @@
 
 import { wiredCapacity } from '../../game/frame';
 import type { Part, Wire } from '../../sim/board';
-import type { Rect } from '../live/layout';
 import { clamp } from './format';
 import { HEADROOM_AMBER_FROM, HEADROOM_RED_OVER, HEADROOM_SEGMENTS } from './thresholds';
 
@@ -55,12 +54,12 @@ export function overBy(demand: number, wired: number): number {
   return demand > wired ? Math.ceil(demand - wired - 1e-9) : 0;
 }
 
-/** The bar's words: "ROOM LEFT 25% · 90 of 120", or the over and no-box cases. */
+/** The bar's words: "HEADROOM 25% · 90 of 120", or the over and no-server cases. */
 export function headroomLabel(demand: number, wired: number): string {
-  if (wired <= 0) return 'ROOM LEFT · NO BOX';
+  if (wired <= 0) return 'HEADROOM · NO SERVER';
   const over = overBy(demand, wired);
-  if (over > 0) return `ROOM LEFT · OVER +${over}/s`;
-  return `ROOM LEFT ${headroomPct(demand, wired)}% · ${Math.round(demand)} of ${Math.round(wired)}`;
+  if (over > 0) return `HEADROOM · OVER +${over} req/s`;
+  return `HEADROOM ${headroomPct(demand, wired)}% · ${Math.round(demand)} of ${Math.round(wired)}`;
 }
 
 /** What the hook mirrors as hud.headroom; also the view's per-frame state, refilled in place. */
@@ -138,37 +137,4 @@ export const RED_SOUND_GAP = 10;
 /** Whether the red sound may play on entering red at HUD time `t`, given when it last played. */
 export function redSoundDue(t: number, lastPlayed: number | null): boolean {
   return lastPlayed === null || t < lastPlayed || t - lastPlayed >= RED_SOUND_GAP;
-}
-
-// ---- where the bar sits ----
-
-export interface HeadroomLayout {
-  /** The bar's plate: the deck from its left edge to just before the keys. */
-  readonly plate: Rect;
-  /** The pulse icon's box, left of the segments. */
-  readonly icon: Rect;
-  /** The words, above the segments. */
-  readonly label: { readonly x: number; readonly y: number };
-  /** The segments: the first one's left, their top, size and pitch. */
-  readonly segments: {
-    readonly x: number;
-    readonly y: number;
-    readonly w: number;
-    readonly h: number;
-    readonly pitch: number;
-    readonly count: number;
-  };
-  /** The 30%-left marker: after this many segments. */
-  readonly marker: number;
-}
-
-/** The room-left bar inside the deck's rect (ZONES.deck): x 470-1225, segments from x 612 at a 20 px pitch. */
-export function headroomLayout(z: Rect): HeadroomLayout {
-  return {
-    plate: { x: z.x, y: z.y, w: 771, h: z.h },
-    icon: { x: z.x + 19, y: z.y + 34, w: 36, h: 30 },
-    label: { x: z.x + 157, y: z.y + 6 },
-    segments: { x: z.x + 157, y: z.y + 34, w: 18, h: 30, pitch: 20, count: HEADROOM_SEGMENTS },
-    marker: Math.round((1 - HEADROOM_AMBER_FROM) * HEADROOM_SEGMENTS),
-  };
 }

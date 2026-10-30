@@ -1,15 +1,14 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { GaugeTestState } from '../../src/scenes/hud/GaugeView';
-import type { ScopeTestState } from '../../src/scenes/hud/ChartView';
 import type { HudTestState } from '../../src/scenes/hud/hook';
-import { forecastAt } from '../../src/sim/demand';
 import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 
 // The instrument panel in the left column (docs/LIVE.md): the COMING /s gauge in ZONES.gauge
 // (gauges-5) and the scope in ZONES.scope (gauges-6), asserted on window.__neonTest.state.hud.
 
 /** Words the player must not see before the debrief (docs/SCRIPT.md C8.terms, and the mockup's). */
-const BANNED_ON_SCREEN = /head\s*room|throughput|est\.|capacity|requests per second/i;
+// Real terms on screen (Rolando, 29 Oct 2026): the old crew words must not come back.
+const BANNED_ON_SCREEN = /\bcoming\b|\broom\b|no box|\bsplitter\b|est\./i;
 
 type Hud = HudTestState & { gauge: GaugeTestState };
 
@@ -38,26 +37,28 @@ function expectGaugeMatchesSim(h: Hud): void {
   expect(h.headroom!.wiredCapacity).toBeLessThanOrEqual(h.sim.capacity + 1);
 }
 
-test('the COMING /s gauge: NO ROOM YET before the first build, in crew words', async ({ page }) => {
+test('the DEMAND gauge: NO CAPACITY YET before the first build, in the real terms', async ({ page }) => {
   test.setTimeout(60_000);
   const { errors } = await openBoard(page, { speed: 20, autopilot: false });
   await dismissJobCard(page);
   const h = await gaugeHud(page);
-  expect(h.gauge.title).toBe('COMING /s');
+  expect(h.gauge.title).toBe('DEMAND req/s');
   expect(h.gauge.max).toBe(400);
   expect(h.gauge.ticks).toEqual(['0', '100', '200', '300', '400']);
   expect(h.gauge.capacity).toBe(0);
-  expect(h.gauge.strip).toBe('NO ROOM YET');
-  // Batch 5: the painted face is baked into the plate and the painted needle turns, both at half.
+  expect(h.gauge.strip).toBe('NO CAPACITY YET');
+  // Batch 5: the painted face is baked into the plate and the painted needle turns with it. Half size
+  // until Rolando picked the one bigger gauge (30 Oct 2026); now at the bigger dial's 0.7.
   expect(h.gauge.face).toBe('hud/gauge-face');
-  expect(h.gauge.needleArt).toEqual({ key: 'hud/gauge-needle', scale: 0.5 });
+  // Layout A2 (Rolando, 30 Oct) shrank the gauge to 0.72 of that to fit the right column.
+  expect(h.gauge.needleArt).toEqual({ key: 'hud/gauge-needle', scale: 0.504 });
   expect(h.gauge.panel!.maxScale).toBeLessThanOrEqual(1);
   expectGaugeMatchesSim(h);
   expectCrewWords(h.gauge);
   expect(errors).toEqual([]);
 });
 
-test('the COMING /s gauge at speed 5: needle on demand, OVER BY in the raid', async ({ page }) => {
+test('the DEMAND gauge at speed 5: needle on demand, OVER BY in the raid', async ({ page }) => {
   test.setTimeout(150_000);
   const { errors } = await openBoard(page, { speed: 5, autopilot: true });
   await reach(page, 'c1');
@@ -82,7 +83,7 @@ test('the COMING /s gauge at speed 5: needle on demand, OVER BY in the raid', as
       .toBe(true);
     const h = settled as unknown as Hud;
     expectGaugeMatchesSim(h);
-    expect(h.gauge.sub).toBe(`room ${Math.round(h.gauge.capacity)}/s`);
+    expect(h.gauge.sub).toBe(`capacity ${Math.round(h.gauge.capacity)} req/s`);
     expect(h.gauge.strip).toBeNull();
     expectCrewWords(h.gauge);
   });
@@ -129,41 +130,16 @@ test('the COMING /s gauge at speed 5: needle on demand, OVER BY in the raid', as
   expect(errors).toEqual([]);
 });
 
-// gauges-6: the scope in ZONES.scope keeps hud.chart and adds the wired line and the forecast region.
-test('the scope: wired room, a forecast region exactly while a rise is forecast', async ({ page }) => {
+// The LAST 60 s chart is gone (Rolando, 30 Oct 2026: three widgets measured the same thing; the
+// gauge stays). hud.chart keeps the demand and capacity it mirrored, now straight from the sim.
+test('no scope: the gauge is the one demand widget, and hud.chart reads the sim', async ({ page }) => {
   test.setTimeout(90_000);
   const { errors } = await openBoard(page, { speed: 20, autopilot: true });
   await reach(page, 'c1');
-  let c = (await hud(page)).chart as ScopeTestState;
-  expect(c.plot.h).toBeGreaterThanOrEqual(140);
-  expect(c.plot).toEqual({ w: 354, h: 145 });
-  expect(c.title).toBe('LAST 60 s');
-  expect(c.ceiling).toBeLessThanOrEqual(400);
-  for (const w of [c.title, c.legend]) expect(w, w).not.toMatch(BANNED_ON_SCREEN);
-
-  // Every read on the way to the C3 climb: the region shows exactly while forecastAt(now) is non-null.
-  let forecastReads = 0;
-  let quietReads = 0;
-  let shotTaken = false;
-  for (let guard = 0; guard < 4_000; guard++) {
-    const h = await hud(page);
-    c = h.chart as ScopeTestState;
-    expect(c.forecast !== null, `chart.now ${c.now}`).toBe(forecastAt(c.now) !== null);
-    expect(c.wiredCapacity).toBeLessThanOrEqual(c.capacity + 0.5);
-    if (c.forecast) {
-      forecastReads++;
-      expect(c.forecast.startsAt).toBe(forecastAt(c.now)!.startsAt);
-      if (!shotTaken) {
-        await shot(page, 'live-m2-scope');
-        shotTaken = true;
-      }
-    } else quietReads++;
-    if (c.now >= 182) break;
-    await page.waitForTimeout(20);
-  }
-  expect(forecastReads).toBeGreaterThan(0);
-  expect(quietReads).toBeGreaterThan(0);
-  expect(c.now).toBeGreaterThanOrEqual(182);
-  expect(c.forecast).toBeNull();
+  const h = await hud(page);
+  const c = h.chart as { demand: number; capacity: number; ceiling: number; plot?: unknown };
+  expect(c.plot).toBeUndefined();
+  expect(c.ceiling).toBe(400);
+  expect(Math.abs(c.capacity - h.sim.capacity)).toBeLessThanOrEqual(1);
   expect(errors).toEqual([]);
 });

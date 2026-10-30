@@ -13,6 +13,7 @@ const TRIAGE_MOODS: Record<string, string> = {
   'wrong-and-proud': 'proud',
   panicking: 'panic',
   sheepish: 'sheepish',
+  worried: 'worried',
   happy: 'happy',
 };
 
@@ -20,10 +21,10 @@ const portrait = (path: string): Portrait => ({ key: `portrait:${path}`, file: `
 
 /** Default faces for the crew and Lux, by where the line is shown. */
 const FACES: Record<string, { board: string; room: string }> = {
-  Lux: { board: 'lux/faces-board/determined', room: 'lux/faces-room/composing' },
-  Rei: { board: 'rei/faces/smirk', room: 'rei/faces/grading' },
-  Mika: { board: 'mika/faces/calm', room: 'mika/faces/reassure' },
-  Ozzie: { board: 'ozzie/faces/smug', room: 'ozzie/faces/half-smile' },
+  Lux: { board: 'lux/vn/board-determined', room: 'lux/vn/neutral' },
+  Rei: { board: 'rei/vn/smirk', room: 'rei/vn/grading' },
+  Mika: { board: 'mika/vn/calm', room: 'mika/vn/reassure' },
+  Ozzie: { board: 'ozzie/vn/smug', room: 'ozzie/vn/half-smile' },
 };
 
 /** The plain name of a speaker, for the nameplate: "TRIAGE (eager)" -> "TRIAGE". */

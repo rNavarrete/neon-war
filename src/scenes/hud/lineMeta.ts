@@ -112,6 +112,40 @@ export const LESSON_IDS: readonly LineId[] = [
 ];
 
 /**
+ * Lux on the board (docs/SCRIPT.md "Lux on the board"): her reactions as she plays. Unlike her
+ * scripted lines they are asides, so the band may drop one that has waited too long and they never
+ * hold up a hint.
+ */
+export const LUX_ASIDES: readonly LineId[] = [
+  'C1.lux.placed',
+  'C1.lux.live',
+  'C1.lux.chat',
+  'C1.lux.goodcall',
+  'C1.lux.moved',
+  'C2.lux.headroom',
+  'C3.lux.climbing',
+  'C3.lux.watch',
+  'C3.lux.father',
+  'C3.lux.near',
+  'C3.lux.over',
+  'C3.lux.eyes',
+  'C3.lux.scaledup',
+  'C3.lux.broke',
+  'C3.lux.tip',
+  'C3.lux.thanks',
+  'C4.lux.forecast',
+  'C4.lux.forecast2',
+  'C4.lux.dark',
+  'C4.lux.retry',
+  'C4.lux.okafor',
+  'C5.lux.recover',
+  'C6.lux.spare',
+  'C6.lux.countdown',
+  'C6.lux.midnight',
+  'C7.lux.count',
+];
+
+/**
  * Lines whose band line draws a leader to something on screen, and to what. Lines not listed point
  * at nothing.
  */
@@ -120,7 +154,7 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
   'C1.triage.03': 'zone:gauge',
   'C1.triage.05': 'zone:inventory',
   'C1.triage.06': 'zone:gauge',
-  'C2.triage.pay': 'zone:scope',
+  'C2.triage.pay': 'zone:gauge',
   'C2.triage.after': 'zone:gauge',
   'C3.triage.01': 'zone:inventory',
   'C3.triage.02': 'part:idle',
@@ -136,7 +170,7 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
   'C4.triage.cut': 'zone:gauge',
   'C5.triage.03': 'zone:gauge',
   'C5.rei.05': 'part:balancer',
-  'C5.mika.05': 'zone:scope',
+  'C5.mika.05': 'zone:gauge',
   // The midnight forecast and its outage sub-line.
   'C6.rei.01': 'zone:alert',
   'C6.triage.01': 'zone:alert',
@@ -144,11 +178,40 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
   // The credits chip in the title cluster.
   'C7.ozzie.01': 'zone:title',
   'C7.triage.01': 'zone:alert',
+  // The tutorial coach's nudges (src/scenes/hud/coach.ts): at the thing to touch next.
+  'C1.triage.nudge.place.1': 'zone:inventory',
+  'C1.triage.nudge.place.2': 'zone:inventory',
+  'C1.lux.nudge.place': 'zone:inventory',
+  'C1.triage.nudge.feed.1': 'part:gateway',
+  'C1.triage.nudge.feed.2': 'part:gateway',
+  'C1.lux.nudge.feed': 'part:gateway',
+  'C1.triage.nudge.store.1': 'part:database',
+  'C1.triage.nudge.store.2': 'part:database',
+  'C1.lux.nudge.store': 'part:database',
+  'C3.triage.nudge.choose.1': 'zone:inventory',
+  'C3.triage.nudge.choose.2': 'zone:inventory',
+  'C3.triage.nudge.idle': 'part:idle',
+  'C3.lux.nudge.idle': 'part:idle',
+  'C5.triage.nudge.splitter': 'part:balancer',
+  'C5.lux.nudge.splitter': 'part:balancer',
+  'C5.triage.nudge.behind.1': 'part:balancer',
+  'C5.triage.nudge.behind.2': 'part:balancer',
+  'C5.lux.nudge.behind': 'part:balancer',
+  'C5.triage.nudge.replace.1': 'zone:inventory',
+  // Lux on the board: the dial she means, the forecast, her credits, the box that went dark.
+  'C3.lux.watch': 'zone:gauge',
+  'C3.lux.near': 'zone:gauge',
+  'C3.lux.over': 'zone:gauge',
+  'C3.lux.broke': 'zone:title',
+  'C4.lux.forecast': 'zone:alert',
+  'C4.lux.forecast2': 'zone:alert',
+  'C4.lux.dark': 'part:dark',
+  'C6.lux.spare': 'part:dark',
 };
 
 /** The debrief terms each line shows before they are named. Lines not listed teach nothing on their own. */
 export const TEACHES: Readonly<Partial<Record<LineId, readonly TermKey[]>>> = {
-  // 120 flats every 4 s is 30 a second: the job card's sum, owned up to as the gauge reads it.
+  // The lights coming back as the gauge first reads the block's real line: the debrief names the sum.
   'C1.triage.03': ['requirements', 'requestsPerSecond', 'estimate'],
   'C1.triage.06': ['capacity', 'headroom'],
   'C2.triage.after': ['headroom'],

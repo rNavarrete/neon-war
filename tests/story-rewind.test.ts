@@ -21,7 +21,7 @@ describe('rewinds', () => {
   it("sends Rei's rewinds to the surge start or to 23:59", () => {
     expect(rewindTarget('rei-surge', C.c5 + 10)).toBe(C.c4);
     expect(rewindTarget('rei-midnight', C.c7)).toBe(C.c6);
-    expect(C.c6).toBe(450); // 23:51:30 + 7:30 = 23:59:00
+    expect(C.c6).toBe(275); // 23:54:25 + 4:35 = 23:59:00
   });
 });
 

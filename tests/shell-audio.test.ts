@@ -1,12 +1,17 @@
 import {
   AudioDirector,
+  MUSIC_LEVEL,
   EVENT_SFX,
   SFX_KEYS,
   isSfxKey,
   musicWanted,
   sfxForAction,
+  TITLE_MUSIC_FILES,
+  TITLE_MUSIC_KEY,
   sfxPath,
+  titleMusicWanted,
 } from '../src/game/audio';
+import { DEFAULT_SETTINGS, SETTINGS_VERSION, parseSettings } from '../src/game/settings';
 import { Bus } from '../src/game/bus';
 
 describe('sound keys', () => {
@@ -40,6 +45,21 @@ describe('sound keys', () => {
     expect(musicWanted({ boardOpen: true, sceneOpen: false })).toBe(true);
     expect(musicWanted({ boardOpen: true, sceneOpen: true })).toBe(false);
     expect(musicWanted({ boardOpen: false, sceneOpen: false })).toBe(false);
+  });
+
+  it('plays "Euphoric Menace" on the title only, and never while the music is muted', () => {
+    expect(TITLE_MUSIC_KEY).not.toBe('music');
+    expect(TITLE_MUSIC_FILES).toEqual(['audio/music/euphoric-menace.ogg', 'audio/music/euphoric-menace.mp3']);
+    expect(titleMusicWanted({ titleOpen: true, muted: false })).toBe(true);
+    expect(titleMusicWanted({ titleOpen: true, muted: true })).toBe(false);
+    expect(titleMusicWanted({ titleOpen: false, muted: false })).toBe(false);
+  });
+
+  it('remembers the speaker icon’s mute in settings, unmuted by default', () => {
+    expect(DEFAULT_SETTINGS.musicMuted).toBe(false);
+    expect(parseSettings(JSON.stringify({ musicMuted: true })).musicMuted).toBe(true);
+    expect(parseSettings(JSON.stringify({ musicMuted: 'yes' })).musicMuted).toBe(false);
+    expect(parseSettings(null).musicMuted).toBe(false);
   });
 });
 
@@ -80,5 +100,20 @@ describe('AudioDirector', () => {
     });
     expect(() => bus.emit('sfx', { key: 'ui-click' })).not.toThrow();
     expect(director.lastSfx).toBe('ui-click');
+  });
+});
+
+describe('the default volume (Rolando, 30 Oct 2026: "kind of high")', () => {
+  it('starts at half volume, with the music under the voices and effects', () => {
+    expect(DEFAULT_SETTINGS.volume).toBe(0.5);
+    expect(MUSIC_LEVEL).toBeGreaterThan(0);
+    expect(MUSIC_LEVEL).toBeLessThan(1);
+  });
+
+  it('gives settings saved with the old 0.8 default the new one, once', () => {
+    expect(parseSettings(JSON.stringify({ volume: 0.8 })).volume).toBe(0.5);
+    // A level the player chose, or one saved after the change, is kept.
+    expect(parseSettings(JSON.stringify({ volume: 0.6 })).volume).toBe(0.6);
+    expect(parseSettings(JSON.stringify({ volume: 0.8, version: SETTINGS_VERSION })).volume).toBe(0.8);
   });
 });

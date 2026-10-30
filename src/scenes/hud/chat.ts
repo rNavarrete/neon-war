@@ -17,8 +17,9 @@ export interface ChatEntry {
 }
 
 export const CHAT_ROWS = 6;
-export const FILLER_MIN_SECONDS = 6;
-export const FILLER_MAX_SECONDS = 10;
+/** Filler every 2 to 4 s, so the feed always feels alive (Rolando, 30 Oct 2026: way more chat). */
+export const FILLER_MIN_SECONDS = 2;
+export const FILLER_MAX_SECONDS = 4;
 
 /** A small seeded random generator (mulberry32), returning numbers in [0, 1). */
 export function seededRandom(seed: number): () => number {
@@ -77,7 +78,7 @@ export function pickFiller(
   return options[Math.min(options.length - 1, Math.floor(rand() * options.length))];
 }
 
-/** Seconds until the next filler line: 6 to 10. */
+/** Seconds until the next filler line: FILLER_MIN_SECONDS to FILLER_MAX_SECONDS. */
 export function fillerDelay(rand: () => number): number {
   return FILLER_MIN_SECONDS + rand() * (FILLER_MAX_SECONDS - FILLER_MIN_SECONDS);
 }
@@ -90,7 +91,7 @@ export function avatarFor(who: string): string | null {
 
 // ---- the LIVE CHAT panel (chat-4): how a row looks and where it sits ----
 
-/** The rows' body inside ZONES.chat (src/scenes/hud/layout.ts RIGHT.chatBody: x 1545-1890, y 840-1060). */
+/** The rows' body inside ZONES.chat (src/scenes/hud/layout.ts RIGHT.chatBody: x 1465-1890, y 360-1050). */
 export const CHAT_BODY = Object.freeze({ ...RIGHT.chatBody });
 
 /** The header strip over the body: ZONES.chat's top 40 px; a click there toggles BLOCK ONLY. */
@@ -101,20 +102,21 @@ export const CHAT_HEADER = Object.freeze({
   h: CHAT_BODY.y - RIGHT.chat.y,
 });
 
-/** A row's badge (a painted avatar for residents, a ring for viewers), in px. */
-export const ROW_AVATAR = 32;
+/** A row's badge (a painted avatar for residents, a ring for viewers), in px: 56 since Rolando asked for bigger faces (30 Oct 2026). */
+export const ROW_AVATAR = 56;
 /** The words start this far right of the body's left edge (tick, badge, gap). */
-export const ROW_TEXT_X = 48;
-/** The name line, then each 14 px message line. */
-export const ROW_NAME_H = 15;
-export const ROW_LINE_H = 17;
+export const ROW_TEXT_X = 74;
+/** The name line, then each 16 px message line (bigger since the chat got its own column). */
+export const ROW_NAME_H = 17;
+export const ROW_LINE_H = 20;
 /** Space under each row. */
-export const ROW_GAP = 4;
+export const ROW_GAP = 6;
 /**
- * A message this long or shorter fits one line of the 297 px column at 14 px; a longer one wraps to
- * two, never more (the view sets maxLines from rowLines). Conservative, so a one-line row never wraps.
+ * A message this long or shorter fits one line of the 316 px column at 16 px (the slim A2 chat); a
+ * longer one wraps to two, never more (the view sets maxLines from rowLines). Conservative, so a
+ * one-line row never wraps.
  */
-export const ONE_LINE_CHARS = 34;
+export const ONE_LINE_CHARS = 31;
 
 /** The handles viewers post under in Lux's stream (05-comms "Live chat"). */
 export const VIEWER_HANDLES: readonly string[] = [
@@ -124,6 +126,19 @@ export const VIEWER_HANDLES: readonly string[] = [
   'rainproxy',
   'void99',
   'tokyo.exe',
+  // The hype pack's regulars (Rolando, 30 Oct 2026).
+  'pixel_auntie',
+  'ramen.raccoon',
+  '404grandma',
+  'lagless_larry',
+  'byte_me',
+  'neonmoth',
+  'cablecat',
+  'sk8r.boi.99',
+  'mochi_dev',
+  'lowbatt',
+  'triage_fanclub',
+  'midnight.mango',
 ];
 
 /** What the panel needs from a chat row (chatEngine.ts ChatRow). */
@@ -144,14 +159,14 @@ export function rowLines(text: string): 1 | 2 {
   return text.length <= ONE_LINE_CHARS ? 1 : 2;
 }
 
-/** A row's height in the panel, gap included: 36 for one line (the badge's height), 53 for two. */
+/** A row's height in the panel, gap included: 62 for one line, 63 for two. */
 export function rowHeight(text: string): number {
   return Math.max(ROW_AVATAR, ROW_NAME_H + rowLines(text) * ROW_LINE_H) + ROW_GAP;
 }
 
 /**
  * The newest rows that fit the body, oldest first: walking back from the newest, take rows while
- * their heights fit `bodyH`, at most `max`. Four or five rows in practice.
+ * their heights fit `bodyH`, at most `max`. About fourteen rows in the tall column.
  */
 export function fitRows<T extends { readonly text: string }>(
   rows: readonly T[],
@@ -215,7 +230,7 @@ export interface RowLook {
 }
 
 const RED_CAUSES: ReadonlySet<string> = new Set(['errorsRising', 'errorsHeavy', 'retriesRising']);
-const AMBER_CAUSES: ReadonlySet<string> = new Set(['recovered', 'held']);
+const AMBER_CAUSES: ReadonlySet<string> = new Set(['recovered', 'held', 'hype']);
 
 /** The 2 px cause tick: red for a complaint or an errors row, amber for thanks or a recovery. */
 export function tickOf(row: Pick<PanelRow, 'cause' | 'complaint' | 'thanks'>): TickColor {

@@ -7,14 +7,16 @@ import { allPortraits } from '../game/portraits';
 import { MAX_FRAME_SECONDS, type Run, run } from '../game/run';
 import { settings } from '../game/settings';
 import { BROWNOUT } from '../sim/brownout';
+import { tipTotal } from '../sim/tips';
 import type { BannerChoice } from '../sim/economy';
 import { LINES, type LineId, line } from '../strings';
 import { provideTestState } from '../testHook';
 import { CommsView } from './hud/CommsView';
-import { type ChartView, scopeViewOf } from './hud/ChartView';
+import { DEMAND_SCALE_MAX } from './hud/thresholds';
 import { ChatFeedView } from './hud/ChatFeedView';
 import { chatOf } from './hud/chat';
 import {
+  BOARD_CUES,
   type CueView,
   type DirectorState,
   NEW_DIRECTOR,
@@ -25,6 +27,16 @@ import {
 } from './hud/cues';
 import { CARD_TEXT_POOL, type CardTextSpec, bannerTexts, dressCardText, jobCardTexts } from './hud/cardText';
 import { countdownText } from './hud/format';
+import {
+  type CoachInput,
+  type CoachState,
+  NEW_COACH,
+  coachHint,
+  coachLit,
+  coachProblem,
+  quietCoach,
+  stepCoach,
+} from './hud/coach';
 import { type HudBounds, type HudTestState, type PagePoint, hudSection } from './hud/hook';
 import { dismissJobCard, jobCardDue, openJobCard } from './hud/jobCard';
 import { BANNER_BUTTONS, BOTTOM, CENTRE, COLORS, FONT, type Home, KEY } from './hud/layout';
@@ -101,8 +113,31 @@ export class HudScene extends Phaser.Scene {
   private unsubscribe: (() => void)[] = [];
 
   private director: DirectorState = NEW_DIRECTOR;
+  /** The tutorial coach: what the player is stuck on and how long (src/scenes/hud/coach.ts). */
+  private coach: CoachState = NEW_COACH;
+  /** What the board was last told to light: the problem's key and whether it showed. */
+  private coachShown: string | null = null;
+  /** Every nudge the coach said this run, in order (for the hook). */
+  private coachSaid: LineId[] = [];
+  /** A card or wire is in hand on the board: the coach waits rather than talk over the drag. */
+  private dragging = false;
+  private readonly coachInput: { -readonly [K in keyof CoachInput]: CoachInput[K] } = {
+    now: 0,
+    paused: false,
+    cardOpen: false,
+    waitingForFirstBuild: false,
+    rescued: false,
+    parts: [],
+    wires: [],
+    dead: [],
+    offline: [],
+    load: {},
+    dropped: 0,
+  };
   private bannerShown = false;
   private decommissionsAfterMidnight = 0;
+  /** Placed parts the player has moved this run. */
+  private moves = 0;
   private lastSurgeAt = -1;
   /** Sim time the current surge warning first went on screen. */
   private surgeShownAt = -1;
@@ -118,14 +153,15 @@ export class HudScene extends Phaser.Scene {
     cardClosed: boolean;
     bannerShown: boolean;
     decommissionsAfterMidnight: number;
+    moves: number;
   } = {
     cardClosed: false,
     bannerShown: false,
     decommissionsAfterMidnight: 0,
+    moves: 0,
   };
 
   // Views, built in create().
-  private chart!: ChartView;
   /** The comms band (the registry's comms view): every bark the cue table fires goes to it. */
   private comms: CommsView | null = null;
   /** The alert band and the deck (registry views): hud.bounds and hud.laundry/regroup read them. */
@@ -211,7 +247,6 @@ export class HudScene extends Phaser.Scene {
       v.create(this, this.hostFor(v));
     }
     this.building = null;
-    this.chart = scopeViewOf(this.views);
     this.buildDipMark();
     this.cardTexts = [];
     this.dressedFor = null;
@@ -222,8 +257,17 @@ export class HudScene extends Phaser.Scene {
     this.unsubscribe.push(
       bus.on('action', (a) => {
         if (a.type === 'decommission' && run().now >= MIDNIGHT) this.decommissionsAfterMidnight++;
+        if (a.type === 'move') this.moves++;
+      }),
+      bus.on('drag', (d) => {
+        this.dragging = d.kind !== null;
+        // Picking something up or letting go is the player trying: the coach holds its next nudge.
+        this.coach = quietCoach(this.coach);
       }),
     );
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
+      this.coach = quietCoach(this.coach);
+    });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       for (const off of this.unsubscribe) off();
       this.unsubscribe = [];
@@ -264,6 +308,7 @@ export class HudScene extends Phaser.Scene {
     this.updateBanner(r);
 
     this.runDirector(f);
+    this.runCoach(f, step);
     if (this.perf.frame(delta)) this.samplePerf();
   }
 
@@ -321,16 +366,19 @@ export class HudScene extends Phaser.Scene {
     this.lastFrame = null;
     this.occurrences.length = 0;
     this.director = NEW_DIRECTOR;
+    this.coach = NEW_COACH;
+    this.coachSaid = [];
+    this.publishCoach(null);
     this.comms?.reset();
     this.chatFeed?.reset(this.clock);
     this.bannerShown = false;
     this.decommissionsAfterMidnight = 0;
+    this.moves = 0;
     // A fresh run: nothing carries over from the last run's view (dropped in C6, the rescue clock).
     Object.assign(this.view, emptyCueView());
     this.firedCues = [];
     this.lastSurgeAt = -1;
     if (this.ready) {
-      this.chart.ring.clear();
       if (jobCardDue(r)) {
         this.cardOpen = true;
         openJobCard(r);
@@ -500,10 +548,69 @@ export class HudScene extends Phaser.Scene {
     host.cardClosed = !this.cardOpen;
     host.bannerShown = this.bannerShown;
     host.decommissionsAfterMidnight = this.decommissionsAfterMidnight;
+    host.moves = this.moves;
     const v = cueViewOf(this.view, f, this.occurrences, this.clock, host, this.view);
-    const out = direct(this.director, v);
+    const out = direct(this.director, v, BOARD_CUES);
     this.director = out.state;
     for (let i = 0; i < out.fired.length; i++) this.cue(out.fired[i]);
+  }
+
+  /**
+   * One frame of the tutorial coach: what the player is stuck on (coachProblem), timed on the HUD
+   * clock while the board runs and nothing is in hand. A due nudge goes to the comms band like a
+   * bark and out on the bus for the chat; a change in what is lit goes out as bus `coach` for the
+   * board and the alert band.
+   */
+  private runCoach(f: Frame, dt: number): void {
+    const c = this.coachInput;
+    c.now = f.now;
+    c.paused = f.paused;
+    c.cardOpen = this.cardOpen;
+    c.waitingForFirstBuild = f.waitingForFirstBuild;
+    c.rescued = f.rescued;
+    c.parts = f.parts;
+    c.wires = f.wires;
+    c.dead = f.dead;
+    c.offline = f.offline;
+    c.load = f.flow.load;
+    c.dropped = f.dropped;
+    // Recomputed only when the sim moved or the card closed: the same frame gives the same problem.
+    const p =
+      f === this.lastCoachFrame && this.cardOpen === this.lastCoachCard
+        ? this.coach.problem
+        : coachProblem(c);
+    this.lastCoachFrame = f;
+    this.lastCoachCard = this.cardOpen;
+    const out = stepCoach(this.coach, p, dt, f.paused || this.dragging);
+    this.coach = out.state;
+    if (out.nudge) {
+      this.coachSaid.push(out.nudge);
+      this.comms?.enqueue(out.nudge);
+      bus.emit('coachNudge', {
+        step: out.state.problem?.step ?? '',
+        id: out.nudge,
+        nth: out.state.nudges,
+        at: this.clock,
+      });
+    }
+    const shown = coachLit(this.coach) && this.coach.problem ? this.coach.problem.key : null;
+    if (shown !== this.coachShown) this.publishCoach(shown);
+  }
+
+  private lastCoachFrame: Frame | null = null;
+  private lastCoachCard = false;
+
+  /** Tell the board and the band what the coach lights now (`key` null: nothing). */
+  private publishCoach(key: string | null): void {
+    this.coachShown = key;
+    const p = key !== null ? this.coach.problem : null;
+    bus.emit('coach', {
+      step: p?.step ?? null,
+      cards: p?.cards ?? [],
+      parts: p?.parts ?? [],
+      wire: p?.wire ?? null,
+      hint: p ? coachHint(this.coach) : null,
+    });
   }
 
   /**
@@ -553,12 +660,9 @@ export class HudScene extends Phaser.Scene {
       clock: f.clock,
       countdown: countdownText(f.now),
       jobCard: { open: this.cardOpen, x: ok.x, y: ok.y },
+      // The LAST 60 s chart is gone (the gauge is the one demand widget); hud.chart keeps its now.
       chart: built
-        ? {
-            demand: this.chart.ring.lastDemand,
-            capacity: this.chart.ring.lastCapacity,
-            ceiling: this.chart.ceiling,
-          }
+        ? { demand: r.demand, capacity: r.capacity, ceiling: DEMAND_SCALE_MAX }
         : { demand: 0, capacity: 0, ceiling: 0 },
       sim: {
         demand: r.demand,
@@ -566,6 +670,7 @@ export class HudScene extends Phaser.Scene {
         capacity: r.capacity,
         trust: r.session.trust,
         credits: r.session.board.credits,
+        tipped: tipTotal(r.play.tips),
       },
       shown: { trust: shownTrust(f.trust), credits: shownCredits(f.credits) },
       surge: w
@@ -600,6 +705,17 @@ export class HudScene extends Phaser.Scene {
       },
       bark: this.comms?.barkSnapshot() ?? { current: null, text: null, history: [] },
       cues: { fired: [...this.firedCues], silenced: chatSilenced(this.director) },
+      coach: {
+        step: this.coach.problem?.step ?? null,
+        key: this.coach.problem?.key ?? null,
+        lit: coachLit(this.coach),
+        stuckFor: this.coach.stuckFor,
+        hint: coachHint(this.coach),
+        cards: [...(this.coach.problem?.cards ?? [])],
+        parts: [...(this.coach.problem?.parts ?? [])],
+        wire: this.coach.problem?.wire ?? null,
+        said: [...this.coachSaid],
+      },
       // The chat view provides hud.chat (block and stream kept, the feed beside them) over this.
       chat: { block: [], stream: [] },
       timeScale: r.timeScale,
@@ -629,8 +745,6 @@ export class HudScene extends Phaser.Scene {
     ];
     // Views can be shut down (quit to title) while the hook is still read. The alert band and the
     // deck's keys are AlertView's and DeckView's now; they are listed under the same ids.
-    const scope = this.chart.builtPanel;
-    if (scope) pieces.unshift(['scope', 'scope', scope]);
     const alert = this.alertView?.container;
     if (alert) pieces.unshift(['alert', 'alert', alert]);
     const keys = this.deckView?.keyHits() ?? [];

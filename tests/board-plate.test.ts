@@ -6,7 +6,10 @@ import {
   PLATE_STATE,
   PlateCache,
   REPLACE_LABEL,
+  cardBarTone,
+  partCard,
   partPlate,
+  wireCard,
   wirePlate,
 } from '../src/scenes/board/plate';
 import { type PartTrouble, partLook } from '../src/scenes/board/view';
@@ -64,7 +67,7 @@ function everyPlate(): string[] {
 describe('hover plates (board-8)', () => {
   it('a server shows its numbers and its state', () => {
     const p = partPlate(s1, partLook(s1, 45, [], {}, 10, none), false);
-    expect(p).toMatch(/^SERVER · 45\/60 a second · 75%/);
+    expect(p).toMatch(/^SERVER · 45\/60 req\/s · 75%/);
     expect(p).toMatch(/running/);
     expect(p.split('\n')).toHaveLength(3);
   });
@@ -72,7 +75,7 @@ describe('hover plates (board-8)', () => {
   it('says what is wrong in the tags’ words: DIES IN, UNFED, BOOTING, DARK, DEAD, SKIPPED', () => {
     const hot = partPlate(s1, partLook(s1, 90, [], {}, 10, { ...none, overload: { s: 3 } }), false);
     expect(hot).toMatch(/DIES IN 5 s/);
-    expect(hot).toMatch(/90\/60 a second · 150%/);
+    expect(hot).toMatch(/90\/60 req\/s · 150%/);
     expect(partPlate(s1, partLook(s1, 0, [], {}, 10, none), false)).toMatch(/UNFED · nothing feeds it/);
     expect(partPlate(s1, partLook(s1, 0, ['s'], { s: 12 }, 10, none), false)).toMatch(/BOOTING 2\.0 s/);
     const dark = partLook(s1, 50, ['s'], {}, 10, {
@@ -87,29 +90,26 @@ describe('hover plates (board-8)', () => {
     expect(partPlate(s1, partLook(s1, 30, [], {}, 10, none), true)).toMatch(/SKIPPED/);
   });
 
-  it('a kitted box and the other parts say what they are from labels.ts', () => {
-    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/30\/120 a second/);
-    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/OVERCLOCK/);
+  it('a scaled-up server and the other parts say what they are from labels.ts', () => {
+    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/30\/120 req\/s/);
+    expect(partPlate(kit, partLook(kit, 30, [], {}, 10, none), false)).toMatch(/SCALE UP/);
     expect(partPlate(gw, partLook(gw, 30, [], {}, 10, none), false)).toMatch(
-      /^GATEWAY · 30 a second coming in/,
+      /^GATEWAY · 30 req\/s coming in/,
     );
     expect(partPlate(db, partLook(db, 30, [], {}, 10, none), false)).toMatch(
-      new RegExp(`^DATABASE · 30/${BROWNOUT.database.capacity} a second`),
+      new RegExp(`^DATABASE · 30/${BROWNOUT.database.capacity} req/s`),
     );
-    expect(partPlate(lb, partLook(lb, 30, [], {}, 10, none), false)).toMatch(/^SPLITTER/);
-    expect(wirePlate(gw, s1, 29.6)).toMatch(/^WIRE · 30 a second\nGATEWAY to SERVER/);
+    expect(partPlate(lb, partLook(lb, 30, [], {}, 10, none), false)).toMatch(/^LOAD BALANCER/);
+    expect(wirePlate(gw, s1, 29.6)).toMatch(/^WIRE · 30 req\/s\nGATEWAY to SERVER/);
   });
 
-  it('never prints capacity, headroom, health check, load balancer or any other debrief term', () => {
-    const terms = debriefTerms();
-    expect(terms.length).toBeGreaterThan(10);
-    for (const banned of ['capacity', 'headroom', 'health check', 'load balancer']) {
-      expect(terms.map((t) => t.toLowerCase()).some((t) => t.includes(banned))).toBe(true);
-    }
-    for (const plate of everyPlate()) {
-      const lower = plate.toLowerCase();
-      for (const t of terms) expect(lower, plate).not.toContain(t.toLowerCase());
-    }
+  it('names the parts and their numbers in the real terms, never the old crew words', () => {
+    // Rolando, 29 Oct 2026: keep the system-design terms intact on screen.
+    expect(debriefTerms().length).toBeGreaterThan(10);
+    const plates = everyPlate();
+    for (const plate of plates) expect(plate, plate).not.toMatch(/\bsplitter\b|\bbox\b|a second|bigger box/i);
+    const all = plates.join('\n');
+    for (const term of ['LOAD BALANCER', 'capacity', 'req/s', 'health check']) expect(all).toContain(term);
   });
 
   it('the cache re-sets the text only when what the plate shows changes', () => {
@@ -123,5 +123,69 @@ describe('hover plates (board-8)', () => {
     expect(c.wire('gateway>s', gw, s1, 46.1)).toBe(false);
     c.reset();
     expect(c.wire('gateway>s', gw, s1, 46.1)).toBe(false);
+  });
+});
+
+// The hover card (Rolando, 30 Oct 2026, "a better pop up", option A): the name once on the title
+// bar, a coloured state chip, one big number, the load bar, and one plain sentence.
+describe('the hover card', () => {
+  it('shows the gateway as its name, a RUNNING chip, the number coming in and one sentence', () => {
+    const c = partCard(gw, partLook(gw, 30, [], {}, 10, none), false);
+    expect(c).toMatchObject({
+      name: 'GATEWAY',
+      chip: 'RUNNING',
+      tone: 'ok',
+      big: '30',
+      bar: null,
+      detail: null,
+    });
+    expect(c.unit).toBe('req/s coming in');
+    // The name is not repeated in the sentence, and the fragments read as sentences.
+    expect(c.about).not.toContain('GATEWAY');
+    expect(c.about).toMatch(/^[A-Z].*\.$/);
+    expect(c.about).not.toContain(' · ');
+  });
+
+  it('gives a server its load out of its capacity and a bar that turns amber from 85% and red over 100%', () => {
+    const cap = BROWNOUT.server.capacity;
+    const c = partCard(s1, partLook(s1, 45, [], {}, 10, none), false);
+    expect(c.big).toBe('45');
+    expect(c.unit).toBe(`of ${cap} req/s · ${Math.round((45 / cap) * 100)}%`);
+    expect(c.bar).toBeCloseTo(45 / cap);
+    expect(cardBarTone(0.5)).toBe('info');
+    expect(cardBarTone(0.85)).toBe('warn');
+    expect(cardBarTone(1.2)).toBe('bad');
+  });
+
+  it('colours the chip by state and says the state in words when it is not simply running', () => {
+    const over = partCard(s1, partLook(s1, 250, [], {}, 10, { ...none, overload: { [s1.id]: 3 } }), false);
+    expect(over.tone).toBe('bad');
+    expect(over.detail).not.toBeNull();
+    const booting = partCard(s1, partLook(s1, 0, [s1.id], { [s1.id]: 12 }, 10, none), false);
+    expect(booting).toMatchObject({ tone: 'info', chip: 'BOOTING', bar: null });
+    expect(booting.detail).toContain('BOOTING');
+    const dead = partCard(s1, partLook(s1, 50, [s1.id], {}, 10, { ...none, dead: [s1.id] }), false);
+    expect(dead).toMatchObject({ tone: 'bad', chip: 'DEAD' });
+    const skipped = partCard(s1, partLook(s1, 30, [], {}, 10, none), true);
+    expect(skipped).toMatchObject({ tone: 'warn', chip: 'SKIPPED' });
+  });
+
+  it('gives a wire its rate and its ends, no chip', () => {
+    expect(wireCard(gw, s1, 45)).toMatchObject({
+      name: 'WIRE',
+      chip: null,
+      big: '45',
+      detail: 'GATEWAY to SERVER',
+    });
+  });
+
+  it('uses the real terms, never the old nicknames', () => {
+    for (const p of [gw, db, lb, s1, kit])
+      for (const load of [0, 45, 250])
+        for (const skipped of [false, true]) {
+          const c = partCard(p, partLook(p, load, [], {}, 10, none), skipped);
+          const words = [c.name, c.chip ?? '', c.big, c.unit, c.detail ?? '', c.about].join(' ');
+          expect(words, words).not.toMatch(/\bsplitter\b|\bbox\b|a second|bigger box/i);
+        }
   });
 });

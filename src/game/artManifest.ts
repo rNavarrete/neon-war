@@ -111,23 +111,24 @@ const size = (w: number, h: number): Size => ({ w, h });
  *   hairline, so the view draws it 1:1 (centred, or repeated at scale 1 along the bar) and fills
  *   the rest of the bar in code.
  * - hud/comms-plate is 1455x149 in the 1455x150 band: CommsView centres it on whole pixels.
- * - board/table-plate is 1228x416 under a 1441 px feed: the board centres it (tablePlatePlace).
+ * - board/table-plate is table D (Rolando's pick, 30 Oct 2026), the whole 1536x1024 rooftop scene
+ *   behind the feed; the board covers the feed with it (tablePlatePlace).
  */
 const PICKED_CUTS: Readonly<Record<string, Size>> = {
-  'board/table-plate': size(1228, 416),
+  'board/table-plate': size(1536, 1024),
   'board/server-dark': size(425, 638),
   'board/server-booting-a': size(427, 638),
   'board/server-booting-b': size(420, 638),
   'board/server-overclocked-dark': size(466, 629),
-  'board/balancer-ping-a': size(480, 337),
-  'board/balancer-ping-b': size(480, 336),
+  'board/balancer-ping-a': size(449, 306),
+  'board/balancer-ping-b': size(449, 306),
   'board/channel-plate': size(300, 233),
   'hud/city-grid': size(816, 620),
   'hud/comms-plate': size(1455, 149),
   'chars/comms/triage': size(244, 256),
-  'chars/comms/rei': size(240, 256),
-  'chars/comms/mika': size(236, 256),
-  'chars/comms/ozzie': size(221, 256),
+  'chars/comms/rei': size(236, 256),
+  'chars/comms/mika': size(221, 256),
+  'chars/comms/ozzie': size(236, 256),
   'hud/live/avatar-luxnet': size(243, 256),
   'hud/icons/door': size(128, 120),
   'hud/icons/tv': size(128, 120),
@@ -181,7 +182,8 @@ const scaled = (cut: Size, k: number): Size => size(Math.round(cut.w * k), Math.
 const fit = (cut: Size, w: number, h: number): Size => scaled(cut, Math.min(1, w / cut.w, h / cut.h));
 
 /** The story scenes draw portraits at 0.8, and the speaker at 0.8 x 1.03 (src/story/view.ts). */
-const PORTRAIT_K = 0.8 * 1.03;
+/** A bust in a story scene (src/story/stage.ts): 0.97, and 1.0 while it speaks. */
+const PORTRAIT_K = 0.97 * 1.03;
 
 const portrait = (path: string, cut: Size): PickedArt => ({
   file: `art/chars/${path}.webp`,
@@ -189,6 +191,15 @@ const portrait = (path: string, cut: Size): PickedArt => ({
   display: scaled(cut, PORTRAIT_K),
   zone: 'story',
   use: 'speaker portrait in the story scenes; the bark face (124 px) and the COMMS slot crop',
+});
+
+/** A tall story sprite, cut at 927 px: 900 px on stage and 927 (its own size) while it speaks. */
+const sprite = (path: string, cut: Size, use: string): PickedArt => ({
+  file: `art/chars/${path}.webp`,
+  cut,
+  display: scaled(cut, 1),
+  zone: 'story',
+  use,
 });
 
 /** The locked parts' scrap tier in the inventory's padlocked drawer: 40x72 minis, art at 72% x 70%. */
@@ -244,8 +255,8 @@ export const PICKED_ART: readonly PickedArt[] = [
   },
   {
     file: 'art/board/gateway.webp',
-    cut: size(407, 704),
-    display: fit(size(407, 704), 110, 190),
+    cut: size(524, 612),
+    display: fit(size(524, 612), 110, 128),
     zone: 'feed',
     use: 'the gateway',
   },
@@ -265,8 +276,8 @@ export const PICKED_ART: readonly PickedArt[] = [
   },
   {
     file: 'art/board/balancer.webp',
-    cut: size(480, 339),
-    display: fit(size(480, 339), 140, 100),
+    cut: size(449, 306),
+    display: fit(size(449, 306), 140, 95),
     zone: 'feed',
     use: "the crew's balancer; its inventory card",
   },
@@ -325,8 +336,8 @@ export const PICKED_ART: readonly PickedArt[] = [
     file: 'art/hud/chart-window.webp',
     cut: size(1008, 454),
     display: size(408, 180),
-    zone: 'scope',
-    use: 'SCOPE plate',
+    zone: 'gauge',
+    use: 'the retired SCOPE plate (the LAST 60 s chart is gone); kept for a later instrument',
     nineSlice: { k: 0.4 },
   },
   {
@@ -351,6 +362,13 @@ export const PICKED_ART: readonly PickedArt[] = [
     zone: 'alert',
     use: 'ALERT plate',
     nineSlice: { k: 0.85 },
+  },
+  {
+    file: 'art/hud/clock-plate.webp',
+    cut: size(272, 112),
+    display: size(272, 112),
+    zone: 'clock',
+    use: "the clock's neon-trimmed sign plate (Rolando's pick, plate 1, 30 Oct 2026), the time in its window",
   },
   {
     file: 'art/hud/clock-panel.webp',
@@ -474,22 +492,144 @@ export const PICKED_ART: readonly PickedArt[] = [
   },
 
   // chars/: the crew's faces and poses, TRIAGE, the block's avatars.
-  portrait('triage/eager', size(238, 290)),
-  portrait('triage/thinking', size(235, 289)),
-  portrait('triage/proud', size(238, 289)),
-  portrait('triage/panic', size(285, 291)),
-  portrait('triage/sheepish', size(235, 290)),
-  portrait('triage/happy', size(238, 290)),
+  portrait('triage/eager', size(231, 290)),
+  portrait('triage/thinking', size(232, 290)),
+  portrait('triage/proud', size(235, 290)),
+  portrait('triage/panic', size(251, 266)),
+  portrait('triage/sheepish', size(233, 290)),
+  portrait('triage/happy', size(235, 290)),
+  portrait('triage/worried', size(280, 290)),
   portrait('lux/faces-board/determined', size(436, 429)),
   portrait('lux/faces-board/tense', size(425, 457)),
   portrait('lux/faces-board/deadpan', size(410, 449)),
   portrait('lux/faces-board/shocked', size(417, 456)),
   portrait('lux/faces-board/smirk', size(427, 455)),
   portrait('lux/faces-board/triumphant', size(506, 453)),
+  sprite(
+    'lux/vn/neutral',
+    size(515, 927),
+    "Lux's story sprite, standing behind the text box (vn-lux-b take 2)",
+  ),
+  sprite('lux/vn/photo', size(601, 927), "Lux looking at Akemi's photo in the cold open (vn-lux-a take 2)"),
+  sprite(
+    'lux/vn/composing',
+    size(538, 927),
+    "Lux's composing story sprite, goggles round her neck (vn-lux-composing)",
+  ),
+  sprite(
+    'lux/vn/exhausted',
+    size(538, 927),
+    "Lux's exhausted story sprite, goggles round her neck (vn-lux-exhausted)",
+  ),
+  sprite(
+    'lux/vn/frightened',
+    size(538, 927),
+    "Lux's frightened story sprite, goggles round her neck (vn-lux-frightened)",
+  ),
+  sprite(
+    'lux/vn/grieving',
+    size(538, 927),
+    "Lux's grieving story sprite, goggles round her neck (vn-lux-grieving)",
+  ),
+  sprite(
+    'lux/vn/relieved',
+    size(538, 927),
+    "Lux's relieved story sprite, goggles round her neck (vn-lux-relieved)",
+  ),
+  sprite(
+    'lux/vn/startled',
+    size(538, 927),
+    "Lux's startled story sprite, goggles round her neck (vn-lux-startled)",
+  ),
+  sprite(
+    'lux/vn/board-deadpan',
+    size(538, 927),
+    "Lux's deadpan story sprite, goggles down (vn-lux-board-deadpan)",
+  ),
+  sprite(
+    'lux/vn/board-determined',
+    size(538, 927),
+    "Lux's determined story sprite, goggles down (vn-lux-board-determined)",
+  ),
+  sprite(
+    'lux/vn/board-shocked',
+    size(538, 927),
+    "Lux's shocked story sprite, goggles down (vn-lux-board-shocked)",
+  ),
+  sprite('lux/vn/board-smirk', size(538, 927), "Lux's smirk story sprite, goggles down (vn-lux-board-smirk)"),
+  sprite('lux/vn/board-tense', size(538, 927), "Lux's tense story sprite, goggles down (vn-lux-board-tense)"),
+  sprite(
+    'lux/vn/board-triumphant',
+    size(538, 927),
+    "Lux's triumphant story sprite, goggles down (vn-lux-board-triumphant)",
+  ),
   portrait('lux/faces-room/composing', size(493, 438)),
   portrait('lux/faces-room/grieving', size(442, 440)),
   portrait('lux/faces-room/relieved', size(412, 429)),
   portrait('lux/faces-room/exhausted', size(460, 431)),
+  sprite('rei/vn/annoyed', size(454, 927), "Rei's annoyed story sprite (vn-rei-annoyed, from pose take 1)"),
+  sprite('rei/vn/grading', size(454, 927), "Rei's grading story sprite (vn-rei-grading, from pose take 1)"),
+  sprite(
+    'rei/vn/impressed',
+    size(454, 927),
+    "Rei's impressed story sprite (vn-rei-impressed, from pose take 1)",
+  ),
+  sprite('rei/vn/laugh', size(454, 927), "Rei's laugh story sprite (vn-rei-laugh, from pose take 1)"),
+  sprite('rei/vn/smirk', size(454, 927), "Rei's smirk story sprite (vn-rei-smirk, from pose take 1)"),
+  sprite('rei/vn/stern', size(454, 927), "Rei's stern story sprite (vn-rei-stern, from pose take 1)"),
+  sprite('rei/vn/pose-1', size(455, 927), "Rei's tall pose take 1, kept for later scenes (vn-rei-1)"),
+  sprite('rei/vn/pose-2', size(433, 927), "Rei's tall pose take 2, kept for later scenes (vn-rei-2)"),
+  sprite('rei/vn/pose-3', size(435, 927), "Rei's tall pose take 3, kept for later scenes (vn-rei-3)"),
+  sprite('mika/vn/calm', size(464, 927), "Mika's calm story sprite (vn-mika-calm, from pose take 1)"),
+  sprite(
+    'mika/vn/explain',
+    size(464, 927),
+    "Mika's explain story sprite (vn-mika-explain, from pose take 1)",
+  ),
+  sprite(
+    'mika/vn/focused',
+    size(464, 927),
+    "Mika's focused story sprite (vn-mika-focused, from pose take 1)",
+  ),
+  sprite('mika/vn/nod', size(464, 927), "Mika's nod story sprite (vn-mika-nod, from pose take 1)"),
+  sprite(
+    'mika/vn/reassure',
+    size(464, 927),
+    "Mika's reassure story sprite (vn-mika-reassure, from pose take 1)",
+  ),
+  sprite(
+    'mika/vn/worried',
+    size(464, 927),
+    "Mika's worried story sprite (vn-mika-worried, from pose take 1)",
+  ),
+  sprite('mika/vn/pose-1', size(437, 927), "Mika's tall pose take 1, kept for later scenes (vn-mika-1)"),
+  sprite('mika/vn/pose-2', size(400, 927), "Mika's tall pose take 2, kept for later scenes (vn-mika-2)"),
+  sprite('mika/vn/pose-3', size(489, 927), "Mika's tall pose take 3, kept for later scenes (vn-mika-3)"),
+  sprite(
+    'ozzie/vn/alarmed',
+    size(538, 927),
+    "Ozzie's alarmed story sprite (vn-ozzie-alarmed, from pose take 1)",
+  ),
+  sprite(
+    'ozzie/vn/annoyed',
+    size(538, 927),
+    "Ozzie's annoyed story sprite (vn-ozzie-annoyed, from pose take 1)",
+  ),
+  sprite(
+    'ozzie/vn/half-smile',
+    size(538, 927),
+    "Ozzie's half-smile story sprite (vn-ozzie-half-smile, from pose take 1)",
+  ),
+  sprite(
+    'ozzie/vn/sceptical',
+    size(538, 927),
+    "Ozzie's sceptical story sprite (vn-ozzie-sceptical, from pose take 1)",
+  ),
+  sprite('ozzie/vn/smug', size(538, 927), "Ozzie's smug story sprite (vn-ozzie-smug, from pose take 1)"),
+  sprite('ozzie/vn/sums', size(538, 927), "Ozzie's sums story sprite (vn-ozzie-sums, from pose take 1)"),
+  sprite('ozzie/vn/pose-1', size(492, 927), "Ozzie's tall pose take 1, kept for later scenes (vn-ozzie-1)"),
+  sprite('ozzie/vn/pose-2', size(474, 927), "Ozzie's tall pose take 2, kept for later scenes (vn-ozzie-2)"),
+  sprite('ozzie/vn/pose-3', size(533, 927), "Ozzie's tall pose take 3, kept for later scenes (vn-ozzie-3)"),
   portrait('rei/faces/smirk', size(420, 449)),
   portrait('rei/faces/grading', size(421, 443)),
   portrait('rei/faces/impressed', size(403, 432)),
@@ -566,7 +706,7 @@ export const PICKED_ART: readonly PickedArt[] = [
     cut: BG,
     display: COVER,
     zone: 'feed',
-    use: 'the skyline behind the board; the title screen',
+    use: 'the skyline behind the board',
     cover: true,
   },
   {
@@ -575,6 +715,14 @@ export const PICKED_ART: readonly PickedArt[] = [
     display: COVER,
     zone: 'story',
     use: "Lux's room in C0 and the fail scene; the cam backdrop stand-in",
+    cover: true,
+  },
+  {
+    file: 'art/bg/title-rooftop.webp',
+    cut: BG,
+    display: COVER,
+    zone: 'titleScreen',
+    use: 'the title screen: Lux and TRIAGE on a rooftop (Rolando picked title A, 30 Oct 2026)',
     cover: true,
   },
   {
@@ -603,14 +751,28 @@ export const PICKED_ART: readonly PickedArt[] = [
   {
     file: 'art/story/akemi-photo.webp',
     cut: size(805, 947),
-    display: scaled(size(805, 947), 0.42),
+    display: scaled(size(805, 947), 0.7),
     zone: 'story',
-    use: "Akemi's photo on the desk",
+    use: "Akemi's photo, an insert in the cold open until Lux speaks",
+  },
+  {
+    file: 'art/story/jackin-tap.webp',
+    cut: BG,
+    display: BG,
+    zone: 'story',
+    use: "the jack-in CG under Lux's last cold-open line: a finger on the visor as it boots (Rolando's pick)",
+  },
+  {
+    file: 'art/story/jackin-dissolve.webp',
+    cut: BG,
+    display: BG,
+    zone: 'story',
+    use: 'the jack-in CG after it: over her shoulder as the room dissolves into the grid',
   },
   {
     file: 'art/ui/logo.webp',
     cut: size(1441, 614),
-    display: scaled(size(1441, 614), 0.72),
+    display: scaled(size(1441, 614), 0.6),
     zone: 'titleScreen',
     use: 'the title logo',
   },
@@ -647,16 +809,16 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
   // Batch 1: board and map.
   {
     key: 'board/table-plate',
-    what: 'perspective PCB table under the parts, no pads painted (code draws any number of pads)',
+    what: "the board table in place on Lux's wet rooftop, steeper top-down camera, plain glass (code draws the grid and pads)",
     batch: 1,
     lane: 'board',
     zone: 'feed',
-    display: size(1228, 416),
-    target: size(1536, 416),
+    display: size(1528, 1019),
+    target: size(1536, 1024),
     cut: picked('board/table-plate'),
     states: 'one; midnight is a tint',
     prompt:
-      'PCB desk 30 degrees from above, an even cyan silkscreen grid edge to edge, no pads or footprints (code places 6 to 24+ pads), amber rim at the near lip, empty; trapezoid 1215 px wide at the far edge, 1441 px at the near edge',
+      'table D (Rolando 30 Oct 2026): the board table on a wet neon rooftop seen from about 60 degrees, plain teal glass, brass near rail, a thin strip of skyline at the top',
     fallback: bake(NAVY, 0.9, 'the code-baked slab the board draws today'),
   },
   {
@@ -717,8 +879,8 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 1,
     lane: 'board',
     zone: 'feed',
-    display: size(140, 100),
-    target: size(480, 339),
+    display: size(140, 95),
+    target: size(449, 306),
     cut: picked('board/balancer-ping-a'),
     states: 'ping off, while it passes a box over',
     prompt: 'board/balancer.webp with its lamp off',
@@ -730,8 +892,8 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 1,
     lane: 'board',
     zone: 'feed',
-    display: size(140, 100),
-    target: size(480, 339),
+    display: size(140, 95),
+    target: size(449, 306),
     cut: picked('board/balancer-ping-b'),
     states: 'ping on, while it passes a box over',
     prompt: 'board/balancer.webp with one cyan lamp lit',
@@ -946,7 +1108,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 2,
     lane: 'chat',
     zone: 'chat',
-    display: size(32, 32),
+    display: size(56, 56),
     target: size(256, 256),
     cut: picked(`chars/avatars/stream-${n}`),
     states: 'one',
@@ -964,7 +1126,7 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
     batch: 2,
     lane: 'chat',
     zone: 'chat',
-    display: size(32, 32),
+    display: size(56, 56),
     target: size(256, 256),
     cut: picked('chars/avatars/unnamed-neighbour'),
     states: 'one',

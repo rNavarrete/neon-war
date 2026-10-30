@@ -5,6 +5,9 @@
 
 import { BROWNOUT } from '../../sim/brownout';
 import type { Rect } from '../live/layout';
+import type { Tip } from '../../sim/tips';
+import { LINES, type LineId, line } from '../../strings';
+import { VIEWER_HANDLES } from './chat';
 
 // ---- the LIVE dot ----
 
@@ -102,8 +105,16 @@ export function countdownRed(now: number): boolean {
 
 // ---- where the pieces sit ----
 
-/** Nothing of the clock cluster is drawn right of this x: the pause button (1850, 52) is OverlayScene's. */
-export const CLOCK_RIGHT_LIMIT = 1800;
+/**
+ * Nothing of the clock cluster is drawn right of this x: the pause button (OverlayScene's, at the
+ * clock zone's right end) starts here. 1800 until the clock's painted plate (Rolando, 30 Oct 2026).
+ */
+export const CLOCK_RIGHT_LIMIT = 1840;
+
+/** The clock's painted plate (art/hud/clock-plate.webp, Rolando's pick) at its drawn size. */
+export const CLOCK_PLATE = { w: 272, h: 112 } as const;
+/** The plate's dark window, where the time is lit, as fractions of the plate. */
+const CLOCK_WINDOW = { x0: 0.1, y0: 0.17, x1: 0.9, y1: 0.8 } as const;
 
 export interface TitleLayout {
   /** The opaque plate behind the cluster: the whole zone. */
@@ -133,21 +144,89 @@ export function titleLayout(z: Rect): TitleLayout {
 }
 
 export interface ClockLayout {
-  /** The opaque plate behind the clock: the zone, cut at CLOCK_RIGHT_LIMIT. */
+  /** The painted plate, at its file's size. */
   readonly plate: Rect;
+  /** Its window, where the time and the countdown are lit. */
+  readonly window: Rect;
+  /** The time's and the countdown's centres, in the window. */
   readonly clock: { readonly x: number; readonly y: number };
   readonly countdown: { readonly x: number; readonly y: number };
-  /** The clock icon, centre and size. */
-  readonly icon: { readonly x: number; readonly y: number; readonly size: number };
 }
 
-/** The clock and the countdown inside their zone's rect (ZONES.clock), never past x 1800. */
+/** The plate and the lit time inside their zone's rect (ZONES.clock), never past CLOCK_RIGHT_LIMIT. */
 export function clockLayout(z: Rect): ClockLayout {
-  const right = Math.min(z.x + z.w, CLOCK_RIGHT_LIMIT);
-  return {
-    plate: { x: z.x, y: z.y, w: right - z.x, h: z.h },
-    clock: { x: z.x + 16, y: z.y + 12 },
-    countdown: { x: z.x + 18, y: z.y + 64 },
-    icon: { x: right - 36, y: z.y + 36, size: 40 },
+  const plate = {
+    x: z.x,
+    y: z.y + Math.round((z.h - CLOCK_PLATE.h) / 2),
+    w: CLOCK_PLATE.w,
+    h: CLOCK_PLATE.h,
   };
+  const window = {
+    x: plate.x + Math.round(plate.w * CLOCK_WINDOW.x0),
+    y: plate.y + Math.round(plate.h * CLOCK_WINDOW.y0),
+    w: Math.round(plate.w * (CLOCK_WINDOW.x1 - CLOCK_WINDOW.x0)),
+    h: Math.round(plate.h * (CLOCK_WINDOW.y1 - CLOCK_WINDOW.y0)),
+  };
+  const cx = window.x + window.w / 2;
+  return {
+    plate,
+    window,
+    clock: { x: cx, y: window.y + Math.round(window.h * 0.38) },
+    countdown: { x: cx, y: window.y + Math.round(window.h * 0.8) },
+  };
+}
+
+// ---- viewer tips (src/sim/tips.ts): the Twitch-style alert and the credits pop ----
+
+/** The tip alert, top-centre over the board's sky, clear of the alert band and the table. */
+export const TIP_ALERT = {
+  x: 980,
+  y: 150,
+  w: 560,
+  h: 84,
+  /** Seconds it slides in, holds and fades out. */
+  inSeconds: 0.25,
+  holdSeconds: 3,
+  outSeconds: 0.35,
+} as const;
+
+/** The pop over the credits chip: changes at least this big in one frame (a tip, a buy, a refund). */
+export const CREDIT_POP_MIN = 5;
+/** Seconds the pop rises and fades. */
+export const CREDIT_POP_SECONDS = 1.2;
+
+const TIP_MESSAGES: readonly LineId[] = (Object.keys(LINES) as LineId[]).filter((id) =>
+  id.startsWith('C1.tip.'),
+);
+/** The message a viewer bailing Lux out sends. */
+const HELP_MESSAGE: LineId = 'C1.tip.07';
+
+/** Who sent tip `n` and what it says: a stream regular, a message, the line the alert shows. */
+export function tipAlertOf(tip: Pick<Tip, 'n' | 'amount' | 'kind'>): {
+  who: string;
+  line: string;
+  message: string;
+} {
+  const who = VIEWER_HANDLES[(tip.n * 7 + 3) % VIEWER_HANDLES.length];
+  const id = tip.kind === 'help' ? HELP_MESSAGE : TIP_MESSAGES[(tip.n * 5 + 1) % TIP_MESSAGES.length];
+  return { who, line: `${who} tipped 💰 ${tip.amount}!`, message: line(id) };
+}
+
+/** The credits pop's words for a change of `delta` in one frame, or null for a drip of upkeep. */
+export function creditPop(delta: number): string | null {
+  const d = Math.round(delta);
+  if (Math.abs(d) < CREDIT_POP_MIN) return null;
+  return d > 0 ? `+${d}` : `${d}`;
+}
+
+/** The tip alert's alpha and y offset `age` seconds after it starts, or null once it has gone. */
+export function tipAlertAt(age: number): { alpha: number; dy: number } | null {
+  const { inSeconds, holdSeconds, outSeconds } = TIP_ALERT;
+  if (age < 0 || age >= inSeconds + holdSeconds + outSeconds) return null;
+  if (age < inSeconds) {
+    const k = age / inSeconds;
+    return { alpha: k, dy: -24 * (1 - k) };
+  }
+  if (age < inSeconds + holdSeconds) return { alpha: 1, dy: 0 };
+  return { alpha: 1 - (age - inSeconds - holdSeconds) / outSeconds, dy: 0 };
 }

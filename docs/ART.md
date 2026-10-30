@@ -16,22 +16,26 @@ Notes:
 
 | Folder | Files (size) | From |
 | --- | --- | --- |
-| `art/board/` | server (431x638), server-hot (430x637), server-dead (433x637), gateway (407x704), database (453x423), database-hot (489x506), balancer (480x339), slot-empty (489x294), slot-locked (476x379), block (1002x1431), solace-banner (1431x700), crew-cable (254x1502), overclock-kit (430x467), server-overclocked (466x638), server-overclocked-hot (480x636) | block-cutaway, crew-cable, overclock-kit-b, parts-core, parts-crew, parts-servers, solace-banner |
+| `art/board/` | server (431x638), server-hot (430x637), server-dead (433x637), gateway (524x612), database (453x423), database-hot (489x506), balancer (449x306), slot-empty (489x294), slot-locked (476x379), block (1002x1431), solace-banner (1431x700), crew-cable (254x1502), overclock-kit (430x467), server-overclocked (466x638), server-overclocked-hot (480x636) | block-cutaway, crew-cable, overclock-kit-b, parts-core, parts-crew, parts-servers, solace-banner, icon-balancer-c (take 3), icon-gateway-c (take 1) |
 | `art/hud/` | button (479x245), button-hover (477x245), button-pressed (482x245), regroup-ready (313x311), regroup-spent (313x311), part-card (289x389), chart-window (1008x454), chat-panel (353x524), textbox (884x184), nameplate (433x108), clock-panel (213x207), warning-bar (537x147), tray (611x216), goggles-overlay (1920x1080), job-card (864x1252), estimate-dial (823x835) | estimate-dial-b, goggles-overlay, job-card-a, ui-buttons, ui-panels |
 | `art/hud/icons/` | credits (372x360), trust (333x366), clock (404x300), warning (347x327), power-dip (175x395), overheat (192x382), lock (323x359), bin (317x365), packet (336x249), pause (298x335), settings (345x325), cut (346x339) | ui-icons-a, ui-icons-b |
-| `art/chars/triage/` | eager (238x290), thinking (235x289), proud (238x289), panic (285x291), sheepish (235x290), happy (238x290) | triage-moods |
+| `art/chars/triage/` | eager (231x290), thinking (232x290), proud (235x290), panic (251x266), sheepish (233x290), happy (235x290), worried (280x290) | triage-cat-moods (Rolando's pick, 30 Oct 2026: the cat drone with an LED screen face); worried is triage-concerned, edited from sheepish (Rolando's pick, worried 1, 30 Oct 2026) |
 | `art/chars/lux/faces-board/` | tense (425x457), determined (436x429), deadpan (410x449), shocked (417x456), smirk (427x455), triumphant (506x453) | lux-faces-board-v2b |
+| `art/chars/lux/vn/` | neutral (515x927), photo (601x927); room moods composing, exhausted, frightened, grieving, relieved, startled and goggles-down board-deadpan, board-determined, board-shocked, board-smirk, board-tense, board-triumphant (538x927) | vn-lux-b-2-shirt, vn-lux-a-2-shirt, vn-lux-&lt;mood&gt; (tall story sprites edited from vn-lux-b-2, same scale and bottom cut, so they swap in place; the text box covers below the waist) |
 | `art/chars/lux/faces-room/` | grieving (442x440), composing (493x438), startled (452x441), relieved (412x429), exhausted (460x431), frightened (400x423) | lux-faces-room-v2 |
 | `art/chars/lux/poses/` | reach (459x893), point (353x885), swipe (678x826), tap-drag (423x963), cheer (535x824), rest (468x541), hug-knees (553x683), goggles-up (382x953), look-back (396x927) | lux-poses-board, lux-poses-room, lux-poses-room-v2, lux-poses-win-v2 |
 | `art/chars/rei/faces/` | smirk (420x449), stern (392x440), impressed (403x432), grading (421x443), laugh (400x450), annoyed (408x439) | rei-faces |
 | `art/chars/rei/poses/` | landing (505x624), arms-crossed (281x889), point (305x884) | rei-poses |
+| `art/chars/rei/vn/` | annoyed, grading, impressed, laugh, smirk, stern (454x927); pose-1 (455x927), pose-2 (433x927), pose-3 (435x927) | vn-rei-&lt;mood&gt;, vn-rei-1..3 (tall story sprites; the six moods share one canvas so they swap in place) |
 | `art/chars/mika/faces/` | calm (367x457), worried (359x445), reassure (371x456), explain (450x458), focused (365x455), nod (370x461) | mika-sheet |
 | `art/chars/mika/poses/` | tablet (296x920), point (455x903), read (311x915) | mika-poses |
+| `art/chars/mika/vn/` | calm, explain, focused, nod, reassure, worried (464x927); pose-1 (437x927), pose-2 (400x927), pose-3 (489x927) | vn-mika-&lt;mood&gt;, vn-mika-1..3 (tall story sprites; the six moods share one canvas so they swap in place) |
 | `art/chars/ozzie/faces/` | sceptical (460x495), annoyed (481x490), half-smile (456x486), sums (471x501), alarmed (446x495), smug (452x499) | ozzie-faces |
 | `art/chars/ozzie/poses/` | coin (365x950), shrug (578x948), nod (322x950) | ozzie-poses |
+| `art/chars/ozzie/vn/` | alarmed, annoyed, half-smile, sceptical, smug, sums (538x927); pose-1 (492x927), pose-2 (474x927), pose-3 (533x927) | vn-ozzie-&lt;mood&gt;, vn-ozzie-1..3 (tall story sprites; the six moods share one canvas so they swap in place) |
 | `art/ui/` | logo (1441x614) | logo |
-| `art/story/` | akemi-photo (805x947), night-book-page (1536x1024) | akemi-photo, night-book-page |
-| `art/bg/` | bedroom-lit (1536x1024), bedroom-dark (1536x1024), bedroom-midnight (1536x1024), immersive (1536x1024), skyline (1536x1024), rooftop (1536x1024), grandma-flat (1536x1024) | bg-bedroom-dark, bg-bedroom-lit, bg-bedroom-midnight, bg-grandma-flat, bg-immersive, bg-rooftop, bg-skyline |
+| `art/story/` | akemi-photo (805x947), night-book-page (1536x1024), jackin-tap (1536x1024), jackin-dissolve (1536x1024) | akemi-photo, night-book-page, jackin-4 and jackin-3 (Rolando's pick, sequence C, 30 Oct 2026: the cold open's jack-in CGs, covered to 1920x1080 like the backdrops) |
+| `art/bg/` | bedroom-lit (1536x1024), bedroom-dark (1536x1024), bedroom-midnight (1536x1024), immersive (1536x1024), skyline (1536x1024), rooftop (1536x1024), grandma-flat (1536x1024), title-rooftop (1536x1024) | bg-bedroom-dark, bg-bedroom-lit, bg-bedroom-midnight, bg-grandma-flat, bg-immersive, bg-rooftop, bg-skyline; title-rooftop is Rolando's title A pick (30 Oct 2026) |
 | `art/chars/avatars/` | kenji (512x512), mrs-okafor (512x512), young-father (512x512), old-man-noodles (512x512) | chat-avatars-v2b |
 | `art/parts/auth/` | scrap (241x382), street (249x476), pro (346x660), solace (391x829) | comp-auth |
 | `art/parts/autoscaler/` | scrap (282x289), street (299x353), pro (423x471), solace (432x595) | comp-autoscaler |
@@ -65,18 +69,19 @@ Notes:
 - Round 2 replaced `hud/comms-plate` (1455x149, a divider 520 px in), `hud/icons/system` (an antenna, 41x64), `board/channel-plate` (300x233, shorter than before), `board/server-overclocked-dark` (466x629), the three `hud/live/card-frame-*` (240x280 each, nine-sliced at k 0.5 into the 120x140 card) and `hud/live/corner-marks`.
 - `hud/live/corner-marks` is a 96x96 set of all four brackets, one per 48x48 quadrant: a panel draws each corner from its own quadrant, unturned, at 48 px or smaller (`cornerStamps` in `src/scenes/hud/kit.ts`).
 - `hud/live/topbar-strip` is 1536x33, short of the 1920x100 bar. It is drawn 1:1 (its request's display is the file size) and the rest of the bar is filled in code, so it is never stretched.
-- `hud/comms-plate` (1455x149) and `board/table-plate` (1228x416) are drawn at their file size, centred in the band and under the feed.
-- `board/table-plate-midnight` (1061x416) is narrower than the day plate: it is drawn at its own size, centred like the day plate, and cross-fades in at midnight.
+- `hud/comms-plate` (1455x149) is drawn at its file size, centred in the band. `board/table-plate` (1536x1024) is table D, Rolando's pick of 30 Oct 2026: the whole rooftop scene, drawn just under its file size to cover the feed, with the grid drawn in code on its glass.
+- `board/table-plate-midnight` (1061x416) was painted for the old table and is no longer drawn: since table D, midnight is a cold tint on the scene.
+- `chars/comms/triage` is rebuilt from the triage-cat-moods eager face (Rolando's pick, 30 Oct 2026) with its LED screen left blank: the comms band's code iris is drawn on it as the screen's eye.
 - The cam busts `chars/lux/cam/*` are 924x548 with transparent sides; cheer has the same framing as lean-in and relieved.
 - `hud/live/night-shift-sticker` is a blank plate: any words on it are drawn in code.
 
 | Folder | Files (size) | From |
 | --- | --- | --- |
-| `art/board/` | table-plate (1228x416), server-dark (425x638), server-booting-a (427x638), server-booting-b (420x638), server-overclocked-dark (466x629), balancer-ping-a (480x337), balancer-ping-b (480x336), channel-plate (300x233), table-plate-midnight (1061x416), packet-cube (59x48) | batch 1: table plate, sheet A, sheet B, channel plate; batch 5 midnight plate, packet cube |
+| `art/board/` | table-plate (1536x1024), server-dark (425x638), server-booting-a (427x638), server-booting-b (420x638), server-overclocked-dark (466x629), balancer-ping-a (449x306), balancer-ping-b (449x306), channel-plate (300x233), table-plate-midnight (1061x416), packet-cube (59x48) | batch 1: table plate, sheet A, sheet B, channel plate; batch 5 midnight plate, packet cube |
 | `art/hud/` | city-grid (816x620), comms-plate (1455x149), chat-plate-wide (770x485), cam-backdrop (824x504), gauge-face (480x269), gauge-needle (24x162), cam-frame (408x243), city-grid-lit (816x620) | batch 1 city-grid; batch 2 comms-plate, chat-plate-wide; batch 3 backdrop; batch 5 gauge, cam frame, lit city grid |
 | `art/hud/icons/` | door (128x120), tv (128x120), system (41x64), play (128x123), ping (128x123), skipped (128x124) | batch 2 icons |
 | `art/hud/live/` | avatar-luxnet (243x256), panel-frame (192x192), label-tab (380x72), tag-chip (216x72), rec-badge (121x48), live-pill (189x56), corner-marks (96x96), divider (8x160), keycap-idle (160x128), keycap-ready (160x128), keycap-pressed (160x128), card-frame-idle (240x280), card-frame-ready (240x280), card-frame-locked (240x280), count-badge (49x56), topbar-strip (1536x33), alert-plate (1040x168), alert-endcap (135x168), night-shift-sticker (320x136) | batch 2 round avatars; batch 4 panel kit, keycaps and cards, topbar-strip, alert-plate; batch 5 sticker |
-| `art/chars/comms/` | triage (244x256), rei (240x256), mika (236x256), ozzie (221x256) | batch 2 round avatars |
+| `art/chars/comms/` | triage (244x256), rei (236x256), mika (221x256), ozzie (236x256) | batch 2 round avatars; 30 Oct 2026 the badges were one face off (rei showed a kid who is not in the cast, mika showed Rei, ozzie showed Mika): rei and mika now hold the right batch-2 faces, ozzie is a round crop of his picked `chars/ozzie/faces/half-smile` |
 | `art/chars/avatars/` | stream-1 (244x256), stream-2 (243x256), stream-3 (244x256), stream-4 (243x256), unnamed-neighbour (243x256) | batch 2 stream avatars |
 | `art/chars/lux/cam/` | lean-in (924x548), relieved (924x548), cheer (924x548) | batch 3 lean-in, relieved; batch 5 cheer |
 

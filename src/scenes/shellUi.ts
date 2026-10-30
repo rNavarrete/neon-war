@@ -15,9 +15,22 @@ const ART: readonly [string, string][] = [
   ['shell:button-pressed', 'art/hud/button-pressed.webp'],
 ];
 
-/** Queue the button art unless another scene already loaded it. */
+/**
+ * The button art each game's texture manager already has queued. Two scenes preload in the same
+ * frame (the title and the overlay), before either load lands, so `exists` alone let both queue it
+ * and the second add warned "Texture key already in use".
+ */
+const queued = new WeakMap<Phaser.Textures.TextureManager, Set<string>>();
+
+/** Queue the button art unless another scene already loaded or queued it. */
 export function preloadButtons(scene: Phaser.Scene): void {
-  for (const [key, file] of ART) if (!scene.textures.exists(key)) scene.load.image(key, file);
+  let keys = queued.get(scene.textures);
+  if (!keys) queued.set(scene.textures, (keys = new Set()));
+  for (const [key, file] of ART) {
+    if (scene.textures.exists(key) || keys.has(key)) continue;
+    keys.add(key);
+    scene.load.image(key, file);
+  }
 }
 
 export interface ShellButton {
@@ -28,7 +41,18 @@ export interface ShellButton {
   setVisible(visible: boolean): void;
 }
 
-const registry = new Map<string, ShellButton & { scene: Phaser.Scene }>();
+/** What the test hook needs of a clickable thing: where it is and whether it takes clicks now. */
+type Clickable = Pick<Phaser.GameObjects.Zone, 'x' | 'y' | 'visible' | 'input'>;
+
+const registry = new Map<string, { scene: Phaser.Scene; image: Clickable }>();
+
+/** Report a clickable that is not a button (the title's speaker icon) to the test hook under `id`. */
+export function registerClickable(scene: Phaser.Scene, id: string, target: Clickable): void {
+  registry.set(id, { scene, image: target });
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    if (registry.get(id)?.image === target) registry.delete(id);
+  });
+}
 
 /**
  * A button from the HUD button art with a text label. Hover and press swap the art; release over the
@@ -71,10 +95,7 @@ export function addButton(
       if (!v) image.setTexture('shell:button');
     },
   };
-  registry.set(id, { ...button, scene });
-  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-    if (registry.get(id)?.image === image) registry.delete(id);
-  });
+  registerClickable(scene, id, image);
   return button;
 }
 

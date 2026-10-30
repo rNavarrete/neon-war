@@ -5,7 +5,6 @@
 // BoardScene, and have no line here. The HUD scene creates every entry in this order (docs/LIVE.md).
 
 import { AlertView } from '../hud/AlertView';
-import { ChartView } from '../hud/ChartView';
 import { ChatFeedView } from '../hud/ChatFeedView';
 import { CommsView } from '../hud/CommsView';
 import { DeckView } from '../hud/DeckView';
@@ -31,7 +30,6 @@ export const REGISTRY: readonly RegistryEntry[] = [
   { zone: 'map', lane: 'gauges', make: () => new MapView() },
   { zone: 'cam', lane: 'luxcam', make: () => new LuxCamView() },
   { zone: 'gauge', lane: 'gauges', make: () => new GaugeView() },
-  { zone: 'scope', lane: 'gauges', make: () => new ChartView() },
   { zone: 'comms', lane: 'comms', make: () => new CommsView() },
   { zone: 'deck', lane: 'gauges', make: () => new DeckView() },
   { zone: 'chat', lane: 'chat', make: () => new ChatFeedView() },

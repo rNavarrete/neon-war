@@ -48,20 +48,6 @@ export const boxAround = (cx: number, cy: number, w: number, h: number): Rect =>
 // The title cluster and the clock are TitleView's (title.ts), the alert band AlertView's (alerts.ts):
 // each places its pieces from its own zone, so nothing for the top strip is left here.
 
-// ---- the left column: the scope ----
-
-const scope = Z.scope;
-
-export const LEFT = {
-  /** The chart's panel is the scope zone; the plot is x 46-400, y 905-1050. */
-  chart: { x: scope.x, y: scope.y, w: scope.w, h: scope.h },
-  plot: { left: scope.x + 30, right: scope.x + 384, top: scope.y + 15, bottom: scope.y + 160 },
-  /** The y-axis top, right-aligned over the plot's top-right corner. */
-  chartTop: { right: scope.x + 384, y: scope.y + 1, w: 90, h: 16 },
-  /** The demand and room numbers under the plot. */
-  chartLegend: { x: scope.x + 30, y: scope.y + 163, w: 354, h: 16 },
-};
-
 // ---- the right: the chat ----
 
 const chat = Z.chat;
@@ -70,7 +56,8 @@ export const RIGHT = {
   /** The one chat column (block and stream merged): its panel is the zone, the rows the body. */
   chat: { x: chat.x, y: chat.y, w: chat.w, h: chat.h },
   chatTitle: { x: chat.x + 22, y: chat.y + 14 },
-  chatBody: { x: chat.x + 20, y: chat.y + 40, w: chat.w - 40, h: 220, rows: 5 },
+  /** The rows fill the tall column (layout A, Rolando 30 Oct 2026: "following the chat is really fun"). */
+  chatBody: { x: chat.x + 20, y: chat.y + 40, w: chat.w - 40, h: chat.h - 60, rows: 16 },
 };
 
 // ---- the bottom: the comms band's slots and the deck ----
@@ -88,10 +75,27 @@ const KEY_LABELS = [
 ] as const;
 
 export const BOTTOM = {
-  /** The crew's five slots, r 42 at y 720, x 517 + 98 i (comms.ts commsLayout matches them). */
-  slots: SLOT_NAMES.map((name, i) => ({ name, x: comms.x + 62 + 98 * i, y: comms.y + 75, r: 42 })),
-  /** The deck's keys, 80x64 at (1272, 1022) and (1360, 1022); the third slot (SET) is empty. */
-  keys: KEY_LABELS.map((k, i) => ({ ...k, x: deck.x + 817 + 88 * i, y: deck.y + 52, w: 80, h: 64 })),
+  /**
+   * The crew's five slots in the caller column, r 42 along its bottom, overlapping like a call's
+   * participant stack: y 512, x 1616 + 61 i (comms.ts commsLayout matches them).
+   */
+  slots: SLOT_NAMES.map((name, i) => ({
+    name,
+    x: Math.round(comms.x + 50 + ((comms.w - 100) / (SLOT_NAMES.length - 1)) * i),
+    y: comms.y + comms.h - 64,
+    r: 42,
+  })),
+  /**
+   * The deck's keys, 120x52, stacked in the strip right of the tray (option 2, Rolando 30 Oct 2026),
+   * under a row for the CUT tooltip; each shows only while it can act.
+   */
+  keys: KEY_LABELS.map((k, i) => ({
+    ...k,
+    x: deck.x + deck.w / 2,
+    y: deck.y + 50 + i * 60,
+    w: 120,
+    h: 52,
+  })),
 };
 
 export const KEY = { regroup: 0, cut: 1 } as const;
@@ -154,28 +158,6 @@ const bannerArt = boxAround(
 );
 
 export const HUD_RECTS: readonly HudRect[] = [
-  { id: 'scope.panel', rect: LEFT.chart, home: 'scope' },
-  {
-    id: 'scope.plot',
-    rect: {
-      x: LEFT.plot.left,
-      y: LEFT.plot.top,
-      w: LEFT.plot.right - LEFT.plot.left,
-      h: LEFT.plot.bottom - LEFT.plot.top,
-    },
-    home: 'scope',
-  },
-  {
-    id: 'scope.top',
-    rect: {
-      x: LEFT.chartTop.right - LEFT.chartTop.w,
-      y: LEFT.chartTop.y,
-      w: LEFT.chartTop.w,
-      h: LEFT.chartTop.h,
-    },
-    home: 'scope',
-  },
-  { id: 'scope.legend', rect: LEFT.chartLegend, home: 'scope' },
   { id: 'chat.panel', rect: RIGHT.chat, home: 'chat' },
   { id: 'chat.body', rect: RIGHT.chatBody, home: 'chat' },
   ...BOTTOM.slots.map((s): HudRect => ({ id: `comms.slot.${s.name}`, rect: circle(s), home: 'comms' })),

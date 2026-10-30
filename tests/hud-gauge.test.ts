@@ -109,27 +109,27 @@ describe('dropping', () => {
     }
   });
 
-  it('says dropping on the sub-line while calls drop, room otherwise', () => {
+  it('says dropping on the sub-line while calls drop, capacity otherwise', () => {
     expect(gaugeState(frameWith({ demand: 30, served: 30, dropped: 0, wiredCapacity: 60 })).sub).toBe(
-      'room 60/s',
+      'capacity 60 req/s',
     );
     expect(gaugeState(frameWith({ demand: 250, served: 60, dropped: 190, wiredCapacity: 60 })).sub).toBe(
-      'dropping 190/s',
+      'dropping 190 req/s',
     );
     expect(gaugeState(frameWith({ demand: 30, served: 0, dropped: 30, wiredCapacity: 0 })).sub).toBe(
-      'no box yet',
+      'no server yet',
     );
   });
 });
 
 describe('the strip', () => {
-  it('reads NO ROOM YET before the first build and OVER BY (demand - capacity) when over', () => {
+  it('reads NO CAPACITY YET before the first build and OVER BY (demand - capacity) when over', () => {
     const r = new Run();
     r.now = C.c1;
     const f = readFrame(r);
     expect(f.waitingForFirstBuild).toBe(true);
     expect(f.wiredCapacity).toBe(0);
-    expect(gaugeState(f).strip).toBe('NO ROOM YET');
+    expect(gaugeState(f).strip).toBe('NO CAPACITY YET');
     expect(gaugeState(f).strip).toBe(LABELS.gauge.noRoom);
 
     expect(gaugeStrip(250, 120)).toBe('OVER BY 130/s');
@@ -168,7 +168,7 @@ describe('the ROOM band', () => {
     expect(st.capacity).toBe(f.wiredCapacity);
     expect(st.capacity).toBe(60);
     expect(st.booting).toBe(0);
-    expect(st.sub).toBe('room 60/s');
+    expect(st.sub).toBe('capacity 60 req/s');
   });
 
   it('extends dashed by the wired boxes still booting, and not by unwired ones', () => {
@@ -221,21 +221,32 @@ describe('the layout', () => {
   it('keeps the arc, its numbers and the readout inside ZONES.gauge', () => {
     const z = ZONES.gauge;
     const L = gaugeLayout(z);
-    expect(L.centre).toEqual({ x: 150, y: 858 });
-    expect(L.outer).toBe(110);
-    expect(L.needle).toBe(88);
+    // The dial fills the column's width since the chart went (30 Oct 2026), the readout under it.
+    // Layout A2's smaller gauge (Rolando, 30 Oct 2026, 344x260) draws it at GAUGE_COMPACT (0.72).
+    // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the gauge moved down to y 645, same size.
+    // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the gauge
+    // moved up to y 545 to make room for the bigger map.
+    expect(L.centre).toEqual({ x: 1738, y: 686 });
+    expect(L.outer).toBe(111);
+    expect(L.needle).toBe(89);
+    expect(gaugeLayout({ x: 16, y: 710, w: 408, h: 360 })).toMatchObject({
+      centre: { x: 220, y: 908 },
+      outer: 154,
+      needle: 123,
+    });
     expect(L.centre.x - L.outer - 8).toBeGreaterThanOrEqual(z.x);
-    expect(L.centre.x + L.outer + 8).toBeLessThanOrEqual(L.readout.x);
+    expect(L.centre.x + L.outer + 8).toBeLessThanOrEqual(z.x + z.w);
+    expect(L.readout.y).toBeGreaterThan(L.centre.y);
     expect(L.centre.y - L.outer - 8).toBeGreaterThanOrEqual(L.title.y + 16);
     expect(L.centre.y).toBeLessThanOrEqual(z.y + z.h);
     for (const v of GAUGE_TICKS) {
       const p = arcPoint(L, v, L.numbers);
       expect(p.x).toBeGreaterThan(z.x);
-      expect(p.x).toBeLessThan(L.readout.x);
+      expect(p.x).toBeLessThan(z.x + z.w);
       expect(p.y).toBeGreaterThan(z.y);
       expect(p.y).toBeLessThan(z.y + z.h);
     }
-    for (const p of [L.readout, L.sub, L.strip]) {
+    for (const p of [L.readout, L.room, L.sub, L.strip]) {
       expect(p.x).toBeGreaterThanOrEqual(z.x);
       expect(p.y).toBeGreaterThanOrEqual(z.y);
       expect(p.y + 20).toBeLessThanOrEqual(z.y + z.h);
@@ -278,7 +289,8 @@ function stubScene() {
   return { scene, texts, graphics: () => graphics };
 }
 
-const BANNED_ON_SCREEN = /head\s*room|throughput|est\.|capacity|requests per second/i;
+// Real terms on screen (Rolando, 29 Oct 2026): the old crew words must not come back.
+const BANNED_ON_SCREEN = /\bcoming\b|\broom\b|no box|\bsplitter\b|est\./i;
 
 describe('GaugeView', () => {
   it('is the registry’s gauge line', () => {
@@ -294,7 +306,8 @@ describe('GaugeView', () => {
     gauge.create(scene as never, { scene: null as never, bus, rect: ZONES.gauge, flags: { lite: true } });
     deck.create(scene as never, { scene: null as never, bus, rect: ZONES.deck, flags: { lite: true } });
     expect(withinBudget(gauge)).toBe(true);
-    expect(gauge.made).toEqual({ objects: 12, texts: 10 });
+    // One more of each since the headroom line moved in (30 Oct 2026).
+    expect(gauge.made).toEqual({ objects: 13, texts: 11 });
 
     const { r } = wiredRun();
     expect(r.placeServer(SERVER_SLOTS[1]).ok).toBe(true);
@@ -313,9 +326,9 @@ describe('GaugeView', () => {
     expect(hud.gauge).toMatchObject({
       max: 400,
       capacity: 60,
-      title: 'COMING /s',
+      title: 'DEMAND req/s',
       readout: `${Math.round(f.demand)}/s`,
-      sub: 'room 60/s',
+      sub: 'capacity 60 req/s',
       strip: null,
       ticks: ['0', '100', '200', '300', '400'],
     });
@@ -337,7 +350,7 @@ describe('GaugeView', () => {
     expect(gauge.made).toEqual({ objects: 0, texts: 0 });
   });
 
-  it('reads NO ROOM YET before the first build, in amber words, and never names the mockup’s terms', () => {
+  it('reads NO CAPACITY YET before the first build, in amber words, and never a crew word', () => {
     const { scene, texts } = stubScene();
     const gauge = new GaugeView();
     gauge.create(scene as never, {
@@ -350,8 +363,8 @@ describe('GaugeView', () => {
     r.now = C.c1;
     gauge.update(readFrame(r), { now: 0, dt: 0.016 });
     const snap = gauge.snapshot();
-    expect(snap.strip).toBe('NO ROOM YET');
-    expect(snap.sub).toBe('no box yet');
+    expect(snap.strip).toBe('NO CAPACITY YET');
+    expect(snap.sub).toBe('no server yet');
     expect(snap.capacity).toBe(0);
     expect(texts.some((t) => t.text === LABELS.gauge.room && t.visible)).toBe(false);
     for (const t of texts) expect(t.text).not.toMatch(BANNED_ON_SCREEN);

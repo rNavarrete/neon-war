@@ -124,17 +124,6 @@ const BANNED: string[] = [
   'redundan',
 ];
 
-/** Where a term may appear before the debrief: the Solace pitch and TRIAGE's echo of it. */
-const ALLOWED: Readonly<Partial<Record<LineId, readonly string[]>>> = {
-  'C2.banner.body': ['capacity'],
-  'C2.triage.01': ['capacity'],
-};
-
-function termsIn(text: string): string[] {
-  const lower = text.toLowerCase();
-  return BANNED.filter((t) => lower.includes(t));
-}
-
 /** Sample outputs of every label formatter, so the numbers-in-words copy is scanned too. */
 const FORMATTED: string[] = [
   gaugeSubLine(0, 0),
@@ -244,62 +233,73 @@ describe('lineMeta', () => {
   });
 });
 
-describe('no term before the debrief', () => {
-  it('finds the bold list and the mockup words to scan for', () => {
+// Real system-design terms on screen (Rolando, 29 Oct 2026: "this is a game that is meant for people
+// to learn system design, so we need to keep all the terminology and system design jargon intact").
+// This replaced the old rule that held every term back until the C8 debrief.
+
+/** The made-up crew words the screen used before: none may come back on a label or a non-chat line. */
+const CREW_WORDS = /\bsplitter\b|\bboxe?s?\b|room left|coming \/s|no room|bigger box/i;
+
+describe('real terms on screen', () => {
+  it('finds the bold list and the terms the screen teaches', () => {
     expect(BOLD_TERMS).toContain('Headroom');
     expect(BOLD_TERMS).toContain('Load balancer');
     expect(BANNED).toEqual(expect.arrayContaining(['headroom', 'throughput', 'balancer', 'n+1']));
   });
 
-  it('keeps every line outside C8.* free of the terms (Solace and TRIAGE may say capacity)', () => {
+  it('keeps the crew words off every line but the chat (viewers and neighbours talk how they like)', () => {
     for (const id of IDS) {
-      if (id.startsWith('C8.')) continue;
-      const found = termsIn(LINES[id].text).filter((t) => !(ALLOWED[id] ?? []).includes(t));
-      expect(found, `${id}: ${LINES[id].text}`).toEqual([]);
+      const line = LINES[id];
+      if (id.startsWith('fill.') || line.kind === 'chat') continue;
+      if (['C8.rei.sizing.good', 'C8.rei.sizing.bad'].includes(id)) continue;
+      expect(line.text, id).not.toMatch(/\bsplitter\b|bigger box/i);
     }
+    // The coach's nudges and the alert band say SERVER and LOAD BALANCER, never box or splitter.
+    for (const id of IDS.filter((i) => i.includes('.nudge.') || i.includes('.alert.')))
+      expect(LINES[id].text, id).not.toMatch(CREW_WORDS);
   });
 
-  it('keeps every label in labels.ts free of the terms, the formatted ones included', () => {
+  it('keeps every label in labels.ts, the formatted ones included, in the real terms', () => {
     const labels = [...allLabels(), ...FORMATTED];
     expect(labels.length).toBeGreaterThan(30);
-    for (const l of labels) expect(termsIn(l), l).toEqual([]);
+    for (const l of labels) expect(l, l).not.toMatch(CREW_WORDS);
   });
 
-  it('scans the labels file itself, so a label added outside LABELS is caught too', () => {
+  it('scans the labels file itself, so a label added outside LABELS is checked too', () => {
     // String literals only (code inside a template's ${...} is an identifier, not copy).
     const literals = [...labelsSource.matchAll(/'([^'\n]*)'|`([^`\n]*)`|"([^"\n]*)"/g)].map((m) =>
       (m[1] ?? m[2] ?? m[3]).replace(/\$\{[^}]*\}/g, ''),
     );
     expect(literals.length).toBeGreaterThan(30);
-    for (const l of literals) expect(termsIn(l), l).toEqual([]);
+    for (const l of literals) expect(l, l).not.toMatch(CREW_WORDS);
   });
 
-  it('prints the crew words: COMING /s, ROOM, ROOM LEFT, SPLITTER (crew gift)', () => {
+  it('prints the real terms: DEMAND req/s, CAPACITY, HEADROOM, LOAD BALANCER, SCALE UP', () => {
     const labels = allLabels();
-    for (const w of ['COMING /s', 'ROOM', 'ROOM LEFT', 'SPLITTER (crew gift)']) {
+    for (const w of ['DEMAND req/s', 'CAPACITY', 'HEADROOM', 'LOAD BALANCER (crew gift)', 'SCALE UP']) {
       expect(labels, w).toContain(w);
     }
-    expect(roomLeftLabel(90, 120)).toBe('ROOM LEFT 25% · 90 of 120');
-    expect(roomLeftLabel(250, 120)).toBe('OVER +130/s');
-    expect(roomLeftLabel(30, 0)).toBe('NO BOX');
-    expect(ghostPlate(0, 3, 80)).toBe('+0 room · nothing feeds it');
-    expect(ghostPlate(60, 3, 80)).toBe('+60 room · boots 3 s · -80 cr');
+    expect(roomLeftLabel(90, 120)).toBe('HEADROOM 25% · 90 of 120');
+    expect(roomLeftLabel(250, 120)).toBe('OVER +130 req/s');
+    expect(roomLeftLabel(30, 0)).toBe('NO SERVER');
+    expect(ghostPlate(0, 3, 80)).toBe('+0 capacity · nothing feeds it');
+    expect(ghostPlate(60, 3, 80)).toBe('+60 capacity · boots 3 s · -80 cr');
     expect(overBy(250, 120)).toBe('OVER BY 130/s');
     expect(overBy(30, 60)).toBeNull();
-    expect(gaugeSubLine(0, 0)).toBe('no box yet');
+    expect(gaugeSubLine(0, 0)).toBe('no server yet');
   });
 
-  it('never prints HEADROOM, EST. THROUGHPUT, BALANCER or a locked mini kind name in a label', () => {
+  it('never names a locked mini part in a label, and calls the crew gift a load balancer', () => {
     // The gateway and the database are the board's own parts, named in C1.triage.05 and C3.lux.01.
     const kinds = LOCKED_KINDS.filter((k) => k !== 'gateway' && k !== 'database').map((k) =>
       k.replace(/-/g, ' '),
     );
     for (const l of [...allLabels(), ...FORMATTED]) {
       const lower = l.toLowerCase();
-      expect(lower, l).not.toMatch(/headroom|throughput|balancer/);
       for (const k of kinds) expect(lower.includes(k), `${l} names ${k}`).toBe(false);
     }
-    expect(LABELS.inventory.splitter).toBe('SPLITTER (crew gift)');
+    expect(LABELS.inventory.splitter).toBe('LOAD BALANCER (crew gift)');
+    expect(LABELS.plates.names.balancer).toBe('LOAD BALANCER');
   });
 
   it('keeps the new learning lines short and free of digits in filler', () => {
@@ -321,12 +321,13 @@ describe('no term before the debrief', () => {
 
 // ---- learning-3: the wording pass over every lane's anchor and labels.ts ----
 
-describe('the wording pass (learning-3)', () => {
-  it('prints the crew word on the tray card and in the refusals, never the debrief name', () => {
+describe('the wording pass (learning-3), in the real terms', () => {
+  it('names the crew card LOAD BALANCER on the tray and in the refusals', () => {
     const balancer = trayCards(false).find((c) => c.id === 'balancer');
-    expect(balancer?.name).toBe('SPLITTER');
+    expect(balancer?.name).toBe('LOAD BALANCER');
     expect(balancer?.name).toBe(LABELS.plates.names.balancer);
     expect(lockedReason('balancer')).toBe(LABELS.inventory.splitterLocked);
+    expect(lockedReason('balancer')).toBe("the crew hasn't given you a load balancer yet");
     const before = { rescued: false, session: { board: { parts: [] } } } as unknown as Run;
     const after = { rescued: true, session: { board: { parts: [] } } } as unknown as Run;
     const reason = (r: Run): string => {
@@ -334,35 +335,35 @@ describe('the wording pass (learning-3)', () => {
       return res.ok ? '' : res.reason;
     };
     expect(reason(before)).toBe(LABELS.inventory.splitterLocked);
-    expect(reason(after)).toBe('the splitter is already racked');
+    expect(reason(after)).toBe('the load balancer is already racked');
     const shown = [
       ...trayCards(true).map((c) => c.name ?? ''),
       lockedReason('balancer'),
       reason(before),
       reason(after),
     ];
-    for (const t of shown) expect(termsIn(t), t).toEqual([]);
+    for (const t of shown) expect(t, t).not.toMatch(CREW_WORDS);
   });
 
-  it('uses one verb for a dark box the splitter passes: skips, as Rei and the SKIPPED tag say', () => {
-    expect(LINES['C5.rei.03'].text).toContain('skips');
-    expect(LABELS.plates.splitter).toContain('skips a dark one');
-    expect(LABELS.plates.state.skipped).toBe('the splitter skips it');
+  it('uses one verb for a dark server the load balancer passes: skips, its health check, as Rei says', () => {
+    expect(LINES['C5.rei.03'].text).toContain('load balancer');
+    expect(LINES['C5.rei.03'].text).toContain('health check skips');
+    expect(LABELS.plates.splitter).toContain('health check skips a dark one');
+    expect(LABELS.plates.state.skipped).toBe('the load balancer skips it (health check)');
   });
 
   it('keeps the reworded lines short and in the words the rest of the night uses', () => {
     // The refresh sub-line names who, as TRIAGE does in C4.triage.03.
     expect(LINES['C4.alert.refresh'].text).toMatch(/^Everyone's hitting refresh/);
     expect(LINES['C4.triage.03'].text).toContain('hitting refresh');
-    // The midnight outage is one box, the word the plates and the crew use, not a rack.
-    expect(LINES['C6.alert.dip'].text).toContain('One box loses power');
+    // The midnight outage is one server, the word the plates and the crew use, not a rack.
+    expect(LINES['C6.alert.dip'].text).toContain('One server loses power');
     expect(LINES['C6.alert.dip'].text.length).toBeLessThan(80);
     // The surge reaction is the neighbours coming in, not viewers flooding the stream (D8: RAID).
     expect(LINES['fill.stream.surge.02'].text).toContain('neighbours');
     expect(LINES['fill.stream.surge.02'].text).not.toMatch(/chat|viewer/);
     // The stream notices the crew's gift instead of repeating fill.stream.rescue.01.
     expect(LINES['C5.chat.lb'].text).not.toMatch(/who are these people/i);
-    expect(termsIn(LINES['C5.chat.lb'].text)).toEqual([]);
   });
 });
 
@@ -583,11 +584,11 @@ describe('the debrief "you saw it at" lines (learning-4, D10)', () => {
     expect(seenLines(EMPTY_TRACE)).toEqual([]);
   });
 
-  it('gives every moment draft words, free of the debrief terms themselves', () => {
+  it('gives every moment draft words, in the real terms', () => {
     for (const m of MOMENT_KINDS) {
       const words = MOMENT_WORDS[m](4);
       expect(words.length, m).toBeGreaterThan(0);
-      expect(termsIn(words), m).toEqual([]);
+      expect(words, m).not.toMatch(CREW_WORDS);
       const e = { term: MOMENT_TEACHES[m][0], group: 'sizing', line: null, moment: m, value: 4, at: 1 };
       expect(seenText({ ...e, group: 'sizing', clock: '23:51:31' })).toBe(
         `you saw it at 11:51:31 PM: ${words}`,
@@ -735,13 +736,13 @@ describe('teaching (b): every cue has its line row (learning-5)', () => {
   });
 });
 
-describe('teaching (c): the readouts print the crew words, never a debrief term (learning-5)', () => {
-  it('the ROOM LEFT words over a sweep of demand and room hold no C8 term', () => {
+describe('teaching (c): the readouts print the real terms (learning-5)', () => {
+  it('the HEADROOM words over a sweep of demand and capacity name the term, never a crew word', () => {
     for (const wired of [0, 30, 60, 120, 180, 240]) {
       for (const demand of [0, 30, 90, 150, 250, 375]) {
         const label = headroomLabel(demand, wired);
-        expect(termsIn(label), label).toEqual([]);
-        expect(label).toMatch(/^ROOM LEFT/);
+        expect(label, label).not.toMatch(CREW_WORDS);
+        expect(label).toMatch(/^HEADROOM/);
       }
     }
   });
@@ -890,7 +891,7 @@ describe('teaching (f): the room and gauge formulas (learning-5)', () => {
       expect(headroomColour(headroomLoad(demand, wired))).toBe(colour);
     }
     expect(headroomLoad(30, 0)).toBe(Infinity);
-    expect(headroomLabel(90, 120)).toBe('ROOM LEFT 25% · 90 of 120');
+    expect(headroomLabel(90, 120)).toBe('HEADROOM 25% · 90 of 120');
   });
 
   it('the needle angle is linear over 0..400 and clamped to the arc', () => {

@@ -39,6 +39,10 @@ import {
   STALE_SECONDS,
   bandAlpha,
   clickLog,
+  callShows,
+  callTarget,
+  isCallerLine,
+  CALL_IDLE_ALPHA,
   commsLayout,
   cutShort,
   dwellFor,
@@ -58,7 +62,7 @@ import {
 import { BOTTOM } from '../src/scenes/hud/layout';
 import { fileTexture } from '../src/scenes/plates';
 import { LEADER_FOR, LESSON_IDS } from '../src/scenes/hud/lineMeta';
-import { ZONES } from '../src/scenes/live/layout';
+import { ZONES, inside } from '../src/scenes/live/layout';
 import { LINES, type LineId } from '../src/strings';
 import { Run } from '../src/game/run';
 import { partAnchor } from '../src/scenes/board/layout';
@@ -126,21 +130,91 @@ describe('comms tags and slots', () => {
   });
 
   it('lays the band out inside its zone where the HUD layout puts it', () => {
+    // Layout A2 (Rolando, 30 Oct 2026): the comms zone is the 344x460 caller column at the right
+    // edge. The caller's cam tile on top, their name and words under it, the five slots along the
+    // bottom, overlapping like a call's participant stack.
     const l = commsLayout(ZONES.comms);
     expect(l.slots.map((s) => ({ name: s.name, x: s.x, y: s.y, r: s.r }))).toEqual(BOTTOM.slots);
+    // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the column is 344x500 from y 135 and the cam
+    // tile takes the extra height (250 tall), the words and slots moving down with it.
+    // Rolando, 30 Oct 2026 ("I don't think we need these avatars here"): the roster of round faces
+    // is not drawn in the column, so the cam takes its space too (330 tall) and the words follow.
+    // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the map grew to
+    // 344x260, so the column is 400 tall and the cam tile 230, everything under it 100 px higher.
+    expect(l.roster).toBe(false);
+    expect(l.tile).toEqual({ x: 1574, y: 143, w: 328, h: 230 });
+    expect(l.slots.map((s) => s.x)).toEqual([1616, 1677, 1738, 1799, 1860]);
+    expect(l.slots.every((s) => s.y === 471)).toBe(true);
+    expect(l.name).toEqual({ x: 1582, y: 381 });
+    expect(l.text).toEqual({ x: 1582, y: 409, w: 312 });
+    expect(l.log.map((r) => r.y)).toEqual([381, 417, 453]);
+    const z = ZONES.comms;
+    expect(inside(l.tile!, z)).toBe(true);
+    expect(l.name.y).toBeGreaterThanOrEqual(l.tile!.y + l.tile!.h);
+    // Four 26 px lines of words end inside the panel (the slots under them are not drawn since
+    // Rolando's 30 Oct 2026 call; before, three lines ended above the slots).
+    expect(l.text.y + 4 * 26).toBeLessThanOrEqual(z.y + z.h);
+    for (const s of l.slots) {
+      expect(s.x - s.r).toBeGreaterThanOrEqual(z.x);
+      expect(s.x + s.r).toBeLessThanOrEqual(z.x + z.w);
+      expect(s.y - s.r).toBeGreaterThanOrEqual(z.y);
+      expect(s.y + s.r).toBeLessThanOrEqual(z.y + z.h);
+    }
+    expect(l.slotLabelY).toBeLessThanOrEqual(z.y + z.h);
+    // The 12 px label (about 15 px tall, top-anchored) ends inside the panel too.
+    expect(l.slotLabelY + 16).toBeLessThanOrEqual(z.y + z.h);
+    expect(l.text.x + l.text.w).toBeLessThanOrEqual(z.x + z.w);
+    expect(l.replay.x + l.replay.w).toBeLessThanOrEqual(z.x + z.w);
+    expect(l.replay.y + l.replay.h).toBeLessThanOrEqual(z.y + z.h);
+  });
+
+  it('keeps the layout A call panel for a wide panel rect (under the tray, before A2)', () => {
+    const l = commsLayout({ x: 16, y: 815, w: 890, h: 255 });
+    expect(l.tile).toEqual({ x: 30, y: 829, w: 232, h: 227 });
+    expect(l.slots.map((s) => s.x)).toEqual([320, 418, 516, 614, 712]);
+    expect(l.text).toEqual({ x: 278, y: 859, w: 604 });
+  });
+
+  it('keeps the old band layout for a band-shaped rect (the strip before layout A)', () => {
+    const band = { x: 455, y: 645, w: 1455, h: 150 };
+    const l = commsLayout(band);
+    expect(l.tile).toBeNull();
+    expect(l.slots.map((s) => ({ x: s.x, y: s.y }))).toEqual(
+      [0, 1, 2, 3, 4].map((i) => ({ x: 517 + 98 * i, y: 720 })),
+    );
     expect(l.divider.x).toBe(975);
     expect(l.text.x).toBe(1000);
     expect(l.text.w).toBe(760);
     expect(l.log.map((r) => r.y)).toEqual([664, 704, 744]);
-    const z = ZONES.comms;
-    for (const s of l.slots) {
-      expect(s.x - s.r).toBeGreaterThanOrEqual(z.x);
-      expect(s.y - s.r).toBeGreaterThanOrEqual(z.y);
-      expect(s.y + s.r).toBeLessThanOrEqual(z.y + z.h);
-    }
     expect(l.text.x + l.text.w).toBeLessThanOrEqual(l.replay.x);
-    expect(l.replay.x + l.replay.w).toBeLessThanOrEqual(z.x + z.w);
-    expect(l.replay.y + l.replay.h).toBeLessThanOrEqual(z.y + z.h);
+    expect(l.replay.x + l.replay.w).toBeLessThanOrEqual(band.x + band.w);
+  });
+});
+
+describe('the caller cam (layout A2)', () => {
+  // Rolando, 30 Oct 2026: the cams on the right are for the other characters; Lux's lines show on
+  // her own cam, so they never pop the caller cam up.
+  it('pops up for one of the others or an open log, never for Lux', () => {
+    expect(callShows(null, false)).toBe(false);
+    expect(callShows('C1.triage.02', false)).toBe(true);
+    expect(callShows('C5.rei.05', false)).toBe(true);
+    expect(callShows('C4.grandma.01', false)).toBe(true);
+    expect(callShows('C4.lux.01', false)).toBe(false);
+    expect(callShows('C4.lux.01', true)).toBe(true);
+    expect(callShows(null, true)).toBe(true);
+  });
+
+  it('keeps the last caller up, dimmed, between lines (Rolando, 30 Oct 2026)', () => {
+    expect(callTarget(null, false, null)).toBe(0);
+    expect(callTarget('C1.triage.02', false, null)).toBe(1);
+    expect(callTarget(null, false, 'C1.triage.02')).toBe(CALL_IDLE_ALPHA);
+    // A Lux line keeps the caller cam on the last caller, dimmed: her words caption her own cam.
+    expect(callTarget('C4.lux.01', false, 'C1.triage.02')).toBe(CALL_IDLE_ALPHA);
+    expect(callTarget(null, true, 'C1.triage.02')).toBe(1);
+    expect(CALL_IDLE_ALPHA).toBeGreaterThan(0);
+    expect(CALL_IDLE_ALPHA).toBeLessThan(1);
+    expect(isCallerLine('C4.grandma.01')).toBe(true);
+    expect(isCallerLine('C4.lux.01')).toBe(false);
   });
 });
 
@@ -156,13 +230,14 @@ describe('comms dwell', () => {
   });
 
   it('dwells an unvoiced line max(4, 1 + chars/cps + 1.5) with no 8 s clamp', () => {
-    // A 60-character line.
+    // A line of about 60 characters (the first bark of 58 to 62).
     const id = (Object.keys(LINES) as LineId[]).find(
-      (k) => LINES[k].kind === 'bark' && LINES[k].text.length === 60,
+      (k) => LINES[k].kind === 'bark' && LINES[k].text.length >= 58 && LINES[k].text.length <= 62,
     );
     expect(id).toBeDefined();
-    expect(dwellFor(id!, CPS)).toBeCloseTo(Math.max(4, 1 + 60 / CPS + 1.5), 9);
-    expect(dwellFor(id!, TEXT_CPS.slow)).toBeCloseTo(1 + 60 / TEXT_CPS.slow + 1.5, 9);
+    const n = LINES[id!].text.length;
+    expect(dwellFor(id!, CPS)).toBeCloseTo(Math.max(4, 1 + n / CPS + 1.5), 9);
+    expect(dwellFor(id!, TEXT_CPS.slow)).toBeCloseTo(1 + n / TEXT_CPS.slow + 1.5, 9);
     // Long lines at the slowest speed run past 8 s: nothing clamps them.
     const longest = (Object.keys(LINES) as LineId[])
       .filter((k) => LINES[k].kind === 'bark')
@@ -421,12 +496,13 @@ describe('comms reread log', () => {
 describe('comms-4: iris, glow and crew light-up', () => {
   const T = Array.from({ length: 241 }, (_, i) => i * 0.0371);
 
-  it("lists TRIAGE's six moods, the same set docs/SCRIPT.md brackets her lines with", () => {
+  // Seven since the worried face for the cold open's "you okay, Lux?" (Rolando's pick, 30 Oct 2026).
+  it("lists TRIAGE's seven moods, the same set docs/SCRIPT.md brackets her lines with", () => {
     const used = new Set(
       (Object.keys(LINES) as LineId[]).map(triageMood).filter((m): m is string => m !== null),
     );
     expect([...used].sort()).toEqual([...TRIAGE_MOODS].sort());
-    expect(TRIAGE_MOODS).toHaveLength(6);
+    expect(TRIAGE_MOODS).toHaveLength(7);
   });
 
   it("irisFor('panicking', t, true) is still (dx = dy = 0) at every t and the widest of the six", () => {
@@ -464,7 +540,8 @@ describe('comms-4: iris, glow and crew light-up', () => {
       const i = irisFor(m, 0.5, true);
       return `${i.dx},${i.dy},${i.r}`;
     });
-    expect(new Set(looks).size).toBe(6);
+    // Seven with worried (Rolando's pick, 30 Oct 2026).
+    expect(new Set(looks).size).toBe(7);
     for (const m of TRIAGE_MOODS) {
       const reduced = T.map((t) => irisFor(m, t, true));
       // Under reduce flicker nothing moves and the lid stays open.
@@ -544,11 +621,13 @@ describe('comms-9: plate, round avatars and HOUSE chips through the art manifest
   it('asks for the plate at the band size and never upscales it', () => {
     expect(plateReq.lane).toBe('comms');
     expect(plateReq.zone).toBe('comms');
-    // Asked for at the band size; the picked file is 1455x149, so it is shown at that size.
-    expect(plateReq.target).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
+    // Asked for at the band size (the 1455x150 strip before layout A, Rolando 30 Oct 2026; the call
+    // panel draws a code plate); the picked file is 1455x149, so it is shown at that size.
+    const BAND = { w: 1455, h: 150 };
+    expect(plateReq.target).toEqual(BAND);
     expect(plateReq.display).toEqual(plateReq.cut);
-    expect(plateReq.display.w).toBeLessThanOrEqual(ZONES.comms.w);
-    expect(plateReq.display.h).toBeLessThanOrEqual(ZONES.comms.h);
+    expect(plateReq.display.w).toBeLessThanOrEqual(BAND.w);
+    expect(plateReq.display.h).toBeLessThanOrEqual(BAND.h);
     expect(plateReq.target.w).toBeGreaterThanOrEqual(plateReq.display.w);
     expect(plateReq.target.h).toBeGreaterThanOrEqual(plateReq.display.h);
     for (const key of [COMMS_AVATARS.TRIAGE, COMMS_AVATARS.REI, COMMS_AVATARS.MIKA, COMMS_AVATARS.OZZIE]) {
@@ -764,28 +843,25 @@ describe('comms-8: the leader line', () => {
   });
 
   it('draws a right-angled path from the band edge nearest the target', () => {
+    // The caller column sits top right since layout A2 (Rolando, 30 Oct 2026): x 1566-1910, y 110-570.
     const band = ZONES.comms;
-    // Above the band (the feed): straight up from the top edge, then across.
-    const up = leaderPath(band, { x: 700, y: 300 });
-    expect(up).toEqual([
-      { x: 700, y: band.y },
-      { x: 700, y: 300 },
-      { x: 700, y: 300 },
+    // Level with it (the board, to its left): straight across from its left side.
+    const left = leaderPath(band, { x: 900, y: 400 });
+    expect(left).toEqual([
+      { x: band.x, y: 400 },
+      { x: band.x, y: 400 },
+      { x: 900, y: 400 },
     ]);
-    // Left of the band and above it (the map): up from the band's left end, then left.
-    const left = leaderPath(band, { x: 200, y: 400 });
-    expect(left[0]).toEqual({ x: band.x + 12, y: band.y });
-    expect(left[1]).toEqual({ x: band.x + 12, y: 400 });
-    expect(left[2]).toEqual({ x: 200, y: 400 });
-    // Below it (the inventory, the keys): down from the bottom edge.
-    expect(leaderPath(band, { x: 900, y: 900 })[0]).toEqual({ x: 900, y: band.y + band.h });
-    // Level with it (the gauge): straight across from its side.
-    expect(leaderPath(band, { x: 236, y: 700 })).toEqual([
-      { x: band.x, y: 700 },
-      { x: band.x, y: 700 },
-      { x: 236, y: 700 },
-    ]);
-    for (const p of [up, left]) {
+    // Below it and left (the tray): down from the band's left end, then left.
+    const down = leaderPath(band, { x: 600, y: 900 });
+    expect(down[0]).toEqual({ x: band.x + 12, y: band.y + band.h });
+    expect(down[1]).toEqual({ x: band.x + 12, y: 900 });
+    expect(down[2]).toEqual({ x: 600, y: 900 });
+    // Below it (the gauge): straight down from the bottom edge.
+    expect(leaderPath(band, { x: 1738, y: 720 })[0]).toEqual({ x: 1738, y: band.y + band.h });
+    // Above it (the clock): up from the top edge.
+    expect(leaderPath(band, { x: 1700, y: 50 })[0]).toEqual({ x: 1700, y: band.y });
+    for (const p of [left, down]) {
       expect(p[0].x === p[1].x || p[0].y === p[1].y).toBe(true);
       expect(p[1].x === p[2].x || p[1].y === p[2].y).toBe(true);
     }

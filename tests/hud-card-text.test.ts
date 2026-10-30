@@ -16,17 +16,19 @@ import { line } from '../src/strings';
 // still on it.
 
 describe('the host text budget', () => {
-  it('the job card keeps all seven of its words', () => {
+  it("the job card is a mission card of seven texts: the alarm, the title, three steps, the goal and LET'S GO", () => {
     const t = jobCardTexts();
     expect(t.map((s) => s.text)).toEqual([
-      '120',
+      '!',
       line('C1.card.title'),
-      line('C1.card.who'),
-      line('C1.card.what'),
-      line('C1.card.bar'),
-      line('C1.card.rate'),
-      'OK',
+      `1   ${line('C1.card.step1')}`,
+      `2   ${line('C1.card.step2')}`,
+      `3   ${line('C1.card.step3')}`,
+      line('C1.card.goal'),
+      line('C1.card.go'),
     ]);
+    // No sums in the opening (Rolando, 30 Oct 2026): nothing on the card has a number to work out.
+    for (const s of t.slice(1, 6)) expect(s.text.replace(/^\d /, '')).not.toMatch(/\d{2,}|÷|req\/s/);
     const ok = t[6];
     expect([ok.x, ok.y]).toEqual([CENTRE.jobCardOk.x, CENTRE.jobCardOk.y]);
   });

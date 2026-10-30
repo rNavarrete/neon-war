@@ -6,6 +6,7 @@ import { run } from '../game/run';
 import type { LineId } from '../strings';
 import { provideTestState } from '../testHook';
 import type { DebriefResults } from './debrief';
+import type { Box } from './rain';
 import type { RewindKind } from './rewind';
 import { seenScenes } from './seen';
 import { isVoiced } from '../game/voice';
@@ -36,6 +37,8 @@ export interface StoryTestState {
   dimmed: string[];
   /** Corner chat lines shown, oldest first. */
   chat: string[];
+  /** What the stream chat has drawn so far, in order: the script's lines as they land one at a time, and the filler between them. */
+  chatShown: string[];
   /** Background file, or null when the scene is drawn over the frozen board. */
   backdrop: string | null;
   look: string | null;
@@ -65,6 +68,16 @@ export interface StoryTestState {
     title: string | null;
   } | null;
   fireworks: { bursts: number; flashes: number };
+  /** Lux's room only: the window glass and the box round the rain drawn this frame (null otherwise). */
+  /** Where each character on stage is drawn (game px): its left and right edges and its top. */
+  figures: Record<string, { left: number; right: number; top: number; facesLeft: boolean }>;
+  /** Akemi's photo is up as an insert (the cold open, until Lux speaks). */
+  photo: boolean;
+  /** The full-screen CG up now (its file under public/), or null: the jack-in shots at the cold open's end. */
+  cg: string | null;
+  /** The jack-in's flash to the board has started (clicks are ignored from here). */
+  jackin: 'tap' | 'dissolve' | 'flash' | null;
+  rain: { glass: Box; drawn: { x: number; y: number; w: number; h: number } | null } | null;
   runNow: number;
   runHeld: boolean;
 }
@@ -86,6 +99,7 @@ export const storyState: Omit<StoryTestState, 'runNow' | 'runHeld' | 'seen'> = {
   onStage: [],
   dimmed: [],
   chat: [],
+  chatShown: [],
   backdrop: null,
   look: null,
   click: null,
@@ -98,6 +112,11 @@ export const storyState: Omit<StoryTestState, 'runNow' | 'runHeld' | 'seen'> = {
   finished: [],
   debrief: null,
   fireworks: { bursts: 0, flashes: 0 },
+  figures: {},
+  photo: false,
+  cg: null,
+  jackin: null,
+  rain: null,
 };
 
 declare module '../testHook' {
@@ -109,7 +128,17 @@ declare module '../testHook' {
 /** The fields the visual-novel view reports live, read only when a test asks. */
 export type ViewSnapshot = Pick<
   StoryTestState,
-  'lineId' | 'typingDone' | 'typed' | 'nameplate' | 'portrait' | 'onStage' | 'dimmed' | 'click' | 'skip'
+  | 'lineId'
+  | 'typingDone'
+  | 'typed'
+  | 'nameplate'
+  | 'portrait'
+  | 'onStage'
+  | 'dimmed'
+  | 'click'
+  | 'skip'
+  | 'chatShown'
+  | 'figures'
 >;
 
 let liveView: { snapshot(): ViewSnapshot } | null = null;

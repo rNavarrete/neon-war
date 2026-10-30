@@ -6,6 +6,9 @@ import { inboundLaneRates } from '../../src/scenes/board/channel';
 import { openBoard as liveOpen, reach as liveReach, shot } from './live/reach';
 import { BALANCER_SPOT, FIXED_ANCHOR, parseCell } from '../../src/sim/grid';
 import { SERVER_SLOTS } from '../../src/sim/tick';
+import { BROWNOUT } from '../../src/sim/brownout';
+
+const C = BROWNOUT.challenges;
 
 // The board on the Live screen (board lane, M1): the feed's tilted table, its parts and slots inside
 // the feed zone, the skyline above it and no goggles overlay. Positions come from the test hook in
@@ -98,6 +101,37 @@ async function placeServer(page: Page, slotId: string): Promise<string> {
   }
   await expect.poll(placed).toBeDefined();
   return (await board(page)).parts.find((p) => p.slot === slotId)!.id;
+}
+
+/**
+ * Drag the SCALE UP kit onto `id`, as placeServer places: if the drop did not take (at speed 20 the
+ * C2 banner can open over the table in that instant), answer the banner if it is up and drag again,
+ * at most twice more.
+ */
+async function fitBiggerBox(page: Page, id: string): Promise<void> {
+  const boosted = async () => (await part(page, id))?.boosted === true;
+  for (let i = 0; i < 3 && !(await boosted()); i++) {
+    const banner = await page.evaluate(
+      () =>
+        (window.__neonTest!.state as unknown as { hud?: { banner: { open: boolean; ignore: Pt } } }).hud
+          ?.banner,
+    );
+    if (banner?.open) {
+      await page.waitForTimeout(600);
+      await page.mouse.click(banner.ignore.x, banner.ignore.y);
+      await page.waitForTimeout(200);
+    }
+    await drag(
+      page,
+      (await board(page)).tray.find((t) => t.id === 'overclock')!,
+      (await part(page, id))!,
+    );
+    await expect
+      .poll(boosted, { timeout: 3_000 })
+      .toBe(true)
+      .catch(() => undefined);
+  }
+  await expect.poll(boosted).toBe(true);
 }
 
 /** Page pixels are rounded to a tenth, so allow a tenth on each edge. */
@@ -602,16 +636,16 @@ test('C3 (board-5, board-6): an idle second box reads UNFED with no packets; the
 
   // A second box racked long before the climb: nothing can feed it (the gateway feeds one part
   // only). It goes down right after the first is wired, before the C2 banner can open over the
-  // table, so it is long online by C3 (racked at board.now 150 it could still be booting when the
+  // table, so it is long online by C3 (racked just before C3 it could still be booting when the
   // hot box died at speed 20).
   const s2 = await placeServer(page, S4);
   const idle = await watch(page, 'the second box online in C3', (b) => {
     const p = b.parts.find((x) => x.id === s2);
-    return b.now >= 180 && p?.status === 'online';
+    return b.now >= C.c3 && p?.status === 'online';
   });
   for (let i = 0; i < 4; i++) {
     const b = i === 0 ? idle : await board(page);
-    if (b.now >= 210) break;
+    if (b.now >= C.c3 + 30) break;
     const p = b.parts.find((x) => x.id === s2)!;
     expect(p.unfed, 'the idle box is UNFED').toBe(true);
     expect(p.tags).toEqual(['UNFED']);
@@ -726,11 +760,12 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   await openBoard(page, '&speed=20');
   await recordAnims(page);
   // GAME.md's best play before the crew: one box wired, the kit on it.
+  // The kit goes on before the wires: the clock holds in C1 until the first box is wired, and on the
+  // shorter night C3's climb is under 4 s of real time after that at speed 20.
   const s1 = await placeServer(page, S1);
+  await fitBiggerBox(page, s1);
   await wire(page, 'gateway', s1);
   await wire(page, s1, 'database');
-  await drag(page, b0(await board(page), 'overclock'), (await part(page, s1))!);
-  await expect.poll(async () => (await part(page, s1))?.boosted).toBe(true);
 
   type StoryHook = {
     active: boolean;
@@ -1102,7 +1137,7 @@ test('the night at speed 20 (board-7, board-9 to board-11): C1, the surge, a ski
   expect(end.sfx.counts['server-online']).toBeGreaterThan(0);
   expect(end.sfx.counts['packet-drop']).toBeGreaterThan(0);
 
-  // The board's live texts within its share of the Live screen's 110 (docs/LIVE.md).
+  // The board's live texts within its share of the Live screen's 144 (docs/LIVE.md).
   test.info().annotations.push({
     type: 'board texts',
     description: `surge ${atSurge.textsBy.board}, midnight ${atMidnight.textsBy.board}`,
@@ -1143,7 +1178,8 @@ async function hold(page: Page, from: Pt, to: Pt): Promise<void> {
 }
 
 /** The debrief's words a plate must never print (docs/SCRIPT.md C8.terms, the four the ticket names). */
-const DEBRIEF_WORDS = ['capacity', 'headroom', 'health check', 'load balancer'];
+/** The made-up crew words the plates used before Rolando asked for real terms (29 Oct 2026). */
+const CREW_WORDS = ['splitter', ' box', 'room left', 'a second'];
 
 test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the feed, plates, Esc and Delete, keys 1/2 left alone', async ({
   page,
@@ -1195,7 +1231,7 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   expect(b.grid.preview).toBeNull();
   expect((await shell(page))?.paused, 'Esc during a drag does not open the pause menu').toBe(false);
 
-  // The ghost again: over s1 with the gateway free it adds 60, the what-if tick reads ROOM +60,
+  // The ghost again: over s1 with the gateway free it adds 60, the what-if tick reads CAPACITY +60,
   // and no credits are spent while it hovers.
   await hold(page, card, s1Pad);
   b = await expectGhost(page, S1);
@@ -1204,10 +1240,10 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
     over: S1,
     legal: true,
     adds: 60,
-    tick: 'ROOM +60',
+    tick: 'CAPACITY +60',
     plateShown: true,
   });
-  expect(b.ghost!.plate).toBe('+60 room · boots 3 s · -80 cr');
+  expect(b.ghost!.plate).toBe('+60 capacity · boots 3 s · -80 cr');
   expect(b.channel.whatIf).toBeCloseTo(0.15, 3);
   expect(b.credits).toBeGreaterThan(credits - 1);
   await page.screenshot({ path: 'test-results/screens/live-m3-board-ghost-c1.png' });
@@ -1225,7 +1261,7 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   await hold(page, card, s2Pad);
   b = await expectGhost(page, S2);
   expect(b.ghost).toMatchObject({ legal: true, adds: 0, capacity: 60, wired: 60, tick: null });
-  expect(b.ghost!.plate).toBe('+0 room · nothing feeds it');
+  expect(b.ghost!.plate).toBe('+0 capacity · nothing feeds it');
   expect(b.channel.whatIf).toBeCloseTo(b.channel.capacityLevel, 3);
   // Let go back over the tray: nothing placed.
   await page.mouse.move(card.x, card.y, { steps: 3 });
@@ -1233,20 +1269,21 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   await expect.poll(async () => (await board(page)).dragging).toBeNull();
   expect((await board(page)).parts.filter((p) => p.kind === 'server')).toHaveLength(1);
 
-  // Hovering a part shows its numbers and state in the script's words, never the debrief's.
+  // Hovering a part shows its numbers and state in real terms, never the old crew words.
   for (const id of ['gateway', s1, 'database']) {
     const p = (await part(page, id))!;
     await page.mouse.move(p.x, p.y, { steps: 2 });
     await expect.poll(async () => (await board(page)).hover.target).toBe(id);
     const text = (await board(page)).hover.text!;
-    expect(text).toMatch(/a second/);
-    for (const word of DEBRIEF_WORDS) expect(text.toLowerCase()).not.toContain(word);
+    expect(text).toMatch(/req\/s/);
+    if (id !== 'gateway') expect(text).toMatch(/capacity \d+ req\/s/);
+    for (const word of CREW_WORDS) expect(text.toLowerCase()).not.toContain(word);
   }
   const hovered = (await board(page)).hover;
   expect(hovered.pinned).toBe(false);
   const sp = (await part(page, s1))!;
   await page.mouse.move(sp.x, sp.y, { steps: 2 });
-  await expect.poll(async () => (await board(page)).hover.text).toMatch(/^SERVER · \d+\/60 a second · \d+%/);
+  await expect.poll(async () => (await board(page)).hover.text).toMatch(/^SERVER · \d+\/60 req\/s · \d+%/);
 
   // Click pins the plate; it stays when the pointer leaves; Esc clears the selection (no pause).
   await page.mouse.click(sp.x, sp.y);
@@ -1267,7 +1304,7 @@ test('C1 to C3 (board-8): legality tints, the ghost tells the truth about the fe
   await page.mouse.click(gw.x, gw.y);
   await expect.poll(async () => (await board(page)).selectedWire).toBe(gw.key);
   await expect.poll(async () => (await board(page)).hover.pinned).toBe(true);
-  expect((await board(page)).hover.text).toMatch(/^WIRE · \d+ a second\nGATEWAY to SERVER/);
+  expect((await board(page)).hover.text).toMatch(/^WIRE · \d+ req\/s\nGATEWAY to SERVER/);
   await page.keyboard.press('Delete');
   await expect.poll(async () => (await board(page)).wires.some((x) => x.key === gw.key)).toBe(false);
   expect((await board(page)).selectedWire).toBeNull();
@@ -1285,18 +1322,18 @@ async function expectGhost(page: Page, over: string): Promise<BoardTestState> {
   return board(page);
 }
 
-test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behind the crew splitter', async ({
+test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behind the crew load balancer', async ({
   page,
 }) => {
   test.setTimeout(120_000);
-  // Best play at speed 12 to the midnight forecast (440, the surge at 450): no sizing prompt holds
+  // Best play at speed 12 to the midnight forecast (10 s before C6): no sizing prompt holds
   // the ghost back.
   await liveOpen(page, { speed: 12 });
   await liveReach(page, 'c1');
   const deadline = Date.now() + 90_000;
   for (;;) {
     const h = await hudBits(page);
-    if (h?.surge?.startsAt === 450) break;
+    if (h?.surge?.startsAt === C.c6) break;
     if (Date.now() > deadline) throw new Error('the midnight forecast never came');
     await clickStoryOn(page);
     await page.waitForTimeout(40);
@@ -1314,8 +1351,8 @@ test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behi
 
   // The ghost comes, wired behind the crew's splitter, adding 60.
   b = await expectGhost(page, pad.id);
-  expect(b.ghost).toMatchObject({ adds: 60, tick: 'ROOM +60' });
-  expect(b.ghost!.plate).toMatch(/^\+60 room · boots 3 s · -80 cr$/);
+  expect(b.ghost).toMatchObject({ adds: 60, tick: 'CAPACITY +60' });
+  expect(b.ghost!.plate).toMatch(/^\+60 capacity · boots 3 s · -80 cr$/);
   expect(b.ghost!.capacity).toBe(b.ghost!.wired + 60);
   expect(b.channel.whatIf).toBeCloseTo(b.ghost!.capacity / 400, 3);
   await page.screenshot({ path: 'test-results/screens/live-m3-board.png' });
@@ -1328,7 +1365,7 @@ test('C6 (board-8): at the midnight forecast the ghost shows at once, wired behi
 /** The board's art keys (src/scenes/board/art.ts BOARD_ART_KEYS), each a picked file under public/art. */
 const BOARD_ART = [
   'board/table-plate',
-  'board/table-plate-midnight',
+  // No midnight plate since table D (Rolando, 30 Oct 2026): it was painted for the old table.
   'board/channel-plate',
   'board/packet-cube',
   'board/server-dark',
@@ -1365,21 +1402,22 @@ test('board-12: the painted table, channel, cards and marks draw from public/art
   }
   expect(art.missing).toEqual([]);
 
-  // The table is the painted plate, never drawn above its file's size, inside the feed and centred
-  // under the table's trapezoid; the channel plate sits on the mouth inside the feed.
+  // The table is the painted plate, never drawn above its file's size. Since table D (Rolando,
+  // 30 Oct 2026) the plate is the whole rooftop scene, so it covers the feed rather than sitting
+  // inside it; the channel plate sits on the mouth inside the feed.
   expect(b.art.table).toBe('plate');
   expect(b.art.tableScale).toBeLessThanOrEqual(1);
-  expectInside(b.art.tableRect, b.area, 'the table plate');
+  const tr = b.art.tableRect;
+  expect(tr.x).toBeLessThanOrEqual(b.area.x + 0.1);
+  expect(tr.y).toBeLessThanOrEqual(b.area.y + 0.1);
+  expect(tr.x + tr.w).toBeGreaterThanOrEqual(b.area.x + b.area.w - 0.1);
+  expect(tr.y + tr.h).toBeGreaterThanOrEqual(b.area.y + b.area.h - 0.1);
   expectInside(b.art.channelPlate!, b.area, 'the channel plate');
-  // Batch 5: the midnight plate waits, hidden, at its own size inside the day plate; the packets
-  // are the painted cube inside its 24 x 18 box, never above its file's size.
-  const mp = b.art.midnightPlate!;
-  expect(mp).not.toBeNull();
-  expect(mp.alpha).toBe(0);
-  expect(mp.scale).toBe(1);
-  expectInside(mp.rect, b.area, 'the midnight plate');
-  expect(mp.rect.x).toBeGreaterThan(b.art.tableRect.x);
-  expect(mp.rect.x + mp.rect.w).toBeLessThan(b.art.tableRect.x + b.art.tableRect.w);
+  // Batch 5's midnight plate was painted for the old table: table D has none, and its cold tint
+  // waits at 0 until midnight. The packets are the painted cube inside its 24 x 18 box, never
+  // above its file's size.
+  expect(b.art.midnightPlate).toBeNull();
+  expect(b.art.midnight).toBe(0);
   expect(b.art.packet.texture).toBe('art:board/packet-cube');
   expect(b.art.packet.scale).toBeLessThanOrEqual(1);
   expect(59 * b.art.packet.scale).toBeLessThanOrEqual(24);

@@ -1,5 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import { CARDS, ZONES, overlaps } from '../../src/scenes/live/layout';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { LINES } from '../../src/strings';
 import { type Snap, dismissJobCard, hud, openBoard, shot, snap } from './live/reach';
 
@@ -11,8 +12,10 @@ import { type Snap, dismissJobCard, hud, openBoard, shot, snap } from './live/re
 /** The learning lane's line in docs/LIVE.md ("Browser test budget"). */
 const LANE_SECONDS = 150;
 
-/** Where the four reads sit: the gauge (COMING against ROOM), the scope and the deck's ROOM LEFT bar. */
-const READOUT = [ZONES.gauge, ZONES.scope, ZONES.deck] as const;
+const C = BROWNOUT.challenges;
+
+/** Where the reads sit: the gauge (DEMAND against CAPACITY) and the deck's HEADROOM bar. */
+const READOUT = [ZONES.gauge, ZONES.deck] as const;
 
 /**
  * Run the night on until `done` holds, clicking the job card away and every story scene on (Skip
@@ -70,45 +73,50 @@ function openModals(s: Snap) {
   return out;
 }
 
-test('1. demand against room is readable at 60, 200, 300, 455 and 515, nothing over the readout', async ({
+test('1. demand against room is readable in C1, C3, C4, C6 and C7, nothing over the readout', async ({
   page,
 }) => {
   test.setTimeout(LANE_SECONDS * 1000);
-  // Speed 10: midnight is 510 and the night hands over to the debrief soon after, so at speed 20
-  // (the HUD clock at true game time) a slow CI frame can step past 515's window before it is read.
+  // Speed 10: the night hands over to the debrief soon after midnight, so at speed 20 (the HUD
+  // clock at true game time) a slow CI frame can step past C7's window before it is read.
   const { errors } = await openBoard(page, { speed: 10, autopilot: true });
   const moments: [number, string][] = [
-    [60, 'teaching-c1'],
-    [200, 'teaching-c3'],
-    [300, 'teaching-c4'],
-    [455, 'teaching-c6'],
-    [515, 'teaching-c7'],
+    [C.c1 + 45, 'teaching-c1'],
+    [C.c3 + 20, 'teaching-c3'],
+    [C.c4, 'teaching-c4'],
+    [C.c6 + 5, 'teaching-c6'],
+    [C.c7 + 5, 'teaching-c7'],
   ];
-  // The C6 forecast is up from 440 until the surge starts at 450: note every read of it on the way.
+  // The C6 forecast is up from 10 s before C6 until the surge starts: note every read of it on the way.
   const forecasts: { now: number; title: string | null; line: string | null; sub: string }[] = [];
   const saw = (s: Snap): void => {
     const a = s.hud?.alert;
-    if (a && a.kind === 'forecast' && s.hud!.now >= 430 && s.hud!.now < 455) {
+    if (a && a.kind === 'forecast' && s.hud!.now >= C.c6 - 20 && s.hud!.now < C.c6 + 5) {
       forecasts.push({ now: s.hud!.now, title: a.title, line: a.line, sub: a.sub });
     }
   };
   for (const [at, name] of moments) {
     await test.step(`now >= ${at}`, async () => {
       await until(page, `hud.now >= ${at}`, (s) => (s.hud?.now ?? 0) >= at && !s.story?.active, 40_000, saw);
-      // The board runs on at speed 10: read the first frame on which the four reads agree.
-      const s = await until(page, `the readout agreeing with hud.sim after now ${at}`, readable, 20_000);
+      // The board runs on at speed 10: read the first frame on which the four reads agree. 40 s (it was
+      // 20) since the C5 rescue can start inside this window and its fifteen lines are clicked through
+      // first; on CI that alone took 20 s (30 Oct 2026). The check itself is unchanged.
+      const s = await until(page, `the readout agreeing with hud.sim after now ${at}`, readable, 40_000);
       const h = s.hud!;
       expect(h.gauge!.readout.length, 'the gauge prints its number').toBeGreaterThan(0);
-      expect(h.headroom!.label.length, 'the ROOM LEFT bar prints its words').toBeGreaterThan(0);
+      expect(h.headroom!.label.length, 'the HEADROOM bar prints its words').toBeGreaterThan(0);
       // No modal card open on this frame sits over the gauge, the scope or the deck.
       for (const m of openModals(s)) {
         for (const z of READOUT)
           expect(overlaps(m.rect, z), `${m.id} over the readout at ${h.now}`).toBe(false);
       }
-      if (at === 455) {
+      if (at === C.c6 + 5) {
         // The C6 forecast led with MIDNIGHT and named the outage under it. It
-        // comes down when the surge starts at 450, so it is read on the way rather than at 455.
-        expect(forecasts.length, 'hud.alert read as the C6 forecast between 430 and 455').toBeGreaterThan(0);
+        // comes down when the surge starts at C6, so it is read on the way rather than 5 s after.
+        expect(
+          forecasts.length,
+          'hud.alert read as the C6 forecast from 20 s before C6 to 5 s after',
+        ).toBeGreaterThan(0);
         for (const f of forecasts) {
           expect(f.title).toBe('C6.alert.title');
           expect(f.line).toBe('C6.alert.dip');
@@ -172,7 +180,7 @@ test('3. a missed line can be reread from the band log, and the log stays open a
   const ids = c.log.lines.map((l) => l.id);
   expect(ids).toContain('C1.triage.01');
   for (const l of c.log.lines) expect(l.text).toBe(LINES[l.id].text);
-  // A new line (Lux's answer to the 480) arrives under the hover: the log stays open and takes it in.
+  // A new line (Lux steadying herself) arrives under the hover: the log stays open and takes it in.
   await page.mouse.move(c.log.outside.x, c.log.outside.y);
   await page.mouse.move(c.log.band.x, c.log.band.y);
   await expect
@@ -225,7 +233,9 @@ test('7. nothing advances on a timer: 10 s without input moves the clock, never 
   page,
 }) => {
   test.setTimeout(LANE_SECONDS * 1000);
-  // Speed 10, so the windows (60..160, 200..300) end before the surge the rescue scene answers.
-  await test.step('from now 60, the first box wired and no card open', () => idleWindow(page, 60, 10));
-  await test.step('from now 200', () => idleWindow(page, 200, 10));
+  // Speed 5, so the windows (50 sim s each, from C1 + 25 and C3 + 20) end before the surge the
+  // rescue scene answers.
+  await test.step(`from now ${C.c1 + 25}, the first box wired and no card open`, () =>
+    idleWindow(page, C.c1 + 25, 5));
+  await test.step(`from now ${C.c3 + 20}`, () => idleWindow(page, C.c3 + 20, 5));
 });

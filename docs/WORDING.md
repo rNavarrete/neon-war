@@ -1,5 +1,11 @@
 # Live screen wording pass (learning-3)
 
+> **Superseded on 29 Oct 2026.** Rolando lifted the ban on system-design terms before the debrief: "this is
+> a game that is meant for people to learn system design, so we need to keep all the terminology and system
+> design jargon intact." The Live screen now says LOAD BALANCER, SERVER, CAPACITY, HEADROOM, DEMAND, req/s
+> and SCALE UP everywhere, and `tests/teaching.test.ts` bans the old crew words (splitter, box, room left)
+> instead. The tables below are kept as history.
+
 One read of every lane's section of `docs/SCRIPT.md` (board, gauges, comms, chat, luxcam, learning) and of
 `src/scenes/hud/labels.ts`, before M4 closes. The rules: every line the player reads on the Live screen is
 plain, short, consistent and in the crew's voice, and no line prints a C8 debrief term (the bold words in

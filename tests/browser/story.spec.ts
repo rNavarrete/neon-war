@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { SERVER_SLOTS } from '../../src/sim/tick';
 import type { TestState } from '../../src/testHook';
 
@@ -7,6 +8,8 @@ import type { TestState } from '../../src/testHook';
 // with `?test&autopilot` playing GAME.md's best-play build (src/game/autopilot.ts).
 
 type Story = NonNullable<TestState['story']>;
+
+const C = BROWNOUT.challenges;
 
 const state = (page: Page) => page.evaluate(() => window.__neonTest!.state);
 const story = async (page: Page): Promise<Story> => (await state(page)).story!;
@@ -77,12 +80,21 @@ test('the cold open waits for a click on every line, then hands over to the boar
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.01');
   expect(s.nameplate).toBe('Lux');
-  expect(s.portrait).toBe('portrait:lux/faces-room/grieving');
+  expect(s.portrait).toBe('portrait:lux/vn/photo');
   expect(s.chat).toEqual([]);
 
-  // The phone lights up with the block's four messages as TRIAGE wakes.
+  // TRIAGE wakes and checks on her before the phone lights up (Rolando, 30 Oct 2026: the old "it's the
+  // net again" came before the chat had said anything), so the chat stays empty for two more lines.
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.triage.01');
+  expect(s.chat).toEqual([]);
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.lux.03');
+  expect(s.chat).toEqual([]);
+
+  // The phone lights up with the block's four messages as TRIAGE reads them out.
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.triage.02');
   expect(s.chat).toHaveLength(4);
   expect(s.chat[0]).toBe("kenji: lux the net's doing the thing again");
   await page.screenshot({ path: 'test-results/screens/cold-open.png' });
@@ -90,9 +102,12 @@ test('the cold open waits for a click on every line, then hands over to the boar
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.02');
   expect(s.sfx).toContain('goggles-on');
+  // Her last line plays over the jack-in CG (Rolando's pick, sequence C, 30 Oct 2026).
+  expect(s.cg).toBe('art/story/jackin-tap.webp');
+  expect(s.jackin).toBe('tap');
   expect((await state(page)).scene).toBe('story');
 
-  // The last click brings the goggles down and hands over to the board at 23:51:45. Even a
+  // The last click brings the goggles down and hands over to the board at 23:54:40. Even a
   // double-click there leaves the job card up to be read.
   // Wait for the short line to finish typing on its own: a click to finish it can land just after
   // it finished and end the scene before the double-click.
@@ -100,6 +115,11 @@ test('the cold open waits for a click on every line, then hands over to the boar
   s = await story(page);
   expect(s.lineId).toBe('C0.lux.02');
   await page.mouse.dblclick(s.click!.x, s.click!.y);
+  // The click plays the jack-in: the room dissolves into the grid, then the flash cuts to the board.
+  await expect
+    .poll(async () => (await story(page)).cg, { timeout: 5_000 })
+    .toBe('art/story/jackin-dissolve.webp');
+  await page.screenshot({ path: 'test-results/screens/cold-open-jackin.png' });
   await expect.poll(async () => (await state(page)).scene, { timeout: 15_000 }).toBe('board');
   s = await story(page);
   expect(s.active).toBe(false);
@@ -151,8 +171,14 @@ test('the rescue plays as a scene over the immersive backdrop and returns to the
 
   s = await nextLine(page);
   expect(s.lineId).toBe('C5.lux.01');
-  expect(s.portrait).toBe('portrait:lux/faces-board/shocked');
+  expect(s.portrait).toBe('portrait:lux/vn/board-shocked');
   expect(s.dimmed).toEqual(['TRIAGE', 'Rei']);
+  // Rei came on first, but Lux stands on the left facing in (never mirrored: her shirt has words on
+  // it) and Rei, on the right, is mirrored to face her.
+  expect(s.figures.Lux!.left).toBeLessThan(s.figures.Rei!.left);
+  expect(s.figures.Lux!.facesLeft).toBe(false);
+  expect(s.figures.Rei!.facesLeft).toBe(true);
+  await page.screenshot({ path: 'test-results/screens/rescue-facing.png' });
 
   const seen: string[] = [];
   while (s.active && s.lineId !== 'C5.rei.cut') {
@@ -206,8 +232,8 @@ test('the sim triggers the rescue and the board returns with the load balancer u
     .poll(async () => (await story(page)).scriptId, { timeout: 90_000, intervals: [50] })
     .toBe('C5');
   const now = (await state(page)).hud as unknown as { now: number };
-  expect(now.now).toBeGreaterThan(300);
-  expect(now.now).toBeLessThan(345.1);
+  expect(now.now).toBeGreaterThan(C.c4);
+  expect(now.now).toBeLessThan(C.c4 + BROWNOUT.rescue.surgeSeconds + 0.1);
   expect((await story(page)).backdrop).toMatch(/immersive/);
   await page.screenshot({ path: 'test-results/screens/rescue-live.png' });
   await playThrough(page);
@@ -217,7 +243,7 @@ test('the sim triggers the rescue and the board returns with the load balancer u
   expect(b.parts.some((p) => p.kind === 'balancer')).toBe(true);
 });
 
-test("a real overheat in C3 plays TRIAGE's replay and rewinds credits, parts and trust to 23:54:30", async ({
+test("a real overheat in C3 plays TRIAGE's replay and rewinds credits, parts and trust to 23:55:55", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -238,11 +264,11 @@ test("a real overheat in C3 plays TRIAGE's replay and rewinds credits, parts and
   // Speed 20 runs on as soon as the board is back, so the rewind target comes from the sim's record.
   const b = (await state(page)).board as unknown as Board & { rewinds: { at: number; to: number }[] };
   expect(b.rewinds).toHaveLength(1);
-  expect(b.rewinds[0].to).toBe(180);
-  expect(b.rewinds[0].at).toBeGreaterThan(180);
+  expect(b.rewinds[0].to).toBe(C.c3);
+  expect(b.rewinds[0].at).toBeGreaterThan(C.c3);
   // Back as it was at the start of C3: the one server and full trust.
   const h = (await state(page)).hud as unknown as { now: number; sim: { trust: number } };
-  expect(h.now).toBeGreaterThanOrEqual(180);
+  expect(h.now).toBeGreaterThanOrEqual(C.c3);
   expect(h.sim.trust).toBe(100);
   expect(b.parts.filter((p) => p.kind === 'server')).toHaveLength(1);
 });
@@ -307,9 +333,9 @@ test('one test plays the whole session from the title to Night Book page 1 with 
 });
 
 const REWINDS = [
-  { kind: 'replay', now: 200, target: 180, lines: ['C3.triage.rewind', 'C3.lux.rewind'], look: 'vhs' },
-  { kind: 'rei-surge', now: 380, target: 300, lines: ['C5.rei.rewind'], look: 'crew' },
-  { kind: 'rei-midnight', now: 500, target: 450, lines: ['C6.rei.fail'], look: 'crew' },
+  { kind: 'replay', now: C.c3 + 20, target: C.c3, lines: ['C3.triage.rewind', 'C3.lux.rewind'], look: 'vhs' },
+  { kind: 'rei-surge', now: C.c5 + 20, target: C.c4, lines: ['C5.rei.rewind'], look: 'crew' },
+  { kind: 'rei-midnight', now: C.c7 - 10, target: C.c6, lines: ['C6.rei.fail'], look: 'crew' },
 ] as const;
 
 for (const r of REWINDS) {
@@ -364,7 +390,12 @@ test('the debrief grades the night, names the terms, ends with the interview car
   let s = await story(page);
   expect(s.debrief?.step).toBe('grades');
   expect(s.debrief?.results).toEqual(results);
-  expect(s.portrait).toBe('portrait:rei/faces/grading');
+  expect(s.portrait).toBe('portrait:rei/vn/grading');
+  // Rei stands tall beside the results panel (x 90 to 710) and the interview card (to 950), not behind them.
+  expect(s.figures.Rei!.left).toBeGreaterThan(950);
+  expect(s.figures.Rei!.right).toBeLessThanOrEqual(1920);
+  // Alone right of the middle, she turns in toward the results.
+  expect(s.figures.Rei!.facesLeft).toBe(true);
   await page.screenshot({ path: 'test-results/screens/debrief.png' });
 
   const grades = [s.lineId];
@@ -433,4 +464,61 @@ test('reduce flicker keeps the debrief fireworks without flashes', async ({ page
   // Built from the run: no banner answer yet, a fresh run's trust.
   expect(s.debrief?.results.banner).toBeNull();
   expect(s.debrief?.results.trustLeft).toBe(100);
+});
+
+test("the rain in Lux's room falls only on the window glass, never over the room", async ({ page }) => {
+  await boot(page, '/?test&scene=story');
+  await expect.poll(async () => (await story(page))?.scriptId, { timeout: 15_000 }).toBe('C0');
+  const boxes: { glass: { x: number; y: number; w: number; h: number }; drawn: unknown }[] = [];
+  for (let i = 0; i < 10; i++) {
+    const s = await story(page);
+    expect(s.rain).not.toBeNull();
+    boxes.push(s.rain!);
+    await page.waitForTimeout(150);
+  }
+  for (const { glass, drawn } of boxes) {
+    expect(drawn).not.toBeNull();
+    const d = drawn as { x: number; y: number; w: number; h: number };
+    expect(d.x).toBeGreaterThanOrEqual(glass.x - 0.5);
+    expect(d.y).toBeGreaterThanOrEqual(glass.y - 0.5);
+    expect(d.x + d.w).toBeLessThanOrEqual(glass.x + glass.w + 0.5);
+    expect(d.y + d.h).toBeLessThanOrEqual(glass.y + glass.h + 0.5);
+  }
+  await page.screenshot({ path: 'test-results/screens/story-room-rain.png' });
+});
+
+test('the cold open shows the photo as an insert, then Lux holding it on the left third, sunk behind the text box', async ({
+  page,
+}) => {
+  await boot(page, '/?test&scene=story');
+  await expect.poll(async () => (await story(page))?.scriptId, { timeout: 15_000 }).toBe('C0');
+  let s = await story(page);
+  expect(s.lineId).toBe('C0.tv.01');
+  expect(s.photo).toBe(true);
+  await page.screenshot({ path: 'test-results/screens/story-photo-insert.png' });
+  while (s.lineId !== 'C0.lux.01') {
+    if (!s.typingDone) await clickStory(page);
+    s = await clickStory(page);
+  }
+  expect(s.photo).toBe(false);
+  expect(s.onStage).toEqual(['Lux']);
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: 'test-results/screens/story-lux-staged.png' });
+  // The phone lights up: four rows in the stream chat, and TRIAGE hovers beside Lux. Since the check-in
+  // beat (Rolando, 30 Oct 2026) that is C0.triage.02, after TRIAGE asks if she's okay.
+  while (s.lineId !== 'C0.triage.02') {
+    if (!s.typingDone) await clickStory(page);
+    s = await clickStory(page);
+  }
+  expect(s.chat).toHaveLength(4);
+  expect(s.onStage).toEqual(['Lux', 'TRIAGE']);
+  // The four messages roll in one at a time rather than all at once...
+  expect(s.chatShown.length).toBeLessThan(4);
+  await expect
+    .poll(async () => (await story(page)).chatShown.length, { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(4);
+  expect((await story(page)).chatShown.slice(0, 4)).toEqual(s.chat);
+  await page.screenshot({ path: 'test-results/screens/story-triage-chat.png' });
+  // ...and the chat keeps talking while the player reads.
+  await expect.poll(async () => (await story(page)).chatShown.length, { timeout: 10_000 }).toBeGreaterThan(4);
 });

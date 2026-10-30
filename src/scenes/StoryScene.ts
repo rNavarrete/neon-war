@@ -12,9 +12,11 @@ import { settings } from '../game/settings';
 import { BROWNOUT } from '../sim/brownout';
 import type { DebriefResults } from '../story/debrief';
 import { LABELS } from '../story/labels';
-import { SCRIPTS, type SceneScript, type ScriptStep, chatText, isChat, stepsFor } from '../story/scripts';
+import { SCRIPTS, type SceneScript, type ScriptStep, isChat, stepsFor } from '../story/scripts';
 import { markSeen, wasSeen } from '../story/seen';
 import { playSfx, playVoice, setLiveView, stopSfx, storyEnd, storyState } from '../story/state';
+import { fillerFor } from '../story/chatPanel';
+import { type Drop, ROOM_GLASS, STREAK, type Segment, clipToGlass, fall, seedDrops } from '../story/rain';
 import type { RewindKind } from '../story/rewind';
 import { FrameClock, H, VnView, W, cover, fileKey, preloadView } from '../story/view';
 import { testHookEnabled } from '../testHook';
@@ -26,11 +28,19 @@ const EXTRA = {
   goggles: 'art/hud/goggles-overlay.webp',
   cable: 'art/board/crew-cable.webp',
   regroup: 'art/hud/regroup-ready.webp',
+  jackinTap: 'art/story/jackin-tap.webp',
+  jackinDissolve: 'art/story/jackin-dissolve.webp',
 } as const;
+
+/** The jack-in's beats in ms at speed 1: the tap CG fading in, the dissolve crossfade, its hold, the flash. */
+export const JACKIN_MS = { tapIn: 450, dissolve: 700, hold: 1300, flash: 260 } as const;
 
 /** Seconds the rewind animation runs after the last line. */
 const REWIND_SECONDS = 1.4;
-const RAIN_DROPS = 90;
+const RAIN_DROPS = 60;
+/** Slow drops running down the pane. */
+const TRICKLES = 9;
+const TRICKLE_TRAIL = 46;
 
 /**
  * Visual-novel scene player: the cold open, the rescue and the rewind screens. Lines play from the
@@ -50,8 +60,18 @@ export class StoryScene extends Phaser.Scene {
   private clock: Phaser.GameObjects.Text | null = null;
   private tracking: Phaser.GameObjects.Rectangle[] = [];
   private rain: Phaser.GameObjects.Graphics | null = null;
-  private drops: { x: number; y: number; v: number }[] = [];
+  private drops: Drop[] = [];
+  private trickles: Drop[] = [];
+  private readonly seg: Segment = { x1: 0, y1: 0, x2: 0, y2: 0 };
+  private readonly drawn: Segment = { x1: 0, y1: 0, x2: 0, y2: 0 };
   private flickerPending = false;
+  private photo: Phaser.GameObjects.Image | null = null;
+  /** The jack-in CG shown under the last line, waiting for the click that plays the outro. */
+  private jackin: Phaser.GameObjects.Image | null = null;
+  private outro = false;
+  private outroT = 0;
+  private dissolve: Phaser.GameObjects.Image | null = null;
+  private flash: Phaser.GameObjects.Rectangle | null = null;
   private frames = new FrameClock();
 
   constructor() {
@@ -86,6 +106,16 @@ export class StoryScene extends Phaser.Scene {
     this.clock = null;
     this.tracking = [];
     this.rain = null;
+    storyState.rain = null;
+    this.photo = null;
+    storyState.photo = false;
+    this.jackin = null;
+    this.outro = false;
+    this.outroT = 0;
+    this.dissolve = null;
+    this.flash = null;
+    storyState.cg = null;
+    storyState.jackin = null;
 
     if (s.backdrop) cover(this, fileKey(s.backdrop));
     if (s.look === 'vhs') this.drawReplay();
@@ -96,6 +126,7 @@ export class StoryScene extends Phaser.Scene {
     this.view = new VnView(this, {
       where: s.where,
       chat: s.look === 'vn',
+      filler: fillerFor(s.id),
       skippable,
       onClick: () => this.click(),
       onSkip: () => this.finish(),
@@ -137,11 +168,12 @@ export class StoryScene extends Phaser.Scene {
       this.updateRewindClock(Math.min(1, this.rewinding / REWIND_SECONDS));
       if (this.rewinding >= REWIND_SECONDS) this.finish();
     }
+    if (this.outro) this.updateJackin(dt);
   }
 
   /** A click finishes the typing line, or goes on to the next one. */
   private click(): void {
-    if (this.done || this.rewinding >= 0) return;
+    if (this.done || this.rewinding >= 0 || this.outro) return;
     if (!this.view.typingDone) {
       this.view.finishTyping();
       return;
@@ -155,18 +187,31 @@ export class StoryScene extends Phaser.Scene {
       const step = this.steps[this.next++];
       this.cue(step);
       if (isChat(step.lineId)) {
-        this.view.chat(chatText(step.lineId));
+        this.view.chat(step.lineId);
         continue;
       }
       this.view.say(step.lineId, step.face);
       return;
     }
-    if (this.story?.rewind) this.startRewind();
+    if (this.jackin) this.playJackin();
+    else if (this.story?.rewind) this.startRewind();
     else this.finish();
   }
 
   private cue(step: ScriptStep): void {
-    if (step.cue === 'flicker') this.flickerPending = !settings().reduceFlicker;
+    if (step.cue === 'flicker') {
+      this.flickerPending = !settings().reduceFlicker;
+      const photo = this.photo;
+      this.photo = null;
+      storyState.photo = false;
+      if (photo)
+        this.tweens.add({
+          targets: photo,
+          alpha: 0,
+          duration: 400 / run().speed,
+          onComplete: () => photo.destroy(),
+        });
+    }
     if (step.cue === 'goggles') {
       playSfx('goggles-on');
       const lens = this.add
@@ -175,6 +220,17 @@ export class StoryScene extends Phaser.Scene {
         .setAlpha(0);
       lens.setDisplaySize(W, H);
       this.tweens.add({ targets: lens, alpha: 1, duration: 800 / run().speed });
+    }
+    if (step.cue === 'jackin') {
+      // A visual novel's event CG for the moment that matters: the whole frame becomes the shot of her
+      // tapping the visor on, the stage and the stream chat giving way to it, with her line over it.
+      playSfx('goggles-on');
+      const cg = cover(this, fileKey(EXTRA.jackinTap)).setDepth(15).setAlpha(0);
+      this.tweens.add({ targets: cg, alpha: 1, duration: JACKIN_MS.tapIn / run().speed });
+      this.view.hideChat(JACKIN_MS.tapIn / run().speed);
+      this.jackin = cg;
+      storyState.cg = EXTRA.jackinTap;
+      storyState.jackin = 'tap';
     }
     if (step.cue === 'cable') {
       playSfx('rescue-cable');
@@ -194,6 +250,39 @@ export class StoryScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * The click after her last line: the box goes, her room dissolves into the grid (the second CG
+   * crossfades in and holds), then a cyan flash cuts to the board; under reduce flicker a dark fade
+   * replaces the flash. Clicks are ignored from here; Skip still ends it at once. It runs on the wall
+   * clock in update() (like the rewind), not on tweens, whose time stalls when frames come slowly.
+   */
+  private playJackin(): void {
+    this.outro = true;
+    this.outroT = 0;
+    this.view.hideBox();
+    this.dissolve = cover(this, fileKey(EXTRA.jackinDissolve)).setDepth(16).setAlpha(0);
+    this.flash = this.add
+      .rectangle(0, 0, W, H, settings().reduceFlicker ? 0x05070f : 0x9ff6ff)
+      .setOrigin(0)
+      .setDepth(45)
+      .setAlpha(0);
+    storyState.cg = EXTRA.jackinDissolve;
+    storyState.jackin = 'dissolve';
+  }
+
+  /** Advance the jack-in outro by `dt` seconds (at test speed); ends the scene after the flash. */
+  private updateJackin(dt: number): void {
+    this.outroT += dt * 1000;
+    const { dissolve, hold, flash } = JACKIN_MS;
+    this.dissolve?.setAlpha(Math.min(1, this.outroT / dissolve));
+    const f = (this.outroT - dissolve - hold) / flash;
+    if (f > 0) {
+      storyState.jackin = 'flash';
+      this.flash?.setAlpha(Math.min(1, f));
+    }
+    if (f >= 1) this.finish();
+  }
+
   private finish(): void {
     if (this.done || !this.story) return;
     this.done = true;
@@ -209,14 +298,16 @@ export class StoryScene extends Phaser.Scene {
 
   private drawRoom(): void {
     this.add.rectangle(0, 0, W, H, 0x05070f, 0.25).setOrigin(0);
+    // Rain falls outside: it shows only on the window glass, never over the room (src/story/rain.ts).
     this.rain = this.add.graphics().setDepth(2);
-    this.drops = Array.from({ length: RAIN_DROPS }, () => ({
-      x: Math.random() * W,
-      y: Math.random() * H,
-      v: 900 + Math.random() * 600,
-    }));
+    this.drops = seedDrops(RAIN_DROPS, ROOM_GLASS, 900, 1500, Math.random);
+    this.trickles = seedDrops(TRICKLES, ROOM_GLASS, 18, 60, Math.random);
+    storyState.rain = { glass: { ...ROOM_GLASS }, drawn: null };
     if (this.script.photo) {
-      this.add.image(1180, 560, fileKey(EXTRA.photo)).setScale(0.42).setAngle(-6).setDepth(8);
+      // An insert, the way visual novels show a prop that matters: the photo fills the middle while the
+      // TV and Grandma talk, then gives way to Lux holding it when she speaks (the 'flicker' cue).
+      this.photo = this.add.image(900, 470, fileKey(EXTRA.photo)).setScale(0.7).setAngle(-4).setDepth(8);
+      storyState.photo = true;
       this.clock = this.add
         .text(80, 60, twelveHour(run().clock(0)), {
           fontFamily: 'monospace',
@@ -231,21 +322,58 @@ export class StoryScene extends Phaser.Scene {
     const g = this.rain;
     if (!g) return;
     g.clear();
+    const glass = ROOM_GLASS;
+    const seg = this.seg;
+    const b = this.drawn;
+    b.x1 = b.y1 = Infinity;
+    b.x2 = b.y2 = -Infinity;
+    // Rain falling past the window.
     g.lineStyle(2, 0x9fb8ff, 0.25);
     for (const d of this.drops) {
-      d.y += d.v * dt;
-      if (d.y > H) {
-        d.y -= H + 40;
-        d.x = Math.random() * W;
-      }
-      g.lineBetween(d.x, d.y, d.x - 6, d.y + 28);
+      fall(d, dt, glass, STREAK.dy, Math.random);
+      if (!clipToGlass(d.x, d.y, STREAK.dx, STREAK.dy, glass, seg)) continue;
+      g.lineBetween(seg.x1, seg.y1, seg.x2, seg.y2);
+      this.extendDrawn();
     }
+    // Drops running down the pane: a faint wet trail and a bright bead at the front.
+    for (const d of this.trickles) {
+      fall(d, dt, glass, TRICKLE_TRAIL, Math.random);
+      if (!clipToGlass(d.x, d.y, 0, TRICKLE_TRAIL, glass, seg)) continue;
+      g.lineStyle(1, 0xc8d8ff, 0.18);
+      g.lineBetween(seg.x1, seg.y1, seg.x2, seg.y2);
+      this.extendDrawn();
+      if (d.y >= glass.y && d.y <= glass.y + glass.h) {
+        g.fillStyle(0xe4ecff, 0.55);
+        g.fillCircle(d.x, d.y, 2);
+      }
+    }
+    const rain = storyState.rain;
+    if (!rain) return;
+    if (b.x1 > b.x2) {
+      rain.drawn = null;
+      return;
+    }
+    const d = (rain.drawn ??= { x: 0, y: 0, w: 0, h: 0 });
+    d.x = b.x1;
+    d.y = b.y1;
+    d.w = b.x2 - b.x1;
+    d.h = b.y2 - b.y1;
+  }
+
+  /** Grows this frame's box round the drawn rain (for the test hook) by the segment just drawn. */
+  private extendDrawn(): void {
+    const s = this.seg;
+    const b = this.drawn;
+    b.x1 = Math.min(b.x1, s.x1, s.x2);
+    b.x2 = Math.max(b.x2, s.x1, s.x2);
+    b.y1 = Math.min(b.y1, s.y1, s.y2);
+    b.y2 = Math.max(b.y2, s.y1, s.y2);
   }
 
   private updateRoomClock(): void {
     if (!this.clock) return;
     // The clock flickers to 02:14 for one frame when Lux looks at the photo (the 'flicker' cue); a
-    // steady clock with reduce flicker. Otherwise it ticks from 23:51:30 and stops at 23:51:45, where
+    // steady clock with reduce flicker. Otherwise it ticks from 23:54:25 and stops at 23:54:40, where
     // the board picks the run up however long she sits there (src/game/flow.ts).
     if (this.flickerPending) {
       this.flickerPending = false;
@@ -331,7 +459,7 @@ declare global {
       playRescue(laundryCut?: boolean): void;
       playRewind(kind: RewindKind): void;
       playDebrief(results?: Partial<DebriefResults>): void;
-      /** Set the run's clock (seconds since 23:51:30), to stage a failure at a given time. */
+      /** Set the run's clock (seconds since 23:54:25), to stage a failure at a given time. */
       setNow(now: number): void;
     };
   }

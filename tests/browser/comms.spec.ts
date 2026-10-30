@@ -1,6 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import { artRequest, isPicked } from '../../src/game/artManifest';
 import type { CommsTestState } from '../../src/scenes/live/views/comms';
+import { ZONES } from '../../src/scenes/live/layout';
 import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 
 // The comms band (comms-2, comms-3): every bark shows in ZONES.comms with its speaker, tag and typed
@@ -44,16 +45,16 @@ test('the band shows C1.triage.02 with its speaker and tag, five slots inside it
   c = h.comms!;
   // hud.bark keeps the ids and text it always had.
   expect(h.bark.current).toBe('C1.triage.02');
-  expect(h.bark.text).toBe("480 a second! I'm great at math.");
+  expect(h.bark.text).toBe("Mrs Okafor's stuck in the lift! Kenji's stream froze!");
   expect(h.bark.history).toEqual(['C1.triage.01', 'C1.triage.02']);
   expect(h.paused).toBe(false);
 
   const line = c.line!;
   expect(line.id).toBe('C1.triage.02');
-  expect(line.speaker).toBe('TRIAGE (wrong-and-proud)');
+  expect(line.speaker).toBe('TRIAGE (eager)');
   expect(line.name).toBe('TRIAGE');
   expect(line.tag).toBe('HINT');
-  expect(line.text).toBe("480 a second! I'm great at math.");
+  expect(line.text).toBe("Mrs Okafor's stuck in the lift! Kenji's stream froze!");
   expect(line.until - line.since).toBeGreaterThanOrEqual(4 - 1e-6);
   expect(line.typed).toBeGreaterThanOrEqual(0);
   expect(line.typed).toBeLessThanOrEqual(line.text.length);
@@ -66,10 +67,10 @@ test('the band shows C1.triage.02 with its speaker and tag, five slots inside it
   // One line at a time: the first ended before the second started.
   expect(c.history).toEqual(['C1.triage.01', 'C1.triage.02']);
   expect(c.emitted.slice(0, 3)).toEqual(['line:C1.triage.01', 'lineEnd:C1.triage.01', 'line:C1.triage.02']);
-  expect(c.triage).toEqual({ mood: 'wrong-and-proud' });
+  expect(c.triage).toEqual({ mood: 'eager' });
   expect(c.slots.find((s) => s.name === 'TRIAGE')!.speaking).toBe(true);
   // comms-4: her iris wears the line's mood, and her ring pulses amber (reduce flicker is off).
-  expect(c.iris.mood).toBe('wrong-and-proud');
+  expect(c.iris.mood).toBe('eager');
   expect(c.iris.motion).toBe('full');
   expect(c.glow).toMatchObject({ slot: 'TRIAGE', color: 'amber', motion: 'pulse', others: 0.25 });
   expect(c.crew.light).toBe(0);
@@ -132,7 +133,7 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
     expect(c.log.open).toBe(true);
     expect(c.log.lines.map((l) => l.id)).toEqual(['C1.triage.01', 'C1.triage.02']);
     expect(c.log.lines.map((l) => l.name)).toEqual(['TRIAGE', 'TRIAGE']);
-    // A click off the band, then Lux answers TRIAGE's 480 while the log stays pinned.
+    // A click off the band, then Lux steadies herself while the log stays pinned.
     await page.mouse.click(c.log.outside.x, c.log.outside.y);
     await expect
       .poll(async () => (await comms(page)).history, { timeout: 30_000, intervals: [50] })
@@ -141,7 +142,11 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
     expect(c.log.pinned).toBe(true);
     expect(c.log.open).toBe(true);
     expect(c.log.lines.map((l) => l.id)).toEqual(c.history.slice(-3));
-    expect(c.log.lines).toContainEqual({ id: 'C1.lux.01', name: 'LUX', text: 'You multiplied. Divide.' });
+    expect(c.log.lines).toContainEqual({
+      id: 'C1.lux.01',
+      name: 'LUX',
+      text: 'Okay. Breathe. I know this one.',
+    });
     await shot(page, 'comms-log');
   });
 
@@ -337,8 +342,11 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
     const r = artRequest(key);
     return !!r && isPicked(r);
   };
-  expect(c.art.plate.use).toBe(pickedKey('hud/comms-plate') ? 'picked' : 'reuse');
-  expect(c.art.plate.texture).not.toBeNull();
+  // Layout A2 (Rolando, 30 Oct 2026): the caller column draws its plate in code (the painted plate
+  // is a 1455 x 149 strip); the strip stays picked in the manifest.
+  expect(pickedKey('hud/comms-plate')).toBe(true);
+  expect(c.art.plate.use).toBe('code');
+  expect(c.art.plate.texture).toBeNull();
   expect(c.art.faces.map((f) => [f.slot, f.key])).toEqual([
     ['TRIAGE', 'chars/comms/triage'],
     ['REI', 'chars/comms/rei'],
@@ -453,7 +461,8 @@ test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both
   await expect.poll(async () => (await hook(page)).settingsScreen!.voiceVolume).toBe(0.9);
   // The old rows keep working beside the new ones.
   await press(page, 'volumeDown');
-  await expect.poll(async () => (await hook(page)).shell!.settings.volume).toBe(0.7);
+  // One step down from the 0.5 default (0.8 down to 0.7 before 30 Oct 2026).
+  await expect.poll(async () => (await hook(page)).shell!.settings.volume).toBe(0.4);
   s = await hook(page);
   expect(s.settingsScreen!.labels).toEqual({ voices: 'OFF', voiceVolume: '90%' });
   // The shell section mirrors both settings, and the mixer's hook reads them too.
@@ -463,7 +472,7 @@ test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both
   const stored = await page.evaluate(() =>
     JSON.parse(window.localStorage.getItem('neon-war.settings') ?? '{}'),
   );
-  expect(stored).toMatchObject({ voices: 'off', voiceVolume: 0.9, volume: 0.7 });
+  expect(stored).toMatchObject({ voices: 'off', voiceVolume: 0.9, volume: 0.4 });
   await shot(page, 'comms-settings-voices');
 
   await press(page, 'back');
@@ -472,7 +481,7 @@ test('comms-7: Voices JA/EN/OFF and Voice volume rows; old rows still work; both
   await waitScene(page, 'title');
   s = await hook(page);
   expect(s.settingsScreen).toMatchObject({ open: false, voices: 'off', voiceVolume: 0.9 });
-  expect(s.shell!.settings.volume).toBe(0.7);
+  expect(s.shell!.settings.volume).toBe(0.4);
   expect(errors).toEqual([]);
 });
 
@@ -546,7 +555,9 @@ test('comms-6: scene lines ask for their voice in order; a click past a line cut
           const n = (await storyOf(page))!;
           return n.clicks > before.clicks && (n.lineId !== before.lineId || !n.active);
         },
-        { timeout: 5_000 },
+        // 10 s since the cold open ends on the jack-in (Rolando's pick, 30 Oct 2026): the click past the
+        // last line plays about 2.3 s of dissolve and flash before the scene ends.
+        { timeout: 10_000 },
       )
       .toBe(true);
   }
@@ -782,11 +793,13 @@ test('comms-9 (M4): the band draws the picked plate, four round badges and the H
   const c = await comms(page);
   for (const key of COMMS_ART) expect(isPicked(artRequest(key)!), key).toBe(true);
 
-  // The plate: the pick, at its file's size, inside the band.
-  expect(c.art.plate.use).toBe('picked');
-  expect(c.art.plate.texture).toBe('art:hud/comms-plate');
-  expect(c.art.plate.source).toEqual({ w: 1455, h: 149 });
-  expect(c.art.plate.size).toEqual({ w: 1455, h: 149 });
+  // The plate. Layout A2 (Rolando, 30 Oct) moved comms into the right caller column, which the
+  // picked 1455 x 149 strip can't fill without stretching, so the call panel draws its plate in
+  // code at the zone's size, inside the zone. The strip stays picked in the manifest.
+  expect(c.art.plate.use).toBe('code');
+  expect(c.art.plate.texture).toBeNull();
+  expect(c.art.plate.source).toBeNull();
+  expect(c.art.plate.size).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
   expect(insideRect(c.art.plate.drawn, c.rect)).toBe(true);
 
   // The four badges: picked, baked once into 84 px round avatars.
@@ -838,7 +851,8 @@ test('comms-9 (M4): with the band art absent the code fallback draws without err
 
   expect(['reuse', 'code']).toContain(c.art.plate.use);
   expect(c.art.plate.source).toBeNull();
-  expect(c.art.plate.size).toEqual({ w: 1455, h: 150 });
+  // Layout A2 (Rolando, 30 Oct): the plate fills the caller column (was the 1455 x 150 band).
+  expect(c.art.plate.size).toEqual({ w: ZONES.comms.w, h: ZONES.comms.h });
   for (const f of c.art.faces) expect(f.use, f.key).not.toBe('picked');
   expect(c.art.house.chips.map((h) => h.use)).toEqual(['code', 'code']);
   expect(c.art.house.drawn).toBe('glyph');
@@ -857,5 +871,23 @@ test('comms-9 (M4): with the band art absent the code fallback draws without err
     path: 'test-results/screens/m4-comms-fallback.png',
     clip: { x: c.rect.x, y: c.rect.y, width: c.rect.w, height: c.rect.h },
   });
+  expect(errors).toEqual([]);
+});
+
+// Rolando, 30 Oct 2026: the caller cam keeps the last speaker on screen after they finish talking.
+test('the caller cam stays up, dimmed, on the last caller after their line ends', async ({ page }) => {
+  test.setTimeout(60_000);
+  const { errors } = await openBoard(page, { speed: 4, autopilot: false });
+  await dismissJobCard(page);
+  await expect
+    .poll(async () => (await comms(page)).line?.id ?? null, { timeout: 40_000, intervals: [50] })
+    .toBe('C1.triage.02');
+  await expect.poll(async () => (await comms(page)).call.alpha, { timeout: 5_000 }).toBe(1);
+  // The line ends; the panel dims to its idle alpha and never goes away.
+  await expect.poll(async () => (await comms(page)).line, { timeout: 30_000, intervals: [50] }).toBeNull();
+  const idle = await comms(page);
+  expect(idle.call.last).toMatch(/^C1\.triage\./);
+  await expect.poll(async () => (await comms(page)).call.alpha, { timeout: 5_000 }).toBeCloseTo(0.6, 2);
+  await shot(page, 'comms-last-caller');
   expect(errors).toEqual([]);
 });

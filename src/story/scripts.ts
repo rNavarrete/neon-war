@@ -8,8 +8,13 @@ import { LINES, type LineId } from '../strings';
 export type Cue =
   /** The bedroom clock flickers to 02:14 for one frame, the night her mum died (cold open). */
   | 'flicker'
-  /** The goggles come down: goggles-on sound and the lens fades in (cold open). */
+  /** The goggles come down: goggles-on sound and the lens fades in. */
   | 'goggles'
+  /**
+   * Jacking in (cold open, Rolando's pick, 30 Oct 2026): the visor-tap CG fills the screen under her
+   * last line; after it the room dissolves into the grid (a second CG) and a cyan flash cuts to the board.
+   */
+  | 'jackin'
   /** The crew's cable drops in (rescue). */
   | 'cable'
   /** Mika hands over Regroup (rescue). */
@@ -45,8 +50,10 @@ export interface SceneScript {
 }
 
 /**
- * C0, the cold open: one line per click in the order of docs/SCRIPT.md. The block's four chat lines
- * land together with TRIAGE waking up; the last click brings the goggles down and ends the scene.
+ * C0, the cold open: one line per click in the order of docs/SCRIPT.md. TRIAGE wakes and checks on
+ * Lux first; once she says she's fine the block's four chat lines roll in and TRIAGE reads them out
+ * (Rolando, 30 Oct 2026: "it's the net again" had no setup). On her last line she taps the visor on
+ * (a full-screen CG) and the click after it plays the jack-in: the room dissolves into the grid, then the board.
  */
 const COLD_OPEN: SceneScript = {
   id: 'C0',
@@ -58,13 +65,15 @@ const COLD_OPEN: SceneScript = {
     { lineId: 'C0.tv.01' },
     { lineId: 'C0.tv.02' },
     { lineId: 'C0.grandma.01' },
-    { lineId: 'C0.lux.01', face: 'lux/faces-room/grieving', cue: 'flicker' },
+    { lineId: 'C0.lux.01', face: 'lux/vn/photo', cue: 'flicker' },
+    { lineId: 'C0.triage.01' },
+    { lineId: 'C0.lux.03', face: 'lux/vn/composing' },
     { lineId: 'C0.chat.01' },
     { lineId: 'C0.chat.02' },
     { lineId: 'C0.chat.03' },
     { lineId: 'C0.chat.04' },
-    { lineId: 'C0.triage.01' },
-    { lineId: 'C0.lux.02', face: 'lux/faces-room/composing', cue: 'goggles' },
+    { lineId: 'C0.triage.02' },
+    { lineId: 'C0.lux.02', face: 'lux/vn/neutral', cue: 'jackin' },
   ],
 };
 
@@ -77,19 +86,19 @@ const RESCUE: SceneScript = {
   steps: [
     { lineId: 'C5.triage.01' },
     { lineId: 'C5.rei.01' },
-    { lineId: 'C5.lux.01', face: 'lux/faces-board/shocked' },
+    { lineId: 'C5.lux.01', face: 'lux/vn/board-shocked' },
     { lineId: 'C5.rei.02' },
     { lineId: 'C5.mika.01' },
-    { lineId: 'C5.mika.02', face: 'mika/faces/explain' },
+    { lineId: 'C5.mika.02', face: 'mika/vn/explain' },
     { lineId: 'C5.rei.03', cue: 'cable' },
-    { lineId: 'C5.rei.cut', onlyIf: 'laundryCut', face: 'rei/faces/impressed' },
-    { lineId: 'C5.lux.cut', onlyIf: 'laundryCut', face: 'lux/faces-board/deadpan' },
-    { lineId: 'C5.ozzie.01', face: 'ozzie/faces/sums' },
+    { lineId: 'C5.rei.cut', onlyIf: 'laundryCut', face: 'rei/vn/impressed' },
+    { lineId: 'C5.lux.cut', onlyIf: 'laundryCut', face: 'lux/vn/board-deadpan' },
+    { lineId: 'C5.ozzie.01', face: 'ozzie/vn/sums' },
     { lineId: 'C5.ozzie.02' },
-    { lineId: 'C5.mika.03', face: 'mika/faces/focused' },
-    { lineId: 'C5.ozzie.03', face: 'ozzie/faces/sceptical' },
-    { lineId: 'C5.rei.04', face: 'rei/faces/stern' },
-    { lineId: 'C5.mika.04', face: 'mika/faces/reassure', cue: 'regroup' },
+    { lineId: 'C5.mika.03', face: 'mika/vn/focused' },
+    { lineId: 'C5.ozzie.03', face: 'ozzie/vn/sceptical' },
+    { lineId: 'C5.rei.04', face: 'rei/vn/stern' },
+    // C5.mika.04 (Mika hands over Regroup) is not in Session 0: BROWNOUT.regroup.inSession.
   ],
 };
 
@@ -99,7 +108,7 @@ const REWIND_REPLAY: SceneScript = {
   backdrop: null,
   where: 'board',
   look: 'vhs',
-  steps: [{ lineId: 'C3.triage.rewind' }, { lineId: 'C3.lux.rewind', face: 'lux/faces-board/deadpan' }],
+  steps: [{ lineId: 'C3.triage.rewind' }, { lineId: 'C3.lux.rewind', face: 'lux/vn/board-deadpan' }],
 };
 
 /** Rei's rewind when trust hits zero in the surge. */
@@ -108,7 +117,7 @@ const REWIND_REI_SURGE: SceneScript = {
   backdrop: 'art/bg/immersive.webp',
   where: 'board',
   look: 'crew',
-  steps: [{ lineId: 'C5.rei.rewind', face: 'rei/faces/stern' }],
+  steps: [{ lineId: 'C5.rei.rewind', face: 'rei/vn/stern' }],
 };
 
 /** Rei's rewind when the block goes dark at midnight. */
@@ -117,7 +126,7 @@ const REWIND_REI_MIDNIGHT: SceneScript = {
   backdrop: 'art/bg/bedroom-dark.webp',
   where: 'board',
   look: 'crew',
-  steps: [{ lineId: 'C6.rei.fail', face: 'rei/faces/stern' }],
+  steps: [{ lineId: 'C6.rei.fail', face: 'rei/vn/stern' }],
 };
 
 export const SCRIPTS: Readonly<Record<ScriptId, SceneScript>> = {

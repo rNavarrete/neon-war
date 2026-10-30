@@ -1,5 +1,5 @@
 // Losing is gentle: a failure rewinds instead of ending the game. Which rewind plays and where it
-// goes back to, as pure functions of the session clock (seconds since 23:51:30).
+// goes back to, as pure functions of the session clock (seconds since 23:54:25).
 
 import { BROWNOUT } from '../sim/brownout';
 

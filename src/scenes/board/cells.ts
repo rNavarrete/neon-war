@@ -1,98 +1,92 @@
-// Where the table's grid cells sit on screen: the painted silkscreen of board/table-plate (1228 x
-// 416, drawn at its own size by art.ts tablePlatePlace) measured line by line, so a cell's outline
-// lies on the painted grid lines. Pure: no Phaser, so the geometry is unit-tested in node.
+// Where the table's grid cells sit on screen: a grid drawn in code on the glass of the picked table
+// (board/table-plate, Rolando's pick 30 Oct 2026: table B, the steeper top-down camera). Pure: no
+// Phaser, so the geometry is unit-tested in node.
 //
-// The plate is painted in perspective: its column lines lean in toward the far edge and its rows
-// get shallower away from the viewer. Each painted line is kept as measured (in plate pixels): a
-// column line as its x on the grid's far and near borders, a row line as its y at two points across
-// the plate. A lattice node is where a column line crosses a row line; a cell is the quad between
-// four nodes. One column (between lines 21 and 22) is painted wider than the rest, and so is its cell.
+// The glass is painted in perspective: its far edge narrower than its near edge. The grid is the
+// glass (layout.ts GLASS) inset a little, mapped from the unit square by a projective transform, so
+// columns lean in toward the far edge and rows get shallower away from the viewer, the way the
+// painting's own perspective does. A lattice node is where a column line crosses a row line; a cell
+// is the quad between four nodes.
 
 import { GRID, type Node, parseCell } from '../../sim/grid';
+import { GLASS } from './glass';
 
 export interface Pt {
   readonly x: number;
   readonly y: number;
 }
 
-/** The plate's top-left in game pixels: tablePlatePlace for the 1228 x 416 cut, at scale 1. */
-export const PLATE_AT: Pt = { x: 568.5, y: 224 };
-/** The plate pixel rows the column lines are measured on: the grid's far and near borders. */
-const FAR_Y = 20;
-const NEAR_Y = 326;
-/** The plate pixel columns the row lines are measured on. */
-const ROW_XL = 300;
-const ROW_XR = 900;
+/** How far the grid sits in from the glass's painted edge, in game pixels. */
+export const GRID_INSET = { side: 14, far: 10, near: 12 } as const;
 
-/** The 29 column lines, left to right: x at the grid's far border and at its near border (plate px). */
-export const COLUMN_LINES: readonly { readonly far: number; readonly near: number }[] = [
-  [196.0, 75.3],
-  [225.0, 112.3],
-  [254.0, 150.1],
-  [283.0, 187.7],
-  [312.0, 225.3],
-  [341.1, 262.9],
-  [370.4, 300.5],
-  [399.4, 337.2],
-  [428.4, 374.6],
-  [457.2, 411.9],
-  [486.1, 449.3],
-  [515.1, 486.8],
-  [544.5, 524.5],
-  [573.7, 561.9],
-  [602.7, 599.5],
-  [631.8, 637.1],
-  [661.2, 674.8],
-  [690.4, 712.7],
-  [719.6, 750.7],
-  [748.5, 788.7],
-  [777.7, 826.4],
-  [806.3, 864.2],
-  [846.2, 917.6],
-  [874.9, 955.7],
-  [903.6, 993.6],
-  [932.3, 1031.3],
-  [960.9, 1069.1],
-  [989.2, 1107.1],
-  [1017.6, 1145.0],
-].map(([far, near]) => ({ far, near }));
+/** The grid's outline: far-left, far-right, near-right, near-left (the glass, inset). */
+export const GRID_QUAD: readonly [Pt, Pt, Pt, Pt] = (() => {
+  const [tl, tr, br, bl] = GLASS;
+  // Along each side, move in by `side` horizontally; the far and near edges down and up.
+  return [
+    { x: tl.x + GRID_INSET.side, y: tl.y + GRID_INSET.far },
+    { x: tr.x - GRID_INSET.side, y: tr.y + GRID_INSET.far },
+    { x: br.x - GRID_INSET.side, y: br.y - GRID_INSET.near },
+    { x: bl.x + GRID_INSET.side, y: bl.y - GRID_INSET.near },
+  ];
+})();
 
-/** The 20 row lines, far to near: y at plate x 300 and at plate x 900 (the outer two are the grid's border). */
-export const ROW_LINES: readonly { readonly l: number; readonly r: number }[] = [
-  [20.1, 20.1],
-  [30.0, 29.9],
-  [42.8, 42.3],
-  [56.0, 55.7],
-  [69.5, 69.0],
-  [83.3, 83.0],
-  [97.8, 97.0],
-  [112.2, 111.7],
-  [126.8, 125.9],
-  [141.1, 140.1],
-  [156.5, 155.2],
-  [174.5, 173.0],
-  [191.8, 190.1],
-  [209.0, 207.2],
-  [227.1, 225.2],
-  [245.8, 243.9],
-  [264.6, 263.0],
-  [284.1, 282.2],
-  [304.0, 302.4],
-  [326.7, 325.9],
-].map(([l, r]) => ({ l, r }));
+type M3 = readonly [number, number, number, number, number, number, number, number, number];
+
+/** The projective map from the unit square (u right, v toward the viewer) onto a quad (Heckbert). */
+function squareToQuad(q: readonly [Pt, Pt, Pt, Pt]): M3 {
+  const [p0, p1, p2, p3] = q;
+  const sx = p0.x - p1.x + p2.x - p3.x;
+  const sy = p0.y - p1.y + p2.y - p3.y;
+  const dx1 = p1.x - p2.x;
+  const dx2 = p3.x - p2.x;
+  const dy1 = p1.y - p2.y;
+  const dy2 = p3.y - p2.y;
+  const den = dx1 * dy2 - dx2 * dy1;
+  const g = (sx * dy2 - dx2 * sy) / den;
+  const h = (dx1 * sy - sx * dy1) / den;
+  return [
+    p1.x - p0.x + g * p1.x,
+    p3.x - p0.x + h * p3.x,
+    p0.x,
+    p1.y - p0.y + g * p1.y,
+    p3.y - p0.y + h * p3.y,
+    p0.y,
+    g,
+    h,
+    1,
+  ];
+}
+
+/** The inverse of a 3x3 map (its adjugate: a projective map is defined up to scale). */
+function inverse(m: M3): M3 {
+  const [a, b, c, d, e, f, g, h, i] = m;
+  return [
+    e * i - f * h,
+    c * h - b * i,
+    b * f - c * e,
+    f * g - d * i,
+    a * i - c * g,
+    c * d - a * f,
+    d * h - e * g,
+    b * g - a * h,
+    a * e - b * d,
+  ];
+}
+
+const FORWARD = squareToQuad(GRID_QUAD);
+const BACK = inverse(FORWARD);
+
+/** The screen point of grid fraction (u, v): 0 to 1 across the columns and down the rows. */
+export function gridPoint(u: number, v: number): Pt {
+  const m = FORWARD;
+  const w = m[6] * u + m[7] * v + m[8];
+  return { x: (m[0] * u + m[1] * v + m[2]) / w, y: (m[3] * u + m[4] * v + m[5]) / w };
+}
 
 /** Where column line i crosses row line j, in game pixels. */
 function cross(i: number, j: number): Pt {
-  const c = COLUMN_LINES[i];
-  const r = ROW_LINES[j];
-  // Column: x = a + b * y; row: y = p + q * x (plate px). Solve the pair.
-  const b = (c.near - c.far) / (NEAR_Y - FAR_Y);
-  const a = c.far - b * FAR_Y;
-  const q = (r.r - r.l) / (ROW_XR - ROW_XL);
-  const p = r.l - q * ROW_XL;
-  const x = (a + b * p) / (1 - b * q);
-  const y = p + q * x;
-  return { x: PLATE_AT.x + x, y: PLATE_AT.y + y };
+  return gridPoint(i / GRID.cols, j / GRID.rows);
 }
 
 /** Every lattice node, row line by row line, made once. */
@@ -130,43 +124,17 @@ export function blockCentre(col: number, row: number, w: number, h: number): Pt 
   return { x: (q[0].x + q[1].x + q[2].x + q[3].x) / 4, y: (q[0].y + q[1].y + q[2].y + q[3].y) / 4 };
 }
 
-/** The x of column line i at screen height y. */
-function columnX(i: number, y: number): number {
-  const c = COLUMN_LINES[i];
-  const py = y - PLATE_AT.y;
-  return PLATE_AT.x + c.far + ((c.near - c.far) * (py - FAR_Y)) / (NEAR_Y - FAR_Y);
-}
-
-/** The y of row line j at screen x. */
-function rowY(j: number, x: number): number {
-  const r = ROW_LINES[j];
-  const px = x - PLATE_AT.x;
-  return PLATE_AT.y + r.l + ((r.r - r.l) * (px - ROW_XL)) / (ROW_XR - ROW_XL);
-}
-
 /**
  * Where a screen point is on the grid, in fractional cells (u across the columns, v down the rows),
- * or null off the grid. Plain loops over the lines; nothing allocates but the answer.
+ * or null off the grid. Nothing allocates but the answer.
  */
 export function gridAt(x: number, y: number): { u: number; v: number } | null {
-  if (y < rowY(0, x) || y > rowY(GRID.rows, x)) return null;
-  let v = -1;
-  for (let j = 0; j < GRID.rows; j++) {
-    const y0 = rowY(j, x);
-    const y1 = rowY(j + 1, x);
-    if (y >= y0 && y <= y1) {
-      v = j + (y - y0) / (y1 - y0);
-      break;
-    }
-  }
-  if (v < 0) return null;
-  if (x < columnX(0, y) || x > columnX(GRID.cols, y)) return null;
-  for (let i = 0; i < GRID.cols; i++) {
-    const x0 = columnX(i, y);
-    const x1 = columnX(i + 1, y);
-    if (x >= x0 && x <= x1) return { u: i + (x - x0) / (x1 - x0), v };
-  }
-  return null;
+  const m = BACK;
+  const w = m[6] * x + m[7] * y + m[8];
+  const u = (m[0] * x + m[1] * y + m[2]) / w;
+  const v = (m[3] * x + m[4] * y + m[5]) / w;
+  if (!(u >= 0 && u <= 1 && v >= 0 && v <= 1)) return null;
+  return { u: u * GRID.cols, v: v * GRID.rows };
 }
 
 /** The cell under a screen point, or null off the grid. */

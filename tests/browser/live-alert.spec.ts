@@ -1,5 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { AlertHistoryEntry } from '../../src/scenes/hud/AlertView';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { dismissJobCard, hud, openBoard, reach, shot, snap } from './live/reach';
 
 // The gauges lane's alert band (gauges-3), asserted on window.__neonTest.state.hud.alert: one alert at
@@ -7,6 +8,7 @@ import { dismissJobCard, hud, openBoard, reach, shot, snap } from './live/reach'
 // climbing with the retries.
 
 const RAIDING = ['raid', 'refresh', 'flicker'];
+const C = BROWNOUT.challenges;
 
 test('the alert band: number first, RAID only as a tag, and the raid number climbs past 250 with retries (speed 5)', async ({
   page,
@@ -64,7 +66,8 @@ test('the alert band: number first, RAID only as a tag, and the raid number clim
     expect(plate.missing).toEqual([]);
     expect(plate.maxScale).toBeGreaterThan(0);
     expect(plate.maxScale).toBeLessThanOrEqual(1);
-    expect(plate.rect).toEqual({ x: 460, y: 8, w: 1040, h: 84 });
+    // Layout A2 (Rolando, 30 Oct) widened the alert zone to sit over the wider board (was 460, 1040).
+    expect(plate.rect).toEqual({ x: 450, y: 8, w: 1070, h: 84 });
     // The map is the painted city grid in its frame; CUT OFF sits on the red tag chip in the raid.
     const map = h.map!;
     expect(map.base).toBe('hud/city-grid');
@@ -191,20 +194,20 @@ test('deck keys: 1 and 2 on the keyboard act like the keys, and wait for the car
     expect((await presses(page)).filter((p) => p.acted && p.key === 'one')).toHaveLength(0);
     expect((await hud(page)).deck!.pressed).toBe(before);
     await reach(page, 'rescue', { timeout: 60_000 });
-    await expect.poll(async () => (await hud(page)).deck?.regroup, { timeout: 10_000 }).toBe('ready');
+    // Session 0 hands over no Regroup (BROWNOUT.regroup.inSession), so key 1 stays empty.
+    expect((await hud(page)).deck?.regroup).toBe('hidden');
   });
 
-  await test.step('after the scene, 1 runs Regroup once', async () => {
+  await test.step('after the scene, 1 does nothing: no Regroup in Session 0', async () => {
     const p = await pressDigit(page, '1');
-    expect(p).toMatchObject({ key: 'one', via: 'key', acted: true });
-    await expect.poll(async () => (await hud(page)).regroup.spent, { timeout: 30_000 }).toBe(true);
-    expect((await pressDigit(page, '1')).acted).toBe(false);
+    expect(p).toMatchObject({ key: 'one', via: 'key', acted: false });
+    expect((await hud(page)).regroup.spent).toBe(false);
   });
 
   await test.step('paused at the midnight forecast, the keys wait', async () => {
     await expect
       .poll(async () => (await hud(page)).surge?.startsAt ?? null, { timeout: 60_000, intervals: [25] })
-      .toBe(450);
+      .toBe(C.c6);
     await page.keyboard.press('Escape');
     await expect.poll(async () => (await hud(page)).paused, { timeout: 5_000 }).toBe(true);
     const before = (await hud(page)).deck!.pressed;

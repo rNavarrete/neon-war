@@ -1,6 +1,10 @@
 import { type Page, expect, test } from '@playwright/test';
+import { BROWNOUT } from '../../src/sim/brownout';
+import { CHAT_PACE } from '../../src/scenes/hud/chatEngine';
+import { LINES } from '../../src/strings';
 import type { HudTestState } from '../../src/scenes/hud/hook';
-import { type ChatTraceTestState, chatArtOf } from '../../src/scenes/hud/ChatFeedView';
+import { type ChatTraceTestState, chatArtOf, chatPlateFor } from '../../src/scenes/hud/ChatFeedView';
+import { ZONES } from '../../src/scenes/live/layout';
 import type { AudienceTestState, ChatTestState } from '../../src/scenes/live/views/chat';
 import { hud, openBoard, reach, shot, snap } from './live/reach';
 
@@ -46,15 +50,19 @@ test('the chat opens with the phone messages, reacts to the first serve and togg
 
   h = await chatOf(page);
   const c = h.chat;
-  expect(c.stream).toContain('viewer: first try lol');
-  // Four or five rows, bottom-up inside the body (y 840-1060), none over the header.
+  // "first try lol" (C1.chat.02) posted on the stream side. Read from the feed, not the last few
+  // stream rows: a hype burst (Rolando's 30 Oct pack) can scroll it out of those before this read.
+  expect(c.feed.find((r) => r.id === 'C1.chat.02')?.chat).toBe('stream');
+  expect(LINES['C1.chat.02'].text).toBe('first try lol');
+  // Bottom-up inside the body, none over the header: four or five rows in the old 220 px body, up to
+  // sixteen in layout A2's tall chat column (y 430-1050, Rolando 30 Oct 2026).
   expect(c.shown).toBe(c.rows.length);
   expect(c.rows.length).toBeGreaterThanOrEqual(4);
-  expect(c.rows.length).toBeLessThanOrEqual(5);
+  expect(c.rows.length).toBeLessThanOrEqual(16);
   const last = c.rows[c.rows.length - 1];
-  expect(last.y + last.h).toBe(1060);
+  expect(last.y + last.h).toBe(1050);
   for (const r of c.rows) {
-    expect(r.y, r.id).toBeGreaterThanOrEqual(840);
+    expect(r.y, r.id).toBeGreaterThanOrEqual(430);
     // chat-6: the viewers' discs have landed, so a stream row shows its painted avatar, not the cyan ring.
     if (r.chat === 'stream') {
       expect(r).toMatchObject({ ring: null, nameColor: 'cyan' });
@@ -64,9 +72,10 @@ test('the chat opens with the phone messages, reacts to the first serve and togg
   // The panel sits in its zone (hud.bounds, page pixels) and the zone is no placeholder any more.
   const panel = h.bounds.find((b) => b.id === 'chat');
   expect(panel?.visible).toBe(true);
-  // chat-6: Rolando's picks draw (the wide plate, the viewers' discs, the system glyph), and nothing
-  // on screen draws Phaser's missing texture.
-  expect(h.chatArt).toEqual({ plate: 'wide', streamAvatars: true, systemGlyph: true });
+  // chat-6: Rolando's picks draw (the viewers' discs, the system glyph), and nothing on screen draws
+  // Phaser's missing texture. The layout A2 column (410x680, Rolando 30 Oct 2026) is too tall for the
+  // wide plate to fill without upscaling, so it draws the see-through code glass in its colours.
+  expect(h.chatArt).toEqual({ plate: 'glass', streamAvatars: true, systemGlyph: true });
   const drawn = await page.evaluate(
     () => (window.__neonTest!.state as unknown as { art?: { missing: string[] } }).art?.missing ?? null,
   );
@@ -172,9 +181,9 @@ class ChatLog {
   }
 
   /** The most rows posted in any `seconds` of chat clock, counting rows from `from` on. */
-  maxInWindow(seconds: number, from: number): number {
+  maxInWindow(seconds: number, from: number, paced = false): number {
     const at = this.rows
-      .filter((r) => r.at >= from)
+      .filter((r) => r.at >= from && (!paced || r.cause !== 'hype'))
       .map((r) => r.at)
       .sort((a, b) => a - b);
     let most = 0;
@@ -207,7 +216,11 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
   const first = await openBoard(page, { speed: 4 });
   let log = new ChatLog();
   const art = await page.evaluate(() => window.__neonTest!.state.hud?.chatArt ?? null);
-  expect(art).toEqual(chatArtOf());
+  // Layout A2 (Rolando, 30 Oct): the tall left chat column is taller than the wide painted plate can
+  // fill without upscaling, so the plate the chat draws is the one chatPlateFor picks for its zone.
+  const want = chatArtOf();
+  expect(art).toEqual({ ...want, plate: chatPlateFor(want.plate, ZONES.chat) });
+  expect(art?.plate).toBe('glass');
 
   // C1: the autopilot places the first server; a stream reaction to it posts within 6 s, and the
   // first served packets post C1.chat.01 and C1.chat.02.
@@ -276,21 +289,23 @@ test('the chat reacts to the placed server, then the surge: complaint, calling, 
   expect(warnings).toEqual([]);
   expect(first.errors).toEqual([]);
   expect(errors).toEqual([]);
-  // Across the surge the chat never posts more than 10 rows (one of tolerance) in any 30 s of chat
-  // clock, scripted rows included. Last, so every check above has run when it fails.
-  expect(log.maxInWindow(30, surgeClock - 30), log.ids()).toBeLessThanOrEqual(11);
+  // Across the surge the paced chat never posts more than its window cap (one of tolerance) in any
+  // 30 s of chat clock, scripted rows included. Changed with Rolando's hype pack (30 Oct 2026): the cap
+  // went from 10 to CHAT_PACE.windowMax (14) and a hype burst's W rows sit on top of the paced feed,
+  // so they are not counted. Last, so every check above has run when it fails.
+  expect(log.maxInWindow(30, surgeClock - 30, true), log.ids()).toBeLessThanOrEqual(CHAT_PACE.windowMax + 1);
 });
 
 test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers', async ({ page }) => {
   test.setTimeout(60_000);
-  // At speed 20 one slow frame (about 2 s of sim) can step from before 320 straight to the crew's
-  // arrival at about 322.5, skipping the leave's window: speed 4 gives the window several frames.
+  // At speed 20 one slow frame (about 2 s of sim) can step from before C4 + 20 straight to the crew's
+  // arrival soon after, skipping the leave's window: speed 4 gives the window several frames.
   const { errors } = await openBoard(page, { speed: 4 });
   await reach(page, 'c1');
   // Enter the district surge 18 s in with trust still full, so Lux is alone (no rescue yet) when the
-  // surge-window lines play from 320. The leave needs the crew to be late, which the autopilot's
-  // night never lets happen (its rescue comes at about 309).
-  await page.evaluate(() => window.__neonStory!.setNow(318));
+  // surge-window lines play from C4 + 20. The leave needs the crew to be late, which the autopilot's
+  // night never lets happen (its rescue comes about 10 s into the surge).
+  await page.evaluate((t) => window.__neonStory!.setNow(t), BROWNOUT.challenges.c4 + 18);
   const log = new ChatLog();
   const leave = () => log.rows.find((r) => r.id === 'C4.chat.03') ?? null;
   const recovery = () => {
@@ -298,7 +313,7 @@ test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers',
     if (!l) return null;
     return log.rows.find((r) => r.at > l.at && (r.thanks || r.id === 'fill.block.rejoin.01')) ?? null;
   };
-  // The jump lands a C1 board in the surge, so a box can overheat before 320 and a rewind screen
+  // The jump lands a C1 board in the surge, so a box can overheat before C4 + 20 and a rewind screen
   // hold the run (seen on CI). Click any such screen on, as play would; never the crew's C5.
   const deadline = Date.now() + 30_000;
   while (leave() === null) {

@@ -1,6 +1,6 @@
 # Recorded voices
 
-Every spoken line of Session 0 (85 lines: the scene lines and the barks of `docs/SCRIPT.md`) has
+Every spoken line of Session 0 (131 lines: the scene lines and the barks of `docs/SCRIPT.md`) has
 a recorded clip in Japanese and in English. This page covers where the clips come from, how to
 re-record one and which takes are out of date. How the game plays them (channels, the duck, one
 voice at a time, lazy groups) is in `docs/AUDIO.md`.
@@ -20,6 +20,12 @@ as delivery, not as words). `log.jsonl` there records one row per take.
   every line's `en` take, TRIAGE's included (`src/game/voice.ts`).
 - `tests/fixtures/voice-recorded-lines.json` is a copy of the `lines.json` the takes were made
   from. Refresh it whenever you re-record.
+
+Lux's 26 board lines (30 Oct 2026, `C1.lux.placed` to `C7.lux.count`) were recorded the same way, with the
+same Lux voices, from the project's cloud session at Rolando's request. The same session then
+re-recorded the 23 stale takes and recorded the 20 coach nudges (30 Oct 2026, after Rolando heard
+the TV say "ten minutes" over a "five minutes" caption), from
+`redo-lines-2026-10-30.json` in the voice pipeline folder.
 
 ## The manifest
 
@@ -55,11 +61,18 @@ would be the wrong voice.
 Lines whose words changed in `src/strings.ts` since they were recorded. Words are compared without
 the performance tags, the stage directions in brackets and quotes.
 
-- `C1.triage.01`: "Ooh, a dial!" became "Ooh, a card!" when the estimate dial was removed. The
-  old take still plays until it is re-recorded.
+None. `C0.grandma.01` was re-recorded with its new words (30 Oct 2026).
 
 Two lines differ only in stage directions written into the text (`C5.rei.cut` has "(beat)",
 `C5.rei.04` has "(to Lux)"); the spoken words match the takes.
+
+## Not recorded yet
+
+Spoken lines added since the last recording session. They show as text with no voice (the mixer
+lists them in `shell.voice.missing`) until they are recorded and added to the manifest.
+
+None. The cold open's check-in beat (`C0.triage.01`, `C0.lux.03`, `C0.triage.02`) was recorded on
+30 Oct 2026.
 
 ## Speaker changed
 

@@ -2,6 +2,9 @@ import script from '../docs/SCRIPT.md?raw';
 import { chatEntry, chatOf, fillerPool, seededRandom } from '../src/scenes/hud/chat';
 import {
   CHAT_PACE,
+  HYPE_BURST,
+  TRIAGE_FILLER_EVERY,
+  TRIAGE_POOL,
   type ChatEvent,
   type ChatInputs,
   type ChatRow,
@@ -84,8 +87,9 @@ function play(
   return m;
 }
 
-/** The most posts inside any 30 s window. */
-function maxInWindow(rows: readonly ChatRow[]): number {
+/** The most paced posts inside any 30 s window (a hype burst's rows sit outside the window). */
+function maxInWindow(all: readonly ChatRow[]): number {
+  const rows = all.filter((r) => r.cause !== 'hype');
   let max = 0;
   for (const r of rows) {
     const n = rows.filter((q) => q.at >= r.at && q.at < r.at + CHAT_PACE.windowSeconds - 1e-9).length;
@@ -98,8 +102,8 @@ describe('stepChat identity', () => {
   it('returns the identical state and NO_POSTS on a frame with no edges or events', () => {
     const m = sim(0);
     const s = m.s;
-    // The first filler is due 6..10 s in: every frame before it changes nothing.
-    for (let c = DT; c < 5.9; c += DT) {
+    // The first filler is due 2..4 s in: every frame before it changes nothing.
+    for (let c = DT; c < 1.9; c += DT) {
       const step = stepChat(s, { ...CALM, clock: c }, [], m.rand);
       expect(step.state).toBe(s);
       expect(step.posts).toBe(NO_POSTS);
@@ -172,7 +176,7 @@ describe('scripted ids and pace', () => {
     // Its reaction is cooling: the generic pool does not double it.
     expect(s.cooldown[SCRIPTED_REACTION['C1.chat.01']!]).toBeCloseTo(1.1 + REACTIONS.servedBlock.cap);
     let full = s;
-    for (let i = 0; i < 12; i++) full = { ...full, recent: [...full.recent, 2] };
+    for (let i = 0; i < CHAT_PACE.windowMax + 2; i++) full = { ...full, recent: [...full.recent, 2] };
     // The cap counts scripted rows (chat-5): over a full window the row waits, then posts as it frees.
     const over = postScripted(full, 'C1.chat.02', 2.1, m.rand);
     expect(over.posts).toBe(NO_POSTS);
@@ -182,10 +186,11 @@ describe('scripted ids and pace', () => {
     expect(freed.posts[0]).toMatchObject({ scripted: true, at: 32.1 });
   });
 
-  it('keeps the minimum gap by error state: 2.5 / 1.8 / 1.2 s', () => {
+  it('keeps the minimum gap by error state: 1.8 / 1.5 / 1.2 s (hype rows sit on top)', () => {
+    expect(CHAT_PACE.minGap).toEqual({ ok: 1.8, slow: 1.5, down: 1.2 });
     for (const [share, gap] of [
-      [0, 2.5],
-      [0.3, 1.8],
+      [0, 1.8],
+      [0.3, 1.5],
       [0.6, 1.2],
     ] as const) {
       const m = play(sim(0), 0, 3, () => ({}));
@@ -205,13 +210,14 @@ describe('scripted ids and pace', () => {
         (r) => r.cause !== 'filler' && r.cause !== 'errorsRising' && r.cause !== 'errorsHeavy',
       );
       expect(reactions.length).toBeGreaterThanOrEqual(2);
-      for (let i = 1; i < m.rows.length; i++) {
-        expect(m.rows[i].at - m.rows[i - 1].at).toBeGreaterThanOrEqual(gap - 1e-9);
+      const paced = m.rows.filter((r) => r.cause !== 'hype');
+      for (let i = 1; i < paced.length; i++) {
+        expect(paced[i].at - paced[i - 1].at).toBeGreaterThanOrEqual(gap - 1e-9);
       }
     }
   });
 
-  it('holds 4 in the queue, drops any older than 6 s, and posts at most 10 in 30 s', () => {
+  it('holds 4 in the queue, drops any older than 6 s, and paces at most windowMax in 30 s', () => {
     const m = sim(0);
     const six: ChatEvent[] = [
       occ('placed', 1, 'a'),
@@ -222,13 +228,13 @@ describe('scripted ids and pace', () => {
     ];
     const s = stepChat({ ...m.s, lastPostAt: 1 }, { ...CALM, clock: 1 }, six, m.rand).state;
     expect(s.queue).toHaveLength(CHAT_PACE.queueMax);
-    // Gap 2.5 s: posts at 3.5, 6, then the rest are older than 6 s by their turn.
+    // Gap 1.8 s: a few post, then the rest are older than 6 s by their turn.
     const run = play({ s, rows: [], rand: m.rand }, 1, 12, () => ({}));
-    const fromQueue = run.rows.filter((r) => r.cause !== 'filler');
+    const fromQueue = run.rows.filter((r) => r.cause !== 'filler' && r.cause !== 'hype');
     expect(fromQueue.length).toBeLessThan(CHAT_PACE.queueMax);
     for (const r of fromQueue) expect(r.at - 1).toBeLessThanOrEqual(CHAT_PACE.staleSeconds + 1e-9);
 
-    // A flood at heavy errors (gap 1.2 s) for 60 s never passes 10 posts in any 30 s.
+    // A flood at heavy errors (gap 1.2 s) for 60 s never passes windowMax paced posts in any 30 s.
     const kinds: OccurrenceKind[] = ['placed', 'wired', 'rescued', 'skipped', 'held'];
     const flood = play(
       sim(0),
@@ -441,7 +447,12 @@ describe('reactions from the Frame’s edges', () => {
     play(m, 0, 2, () => ({ served: 0, servingBoxes: 0 }));
     expect(m.rows).toEqual([]);
     play(m, 2, 8, () => ({}));
-    expect(m.rows.slice(0, 2).map((r) => [r.cause, r.chat])).toEqual([
+    expect(
+      m.rows
+        .filter((r) => r.cause !== 'hype')
+        .slice(0, 2)
+        .map((r) => [r.cause, r.chat]),
+    ).toEqual([
       ['served', 'block'],
       ['served', 'stream'],
     ]);
@@ -452,6 +463,14 @@ describe('reactions from the Frame’s edges', () => {
 });
 
 describe('scripted extras', () => {
+  it('a neighbour who left posts none of her scripted lines either (Mrs Okafor\'s "it\'s gone again")', () => {
+    const m = sim(0);
+    const s = postScripted(m.s, 'C4.chat.03', 1, m.rand).state;
+    const late = postScripted(s, 'C4.chat.01', 2, m.rand);
+    expect(late.posts).toBe(NO_POSTS);
+    expect(late.state.scripted).toContain('C4.chat.01');
+  });
+
   it('a neighbour who left never speaks in filler; the dark direction silences without a row', () => {
     const m = sim(0);
     let s = postScripted(m.s, 'C4.chat.03', 1, m.rand).state;
@@ -469,11 +488,12 @@ describe('scripted extras', () => {
     expect(back.silenced).toBe(false);
   });
 
-  it('toggles BLOCK ONLY and shows the newest five rows', () => {
+  // Sixteen rows since the layout A chat column (Rolando, 30 Oct 2026); five before.
+  it('toggles BLOCK ONLY and shows the newest sixteen rows', () => {
     const m = play(sim(0), 0, 120, () => ({}));
     const all = visibleRows(m.s);
-    expect(all.length).toBe(5);
-    expect(all[4]).toBe(m.s.feed[m.s.feed.length - 1]);
+    expect(all.length).toBe(16);
+    expect(all[15]).toBe(m.s.feed[m.s.feed.length - 1]);
     const blockOnly = toggleFilter(m.s);
     expect(blockOnly.filter).toBe('block');
     expect(visibleRows(blockOnly).every((r) => r.chat === 'block')).toBe(true);
@@ -534,9 +554,10 @@ describe('the chat anchor lines (chat-2)', () => {
     'estimate',
   ];
 
-  it('has about 48 lines, and Object.keys(LINES) equals the SCRIPT.md id set, word for word', () => {
-    expect(rows.length).toBeGreaterThanOrEqual(44);
-    expect(rows.length).toBeLessThanOrEqual(56);
+  it('has about 100 lines, and Object.keys(LINES) equals the SCRIPT.md id set, word for word', () => {
+    // 50 from the chat lane, 47 more for the tutorial pass (Rolando, 29 Oct 2026: more live chat), and
+    // 46 from the hype pack (Rolando, 30 Oct 2026: "way more hearts, way more W's", TRIAGE's fans).
+    expect(rows.length).toBe(143);
     expect(Object.keys(LINES).sort()).toEqual([...scriptIds].sort());
     for (const r of rows) {
       const id = r[0] as LineId;
@@ -587,18 +608,19 @@ describe('the chat anchor lines (chat-2)', () => {
     }
   });
 
-  it('has fill.block.rejoin.01 (Mrs Okafor rejoins) and no new ok, slow or down pool', () => {
+  it('has fill.block.rejoin.01 (Mrs Okafor rejoins) and no ok, slow or down pool in the chat lane', () => {
     expect(rows.map((r) => r[0])).toContain('fill.block.rejoin.01');
     expect(LINES['fill.block.rejoin.01'].text).toContain('Mrs Okafor');
     expect(LINES['fill.block.rejoin.01'].speaker).toContain('(system)');
     for (const r of rows) expect(r[0].split('.')[2], r[0]).not.toMatch(/^(ok|slow|down)$/);
-    // The pinned pool sizes in tests/hud-chat.test.ts are unchanged.
-    expect(fillerPool('block', 'ok')).toHaveLength(4);
-    expect(fillerPool('block', 'slow')).toHaveLength(3);
-    expect(fillerPool('block', 'down')).toHaveLength(2);
-    expect(fillerPool('stream', 'ok')).toHaveLength(3);
-    expect(fillerPool('stream', 'slow')).toHaveLength(2);
-    expect(fillerPool('stream', 'down')).toHaveLength(2);
+    // The filler pools (the Chat filler table, not this lane), pinned as in tests/hud-chat.test.ts.
+    expect(fillerPool('block', 'ok')).toHaveLength(10);
+    expect(fillerPool('block', 'slow')).toHaveLength(5);
+    expect(fillerPool('block', 'down')).toHaveLength(4);
+    // The stream's pools grew with the hype pack (Rolando, 30 Oct 2026).
+    expect(fillerPool('stream', 'ok')).toHaveLength(21);
+    expect(fillerPool('stream', 'slow')).toHaveLength(12);
+    expect(fillerPool('stream', 'down')).toHaveLength(13);
   });
 
   it('posts the rejoin as a system row once calm holds after Mrs Okafor left', () => {
@@ -611,5 +633,76 @@ describe('the chat anchor lines (chat-2)', () => {
     const rejoin = m.rows.find((r) => r.id === 'fill.block.rejoin.01');
     expect(rejoin).toMatchObject({ system: true, cause: 'recovered', chat: 'block', who: 'system' });
     expect(m.s.left).toEqual([]);
+  });
+});
+
+describe("the hype (Rolando, 30 Oct 2026: way more hearts, W's, emoji and TRIAGE)", () => {
+  it('the first serve pours 6 to 10 win lines in about 2 s, no line twice, then settles', () => {
+    for (const seed of [1, 2, 3, 4]) {
+      const rand = seededRandom(seed);
+      const m: Sim = { s: initialChat(0, rand), rows: [], rand };
+      play(m, 0, 1, () => ({ served: 0, servingBoxes: 0 }));
+      expect(m.rows.filter((r) => r.cause === 'hype')).toEqual([]);
+      m.rows.length = 0;
+      play(m, 1, 6, () => ({ served: 30, servingBoxes: 1 }));
+      const hype = m.rows.filter((r) => r.cause === 'hype');
+      expect(hype.length).toBeGreaterThanOrEqual(HYPE_BURST.min);
+      expect(hype.length).toBeLessThanOrEqual(HYPE_BURST.max);
+      expect(new Set(hype.map((r) => r.id)).size).toBe(hype.length);
+      for (const r of hype) expect(r.id.startsWith(HYPE_BURST.pool), r.id).toBe(true);
+      expect(hype.at(-1)!.at - hype[0].at).toBeLessThanOrEqual(HYPE_BURST.every * HYPE_BURST.max + 1e-9);
+      // Settled: a later calm stretch has no more hype.
+      m.rows.length = 0;
+      play(m, 6, 20, () => ({ served: 30, servingBoxes: 1 }));
+      expect(m.rows.filter((r) => r.cause === 'hype')).toEqual([]);
+    }
+  });
+
+  it('a rescue and a held midnight burst too; a silenced chat never does', () => {
+    for (const kind of ['rescued', 'held'] as const) {
+      const m = sim(0, 5);
+      play(
+        m,
+        0,
+        4,
+        () => ({}),
+        (c, i) => (i === 1 ? [occ(kind, c)] : []),
+      );
+      expect(m.rows.filter((r) => r.cause === 'hype').length).toBeGreaterThanOrEqual(HYPE_BURST.min);
+    }
+    const m = sim(0, 5);
+    const dark: ChatEvent = { kind: 'occurrence', occurrence: { kind: 'dark', at: 1 } as Occurrence };
+    play(
+      m,
+      0,
+      4,
+      () => ({}),
+      (c, i) => (i === 1 ? [dark, occ('rescued', c)] : []),
+    );
+    expect(m.rows.filter((r) => r.cause === 'hype')).toEqual([]);
+  });
+
+  it('every win and TRIAGE line has an emoji, a W or a heart somewhere in the pools, and fits one line', () => {
+    const win = (Object.keys(LINES) as LineId[]).filter((id) => id.startsWith(HYPE_BURST.pool));
+    const fans = (Object.keys(LINES) as LineId[]).filter((id) => id.startsWith(TRIAGE_POOL));
+    expect(win.length).toBeGreaterThanOrEqual(20);
+    expect(fans.length).toBeGreaterThanOrEqual(10);
+    expect(win.filter((id) => /\bW\b/.test(LINES[id].text)).length).toBeGreaterThanOrEqual(5);
+    expect(win.filter((id) => /❤️|💙/.test(LINES[id].text)).length).toBeGreaterThanOrEqual(3);
+    for (const id of fans) expect(LINES[id].text.toLowerCase(), id).toContain('triage');
+    for (const id of [...win, ...fans]) expect(LINES[id].text.length, id).toBeLessThanOrEqual(34);
+  });
+
+  it("one filler line in five is from TRIAGE's fans, in any state", () => {
+    for (const errorShare of [0, 0.3, 0.6]) {
+      const m = play(sim(0, 3), 0, 90, () => ({ errorShare }));
+      const filler = m.rows.filter((r) => r.cause === 'filler');
+      expect(filler.length).toBeGreaterThanOrEqual(2 * TRIAGE_FILLER_EVERY);
+      filler.forEach((r, i) =>
+        expect(r.id.startsWith(TRIAGE_POOL), `${i}: ${r.id}`).toBe(
+          i % TRIAGE_FILLER_EVERY === TRIAGE_FILLER_EVERY - 1,
+        ),
+      );
+    }
   });
 });

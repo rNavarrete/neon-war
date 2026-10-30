@@ -3,7 +3,7 @@
 // whole session: failures, the rescue, Regroup, rewinds, midnight). Not pure itself: it is the
 // boundary between the pure sim and Phaser, and it turns changes in the sim into bus events.
 
-import { type Flow, connect, decommission, disconnect, wireKey } from '../sim/board';
+import { type Flow, connect, decommission, disconnect, move, wireKey } from '../sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../sim/brownout';
 import { type BannerChoice, placeServer } from '../sim/economy';
 import { type DebriefNumbers, type Play, type PlayResult, createPlay, debriefNumbers } from '../sim/play';
@@ -96,7 +96,7 @@ export class Run {
     return this.play.session;
   }
 
-  /** Seconds since the clock opened at 23:51:30. Setting it jumps the clock (the cold open hands over at C1). */
+  /** Seconds since the clock opened at 23:54:25. Setting it jumps the clock (the cold open hands over at C1). */
   get now(): number {
     return this.play.t;
   }
@@ -219,6 +219,13 @@ export class Run {
     );
   }
 
+  /** Pick a placed part up and set it down with its anchor at `slot`: free, instant, wires kept. */
+  move(id: string, slot: string): ActionResult {
+    return this.applyBoard(move(this.session.board, id, slot), () =>
+      bus.emit('action', { type: 'move', id, slot }),
+    );
+  }
+
   cut(from: string, to: string): ActionResult {
     return this.applyBoard(disconnect(this.session.board, from, to), () =>
       bus.emit('action', { type: 'cut', from, to }),
@@ -258,7 +265,7 @@ export class Run {
     return this.apply(rewind(this.play), () => {});
   }
 
-  /** In-world clock at `now`, as hh:mm:ss (23:51:30 at 0, 00:00:00 at midnight). */
+  /** In-world clock at `now`, as hh:mm:ss (23:54:25 at 0, 00:00:00 at midnight). */
   clock(now = this.now): string {
     const [h, m, s] = BROWNOUT.clock.opensAt.split(':').map(Number);
     const total = (((h * 3600 + m * 60 + s + Math.floor(now)) % 86400) + 86400) % 86400;

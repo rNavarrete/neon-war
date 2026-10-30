@@ -26,35 +26,54 @@ Twelve rects `{x, y, w, h}` in game pixels. No two overlap; all lie inside 1920x
 | Zone        |    x |   y |    w |   h | Lane    | What it holds                                              |
 | ----------- | ---: | --: | ---: | --: | ------- | ---------------------------------------------------------- |
 | `title`     |    0 |   0 |  440 | 100 | gauges  | Lux's avatar, the stream title, the viewer count           |
-| `alert`     |  460 |   8 | 1040 |  84 | gauges  | The one-at-a-time alert band: surge, fall, dip             |
-| `clock`     | 1520 |   0 |  400 | 100 | gauges  | The in-world clock, the countdown, trust and credits       |
-| `map`       |   16 | 110 |  408 | 310 | gauges  | The city map with the block's dots                         |
-| `cam`       |   16 | 430 |  408 | 270 | luxcam  | Lux's cam frame                                            |
-| `gauge`     |   16 | 710 |  408 | 170 | gauges  | The demand gauge                                           |
-| `scope`     |   16 | 890 |  408 | 180 | gauges  | The scope: the chart with the demand and capacity lines    |
-| `feed`      |  455 | 110 | 1455 | 530 | board   | The board: gateway, balancer, rack, database, packets      |
-| `comms`     |  455 | 645 | 1455 | 150 | comms   | The comms band: the crew's slots and the current line      |
-| `inventory` |  455 | 800 | 1055 | 165 | board   | The tray of parts                                          |
-| `deck`      |  455 | 970 | 1055 | 105 | gauges  | The deck of keys and the headroom bar                      |
-| `chat`      | 1525 | 800 |  385 | 275 | chat    | Lux's stream chat                                          |
+| `alert`     |  450 |   8 | 1070 |  84 | gauges  | The one-at-a-time alert band: surge, fall, dip             |
+| `clock`     | 1566 |   0 |  344 | 125 | gauges  | The in-world clock on its painted plate, the pause button  |
+| `map`       | 1566 | 813 |  344 | 260 | gauges  | The city map with the block's dots, under the gauge        |
+| `cam`       |    6 | 110 |  410 | 270 | luxcam  | Lux's cam frame, her lines captioned on it                 |
+| `gauge`     | 1566 | 545 |  344 | 260 | gauges  | The demand gauge, the one demand widget (smaller since A2) |
+| `feed`      |  426 | 102 | 1128 | 790 | board   | The board on Lux's rooftop (table D), the skyline above it |
+| `comms`     | 1566 | 135 |  344 | 400 | comms   | The cam of whoever is talking to Lux, popping in and out   |
+| `inventory` |  426 | 904 | 1000 | 156 | board   | The tray of parts, down to the bottom edge                 |
+| `deck`      | 1434 | 904 |  120 | 156 | gauges  | The deck's keys, stacked right of the tray, shown when live |
+| `chat`      |    6 | 390 |  410 | 680 | chat    | Lux's stream chat, nearly full height                      |
 
-The board's areas come straight from the table: `rectToArea(ZONES.feed)` is
-`{left: 455, right: 1910, top: 110, bottom: 640}` and `rectToArea(ZONES.inventory)` is
+Layout version 2 is layout A2 (Rolando, 30 Oct 2026): three columns. Lux's cam and her stream
+chat fill a slim left column; the board sits in the middle with the city's sky above it and the tray
+and keys under it; the cam of whoever is talking to Lux pops in and out at the top of the right
+column, over the smaller gauge and the city map. The comms strip, and the REGROUP and CUT boxes, are
+gone: a key shows only while it can be pressed, and Lux's own lines are captioned on her cam.
+
+Option 2 (Rolando, 30 Oct 2026, "too much wasted space"): the clock sits on its painted plate
+(`art/hud/clock-plate.webp`, his pick) at the top of the right column, and the caller cam, now
+400 tall with a 230 tall tile that keeps the last caller up, the gauge and the map fill the column
+to the bottom edge. Later that day he asked for the city map to match the gauge, so it is 344x260 like
+the gauge and the caller cam gave up 100 px. The board is table D, his pick: the table standing on Lux's wet rooftop, painted
+from a steeper camera, the whole scene covering the feed and the grid drawn in code on its glass
+(`src/scenes/board/glass.ts`, `cells.ts`). The tray runs to the bottom edge with the deck's keys
+stacked right of it.
+
+The board draws in its own space, the boxes its table was painted for: `FEED_WORLD`
+`{x: 455, y: 110, w: 1455, h: 530}` and `TRAY_WORLD` `{x: 455, y: 800, w: 1055, h: 165}`. Two
+cameras show them in `ZONES.feed` and `ZONES.inventory`: `FEED_VIEW` shows `FEED_SHOWN` (the feed
+with the rest of the painted sky above it, `{x: 455, y: -271, w: 1455, h: 911}`) at 1128/1455, about
+0.78, and `TRAY_VIEW` shows the tray at 1. `boardToScreen`, `screenToBoard` and `boardRectToScreen`
+convert between the two, and the board's areas are those boxes as edges: `rectToArea(FEED_WORLD)` is
+`{left: 455, right: 1910, top: 110, bottom: 640}` and `rectToArea(TRAY_WORLD)` is
 `{left: 455, right: 1510, top: 800, bottom: 965}`.
 
 ### Cards
 
 Cards are drawn over the feed only while something asks for them, and are the one thing allowed to
-cover another lane's zone. The banner, job card and dip fallback keep the centres today's
-`HudScene` uses, so every click point `tests/browser/hud.spec.ts` reads from the hook still lands.
+cover another lane's zone. The banner, job card and dip fallback are centred across the feed
+(x 990 since layout A2), and `tests/browser/hud.spec.ts` clicks them from the points the hook reports.
 There is no estimate step: the dial card and the C6 sizing prompt are gone, and nothing is drawn
 over the top right of the feed (`live-gauges.spec.ts` checks it).
 
 | Card           |    x |   y |   w |   h | Centre     | When                                                   |
 | -------------- | ---: | --: | --: | --: | ---------- | ------------------------------------------------------ |
-| `banner`       |  638 | 172 | 644 | 316 | 960, 330   | The Solace banner (1431x700 art at 0.45), in C2        |
-| `jobCard`      |  701 | 156 | 518 | 752 | 960, 532   | The C1 job card (864x1252 art at 0.6), until clicked   |
-| `dipFallback`  |  860 | 240 | 200 | 120 | 960, 300   | The power-dip warning when the board can't place it    |
+| `banner`       |  668 | 172 | 644 | 316 | 990, 330   | The Solace banner (1431x700 art at 0.45), in C2        |
+| `jobCard`      |  731 | 156 | 518 | 752 | 990, 532   | The C1 job card (864x1252 art at 0.6), until clicked   |
+| `dipFallback`  |  890 | 240 | 200 | 120 | 990, 300   | The power-dip warning when the board can't place it    |
 
 ### Helpers
 
@@ -92,10 +111,9 @@ prove none is left.
 | `clock` | `ClockView` (`src/scenes/hud/TitleView.ts`) | gauges |
 | `map`   | `MapView`                               | gauges |
 | `cam`   | `LuxCamView`                            | luxcam |
-| `gauge` | `GaugeView`                             | gauges |
-| `scope` | `ChartView`                             | gauges |
+| `gauge` | `GaugeView` (with `HeadroomView`)       | gauges |
 | `comms` | `CommsView`                             | comms  |
-| `deck`  | `DeckView` (with `HeadroomView`)        | gauges |
+| `deck`  | `DeckView`                              | gauges |
 | `chat`  | `ChatFeedView`                          | chat   |
 
 `HudScene` hosts the registry: it makes every view in `init`, calls `preload`, `create` (first, so
@@ -125,7 +143,7 @@ Every `Frame` field (`tests/live-docs.test.ts` checks this list against the inte
 
 | Field | What it holds |
 | --- | --- |
-| `now` | Sim seconds since the clock opened at 23:51:30 |
+| `now` | Sim seconds since the clock opened at 23:54:25 |
 | `clock` | The in-world clock as hh:mm:ss |
 | `speed` | The test speed multiplier (1 in play) |
 | `paused` | Something holds the board (a card, a scene, the pause menu) or a failure waits for its rewind |
@@ -135,6 +153,7 @@ Every `Frame` field (`tests/live-docs.test.ts` checks this list against the inte
 | `parts` | The parts on the board |
 | `wires` | The wires on the board |
 | `credits` | Credits in hand |
+| `tips` | The viewers' tips so far (`src/sim/tips.ts`), oldest first: TitleView plays each as a tip alert |
 | `trust` | The block's trust |
 | `offlineUntil` | Parts booting or rebooting, by id: the sim time they come back |
 | `flow` | The routing of this frame's demand over the board, read once |
@@ -234,6 +253,8 @@ against `src/game/bus.ts`):
 | `voiceEnd` | the mixer, the clip finished or was stopped | `{id}` |
 | `cue` | HudScene's host loop (above) | `{id, kind, at}` |
 | `audience` | ChatFeedView (above) | `{watching}` |
+| `coach` | HudScene, when what the tutorial coach lights changes (`src/scenes/hud/coach.ts`) | `{step, cards, parts, wire, hint}` |
+| `coachNudge` | HudScene, when the coach says a nudge (it also goes to the comms band); `nth` counts from 1 per problem | `{step, id, nth, at}` |
 | `perfSample` | HudScene, once per perf sample | `{at, fps, objects, texts, graphics}` |
 
 ### Hook sections
@@ -265,9 +286,10 @@ The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard
 | `hud.bark` | the host, from CommsView | `{current, text, history}`, the band's shown lines (the older name) |
 | `hud.luxCam` | LuxCamView | the mood, the art, `history` of moods, REC, the frame, `speaking`, `motion` |
 | `hud.alert` | AlertView | the alert up now and its kind, line, tag and text; `hint` and `hintText`, the start-of-C1 hint ("drag a SERVER card onto the grid") while no alert is up |
-| `hud.gauge`, `hud.chart` | GaugeView, ChartView | the COMING /s gauge; the scope's series over the host's `chart` |
+| `hud.gauge`, `hud.chart` | GaugeView, the HUD host | the DEMAND req/s gauge; the host's `chart` mirrors demand and capacity (the LAST 60 s chart is gone) |
 | `hud.map` | MapView | the city map's dots, raid outlines and midnight |
-| `hud.deck`, `hud.headroom`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, the room-left bar, Regroup and the laundry cut |
+| `hud.deck`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, Regroup and the laundry cut |
+| `hud.headroom` | GaugeView (HeadroomView) | the headroom line under the gauge's number (the deck's bar until 30 Oct 2026) |
 | `hud.chatArt`, `hud.chatTrace` | ChatFeedView | which chat art loaded or fell back; the trace of rows posted, with their cause |
 | `hud.measure`, `hud.taught` | `src/scenes/hud/taught.ts` | the board's wires and when the first went in; the trace of moments the night taught, for the debrief's grey lines |
 
@@ -308,7 +330,7 @@ that lane. `src/sim/` is frozen (only decision D2 could open it), and the protec
 | --- | --- | --- | --- |
 | tech | none (the host, the contract) | `src/game/run.ts`, `flow.ts`, `director.ts`, `frame.ts`, `occurrences.ts`, `bus.ts`, `mixer.ts`, `audio.ts`, `src/main.ts`, `src/testHook.ts`, `src/scenes/live/` (`layout.ts`, `view.ts`, `registry.ts`, `flags.ts`, `hook.ts`; lanes edit only their registry line), `src/scenes/HudScene.ts`, `src/scenes/hud/layout.ts`, `src/scenes/hud/hook.ts`, `src/scenes/OverlayScene.ts`, `docs/LIVE.md`, `docs/AUDIO.md` | `live-layout`, `frame`, `occurrences`, `live-flags`, `live-docs`, `mixer`, `hud-layout`; `tests/browser/live/reach.ts`, `live-skeleton`, `live-perf`, `live-tour`, `voice`, and the existing `hud`, `board`, `story`, `boot`, `shell` specs |
 | board | `feed`, `inventory` | `src/scenes/BoardScene.ts`, `src/scenes/board/` (layout, tray, view, packets, hook, crew, channel, anim, ghost, InventoryView) | `board-layout`, `board-view`, `board-packets`, `board-channel`, `board-anim`; `board-live.spec.ts` |
-| gauges | `title`, `alert`, `clock`, `map`, `gauge`, `scope`, `deck` | `src/scenes/hud/` TitleView, title, alerts, AlertView, gauge, GaugeView, headroom, HeadroomView, thresholds, cityMap, MapView, deck, DeckView, ChartView, chartRing, warnings, pending503, regroup, jobCard, format, panel | `hud-title`, `hud-alerts`, `hud-chart`, `hud-gauge`, `hud-headroom`, `hud-map`, `hud-deck`, `hud-format`; `live-gauges.spec.ts` |
+| gauges | `title`, `alert`, `clock`, `map`, `gauge`, `deck` | `src/scenes/hud/` TitleView, title, alerts, AlertView, gauge, GaugeView, headroom, HeadroomView, thresholds, cityMap, MapView, deck, DeckView, warnings, pending503, regroup, jobCard, format, panel | `hud-title`, `hud-alerts`, `hud-gauge`, `hud-headroom`, `hud-map`, `hud-deck`, `hud-format`; `live-gauges.spec.ts` |
 | comms | `comms` | `src/scenes/hud/comms.ts`, `CommsView.ts`, `locate.ts`; `src/game/voice.ts`, `settings.ts`, `settingsControls.ts`, `src/scenes/SettingsScene.ts`; the voice emits in `StoryScene.ts`, `src/story/view.ts`, `src/story/state.ts` | `hud-comms`, `game-voice`, `shell-audio`; `comms.spec.ts` |
 | chat | `chat` | `src/scenes/hud/chatEngine.ts`, `ChatFeedView.ts`, `chat.ts` | `hud-chat`, `hud-chat-engine`; `chat.spec.ts` |
 | luxcam | `cam` | `src/scenes/hud/luxcam.ts`, `LuxCamView.ts`, `src/game/portraits.ts` | `hud-luxcam`; `luxcam.spec.ts` |
@@ -350,35 +372,34 @@ No view reads the meter, and it allocates nothing per object.
 
 ### Budgets
 
-The global budget is 750 objects and 110 texts across board and HUD. `live-perf.spec.ts` checks it
+The global budget is 750 objects and 144 texts across board and HUD. `live-perf.spec.ts` checks it
 at the C4 surge and at midnight: all objects against 750, the drawn texts and all texts (hidden
-ones included) against 110, and the board's texts against 28. It also checks three more things:
+ones included) against 144, and the board's texts against 28. It also checks three more things:
 
 - Every registered view's `actual` stays within its `budget`.
 - `pools.packets` stays at or below 160.
 - The pool stops growing: two reads 5 s apart after the rescue are equal.
 
-Per zone, the text budgets sum to 110. A registered view's budget is the one it declares in code,
+Per zone, the text budgets sum to 144. A registered view's budget is the one it declares in code,
 and each row below is that declaration (`tests/live-perf-table.test.ts` checks both columns
 against the built views):
 
 | Zone / owner                                         | Texts | Objects (declared) |
 | ---------------------------------------------------- | ----: | -----------------: |
-| `title` (TitleView)                                  |     5 |                 11 |
+| `title` (TitleView)                                  |    10 |                 18 |
 | `alert` (AlertView)                                  |     4 |                 10 |
-| `clock` (ClockView)                                  |     2 |                  4 |
+| `clock` (ClockView)                                  |     2 |                  3 |
 | `map` (MapView)                                      |     3 |                 10 |
-| `cam` (LuxCamView)                                   |     2 |                 15 |
-| `gauge` (GaugeView)                                  |    10 |                 13 |
-| `scope` (ChartView)                                  |     5 |                  7 |
-| `comms` (CommsView, with the leader line)            |    13 |                 29 |
-| `deck` (DeckView with HeadroomView)                  |     8 |                 21 |
-| `chat` (ChatFeedView)                                |    17 |                 31 |
+| `cam` (LuxCamView, with Lux's caption)               |     3 |                 17 |
+| `gauge` (GaugeView with HeadroomView)                |    11 |                 14 |
+| `comms` (CommsView, with the leader line and call tile) |    13 |                 31 |
+| `deck` (DeckView)                                    |     7 |                 18 |
+| `chat` (ChatFeedView)                                |    50 |                 86 |
 | `feed` and `inventory` (BoardScene)                  |    28 |                  - |
 | Cards (HUD host: job card, banner, dip)              |    13 |                  - |
-| **Total**                                             | **110** |                  |
+| **Total**                                             | **144** |                  |
 
-The chat feed's five rows of name and words need 17 texts, so the host's cards give up 7 of their 20 to keep the total at 110. The host makes 8 of its 13 since the dial card and the sizing prompt went with the estimate step (`HOST_TEXTS` in `src/scenes/hud/cardText.ts`, `tests/hud-card-text.test.ts`, and `perf.host.texts <= 13` in `live-skeleton.spec.ts`):
+The chat feed's sixteen rows (an initial, a name and the words each, plus the title and the tag) need 50 texts. The total was 110 with a five-row chat; layout A's tall chat column (Rolando, 30 Oct 2026: a chat about half the screen) raised it to 143, Lux's caption on her cam (layout A2) to 144, and the caller cam's video tile (a screen and the speaker's face) took CommsView from 29 objects to 31; and `live-perf.spec.ts` checks the frame rate there too. The host's cards gave up 7 of their 20 when the chat first grew. The host makes 8 of its 13 since the dial card and the sizing prompt went with the estimate step (`HOST_TEXTS` in `src/scenes/hud/cardText.ts`, `tests/hud-card-text.test.ts`, and `perf.host.texts <= 13` in `live-skeleton.spec.ts`):
 
 - **Job card and banner, 7.** The C1 job card (rate, title, who, what, bar, pay line, OK) and the
   C2 Solace banner (title, body, three button words) never show together: the banner waits for the

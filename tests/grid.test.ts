@@ -5,7 +5,7 @@
 import { type Board, type Part, place } from '../src/sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../src/sim/brownout';
 import { placeServer } from '../src/sim/economy';
-import { DIP_SCRIPT, resolveDip, serverRacks } from '../src/sim/failures';
+import { DIP_SCRIPT, resolveDip } from '../src/sim/failures';
 import {
   BALANCER_SPOT,
   BOARD_CELLS,
@@ -219,7 +219,7 @@ describe('suggested spots and the crew’s splitter', () => {
   });
 });
 
-describe('racks: the midnight dip takes one rack dark', () => {
+describe('the midnight dip takes one server dark', () => {
   it('splits the table into four racks of seven columns', () => {
     expect(RACKS.map((r) => [r.id, r.from, r.to])).toEqual([
       ['A', 0, 6],
@@ -233,23 +233,27 @@ describe('racks: the midnight dip takes one rack dark', () => {
     expect(rackOf(null)).toBeNull();
   });
 
-  it('takes every server anchored in the picked rack, and only those', () => {
+  it('takes exactly one server dark, wherever the servers stand (no racks: Rolando, 30 Oct 2026)', () => {
+    // Four servers stacked in one column band: the old rack dip took all four; now one goes.
     const parts: Part[] = [
       ...START,
       server('a1', 'c3-11'),
       server('a2', 'c3-5'),
-      server('b1', 'c9-11'),
-      server('c1', 'c16-11'),
+      server('a3', 'c5-11'),
+      server('a4', 'c5-5'),
     ];
     const b = board(parts);
-    expect(serverRacks(b)).toEqual(['A', 'B', 'C']);
     const midnight = DIP_SCRIPT.find((d) => d.target === 'seeded')!;
+    const picked = new Set<string>();
     for (let seed = 0; seed < 12; seed++) {
       const dip = resolveDip(b, midnight, seed);
-      const ids = parts.filter((p) => p.kind === 'server' && rackOf(p.slot) === dip.rack).map((p) => p.id);
-      expect(dip.parts).toEqual(ids);
-      expect(dip.part).toBe(ids[0]);
+      expect(dip.parts).toHaveLength(1);
+      expect(dip.part).toBe(dip.parts![0]);
+      expect(dip.rack).toBeNull();
+      picked.add(dip.part!);
     }
+    // The seed spreads the pick over the servers.
+    expect(picked.size).toBeGreaterThan(1);
   });
 
   it('servers spread one per rack lose one box to the dip', () => {

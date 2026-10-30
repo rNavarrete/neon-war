@@ -1,13 +1,17 @@
 import { type Page, expect, test } from '@playwright/test';
-import type { ScopeTestState } from '../../src/scenes/hud/ChartView';
+import { ZONES } from '../../src/scenes/live/layout';
 import type { KeyName } from '../../src/scenes/hud/deck';
 import type { HudTestState } from '../../src/scenes/hud/hook';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { dismissJobCard, hud, openBoard, reach, shot, snap } from './live/reach';
+
+const C = BROWNOUT.challenges;
+const MIDNIGHT = BROWNOUT.clock.midnight;
 
 // The gauges lane's Live views (docs/LIVE.md), asserted on window.__neonTest.state.hud: the title
 // cluster and the clock (gauges-1), and the clear top right of the feed now the dial card is gone.
 
-test('the title cluster: waiting for the first build, then live; WATCHING has no number yet; clock left of x 1800', async ({
+test('the title cluster: waiting for the first build, then live; WATCHING has no number yet; clock left of x 1840', async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -18,10 +22,12 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
   await expect.poll(async () => (await hud(page)).title?.live, { timeout: 5_000 }).toBe('waiting');
   let h = await hud(page);
   expect(h.title!.watching).toBe(h.audience?.watching ?? null);
-  // Nothing of the title is drawn outside its zone, and nothing of the clock past x 1800.
+  // Nothing of the title is drawn outside its zone, and nothing of the clock past x 1840 (1800 before
+  // Rolando's painted clock plate, 30 Oct 2026).
   expect(h.title!.right).toBeLessThanOrEqual(440);
   expect(h.title!.clockRight).not.toBeNull();
-  expect(h.title!.clockRight!).toBeLessThanOrEqual(1800);
+  // Rolando, 30 Oct 2026 (clock plate 1): the painted plate moved the limit from x 1800 to 1840.
+  expect(h.title!.clockRight!).toBeLessThanOrEqual(1840);
   await shot(page, 'live-m2-title');
   expect(first.errors).toEqual([]);
 
@@ -41,7 +47,10 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
     const ids = h.bounds.map((b) => b.id);
     expect(ids).not.toContain('dial');
     expect(ids).not.toContain('sizing');
-    const topRight = { x: 1560, y: 120, w: 340, h: 250 };
+    // Layout A2 (Rolando, 30 Oct) put the caller column right of the feed, so the feed's top right
+    // corner is read from its zone (it was 1560, 120 when the feed ran to x 1900).
+    const feed = ZONES.feed;
+    const topRight = { x: feed.x + feed.w - 340, y: feed.y, w: 340, h: 250 };
     const canvas = await page.evaluate(() => {
       const r = document.querySelector('canvas')!.getBoundingClientRect();
       return { left: r.left, top: r.top, sx: r.width / 1920, sy: r.height / 1080 };
@@ -61,8 +70,8 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
   expect(second.errors).toEqual([]);
 });
 
-// gauges-4: the room-left bar in the deck goes red within one sim second of the district surge.
-test('the room-left bar: red within one sim second of the district surge at speed 5, in crew words', async ({
+// gauges-4: the headroom line (the deck's bar until 30 Oct 2026, now in the gauge) goes red within one sim second of the district surge.
+test('the headroom bar: red within one sim second of the district surge at speed 5, in the real terms', async ({
   page,
 }) => {
   test.setTimeout(150_000);
@@ -72,10 +81,12 @@ test('the room-left bar: red within one sim second of the district surge at spee
     .poll(async () => (await hud(page)).headroom?.wiredCapacity ?? 0, { timeout: 10_000 })
     .toBeGreaterThan(0);
   let h = await hud(page);
-  expect(h.headroom!.label).toMatch(/^ROOM LEFT -?\d+% · \d+ of \d+$|^ROOM LEFT · (OVER \+\d+\/s|NO BOX)$/);
+  expect(h.headroom!.label).toMatch(
+    /^HEADROOM -?\d+% · \d+ of \d+$|^HEADROOM · (OVER \+\d+ req\/s|NO SERVER)$/,
+  );
 
   await reach(page, 'surge', { timeout: 110_000 });
-  const surgeAt = 300;
+  const surgeAt = C.c4;
   await expect
     .poll(async () => (await hud(page)).now, { timeout: 10_000 })
     .toBeGreaterThanOrEqual(surgeAt + 1);
@@ -87,10 +98,12 @@ test('the room-left bar: red within one sim second of the district surge at spee
   expect(room.wiredCapacity).toBeGreaterThan(0);
   expect(room.pct).toBe(Math.round((1 - room.demand / room.wiredCapacity) * 100));
   expect(room.lit).toBe(0);
-  expect(room.label).toMatch(/^ROOM LEFT · OVER \+\d+\/s$/);
-  expect(room.label).not.toMatch(/head\s*room/i);
+  expect(room.label).toMatch(/^HEADROOM · OVER \+\d+ req\/s$/);
+  expect(room.label).not.toMatch(/room left|\bbox\b/i);
   expect(room.capacity).toBeCloseTo(h.sim.capacity, 0);
-  expect(room.right).toBeLessThanOrEqual(1232);
+  // Layout A2 (Rolando, 30 Oct): the gauge, and its headroom words, moved to the right column, so
+  // the words end inside the gauge zone (they ended left of the old deck key at x 1232).
+  expect(room.right).toBeLessThanOrEqual(ZONES.gauge.x + ZONES.gauge.w);
   await shot(page, 'live-m2-deck');
   expect(errors).toEqual([]);
 });
@@ -104,11 +117,12 @@ test('the room-left bar: red within one sim second of the district surge at spee
 // the spec needs no second page at speed 5.
 
 /** Words the player must not see before the debrief (docs/SCRIPT.md C8.terms). */
-const NOT_BEFORE_DEBRIEF = /head\s*room|throughput|capacity|load\s*balanc|requests per second/i;
+// Real terms on screen (Rolando, 29 Oct 2026): the old crew words must not come back.
+const NOT_BEFORE_DEBRIEF = /\bcoming\b|\broom\b|no box|\bsplitter\b/i;
 
 type LaneHud = HudTestState &
   Required<Pick<HudTestState, 'title' | 'gauge' | 'alert' | 'map' | 'headroom' | 'deck'>> & {
-    chart: ScopeTestState;
+    chart: { demand: number; capacity: number; ceiling: number; plot?: unknown };
   };
 
 /** Read hud with every gauges-lane section present. */
@@ -135,14 +149,15 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
   test.setTimeout(150_000);
   const { errors } = await openBoard(page, { speed: 20, autopilot: true });
 
-  await test.step('C1: the gauge and the scope read the real line, the room bar fills', async () => {
+  await test.step('C1: the gauge reads the real line, the room bar fills', async () => {
     await reach(page, 'c1');
     await expect.poll(async () => (await lane(page)).title.live, { timeout: 5_000 }).toBe('live');
     let h = await lane(page);
     expect(h.title.watching).toBe(h.audience?.watching ?? null);
     expect(h.title.right).toBeLessThanOrEqual(440);
     expect(h.title.clockRight).not.toBeNull();
-    expect(h.title.clockRight!).toBeLessThanOrEqual(1800);
+    // Rolando, 30 Oct 2026 (clock plate 1): the painted plate moved the limit from x 1800 to 1840.
+    expect(h.title.clockRight!).toBeLessThanOrEqual(1840);
 
     // The room band, the needle and the bar settle on one frame.
     await expect
@@ -168,11 +183,11 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
 
     const g = h.gauge;
     expect(g.visible).toBe(true);
-    expect(g.title).toBe('COMING /s');
+    expect(g.title).toBe('DEMAND req/s');
     expect(g.max).toBe(400);
     expect(g.ticks).toEqual(['0', '100', '200', '300', '400']);
     expect(g.readout).toBe(`${Math.round(g.demand)}/s`);
-    expect(g.sub).toBe(`room ${Math.round(g.capacity)}/s`);
+    expect(g.sub).toBe(`capacity ${Math.round(g.capacity)} req/s`);
     expect(g.strip).toBeNull();
     expect(g.dropped).toBe(0);
     expect(g.served).toBeGreaterThan(0);
@@ -190,20 +205,20 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(room.redSince).toBeNull();
     expect(room.lit).toBeGreaterThan(0);
     expect(room.lit).toBeLessThanOrEqual(30);
-    expect(room.label).toMatch(/^ROOM LEFT -?\d+% · \d+ of \d+$/);
-    expect(room.right).toBeLessThanOrEqual(1232);
+    expect(room.label).toMatch(/^HEADROOM -?\d+% · \d+ of \d+$/);
+    // Layout A2 (Rolando, 30 Oct): the gauge, and its headroom words, moved to the right column, so
+    // the words end inside the gauge zone (they ended left of the old deck key at x 1232).
+    expect(room.right).toBeLessThanOrEqual(ZONES.gauge.x + ZONES.gauge.w);
 
-    expect(h.chart.wiredCapacity).toBeGreaterThan(0);
-    expect(h.chart.racked).toBe(false);
-    expect(h.chart.plot).toEqual({ w: 354, h: 145 });
-    expect(h.chart.title).toBe('LAST 60 s');
+    // No LAST 60 s chart any more (30 Oct 2026): the gauge is the one demand widget.
+    expect(h.chart.plot).toBeUndefined();
 
     expect(h.map.raid).toBe(false);
     expect(h.map.neighboursCut).toBe(false);
     expect(h.map.laundryDark).toBe(false);
     expect(h.map.midnight).toBe(false);
     expect(h.map.litFloors).toBeGreaterThan(0);
-    expectCrewWordsOnly([g.title, g.readout, g.sub, g.strip, room.label, h.chart.title, h.chart.legend]);
+    expectCrewWordsOnly([g.title, g.readout, g.sub, g.strip, room.label]);
     await shot(page, 'live-gauges-c1');
 
     // M4 frame kit: each panel is one baked texture of picked pieces, none drawn above its file's size.
@@ -211,9 +226,8 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     const panels = {
       title: kit.title.panel,
       gauge: kit.gauge.panel,
-      scope: kit.chart.panel,
       map: kit.map.panel,
-      headroom: kit.headroom.panel,
+      // No headroom plate: the bar is a line in the gauge now (30 Oct 2026).
     };
     for (const [name, p] of Object.entries(panels)) {
       expect(p, `${name}.panel`).toBeTruthy();
@@ -224,10 +238,10 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       expect(p!.maxScale, name).toBeGreaterThan(0);
       expect(p!.maxScale, name).toBeLessThanOrEqual(1);
     }
-    for (const name of ['gauge', 'scope', 'map'] as const)
+    for (const name of ['gauge', 'map'] as const)
       expect(panels[name]!.pieces, name).toContain('hud/live/label-tab');
-    for (const name of ['gauge', 'headroom'] as const)
-      expect(panels[name]!.pieces, name).toContain('hud/live/divider');
+    // The gauge's divider went with its right column: the readout sits under the dial now.
+    expect(panels.gauge!.pieces).not.toContain('hud/live/divider');
     expect(kit.map.base).toBe('hud/city-grid');
     // The LIVE pill shows exactly while the dot reads live.
     expect(kit.title.pill).toBe(kit.title.live === 'live');
@@ -249,12 +263,12 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       .toBeGreaterThan(before);
     const last = (await lane(page)).deck.presses.at(-1)!;
     expect(last).toMatchObject({ key: 'two', via: 'key', acted: false });
-    expect(last.at).toBeGreaterThanOrEqual(90);
+    expect(last.at).toBeGreaterThanOrEqual(C.c2);
   });
 
   await test.step('C3: the climb is forecast number first, the map walks its pooled dots', async () => {
     const r = await reach(page, 'c3');
-    expect(r.hud.now).toBeGreaterThanOrEqual(180);
+    expect(r.hud.now).toBeGreaterThanOrEqual(C.c3);
     const h = await lane(page);
     expect(h.deck.bannerOpen).toBe(false);
     expect(h.alert.history.some((e) => e.kind === 'forecast' && e.number === 90)).toBe(true);
@@ -269,7 +283,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     // here on (window.__liveGauges9, a test-only global the game never reads), the key is clicked on
     // the first frame the deck offers the cut, and the asserts run on the frames it kept.
     const key = (await lane(page)).deck.keys.two;
-    await page.evaluate(() => {
+    await page.evaluate((c4) => {
       type H = {
         now: number;
         paused: boolean;
@@ -293,7 +307,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       const look = (): void => {
         const st = window.__neonTest!.state as unknown as { hud: H; story?: { active: boolean } };
         const h = st.hud;
-        if (h.now >= 295 && rec.trail.length < 400)
+        if (h.now >= c4 - 5 && rec.trail.length < 400)
           rec.trail.push(
             `${h.now.toFixed(1)} ${h.paused ? 'held' : 'run'} ${h.alert?.kind} ${h.gauge?.strip} ` +
               `${Math.round(h.gauge?.dropped ?? 0)} ${h.headroom?.state} ${h.deck?.cut}`,
@@ -310,11 +324,11 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
         )
           rec.over = h;
         if (!rec.cut && h.laundry.cut && h.deck?.cut === 'done' && h.map?.laundryDark) rec.cut = h;
-        if (h.now >= 300 && st.story?.active) rec.scene = true;
+        if (h.now >= c4 && st.story?.active) rec.scene = true;
         if (!rec.scene && performance.now() < end) requestAnimationFrame(look);
       };
       look();
-    });
+    }, C.c4);
     // reach runs the night on to the surge moment alongside; the click does not wait for its polling.
     const reaching = reach(page, 'surge');
     // The first frame the deck offers the cut: click it at once.
@@ -334,7 +348,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     await page.mouse.click(key.x, key.y);
     await shot(page, 'live-gauges-surge');
     const reached = await reaching;
-    expect(reached.hud.now).toBeGreaterThanOrEqual(300);
+    expect(reached.hud.now).toBeGreaterThanOrEqual(C.c4);
     type Rec = {
       ready: unknown;
       raid: unknown;
@@ -397,7 +411,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(a.headline).toMatch(/^\d+\/s · NEIGHBOURS REROUTED HERE$/);
     expect(a.headline).not.toContain('RAID');
     expect(a.shownAt).not.toBeNull();
-    expect(a.shownAt!).toBeGreaterThanOrEqual(290);
+    expect(a.shownAt!).toBeGreaterThanOrEqual(C.c4 - 10);
     expect(a.retry).toBeGreaterThanOrEqual(0);
     expect(a.offset).toBeLessThanOrEqual(0);
     // ?test runs the lite flag: the band holds still, as under reduce flicker.
@@ -419,49 +433,35 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     expect(room.redSince).not.toBeNull();
     expect(room.redSince!).toBeLessThanOrEqual(o.now);
     expect(room.lit).toBe(0);
-    expect(room.label).toMatch(/^ROOM LEFT · OVER \+\d+\/s$/);
+    expect(room.label).toMatch(/^HEADROOM · OVER \+\d+ req\/s$/);
     expect(room.load!).toBeGreaterThan(1);
     expectCrewWordsOnly([a.headline, a.sub, a.chip, g.strip, g.sub, room.label]);
   });
 
-  await test.step('after the rescue: Regroup is ready, a click slows the night to a quarter, then it is spent', async () => {
+  await test.step('after the rescue: no Regroup in Session 0, key 1 stays empty and the night runs at full speed', async () => {
     // The C5 scene holds the board.
     await expect
       .poll(async () => (await snap(page)).story?.scriptId ?? null, { timeout: 15_000, intervals: [25] })
       .toBe('C5');
     expect((await lane(page)).paused).toBe(true);
     await reach(page, 'rescue');
-    await expect
-      .poll(async () => (await lane(page)).deck.regroup, { timeout: 10_000, intervals: [25] })
-      .toBe('ready');
-    let h = await lane(page);
-    expect(h.deck.keys.one.lit).toBe(true);
-    expect(h.deck.pulse).toBeGreaterThanOrEqual(0.75);
-    expect(h.deck.pulse).toBeLessThanOrEqual(1);
-    await clickKey(page, 'one');
-    // Regroup lasts about half a wall second at speed 20, so assert on the very snapshot that first
-    // shows it active rather than reading the hook a second time.
-    await expect
-      .poll(
-        async () => {
-          h = await lane(page);
-          return h.deck.regroup;
-        },
-        { timeout: 3_000, intervals: [10] },
-      )
-      .toBe('active');
-    expect(h.deck.presses.at(-1)).toMatchObject({ key: 'one', via: 'click', acted: true });
-    expect(h.timeScale).toBe(0.25);
-    expect(h.deck.ring).toBeGreaterThan(0);
-    expect(h.deck.ring).toBeLessThanOrEqual(1);
+    const h = await lane(page);
+    // Regroup is kept for a later session (BROWNOUT.regroup.inSession).
+    expect(h.deck.regroup).toBe('hidden');
     expect(h.deck.keys.one.lit).toBe(false);
-    await shot(page, 'live-gauges-regroup');
-    await expect
-      .poll(async () => (await lane(page)).deck.regroup, { timeout: 15_000, intervals: [50] })
-      .toBe('spent');
-    h = await lane(page);
     expect(h.timeScale).toBe(1);
     expect(h.deck.ring).toBe(0);
+    // A click on the empty key is counted and does nothing.
+    await clickKey(page, 'one');
+    await expect
+      .poll(async () => (await lane(page)).deck.presses.at(-1)?.key ?? null, {
+        timeout: 3_000,
+        intervals: [10],
+      })
+      .toBe('one');
+    const after = await lane(page);
+    expect(after.deck.presses.at(-1)).toMatchObject({ key: 'one', via: 'click', acted: false });
+    expect(after.timeScale).toBe(1);
   });
 
   await test.step('C6: the midnight forecast asks nothing; Rei and TRIAGE come on the forecast', async () => {
@@ -469,7 +469,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       .poll(async () => (await lane(page)).cues.fired, { timeout: 20_000, intervals: [25] })
       .toEqual(expect.arrayContaining(['C6.rei.01', 'C6.triage.01']));
     const h = await lane(page);
-    expect(h.now).toBeLessThan(510);
+    expect(h.now).toBeLessThan(MIDNIGHT);
     const ids = h.bounds.map((b) => b.id);
     expect(ids).not.toContain('dial');
     expect(ids).not.toContain('sizing');
@@ -481,10 +481,10 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       .poll(async () => (await lane(page)).map.midnight, { timeout: 5_000, intervals: [25] })
       .toBe(true);
     const h = await lane(page);
-    expect(h.alert.history.some((e) => e.kind === 'held' && e.at >= 510)).toBe(true);
+    expect(h.alert.history.some((e) => e.kind === 'held' && e.at >= MIDNIGHT)).toBe(true);
     expect(h.alert.history.some((e) => e.kind === 'dark')).toBe(false);
     expect(h.title.watching).toBe(h.audience?.watching ?? null);
-    expect(h.deck.regroup).toBe('spent');
+    expect(h.deck.regroup).toBe('hidden');
     await shot(page, 'live-gauges-midnight');
   });
 

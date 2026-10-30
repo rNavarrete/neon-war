@@ -12,6 +12,16 @@ export const MUSIC_FILES: readonly string[] = [
   'audio/music/cell-shaped-chaos.mp3',
 ];
 
+/** The title screen's loop, "Euphoric Menace" (Rolando's pick, 30 Oct 2026), loaded the same way. */
+export const TITLE_MUSIC_KEY = 'music-title';
+export const TITLE_MUSIC_FILES: readonly string[] = [
+  'audio/music/euphoric-menace.ogg',
+  'audio/music/euphoric-menace.mp3',
+];
+
+/** Seconds the title music takes to fade out when the player leaves the title. */
+export const TITLE_MUSIC_FADE = 0.8;
+
 /** Every effect in public/audio/sfx, by its file name without .mp3. */
 export const SFX_KEYS = [
   'banner-pop',
@@ -52,6 +62,7 @@ export function isSfxKey(key: string): key is SfxKey | LiveSfxKey {
 export function sfxForAction(action: GameEvents['action']): SfxKey | null {
   switch (action.type) {
     case 'place':
+    case 'move':
       return 'place-part';
     case 'wire':
       return 'wire-connect';
@@ -77,6 +88,17 @@ export const EVENT_SFX = {
 /** The board music plays while the board is on screen (running or under the pause menu), not in scenes. */
 export function musicWanted(view: { boardOpen: boolean; sceneOpen: boolean }): boolean {
   return view.boardOpen && !view.sceneOpen;
+}
+
+/**
+ * The music's level under the master volume, so the title track and the board loop sit under the
+ * voices and effects (Rolando, 30 Oct 2026: the default volume was too high).
+ */
+export const MUSIC_LEVEL = 0.6;
+
+/** The title music plays while the title is on screen, unless the player muted the music. */
+export function titleMusicWanted(view: { titleOpen: boolean; muted: boolean }): boolean {
+  return view.titleOpen && !view.muted;
 }
 
 /** What actually makes noise. Must never throw, even when the browser has audio locked. */

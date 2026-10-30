@@ -14,6 +14,14 @@ Session 0's music and sound effects. They were picked on 27 Oct 2026 from the ca
 | File                            | Length  | Plays                      |
 | ------------------------------- | ------- | -------------------------- |
 | `music/cell-shaped-chaos.{ogg,mp3}` | 2:41 | On the board, looped; stops in scenes |
+| `music/euphoric-menace.{ogg,mp3}` | 2:31 | On the title screen, looped; fades out over 0.8 s when the title closes |
+
+The title has a speaker icon (top right, or the M key) that mutes and unmutes all music, title and board.
+The choice is kept in settings (`musicMuted`). Effects and voices still play. Browsers hold audio until the
+first click or key press, so the title music starts then if the page opened silent.
+
+"Euphoric Menace" was picked by Rolando on 30 Oct 2026. Its loudness (−15.0 LUFS) is close to "Cell Shaped
+Chaos" (−15.6 LUFS), so the two tracks need no gain change.
 
 ## Effects (`sfx/`, MP3)
 

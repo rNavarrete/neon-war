@@ -29,7 +29,7 @@ export function brownoutSession(): Session {
 
 export interface Moment {
   readonly session: Session;
-  /** Seconds since the clock opened at 23:51:30. */
+  /** Seconds since the clock opened at 23:54:25. */
   readonly now: number;
   readonly demand: number;
   readonly flow: Flow;

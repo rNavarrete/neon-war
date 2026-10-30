@@ -1,5 +1,5 @@
-// The deck (ZONES.deck) as a Live screen view: the room-left bar on the left (HeadroomView), and the
-// two keys on the right, 1 REGROUP and 2 CUT 3F, each clicked or pressed on the keyboard. (3 SET went
+// The deck (ZONES.deck) as a Live screen view: the two keys on the right (the headroom bar that sat on
+// the left is a line in the gauge now, 30 Oct 2026), 1 REGROUP and 2 CUT 3F, each clicked or pressed on the keyboard. (3 SET went
 // with the estimate dial; its slot is left empty.)
 // The rules are pure in deck.ts; this file draws them and calls the run's actions:
 //
@@ -14,7 +14,7 @@
 //
 // These are the only keys on the deck (the HUD scene's own legacy keys are gone): this view takes
 // every click there and every digit 1, 2; hud.regroup, hud.laundry and hud.deck mirror it, and the
-// HUD scene lists its hit areas as hud.bounds deck.1..2. hud.headroom mirrors the bar.
+// HUD scene lists its hit areas as hud.bounds deck.1..2.
 //
 // Phaser is a type here only, so the registry and its node tests can import this file.
 
@@ -36,6 +36,7 @@ import {
   cutDoneWord,
   emptyDeck,
   keyAlpha,
+  keyShown,
   keyLit,
   keyRects,
   keyWords,
@@ -43,40 +44,14 @@ import {
   stepDeck,
   tooltipAt,
 } from './deck';
-import { HEADROOM_KIT, HeadroomView } from './HeadroomView';
-import type { HeadroomColour } from './headroom';
 import { jobCardDue } from './jobCard';
 import { COLORS, FONT } from './layout';
 import { cutLaundry } from './pending503';
 import { type PagePoint, provideHudSection } from './hook';
 import { register as registerLocate } from './locate';
 import { KIT, type KeyCap, keyCap } from './kit';
-import { GAUGES_DEPTH, type PanelTestState } from './panel';
+import { GAUGES_DEPTH } from './panel';
 import { preloadArt, resolveArt } from '../plates';
-
-/** What the hook mirrors as hud.headroom. */
-export interface HeadroomTestState {
-  /** round((1 - demand / wiredCapacity) x 100); null with nothing wired. */
-  pct: number | null;
-  /** demand / wiredCapacity; null with nothing wired. */
-  load: number | null;
-  /** Req/s every live server could serve, wired or not. */
-  capacity: number;
-  /** Req/s the wired, online servers can serve: what the bar measures. */
-  wiredCapacity: number;
-  demand: number;
-  state: HeadroomColour;
-  /** Sim time the bar turned red, while it stays red; null otherwise. */
-  redSince: number | null;
-  /** Segments of room left lit, 0..30. */
-  lit: number;
-  /** The words on the bar now. */
-  label: string;
-  /** The right edge of the bar, in game x (the keys sit right of it). */
-  right: number;
-  /** The bar's baked plate (m4 panel kit). */
-  panel?: PanelTestState | null;
-}
 
 /** One key as the hook sees it. */
 export interface DeckKeyTestState {
@@ -91,6 +66,8 @@ export interface DeckKeyTestState {
   interactive: boolean;
   /** The picked keycap drawn now (idle, ready, or pressed just after a press that acted); null in code. */
   cap?: KeyCap | null;
+  /** Whether the key shows at all (only while it can act or reports done). */
+  shown?: boolean;
 }
 
 /** One press of a key, by click or keyboard, and whether it acted. */
@@ -121,8 +98,6 @@ export interface DeckTestState {
 
 declare module './hook' {
   interface HudTestState {
-    /** The room-left bar in the deck (gauges-4). */
-    headroom?: HeadroomTestState;
     /** The deck's keys (gauges-8). */
     deck?: DeckTestState;
   }
@@ -162,15 +137,13 @@ interface KeyParts {
   shownLit: boolean | null;
   alpha: number;
   word0: string;
+  /** Whether the key shows (deck.ts keyShown): hidden keys leave the zone empty. */
+  shown: boolean;
 }
 
 export class DeckView implements LiveView {
   readonly zone = 'deck' as const;
-  readonly budget: LiveBudget = {
-    objects: HeadroomView.budget.objects + 18,
-    texts: HeadroomView.budget.texts + 7,
-  };
-  readonly headroom = new HeadroomView();
+  readonly budget: LiveBudget = { objects: 18, texts: 7 };
   readonly deck: DeckState = emptyDeck();
   private keys: Partial<Record<KeyName, KeyParts>> = {};
   private ring: Phaser.GameObjects.Graphics | null = null;
@@ -204,14 +177,13 @@ export class DeckView implements LiveView {
   };
 
   preload(scene: Phaser.Scene): void {
-    preloadArt(scene as never, [...HEADROOM_KIT, ...DECK_KIT]);
+    preloadArt(scene as never, [...DECK_KIT]);
   }
 
   create(scene: Phaser.Scene, host: LiveHost): void {
     this.scene = scene;
     this.host = host;
     this.bus = host.bus;
-    this.headroom.create(scene, host.rect, host.bus);
     Object.assign(this.deck, emptyDeck());
     this.presses.length = 0;
     this.pressed = 0;
@@ -239,12 +211,8 @@ export class DeckView implements LiveView {
     }
     const caps = Object.keys(this.capTexture).length === 3;
     // One opaque backing under the keys, never dimmed, so the HUD's own keys never show through.
+    // Drawn under the keys that show (drawBack), so a hidden key leaves the zone empty.
     const back = add.graphics();
-    back.fillStyle(COLORS.ink, 1);
-    for (const name of KEY_NAMES) {
-      const r = rects[name];
-      back.fillRoundedRect(r.x, r.y, r.w, r.h, 6);
-    }
     back.setDepth(GAUGES_DEPTH);
     this.back = back;
     for (const name of KEY_NAMES) {
@@ -290,6 +258,7 @@ export class DeckView implements LiveView {
         shownLit: null,
         alpha: -1,
         word0: words.word,
+        shown: true,
       };
     }
     this.ring = add.graphics().setDepth(GAUGES_DEPTH);
@@ -330,7 +299,6 @@ export class DeckView implements LiveView {
       const mid = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
       this.off.push(registerLocate(`key:${name}`, () => mid));
     }
-    this.off.push(provideHudSection('headroom', () => this.headroomSnapshot()));
     this.off.push(provideHudSection('deck', () => this.snapshot()));
     this.off.push(provideHudSection('regroup', () => this.regroupHook()));
     this.off.push(provideHudSection('laundry', () => this.laundryHook()));
@@ -338,7 +306,6 @@ export class DeckView implements LiveView {
 
   update(frame: Frame, clock: LiveClock): void {
     this.hudNow = clock.now;
-    this.headroom.update(frame, clock.now);
     this.now = frame.now;
     this.laundryCut = frame.laundryCut !== null;
     const steady = settings().reduceFlicker || (this.host?.flags.lite ?? false);
@@ -390,8 +357,8 @@ export class DeckView implements LiveView {
     const word = name === 'two' && this.deck.cut === 'done' ? CUT_DONE : k.word0;
     if (lit !== k.shownLit || word !== k.word.text) {
       k.shownLit = lit;
-      k.lit?.setVisible(lit);
-      k.dim?.setVisible(!lit);
+      k.lit?.setVisible(k.shown && lit);
+      k.dim?.setVisible(k.shown && !lit);
       const color = lit ? COLORS.heroText : COLORS.dim;
       k.digit.setColor(color);
       if (word !== k.word.text) k.word.setText(word).setFontSize(word.length > 8 ? 11 : 12);
@@ -407,6 +374,14 @@ export class DeckView implements LiveView {
         if (t) k.cap.setTexture(t).setDisplaySize(k.rect.w, k.rect.h);
       }
     }
+    const shown = keyShown(this.deck, name);
+    if (shown !== k.shown) {
+      k.shown = shown;
+      for (const o of [k.cap, k.digit, k.word]) o?.setVisible(shown);
+      k.dim?.setVisible(shown && !lit);
+      k.lit?.setVisible(shown && lit);
+      this.drawBack();
+    }
     const alpha = keyAlpha(this.deck, name);
     if (alpha !== k.alpha) {
       k.alpha = alpha;
@@ -415,6 +390,18 @@ export class DeckView implements LiveView {
       k.lit?.setAlpha(alpha);
       k.digit.setAlpha(alpha);
       k.word.setAlpha(alpha);
+    }
+  }
+
+  /** The opaque backing under the keys that show. */
+  private drawBack(): void {
+    const g = this.back;
+    if (!g) return;
+    g.clear();
+    g.fillStyle(COLORS.ink, 1);
+    for (const name of KEY_NAMES) {
+      const k = this.keys[name];
+      if (k?.shown) g.fillRoundedRect(k.rect.x, k.rect.y, k.rect.w, k.rect.h, 6);
     }
   }
 
@@ -484,6 +471,7 @@ export class DeckView implements LiveView {
         lit: keyLit(d, name),
         alpha: k?.alpha ?? 0,
         interactive: k?.zone?.input?.enabled ?? false,
+        shown: k?.shown ?? false,
         cap: k?.shownCap ?? null,
       };
     }
@@ -501,28 +489,9 @@ export class DeckView implements LiveView {
     };
   }
 
-  /** hud.headroom, built only when the hook is read. */
-  headroomSnapshot(): HeadroomTestState {
-    const s = this.headroom.state;
-    return {
-      pct: s.pct,
-      load: s.load,
-      capacity: s.capacity,
-      wiredCapacity: s.wiredCapacity,
-      demand: s.demand,
-      state: s.state,
-      redSince: s.redSince,
-      lit: s.lit,
-      label: this.headroom.labelText,
-      right: this.headroom.right,
-      panel: this.headroom.panel,
-    };
-  }
-
   shutdown(): void {
     for (const off of this.off) off();
     this.off = [];
-    this.headroom.shutdown();
     for (const name of KEY_NAMES) {
       const k = this.keys[name];
       if (!k) continue;

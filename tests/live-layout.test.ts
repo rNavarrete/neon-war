@@ -4,42 +4,57 @@ import { CENTRE } from '../src/scenes/hud/layout';
 import {
   CARDS,
   CARD_IDS,
+  FEED_SHOWN,
+  FEED_VIEW,
+  FEED_WORLD,
   LAYOUT_VERSION,
   type Rect,
   SCREEN,
   SCREEN_RECT,
   ZONES,
+  TRAY_VIEW,
+  TRAY_WORLD,
   ZONE_IDS,
+  boardRectToScreen,
+  boardToScreen,
   centreOf,
   inside,
   overlaps,
   pagePoint,
   pageRect,
   rectToArea,
+  screenToBoard,
 } from '../src/scenes/live/layout';
 
 // The Live screen's layout contract (docs/LIVE.md): the zone table, the cards over the feed and
 // the page mapping every lane's hook uses.
 describe('live layout contract', () => {
-  it('is version 1 of a 1920x1080 screen', () => {
-    expect(LAYOUT_VERSION).toBe(1);
+  // Version 2 is layout A, the streamer column (Rolando, 30 Oct 2026): the zones below moved with it.
+  it('is version 2 of a 1920x1080 screen', () => {
+    // 3 since option 2 (Rolando, 30 Oct 2026) moved the right column's zones.
+    expect(LAYOUT_VERSION).toBe(3);
     expect(SCREEN).toEqual({ width: 1920, height: 1080 });
   });
 
-  it('has the twelve zones of the plan, exactly', () => {
+  it("has the eleven zones of the plan, exactly (the gauge took the scope's space, 30 Oct 2026)", () => {
+    // Layout A2 (Rolando, 30 Oct 2026): Lux's cam and chat in a slim left column, the board in the
+    // middle with its sky, the callers' cams, the gauge and the map in a right column.
     expect(ZONES).toEqual({
       title: { x: 0, y: 0, w: 440, h: 100 },
-      alert: { x: 460, y: 8, w: 1040, h: 84 },
-      clock: { x: 1520, y: 0, w: 400, h: 100 },
-      map: { x: 16, y: 110, w: 408, h: 310 },
-      cam: { x: 16, y: 430, w: 408, h: 270 },
-      gauge: { x: 16, y: 710, w: 408, h: 170 },
-      scope: { x: 16, y: 890, w: 408, h: 180 },
-      feed: { x: 455, y: 110, w: 1455, h: 530 },
-      comms: { x: 455, y: 645, w: 1455, h: 150 },
-      inventory: { x: 455, y: 800, w: 1055, h: 165 },
-      deck: { x: 455, y: 970, w: 1055, h: 105 },
-      chat: { x: 1525, y: 800, w: 385, h: 275 },
+      alert: { x: 450, y: 8, w: 1070, h: 84 },
+      // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the clock on its painted plate, then the taller
+      // caller cam, the gauge and the map down to the bottom edge.
+      clock: { x: 1566, y: 0, w: 344, h: 125 },
+      // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the map is the
+      // gauge's size and the caller cam 100 px shorter.
+      map: { x: 1566, y: 813, w: 344, h: 260 },
+      cam: { x: 6, y: 110, w: 410, h: 270 },
+      gauge: { x: 1566, y: 545, w: 344, h: 260 },
+      feed: { x: 426, y: 102, w: 1128, h: 790 },
+      comms: { x: 1566, y: 135, w: 344, h: 400 },
+      inventory: { x: 426, y: 904, w: 1000, h: 156 },
+      deck: { x: 1434, y: 904, w: 120, h: 156 },
+      chat: { x: 6, y: 390, w: 410, h: 680 },
     });
     expect(ZONE_IDS).toEqual([
       'title',
@@ -48,7 +63,6 @@ describe('live layout contract', () => {
       'map',
       'cam',
       'gauge',
-      'scope',
       'feed',
       'comms',
       'inventory',
@@ -81,8 +95,42 @@ describe('live layout contract', () => {
   });
 
   it('gives the board its areas as edges', () => {
-    expect(rectToArea(ZONES.feed)).toEqual({ left: 455, right: 1910, top: 110, bottom: 640 });
-    expect(rectToArea(ZONES.inventory)).toEqual({ left: 455, right: 1510, top: 800, bottom: 965 });
+    // Since layout A (Rolando, 30 Oct 2026) the board draws in its own space and views show it in the
+    // zones: the areas are that space's boxes, the ones the table was painted for.
+    // Option 2 (Rolando, 30 Oct 2026), table D: a taller table box, the tray's space below it, the feed taller
+    // and the tray running to the bottom edge beside the keys.
+    expect(rectToArea(FEED_WORLD)).toEqual({ left: 455, right: 1910, top: 110, bottom: 870 });
+    expect(rectToArea(TRAY_WORLD)).toEqual({ left: 455, right: 1510, top: 1000, bottom: 1165 });
+    expect(rectToArea(ZONES.feed)).toEqual({ left: 426, right: 1554, top: 102, bottom: 892 });
+    expect(rectToArea(ZONES.inventory)).toEqual({ left: 426, right: 1426, top: 904, bottom: 1060 });
+  });
+
+  it("shows the board's space in its zones through one-scale views, both ways", () => {
+    // The feed shows FEED_WORLD with the painted sky above it (FEED_SHOWN), keeping its shape (to
+    // within a pixel); the tray draws at its own size.
+    expect(FEED_VIEW.world).toEqual(FEED_SHOWN);
+    expect(FEED_SHOWN.x).toBe(FEED_WORLD.x);
+    expect(FEED_SHOWN.w).toBe(FEED_WORLD.w);
+    expect(FEED_SHOWN.y + FEED_SHOWN.h).toBe(FEED_WORLD.y + FEED_WORLD.h);
+    expect(FEED_VIEW.scale).toBeCloseTo(1128 / 1455, 9);
+    expect(Math.abs(FEED_SHOWN.h * FEED_VIEW.scale - ZONES.feed.h)).toBeLessThan(1);
+    // Option 2 (Rolando, 30 Oct 2026): the tray shows at 1000/1055 (it was 1:1), its shape kept to within a pixel.
+    expect(TRAY_VIEW.scale).toBeCloseTo(1000 / 1055, 9);
+    expect(Math.abs(TRAY_WORLD.h * TRAY_VIEW.scale - ZONES.inventory.h)).toBeLessThan(1);
+    expect(boardToScreen({ x: 455, y: -149 })).toEqual({ x: 426, y: 102 });
+    expect(boardToScreen({ x: 455, y: 1000 })).toEqual({ x: 426, y: 904 });
+    for (const p of [
+      { x: 700, y: 300 },
+      { x: 1900, y: 630 },
+      { x: 600, y: 1100 },
+    ]) {
+      const back = screenToBoard(boardToScreen(p));
+      expect(back.x).toBeCloseTo(p.x, 6);
+      expect(back.y).toBeCloseTo(p.y, 6);
+    }
+    const r = boardRectToScreen(FEED_WORLD);
+    expect(r.x).toBe(426);
+    expect(r.w).toBeCloseTo(1128, 6);
   });
 
   it('lists the cards over the feed: the banner, the job card and the dip fallback', () => {
@@ -109,6 +157,8 @@ describe('live layout contract', () => {
   });
 
   it('maps game pixels to page pixels exactly as toPage in the board layout', () => {
+    // toPage takes board-space points (it maps them through the views first, since layout A): the
+    // zones are screen rects, so their corners go in as the board-space points that land on them.
     // A 1280x720 viewport with the canvas filling it, and a letterboxed one with an offset.
     const canvases = [
       { left: 0, top: 0, width: 1280, height: 720 },
@@ -120,17 +170,22 @@ describe('live layout contract', () => {
         const z = ZONES[id];
         const corner = { x: z.x, y: z.y };
         const far = { x: z.x + z.w, y: z.y + z.h };
-        expect(pagePoint(corner, c)).toEqual(toPage(corner, c, game));
-        expect(pagePoint(far, c)).toEqual(toPage(far, c, game));
+        // Only the board's zones show its space; any other zone's corner maps straight.
+        const board = id === 'feed' || id === 'inventory';
+        const page = (q: { x: number; y: number }) =>
+          board ? toPage(screenToBoard(q), c, game) : pagePoint(q, c);
+        expect(pagePoint(corner, c)).toEqual(page(corner));
+        expect(pagePoint(far, c)).toEqual(page(far));
         const r = pageRect(z, c);
-        expect({ x: r.x, y: r.y }).toEqual(toPage(corner, c, game));
+        expect({ x: r.x, y: r.y }).toEqual(page(corner));
         // The far corner, reached through the size, lands within the tenth both round to.
-        const end = toPage(far, c, game);
+        const end = page(far);
         expect(Math.abs(r.x + r.w - end.x)).toBeLessThanOrEqual(0.1 + 1e-9);
         expect(Math.abs(r.y + r.h - end.y)).toBeLessThanOrEqual(0.1 + 1e-9);
       }
     }
-    expect(pageRect(ZONES.feed, canvases[0])).toEqual({ x: 303.3, y: 73.3, w: 970, h: 353.3 });
+    // Option 2 (Rolando, 30 Oct 2026, table D): the taller feed; it was {284, 80, 752, 470.7}.
+    expect(pageRect(ZONES.feed, canvases[0])).toEqual({ x: 284, y: 68, w: 752, h: 526.7 });
   });
 
   it('publishes every card rect in the docs/LIVE.md Cards table', () => {

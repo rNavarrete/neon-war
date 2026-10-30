@@ -4,6 +4,7 @@ import { readFrame } from '../src/game/frame';
 import { Run } from '../src/game/run';
 import { ClockView, TitleView } from '../src/scenes/hud/TitleView';
 import {
+  CLOCK_PLATE,
   CLOCK_RIGHT_LIMIT,
   COUNTDOWN_RED_FROM,
   LIVE_WORDS,
@@ -19,7 +20,14 @@ import {
   trustRed,
   watchingFrom,
   watchingText,
+  CREDIT_POP_MIN,
+  TIP_ALERT,
+  creditPop,
+  tipAlertAt,
+  tipAlertOf,
 } from '../src/scenes/hud/title';
+import { VIEWER_HANDLES } from '../src/scenes/hud/chat';
+import { line } from '../src/strings';
 import { dismissJobCard, openJobCard } from '../src/scenes/hud/jobCard';
 import { type Rect, ZONES, inside } from '../src/scenes/live/layout';
 import type { LiveHost } from '../src/scenes/live/view';
@@ -145,17 +153,31 @@ describe('where the title and the clock sit', () => {
     for (const r of rectsOf(titleLayout(ZONES.title))) expect(inside(r, ZONES.title)).toBe(true);
   });
 
-  it('keeps every clock piece inside ZONES.clock and left of x 1800 (the pause button is the overlay’s)', () => {
-    expect(CLOCK_RIGHT_LIMIT).toBe(1800);
+  it('keeps every clock piece inside ZONES.clock and left of x 1840 (the pause button is the overlay’s)', () => {
+    // Rolando, 30 Oct 2026 (option 2, clock plate 1): the clock sits on its painted plate, 272 wide,
+    // so the limit moved from x 1800 to 1840 and the clock icon left (the plate frames the time).
+    expect(CLOCK_RIGHT_LIMIT).toBe(1840);
     for (const r of rectsOf(clockLayout(ZONES.clock))) {
       expect(inside(r, ZONES.clock)).toBe(true);
-      expect(r.x + r.w).toBeLessThanOrEqual(1800);
+      expect(r.x + r.w).toBeLessThanOrEqual(CLOCK_RIGHT_LIMIT);
     }
-    // The clock's 40 px text (8 characters) ends before the icon; the countdown runs under it.
     const L = clockLayout(ZONES.clock);
-    expect(L.clock.x + 8 * 25).toBeLessThan(L.icon.x - L.icon.size / 2);
-    expect(L.countdown.y).toBeGreaterThanOrEqual(L.icon.y + L.icon.size / 2);
-    expect(L.countdown.x + 16 * 12.5).toBeLessThan(1800);
+    expect(L.plate.w).toBe(CLOCK_PLATE.w);
+    expect(L.plate.h).toBe(CLOCK_PLATE.h);
+    // The window sits inside the plate, and the time (8 characters at 34 px) and the countdown
+    // (16 at 15 px) fit across it, both centred in it.
+    expect(inside(L.window, L.plate)).toBe(true);
+    expect(8 * 21).toBeLessThan(L.window.w);
+    expect(16 * 9.5).toBeLessThan(L.window.w);
+    for (const p of [L.clock, L.countdown]) {
+      expect(Math.abs(p.x - (L.window.x + L.window.w / 2))).toBeLessThanOrEqual(1);
+      expect(p.y).toBeGreaterThan(L.window.y);
+      expect(p.y).toBeLessThan(L.window.y + L.window.h);
+    }
+    expect(L.clock.y).toBeLessThan(L.countdown.y);
+    // The overlay's pause button (479 x 245 art at 0.13, centred 36 in from the zone's right end).
+    const pauseLeft = ZONES.clock.x + ZONES.clock.w - 36 - (479 * 0.13) / 2;
+    expect(L.plate.x + L.plate.w).toBeLessThan(pauseLeft);
   });
 });
 
@@ -237,9 +259,9 @@ describe('TitleView and ClockView', () => {
     clock.update(readFrame(r));
     expect(texts.some((t) => t.text === 'WATCHING')).toBe(true);
     expect(texts.some((t) => t.text === 'waiting for your build')).toBe(true);
-    // The title shows the run's clock in 12-hour time (11:51:45 PM).
+    // The title shows the run's clock in 12-hour time (11:54:40 PM).
     expect(texts.some((t) => t.text === twelveHour(r.clock()))).toBe(true);
-    expect(texts.some((t) => t.text === 'midnight in 8:15')).toBe(true);
+    expect(texts.some((t) => t.text === 'midnight in 5:20')).toBe(true);
 
     const hud = getTestState().hud as unknown as { title: { live: string; watching: number | null } };
     expect(hud.title.live).toBe('waiting');
@@ -309,7 +331,8 @@ describe('TitleView: round avatar and held under a paused HUD', () => {
     const r = titleLayout(ZONES.title).avatar.r;
     expect(title().avatar).toBe(`avatar:hud/live/avatar-luxnet@${2 * r}`);
     expect(made.length).toBe(view.budget.objects);
-    expect(made.filter((m) => m.kind === 'Image').length).toBe(3);
+    // The face, the two chip icons, and the tip alert's coin (Rolando, 30 Oct 2026: viewer tips).
+    expect(made.filter((m) => m.kind === 'Image').length).toBe(4);
     view.shutdown();
   });
 
@@ -344,5 +367,32 @@ describe('TitleView: round avatar and held under a paused HUD', () => {
 
     view.shutdown();
     expect(events.count()).toBe(0);
+  });
+});
+
+describe('viewer tips on the title (Rolando, 30 Oct 2026: donations like on Twitch)', () => {
+  it('a tip alert names a regular, the amount and a message; a bail-out says you got this', () => {
+    const a = tipAlertOf({ n: 0, amount: 25, kind: 'trickle' });
+    expect(VIEWER_HANDLES).toContain(a.who);
+    expect(a.line).toBe(`${a.who} tipped 💰 25!`);
+    expect(a.message.length).toBeGreaterThan(0);
+    expect(tipAlertOf({ n: 3, amount: 90, kind: 'help' }).message).toBe(line('C1.tip.07'));
+    // Different tips, different regulars.
+    const who = new Set([0, 1, 2, 3, 4, 5].map((n) => tipAlertOf({ n, amount: 5, kind: 'trickle' }).who));
+    expect(who.size).toBeGreaterThan(3);
+  });
+
+  it('the credits pop shows tips, buys and refunds, never the drip of upkeep', () => {
+    expect(creditPop(25)).toBe('+25');
+    expect(creditPop(-80)).toBe('-80');
+    expect(creditPop(-0.4)).toBeNull();
+    expect(creditPop(CREDIT_POP_MIN - 1)).toBeNull();
+  });
+
+  it('the alert slides in, holds 3 s and fades out', () => {
+    expect(tipAlertAt(0)).toEqual({ alpha: 0, dy: -24 });
+    expect(tipAlertAt(1)).toEqual({ alpha: 1, dy: 0 });
+    expect(tipAlertAt(TIP_ALERT.inSeconds + TIP_ALERT.holdSeconds + TIP_ALERT.outSeconds)).toBeNull();
+    expect(tipAlertAt(-1)).toBeNull();
   });
 });

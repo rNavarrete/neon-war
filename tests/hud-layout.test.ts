@@ -5,7 +5,6 @@ import {
   FEED_CARDS,
   HUD_RECTS,
   KEY,
-  LEFT,
   RIGHT,
   homeRect,
 } from '../src/scenes/hud/layout';
@@ -19,7 +18,8 @@ describe('hud layout inside the zones', () => {
   it('puts every rect inside the zone or card it belongs to', () => {
     // 30 once the title cluster's, the alert band's, the clock's and the comms band's own rows were
     // retired with the legacy code that drew them (TitleView, AlertView and CommsView place theirs).
-    expect(HUD_RECTS.length).toBeGreaterThanOrEqual(20);
+    // 17 since the scope's four rows went with the LAST 60 s chart (30 Oct 2026).
+    expect(HUD_RECTS.length).toBeGreaterThanOrEqual(17);
     for (const { id, rect, home } of HUD_RECTS) {
       expect(inside(rect, homeRect(home)), `${id} in ${home}`).toBe(true);
     }
@@ -43,7 +43,8 @@ describe('hud layout inside the zones', () => {
     const homes = new Set(HUD_RECTS.map((r) => r.home));
     // title, alert and clock are drawn by their views from their own layouts (title.ts, alerts.ts),
     // not from this file any more: their rows tested deleted code and are gone.
-    for (const zone of ['scope', 'comms', 'deck', 'chat'] as const) {
+    // No scope: the LAST 60 s chart is gone (30 Oct 2026).
+    for (const zone of ['comms', 'deck', 'chat'] as const) {
       expect(homes.has(zone), zone).toBe(true);
     }
     for (const card of ['jobCard', 'banner', 'dipFallback'] as const) {
@@ -63,33 +64,45 @@ describe('hud layout owner-fixed internals', () => {
     );
   });
 
-  it('puts the chart in the scope with the plot at x 46-400, y 905-1050', () => {
-    expect(LEFT.chart).toEqual(ZONES.scope);
-    expect(LEFT.plot).toEqual({ left: 46, right: 400, top: 905, bottom: 1050 });
+  it("has no chart: the gauge took the scope's space (Rolando, 30 Oct 2026)", () => {
+    expect(Object.keys(ZONES)).not.toContain('scope');
+    // Smaller and in the right column, under the callers, since layout A2 (Rolando, 30 Oct 2026).
+    // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the right column runs clock, caller cam, gauge, map to the bottom edge.
+    // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the map below
+    // grew to the gauge's size, so the gauge sits 100 px higher.
+    expect(ZONES.gauge).toEqual({ x: 1566, y: 545, w: 344, h: 260 });
   });
 
-  it('merges both chats into one column with the body at x 1545-1890, y 840-1060', () => {
+  // Layout A2 (Rolando, 30 Oct 2026): the chat is the tall slim left column, up to sixteen rows.
+  it('merges both chats into one column with the body at x 26-396, y 430-1050', () => {
     expect(RIGHT.chat).toEqual(ZONES.chat);
     const b = RIGHT.chatBody;
-    expect([b.x, b.x + b.w, b.y, b.y + b.h]).toEqual([1545, 1890, 840, 1060]);
-    expect(b.rows).toBe(5);
+    expect([b.x, b.x + b.w, b.y, b.y + b.h]).toEqual([26, 396, 430, 1050]);
+    expect(b.rows).toBe(16);
   });
 
-  it('keeps the comms band’s five slots r 42 at y 720, x 517 + 98 i', () => {
+  // Along the bottom of the layout A2 caller column, overlapping like a call's participants
+  // (Rolando, 30 Oct 2026).
+  // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the taller caller column puts them at y 571.
+  // Rolando, 30 Oct 2026 ("expand the city grid to match the size of the demand widget"): the shorter
+  // caller column (400 tall) puts them at y 471.
+  it('keeps the caller column’s five slots r 42 at y 471, x 1616 + 61 i', () => {
     expect(BOTTOM.slots).toEqual(
       ['TRIAGE', 'REI', 'MIKA', 'OZZIE', 'HOUSE'].map((name, i) => ({
         name,
-        x: 517 + 98 * i,
-        y: 720,
+        x: 1616 + 61 * i,
+        y: 471,
         r: 42,
       })),
     );
   });
 
-  it('puts the keys 80x64 at (1272, 1022) and (1360, 1022) labelled 1 REGROUP and 2 CUT 3F', () => {
+  // Side by side in the strip under the tray since layout A2 (Rolando, 30 Oct 2026).
+  // Option 2 (Rolando, 30 Oct 2026): stacked in the strip right of the tray instead.
+  it('puts the keys 120x52 at (1494, 954) and (1494, 1014) labelled 1 REGROUP and 2 CUT 3F', () => {
     expect(BOTTOM.keys.map((k) => [k.x, k.y, k.w, k.h])).toEqual([
-      [1272, 1022, 80, 64],
-      [1360, 1022, 80, 64],
+      [1494, 954, 120, 52],
+      [1494, 1014, 120, 52],
     ]);
     expect(BOTTOM.keys.map((k) => `${k.digit} ${k.word}`)).toEqual(['1 REGROUP', '2 CUT 3F']);
     expect(KEY).toEqual({ regroup: 0, cut: 1 });

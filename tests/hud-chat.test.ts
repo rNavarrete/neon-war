@@ -24,12 +24,20 @@ import { Bus } from '../src/game/bus';
 import type { Frame } from '../src/game/frame';
 import type { Occurrence } from '../src/game/occurrences';
 import {
+  CHAT_GLASS,
+  CHAT_PANEL_FILE,
+  CHAT_PANEL_K,
+  CHAT_PANEL_SLICE,
+  CHAT_PLATE_K,
+  CHAT_PLATE_SLICE,
   CHAT_PLATE_WIDE,
   CHAT_TEXT,
   ChatFeed,
   ChatFeedView,
   SYSTEM_GLYPH,
   chatArtOf,
+  chatPlateFor,
+  plateFits,
   lookWithArt,
   streamAvatarFor,
 } from '../src/scenes/hud/ChatFeedView';
@@ -53,6 +61,7 @@ import {
 } from '../src/scenes/hud/chat';
 import {
   CHAT_PACE,
+  HYPE_BURST,
   type ChatEvent,
   type ChatInputs,
   type ChatRow,
@@ -69,7 +78,7 @@ import { updateSettings } from '../src/game/settings';
 import { BLOCK_AVATARS } from '../src/scenes/avatars';
 import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
 import { LESSON_IDS } from '../src/scenes/hud/lineMeta';
-import { ZONES } from '../src/scenes/live/layout';
+import { type Rect, ZONES } from '../src/scenes/live/layout';
 import type { LiveClock, LiveHost } from '../src/scenes/live/view';
 import type { ChatTestState } from '../src/scenes/live/views/chat';
 import { LINES, type LineId } from '../src/strings';
@@ -113,9 +122,16 @@ describe('chat', () => {
   });
 
   it('picks filler from the pool for the error state', () => {
-    expect(fillerPool('block', 'ok')).toHaveLength(4);
-    expect(fillerPool('block', 'slow')).toHaveLength(3);
-    expect(fillerPool('stream', 'down')).toEqual(['fill.stream.down.01', 'fill.stream.down.02']);
+    expect(fillerPool('block', 'ok')).toHaveLength(10);
+    expect(fillerPool('block', 'slow')).toHaveLength(5);
+    // The four original down lines, then the hype pack's nine (Rolando, 30 Oct 2026).
+    expect(fillerPool('stream', 'down').slice(0, 4)).toEqual([
+      'fill.stream.down.01',
+      'fill.stream.down.02',
+      'fill.stream.down.03',
+      'fill.stream.down.04',
+    ]);
+    expect(fillerPool('stream', 'down')).toHaveLength(13);
     const rand = seededRandom(1);
     for (let i = 0; i < 20; i++) expect(pickFiller('block', 'down', rand)).toMatch(/^fill\.block\.down\./);
     expect(pickFiller('stream', 'down', () => 0, 'fill.stream.down.01')).toBe('fill.stream.down.02');
@@ -232,9 +248,16 @@ function stubScene(): { scene: Phaser.Scene; down: ((p: { x: number; y: number }
   return { scene: scene as unknown as Phaser.Scene, down };
 }
 
-function hostOn(scene: Phaser.Scene, b: Bus): LiveHost {
-  return { scene, bus: b, rect: ZONES.chat, flags: { lite: true } };
+function hostOn(scene: Phaser.Scene, b: Bus, rect: Rect = ZONES.chat): LiveHost {
+  return { scene, bus: b, rect, flags: { lite: true } };
 }
+
+/**
+ * A chat the size the painted plates were requested for (385x275, the chat zone before layout A).
+ * The layout A2 column (410x680, Rolando 30 Oct 2026) is too tall for either plate to fill without
+ * upscaling, so it draws the code glass; the drop-in tests run here, where the plates fit.
+ */
+const PAINTED_CHAT: Rect = { ...ZONES.chat, w: 385, h: 275 };
 
 /** The hud section as the hook publishes it, over an empty base. */
 const hudRead = (): HudTestState => hudSection({} as HudTestState);
@@ -393,7 +416,10 @@ describe('the chat in the host loop (chat-3)', () => {
     b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 1 });
     for (let c = 1; c < 3; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
     h = hudRead();
-    expect((h.chat as ChatTestState).stream).toEqual(['viewer: first try lol']);
+    // The scripted line first, then the first serve's hype burst pours in on top.
+    const feed = (h.chat as ChatTestState).feed;
+    expect(feed.find((r) => r.id === 'C1.chat.02')).toMatchObject({ chat: 'stream', scripted: true });
+    expect(feed.filter((r) => r.cause === 'hype').length).toBeGreaterThanOrEqual(HYPE_BURST.min);
     expect(h.audience).toEqual({ watching: 3 });
     view.shutdown();
   });
@@ -403,7 +429,8 @@ describe('the chat in the host loop (chat-3)', () => {
     const first = stubScene();
     const a = new ChatFeedView();
     a.create(first.scene, hostOn(first.scene, b));
-    expect(a.feed.listening).toBe(3);
+    // cue, line, coachNudge and action.
+    expect(a.feed.listening).toBe(4);
     a.shutdown();
     expect(a.feed.listening).toBe(0);
     expect(first.down).toHaveLength(0);
@@ -458,29 +485,33 @@ function liveView(): { view: ChatFeedView; bus: Bus; click: (x: number, y: numbe
 const chatRead = (): ChatTestState => hudRead().chat as ChatTestState;
 
 describe('the LIVE CHAT panel (chat-4)', () => {
-  it('fits the newest four or five rows into the 220 px body, bottom-up', () => {
+  // Layout A2 (Rolando, 30 Oct 2026): the chat is the tall slim left column (410x680), its text
+  // bigger, so the body fits up to fourteen rows (nine when every row wraps) at y 430-1050.
+  // Rolando, 30 Oct 2026: bigger faces (56 px discs), so a one-line row is 62 tall (43 before) and
+  // the body fits ten of them (fourteen before).
+  it('fits the newest nine to ten rows into the 620 px body, bottom-up', () => {
     const one = { text: 'x'.repeat(ONE_LINE_CHARS) };
     const two = { text: 'x'.repeat(ONE_LINE_CHARS + 1) };
-    expect(rowHeight(one.text)).toBe(36);
-    expect(rowHeight(two.text)).toBe(53);
-    expect(fitRows([one, one, one, one, one, one], 5)).toHaveLength(5);
-    expect(fitRows([two, two, two, two, two, two], 5)).toHaveLength(4);
-    // The worst mix still leaves four, the newest ones.
-    const mix = [one, two, two, two, one, two, two];
-    const fit = fitRows(mix, 5);
-    expect(fit.length).toBeGreaterThanOrEqual(4);
+    expect(rowHeight(one.text)).toBe(62);
+    expect(rowHeight(two.text)).toBe(63);
+    expect(fitRows(Array(20).fill(one), 16)).toHaveLength(10);
+    expect(fitRows(Array(20).fill(two), 16)).toHaveLength(9);
+    // The worst mix still leaves nine, the newest ones.
+    const mix = [one, two, two, two, one, two, two, one, two, two, two, one, two, two, two, two, one, two];
+    const fit = fitRows(mix, 16);
+    expect(fit.length).toBeGreaterThanOrEqual(9);
     expect(fit[fit.length - 1]).toBe(mix[mix.length - 1]);
-    for (const rows of [Array(5).fill(one), Array(4).fill(two), fit]) {
+    for (const rows of [Array(10).fill(one), Array(9).fill(two), fit]) {
       const heights = rows.map((r: { text: string }) => rowHeight(r.text));
       const tops = stackRows(heights);
-      // Inside y 840-1060, the newest on the bottom edge, none over the header.
+      // Inside y 430-1050, the newest on the bottom edge, none over the header.
       expect(tops[0]).toBeGreaterThanOrEqual(CHAT_BODY.y);
-      expect(CHAT_BODY.y).toBe(840);
-      expect(CHAT_BODY.y + CHAT_BODY.h).toBe(1060);
-      expect(tops[tops.length - 1] + heights[heights.length - 1]).toBe(1060);
+      expect(CHAT_BODY.y).toBe(430);
+      expect(CHAT_BODY.y + CHAT_BODY.h).toBe(1050);
+      expect(tops[tops.length - 1] + heights[heights.length - 1]).toBe(1050);
       for (let i = 1; i < tops.length; i++) expect(tops[i]).toBe(tops[i - 1] + heights[i - 1]);
     }
-    expect(CHAT_HEADER).toEqual({ x: 1525, y: 800, w: 385, h: 40 });
+    expect(CHAT_HEADER).toEqual({ x: 6, y: 390, w: 410, h: 40 });
   });
 
   it('draws block rows with painted avatars and amber names, stream rows with a cyan ring and a handle', () => {
@@ -538,15 +569,16 @@ describe('the LIVE CHAT panel (chat-4)', () => {
     for (const [id, at] of posts) b.emit('cue', { id, kind: 'chat', at });
     view.update(frameAt(), clockAt(6.5), []);
     const c = chatRead();
-    expect(c.rows.length).toBeGreaterThanOrEqual(4);
-    expect(c.rows.length).toBeLessThanOrEqual(5);
+    // The tall layout A2 column (Rolando, 30 Oct 2026) has room for every one of the six posts.
+    expect(c.rows.length).toBeGreaterThanOrEqual(6);
+    expect(c.rows.length).toBeLessThanOrEqual(16);
     expect(c.rows.map((r) => r.id)).toEqual(c.feed.slice(-c.rows.length).map((r) => r.id));
     const last = c.rows[c.rows.length - 1];
-    expect(last.y + last.h).toBe(1060);
+    expect(last.y + last.h).toBe(1050);
     for (const r of c.rows) {
-      expect(r.y, r.id).toBeGreaterThanOrEqual(840);
-      expect(r.y + r.h, r.id).toBeLessThanOrEqual(1060);
-      expect(r.x).toBe(1545);
+      expect(r.y, r.id).toBeGreaterThanOrEqual(430);
+      expect(r.y + r.h, r.id).toBeLessThanOrEqual(1050);
+      expect(r.x).toBe(26);
       if (r.chat === 'stream') {
         expect(r).toMatchObject({ ring: 'cyan', nameColor: 'cyan', avatar: null });
         expect(VIEWER_HANDLES).toContain(r.name);
@@ -567,15 +599,15 @@ describe('the LIVE CHAT panel (chat-4)', () => {
     b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 1 });
     view.update(frameAt(), clockAt(1.5), []);
     expect(chatRead().rows.some((r) => r.chat === 'stream')).toBe(true);
-    // A click in the body does nothing; one on the header toggles.
-    click(1700, 950);
+    // A click in the body does nothing; one on the header toggles (y 390-430 since layout A2).
+    click(200, 700);
     expect(chatRead().filter).toBe('all');
-    click(1700, 820);
+    click(200, 410);
     let c = chatRead();
     expect(c.filter).toBe('block');
     expect(c.header.tag).toBe(CHAT_TEXT.block);
     expect(c.rows.every((r) => r.chat === 'block')).toBe(true);
-    click(1700, 820);
+    click(200, 410);
     c = chatRead();
     expect(c.filter).toBe('all');
     expect(c.header.tag).toBe(CHAT_TEXT.all);
@@ -615,9 +647,10 @@ describe('the LIVE CHAT panel (chat-4)', () => {
 
   it('sits the rows back to alpha 0.4 while the chat is silent', () => {
     const { view, bus: b } = liveView();
-    view.update(frameAt(), clockAt(5), []);
-    b.emit('cue', { id: 'C6.fail.chat', kind: 'chat', at: 5 });
-    view.update(frameAt(), clockAt(5.05), []);
+    // Before the first filler (2 s at the earliest), so no row is still fading in.
+    view.update(frameAt(), clockAt(1.5), []);
+    b.emit('cue', { id: 'C6.fail.chat', kind: 'chat', at: 1.5 });
+    view.update(frameAt(), clockAt(1.55), []);
     const c = chatRead();
     expect(c.silenced).toBe(true);
     expect(c.rows.every((r) => r.alpha === 0.4)).toBe(true);
@@ -719,15 +752,21 @@ function artScene(present: (key: string) => boolean): { scene: Phaser.Scene; cal
 }
 
 /** The view on an art scene, with a stream row (C1.chat.02) and a system row (C4.chat.03) posted. */
-function artView(picked: (key: string) => boolean, present: (key: string) => boolean) {
+function artView(
+  picked: (key: string) => boolean,
+  present: (key: string) => boolean,
+  rect: Rect = PAINTED_CHAT,
+) {
   const b = new Bus();
   const s = artScene(present);
   const view = new ChatFeedView(picked);
   view.preload(s.scene);
-  view.create(s.scene, hostOn(s.scene, b));
-  b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 1 });
-  b.emit('cue', { id: 'C4.chat.03', kind: 'chat', at: 1.5 });
-  for (let c = 1; c < 3; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
+  view.create(s.scene, hostOn(s.scene, b, rect));
+  // Let the first serve's hype burst pour in and settle first, then the two rows under test post.
+  for (let c = 0.05; c < 3.5; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
+  b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 3.5 });
+  b.emit('cue', { id: 'C4.chat.03', kind: 'chat', at: 3.55 });
+  for (let c = 3.5; c < 3.7; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
   return { view, ...s };
 }
 
@@ -830,6 +869,30 @@ describe('the chat art drop-in (chat-6)', () => {
     view.shutdown();
   });
 
+  it('draws the see-through code glass in the tall layout A2 column, with the painted avatars still on', () => {
+    // Neither painted plate can fill 410x680 at or under 1:1 (Rolando's layout A2, 30 Oct 2026).
+    expect(plateFits(artRequest(CHAT_PLATE_WIDE)!.cut!, ZONES.chat, CHAT_PLATE_K, CHAT_PLATE_SLICE)).toBe(
+      false,
+    );
+    expect(plateFits(CHAT_PANEL_FILE, ZONES.chat, CHAT_PANEL_K, CHAT_PANEL_SLICE)).toBe(false);
+    expect(chatPlateFor('portrait', ZONES.chat)).toBe('portrait');
+    expect(plateFits(artRequest(CHAT_PLATE_WIDE)!.cut!, PAINTED_CHAT, CHAT_PLATE_K, CHAT_PLATE_SLICE)).toBe(
+      true,
+    );
+    expect(chatPlateFor('wide', ZONES.chat)).toBe('glass');
+    expect(chatPlateFor('wide', PAINTED_CHAT)).toBe('wide');
+    expect(CHAT_GLASS.alpha).toBeLessThan(1);
+    const { view, calls } = artView(
+      () => true,
+      () => true,
+      ZONES.chat,
+    );
+    expect(hudRead().chatArt).toEqual({ plate: 'glass', streamAvatars: true, systemGlyph: true });
+    expect(calls.nineslice).not.toContain(artTexture(CHAT_PLATE_WIDE));
+    expect(calls.nineslice).not.toContain('hud:chat-panel');
+    view.shutdown();
+  });
+
   it('falls back the same way when a picked file did not load, so a missing texture is never drawn', () => {
     const present = (key: string) => !CHAT_ART_TEXTURES.includes(key);
     const { view, calls } = artView(() => true, present);
@@ -859,7 +922,7 @@ describe('the chat art drop-in (chat-6)', () => {
     const s = artScene(() => true);
     const view = new ChatFeedView();
     view.preload(s.scene);
-    view.create(s.scene, hostOn(s.scene, b));
+    view.create(s.scene, hostOn(s.scene, b, PAINTED_CHAT));
     b.emit('cue', { id: 'C4.chat.seed', kind: 'chat', at: 1 });
     for (let c = 1; c < 2; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
     expect(s.calls.nineslice).toContain(artTexture(CHAT_PLATE_WIDE));
@@ -921,7 +984,7 @@ describe('the 10 per 30 s cap with scripted rows', () => {
     lastPostAt: at,
   });
 
-  it('a surge of scripted cues, reactions and filler never posts more than 10 in 30 s, and every scripted id posts, in order', () => {
+  it('a surge of scripted cues, reactions and filler never paces more than windowMax in 30 s, and every scripted id posts, in order', () => {
     const rand = seededRandom(7);
     let s: ChatState = { ...initialChat(0, rand), servedOnce: true, servingMax: 1, watching: 3 };
     const rows: ChatRow[] = [];
@@ -954,7 +1017,8 @@ describe('the 10 per 30 s cap with scripted rows', () => {
       s = step.state;
       rows.push(...step.posts);
     }
-    expect(most(rows)).toBeLessThanOrEqual(CHAT_PACE.windowMax);
+    // A hype burst's rows sit on top of the window; everything else is paced.
+    expect(most(rows.filter((r) => r.cause !== 'hype'))).toBeLessThanOrEqual(CHAT_PACE.windowMax);
     const scripted = rows.filter((r) => r.scripted).map((r) => r.id);
     // Every cue posted except a complaint whose errors stopped first (none here), in cue order.
     expect(scripted).toEqual(['C1.chat.01', ...cues.map(([, id]) => id)]);
@@ -1054,7 +1118,7 @@ describe('the 10 per 30 s cap with scripted rows', () => {
     const b = new Bus();
     const f = new ChatFeed(0);
     f.attach(b);
-    // The four seeds sit in the window; six cues fill it.
+    // The four seeds sit in the window; ten cues fill it.
     const fill: LineId[] = [
       'C1.chat.01',
       'C1.chat.02',
@@ -1062,7 +1126,12 @@ describe('the 10 per 30 s cap with scripted rows', () => {
       'C3.chat.02',
       'C3.chat.03',
       'C4.chat.04',
+      'C4.chat.01',
+      'C4.chat.02',
+      'C5.chat.01',
+      'C6.chat.hold.01',
     ];
+    expect(fill.length + 4).toBe(CHAT_PACE.windowMax);
     fill.forEach((id, i) => b.emit('cue', { id, kind: 'chat', at: 1 + i * 0.1 }));
     expect(f.posts).toBe(CHAT_PACE.windowMax);
     b.emit('cue', { id: 'C4.chat.cut', kind: 'chat', at: 2 });
@@ -1072,7 +1141,8 @@ describe('the 10 per 30 s cap with scripted rows', () => {
     expect(f.state.feed.some((r) => r.id === 'C4.chat.cut')).toBe(false);
     // The seeds at 0 leave the window at 30.
     f.step(frameAt(SERVING), 30.05, []);
-    expect(f.state.feed[f.state.feed.length - 1]).toMatchObject({
+    // (The first serve's hype burst may post on the same frame; it sits outside the window.)
+    expect(f.state.feed.filter((r) => r.cause !== 'hype').at(-1)).toMatchObject({
       id: 'C4.chat.cut',
       at: 30.05,
       scripted: true,

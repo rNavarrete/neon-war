@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { type GameEvents, bus, dragVerdict } from '../game/bus';
 import { Director } from '../game/director';
 import { run } from '../game/run';
-import { type Part, wireKey } from '../sim/board';
+import { type Part, type PartKind, wireKey } from '../sim/board';
 import { provideTestState } from '../testHook';
 import { type Frame, frame } from '../game/frame';
 import { balancerGiven, balancerGivenIn, placeBalancer } from './board/crew';
@@ -58,7 +58,18 @@ import { dipPhase } from '../sim/failures';
 import { blockCentre, blockQuad, cellQuad, cellSize, nodeAt } from './board/cells';
 import { register as registerLocate } from './hud/locate';
 import { registerPool } from './live/hook';
-import { ZONES, pageRect } from './live/layout';
+import {
+  FEED_SHOWN,
+  FEED_VIEW,
+  ZONES,
+  type Rect,
+  TRAY_VIEW,
+  type View,
+  boardRectToScreen,
+  boardToScreen,
+  pageRect,
+  screenToBoard,
+} from './live/layout';
 import {
   HOT_SPEED,
   PACKETS_PER_REQUEST,
@@ -77,7 +88,7 @@ import {
 import { flagsFrom } from './live/flags';
 import { BROWNOUT, BROWNOUT_RULES } from '../sim/brownout';
 import { type GhostInfo, ghostInfo } from './board/ghost';
-import { PlateCache, REPLACE_LABEL } from './board/plate';
+import { type CardTone, type PlateCard, PlateCache, REPLACE_LABEL, cardBarTone } from './board/plate';
 import { BoardSnapshot } from './board/snapshot';
 import { type InventoryArt, InventoryView } from './board/InventoryView';
 import {
@@ -171,6 +182,23 @@ export const GAME_WIDTH = 1920;
 export const GAME_HEIGHT = 1080;
 
 const CYAN = 0x2de2e6;
+/** The hover card's width, padding and font sizes, in the feed's space (shown at FEED_VIEW's scale). */
+const CARD = { w: 380, pad: 14, name: 19, chip: 14, big: 34, unit: 16, detail: 16, about: 17 } as const;
+/** The hover card's tones as text colours and as fills. */
+const TONE_TEXT: Readonly<Record<CardTone, string>> = {
+  ok: '#59f2a0',
+  info: '#2de2e6',
+  warn: '#ffb02e',
+  bad: '#ff4d5e',
+  idle: '#8aa0b4',
+};
+const TONE_HEX: Readonly<Record<CardTone, number>> = {
+  ok: 0x59f2a0,
+  info: 0x2de2e6,
+  warn: 0xffb02e,
+  bad: 0xff4d5e,
+  idle: 0x8aa0b4,
+};
 const AMBER = 0xffb02e;
 const GREY = 0x6b7385;
 const DARK_TINT = 0x3a3f55;
@@ -178,6 +206,15 @@ const DARK_TINT = 0x3a3f55;
 const REFUSAL_MS = 2000;
 /** Pointer travel (game px) before a press on a part counts as a wire drag rather than a click. */
 const DRAG_START = 10;
+/**
+ * How long (ms) a press on a placed part must hold still before the part lifts to be moved; a drag
+ * before then draws a wire as always (the long press that rearranges a phone's home screen).
+ */
+const HOLD_TO_MOVE_MS = 350;
+/** The most one frame adds to a hold, so a stalled frame never completes it alone. */
+const HOLD_FRAME_MS = 50;
+/** The lifted part's alpha while it is carried. */
+const CARRIED_ALPHA = 0.45;
 const BUTTON_RADIUS = 28;
 
 const ART: Readonly<Record<string, string>> = {
@@ -311,6 +348,8 @@ const INBOUND_KEYS: readonly string[] = INBOUND.map((w) => w.key);
 const RED = 0xff4d5e;
 /** The day plate's tint under the midnight plate, once it has faded in: the ends of the table go cold. */
 const MIDNIGHT_DAY_TINT = 0x4a5468;
+/** The whole rooftop scene's tint at midnight (table D, no midnight plate): colder, not as dark. */
+const MIDNIGHT_SCENE_TINT = 0x8894b0;
 /** strokePoints reads only x and y, so a plain point list will do. */
 const asVectors = (path: readonly Point[]) => path as unknown as Phaser.Math.Vector2[];
 /** How much the skyline above the table is dimmed, so the board reads first but the city still shows. */
@@ -320,7 +359,8 @@ const SKY_HORIZON = { art: 0.5, screen: TABLE.far.y - 8 } as const;
 
 type Drag =
   | { kind: 'card'; id: string }
-  | { kind: 'wire'; from: string; x0: number; y0: number; moved: boolean }
+  | { kind: 'wire'; from: string; x0: number; y0: number; moved: boolean; held: number }
+  | { kind: 'move'; id: string; part: PartKind; at: string | null }
   | null;
 
 /**
@@ -513,6 +553,12 @@ export class BoardScene extends Phaser.Scene {
   private plates = new PlateCache();
   private plate!: Phaser.GameObjects.Text;
   private plateG!: Phaser.GameObjects.Graphics;
+  /** The hover card's other lines: the name, the chip, the big number, its unit, the state. */
+  private plateName!: Phaser.GameObjects.Text;
+  private plateChip!: Phaser.GameObjects.Text;
+  private plateBig!: Phaser.GameObjects.Text;
+  private plateUnit!: Phaser.GameObjects.Text;
+  private plateDetail!: Phaser.GameObjects.Text;
   private plateFor: string | null = null;
   private platePinned = false;
   private replaceBtn!: Phaser.GameObjects.Container;
@@ -565,6 +611,15 @@ export class BoardScene extends Phaser.Scene {
   private readonly cf = { lower: 0, dy: -CABLE_DROP_PX, sway: 0, landed: false };
   private readonly pf = { along: 0, alpha: 0, radius: 0 };
   private offAction: (() => void) | null = null;
+  private offCoach: (() => void) | null = null;
+  /** What the tutorial coach lights now (bus `coach`), or null; drawn by drawCoach. */
+  private coachLit: GameEvents['coach'] | null = null;
+  private coachG!: Phaser.GameObjects.Graphics;
+  /** The coach's ghost wire along the grid, and the parts it was routed round. */
+  private coachPath: Point[] | null = null;
+  private coachPathLength = 0;
+  private coachPathFor: readonly Part[] | null = null;
+  private readonly coachDot = { x: 0, y: 0 };
   /** board-11: the board clock each wire was first laid on, and the last key the board consumed. */
   private wireBorn = new Map<string, number>();
   private lastKey: string | null = null;
@@ -729,17 +784,35 @@ export class BoardScene extends Phaser.Scene {
       .setOrigin(1, 1)
       .setDepth(0.8)
       .setVisible(false);
-    this.plateG = this.add.graphics().setDepth(37);
+    // The hover card (Rolando, 30 Oct 2026: option A, the part card): a title bar with the name and
+    // a state chip, one big number and its unit, the load bar, the state in words when it is not
+    // simply running, and one plain sentence. `plate` is that sentence; drawCard lays them all out.
+    this.plateG = this.add.graphics().setDepth(37).setVisible(false);
+    const cardText = (size: number, color: string, bold = false) =>
+      this.add
+        .text(0, 0, '', {
+          fontFamily: 'monospace',
+          fontSize: `${size}px`,
+          color,
+          fontStyle: bold ? 'bold' : 'normal',
+        })
+        .setOrigin(0, 0)
+        .setDepth(38)
+        .setVisible(false);
+    this.plateName = cardText(CARD.name, '#ffb02e', true);
+    this.plateChip = cardText(CARD.chip, '#59f2a0', true).setOrigin(1, 0);
+    this.plateBig = cardText(CARD.big, '#2de2e6', true);
+    this.plateUnit = cardText(CARD.unit, '#8aa0b4');
+    this.plateDetail = cardText(CARD.detail, '#ffb02e');
     this.plate = this.add
       .text(0, 0, '', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#ffe2b0',
-        backgroundColor: '#05070fee',
-        padding: { x: 10, y: 6 },
-        lineSpacing: 4,
+        fontFamily: 'sans-serif',
+        fontSize: `${CARD.about}px`,
+        color: '#b9c8d6',
+        lineSpacing: 3,
+        wordWrap: { width: CARD.w - 2 * CARD.pad },
       })
-      .setOrigin(0.5, 1)
+      .setOrigin(0, 0)
       .setDepth(38)
       .setVisible(false);
     this.replaceBtn = this.makeReplaceButton();
@@ -758,6 +831,11 @@ export class BoardScene extends Phaser.Scene {
       .setDepth(40)
       .setVisible(false);
 
+    // The feed and the tray draw in the board's own space; a camera shows each in its zone.
+    for (const cam of this.cameras.cameras.slice(1)) this.cameras.remove(cam);
+    this.fitView(this.cameras.main, FEED_VIEW);
+    this.fitView(this.cameras.add(), TRAY_VIEW);
+
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.onDown, this);
     this.input.on('pointermove', this.onMove, this);
@@ -773,13 +851,21 @@ export class BoardScene extends Phaser.Scene {
     this.offBus = bus.on('refused', ({ reason }) => this.showRefusal(reason));
     this.offAction?.();
     this.offAction = bus.on('action', (a) => this.onAction(a));
+    this.offCoach?.();
+    this.coachLit = null;
+    this.coachPathFor = null;
+    this.coachG = this.add.graphics().setDepth(6.4);
+    this.offCoach = bus.on('coach', (c) => {
+      this.coachLit = c.step !== null ? c : null;
+      this.coachPathFor = null;
+    });
     this.director?.destroy();
     this.director = new Director();
-    // Where the comms band's leader line may point on the board (game px, made once): the
-    // inventory's SERVER card and the channel's mouth.
+    // Where the comms band's leader line may point on the board (screen px through the views, made
+    // once): the inventory's SERVER card and the channel's mouth.
     const serverCard = trayCards(false).find((c) => c.id === 'server');
-    const cardAt = serverCard ? { x: serverCard.x, y: serverCard.y } : null;
-    const mouthAt = { x: CHANNEL.mouth.x, y: (CHANNEL.mouth.top + CHANNEL.mouth.bottom) / 2 };
+    const cardAt = serverCard ? boardToScreen({ x: serverCard.x, y: serverCard.y }) : null;
+    const mouthAt = boardToScreen({ x: CHANNEL.mouth.x, y: (CHANNEL.mouth.top + CHANNEL.mouth.bottom) / 2 });
     const offLocate = [registerLocate('inventory', () => cardAt), registerLocate('channel', () => mouthAt)];
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       for (const off of offLocate) off();
@@ -790,6 +876,8 @@ export class BoardScene extends Phaser.Scene {
       this.offBus = null;
       this.offAction?.();
       this.offAction = null;
+      this.offCoach?.();
+      this.offCoach = null;
       this.director?.destroy();
       this.director = null;
       this.glowProbe.clear();
@@ -811,6 +899,7 @@ export class BoardScene extends Phaser.Scene {
     const seconds = this.game.loop.rawDelta / 1000;
     const r = run();
     r.tick(seconds);
+    this.liftHeld(this.game.loop.rawDelta);
     this.director?.flush(this);
     this.syncBoard(seconds);
   }
@@ -822,8 +911,8 @@ export class BoardScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05070f, 1).setOrigin(0);
 
     // The feed: the city's skyline across the top of the zone, its horizon just behind the table's
-    // far edge, cropped to the zone and dimmed a little so the board reads first.
-    const feed = ZONES.feed;
+    // far edge, cropped to what the feed's camera shows and dimmed a little so the board reads first.
+    const feed = FEED_SHOWN;
     const sky = this.add.image(feed.x, 0, 'sky').setOrigin(0);
     const scale = feed.w / sky.width;
     const top = SKY_HORIZON.screen - SKY_HORIZON.art * sky.height * scale;
@@ -1226,7 +1315,8 @@ export class BoardScene extends Phaser.Scene {
       else v.img.clearTint();
       v.lit = flickerLit(f.flickering.includes(part.id), t, reduce);
       const base = !painted && (look.status === 'booting' || look.status === 'rebooting') ? pulse + 0.2 : 1;
-      v.img.setAlpha(v.lit ? base : FLICKER_DIM);
+      const carried = this.drag?.kind === 'move' && this.drag.id === part.id ? CARRIED_ALPHA : 1;
+      v.img.setAlpha((v.lit ? base : FLICKER_DIM) * carried);
       if (v.readout.update(look)) v.label.setText(v.readout.text).setColor(v.readout.colour);
       this.drawPartState(part, v);
       // The balancer skips this box: grey dashed footprint, SKIPPED sticky for 1 s after.
@@ -1262,6 +1352,7 @@ export class BoardScene extends Phaser.Scene {
     this.stepSparks(dt, parts);
     if (!f.paused) this.playSounds(occ, parts);
     this.drawWait(wait, f.paused ? 0 : Math.min(seconds, 0.25));
+    this.drawCoach(parts, t, reduce);
     this.updateGhost(f);
     this.updatePlate(parts, f);
     this.placeButtons(parts);
@@ -1308,6 +1399,63 @@ export class BoardScene extends Phaser.Scene {
       }
     }
     v.warn.setVisible(look.warning && v.lit);
+  }
+
+  /**
+   * The tutorial coach's highlight (src/scenes/hud/coach.ts): a pulsing cyan ring round each tray
+   * card and part it names, and the connection to make as a ghost wire along the grid, dashes
+   * marching from the part that sends to the part that takes, an arrowhead at the end and a cube
+   * running it to show the way. Steady under reduce flicker. The route is found again only when the
+   * coach or the parts change.
+   */
+  private drawCoach(parts: readonly Part[], t: number, reduce: boolean): void {
+    const g = this.coachG;
+    g.clear();
+    const c = this.coachLit;
+    if (!c) return;
+    const a = reduce ? 0.9 : 0.55 + 0.45 * Math.abs(Math.sin(Math.PI * 1.2 * t));
+    for (let i = 0; i < c.cards.length; i++) {
+      const card = this.cards.find((k) => k.id === c.cards[i]);
+      if (!card) continue;
+      ringBox(g, card.x, card.y, card.w + 14, card.h + 14, a);
+    }
+    for (let i = 0; i < c.parts.length; i++) {
+      const p = partById(parts, c.parts[i]);
+      const b = p ? partBox(p) : null;
+      if (b) ringBox(g, b.x, b.y, b.w + 18, b.h + 18, a);
+    }
+    if (!c.wire) return;
+    if (this.coachPathFor !== parts) {
+      this.coachPathFor = parts;
+      const from = partById(parts, c.wire.from);
+      const to = partById(parts, c.wire.to);
+      this.coachPath = from && to ? wirePath(from, to, parts) : null;
+      this.coachPathLength = this.coachPath ? pathLength(this.coachPath) : 0;
+    }
+    const path = this.coachPath;
+    if (!path || path.length < 2) return;
+    const shift = reduce ? 0 : (t * 48) % 24;
+    g.lineStyle(10, CYAN, 0.18 * a);
+    for (let i = 1; i < path.length; i++) g.lineBetween(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y);
+    g.lineStyle(4, CYAN, a);
+    marchingDashes(g, path, 14, 10, shift);
+    // The arrowhead on the part that takes the wire.
+    const end = path[path.length - 1];
+    const prev = path[path.length - 2];
+    const ang = Math.atan2(end.y - prev.y, end.x - prev.x);
+    const s = 16;
+    g.fillStyle(CYAN, a).fillTriangle(
+      end.x,
+      end.y,
+      end.x - s * Math.cos(ang) + (s / 2) * Math.sin(ang),
+      end.y - s * Math.sin(ang) - (s / 2) * Math.cos(ang),
+      end.x - s * Math.cos(ang) - (s / 2) * Math.sin(ang),
+      end.y - s * Math.sin(ang) + (s / 2) * Math.cos(ang),
+    );
+    if (!reduce) {
+      pointAlong(path, this.coachPathLength, (t * 0.6) % 1, this.coachDot);
+      g.fillStyle(0xffffff, 0.9).fillCircle(this.coachDot.x, this.coachDot.y, 5);
+    }
   }
 
   /** The waits' port blink, the crew chip and the pool of tumbling cubes, made once. */
@@ -1376,26 +1524,27 @@ export class BoardScene extends Phaser.Scene {
   // footprint would cover light green (it fits) or red (blocked); while the board waits for a
   // build, one good spot pulses; at midnight the rack that loses power goes dark.
 
-  /** The grid's layers, and its static drawing: the rack bands with their labels. */
+  /** The grid's layers. */
   private drawGrid(): void {
-    const g = (this.rackG = this.add.graphics().setDepth(0.6));
-    for (let k = 0; k < RACKS.length; k++) {
-      const r = RACKS[k];
-      const q = blockQuad(r.from, 0, r.to - r.from + 1, GRID.rows);
-      // Every other rack a faint wash, so the four power feeds read as bands.
-      if (k % 2 === 1) g.fillStyle(CYAN, 0.04).fillPoints(asVectors(q), true);
-      if (k > 0) g.lineStyle(2, CYAN, 0.3).lineBetween(q[0].x, q[0].y, q[3].x, q[3].y);
-      addLabel(this, (q[0].x + q[1].x) / 2, q[0].y - 3, `rack-${r.id}`, `${LABELS.board.rack} ${r.id}`, {
-        fontFamily: 'monospace',
-        fontSize: '13px',
-        fontStyle: 'bold',
-        color: '#7fe9ff',
-        stroke: '#05070f',
-        strokeThickness: 3,
-      })
-        .setOrigin(0.5, 1)
-        .setAlpha(0.75)
-        .setDepth(0.62);
+    // No rack bands or RACK labels (Rolando, 30 Oct 2026: just capacity and the servers covering it,
+    // as in an interview). The layer stays for the grid's static drawing.
+    this.rackG = this.add.graphics().setDepth(0.6);
+    // The grid itself, drawn in code on the picked table's plain glass (table D, Rolando 30 Oct
+    // 2026): a faint cyan line on every cell edge, a brighter one every fourth, the border brightest.
+    const g = this.rackG;
+    for (let i = 0; i <= GRID.cols; i++) {
+      const edge = i === 0 || i === GRID.cols;
+      g.lineStyle(edge ? 2 : 1, CYAN, edge ? 0.55 : i % 4 ? 0.14 : 0.28);
+      const a = nodeAt(i, 0);
+      const b = nodeAt(i, GRID.rows);
+      g.lineBetween(a.x, a.y, b.x, b.y);
+    }
+    for (let j = 0; j <= GRID.rows; j++) {
+      const edge = j === 0 || j === GRID.rows;
+      g.lineStyle(edge ? 2 : 1, CYAN, edge ? 0.55 : j % 4 ? 0.14 : 0.28);
+      const a = nodeAt(0, j);
+      const b = nodeAt(GRID.cols, j);
+      g.lineBetween(a.x, a.y, b.x, b.y);
     }
     this.dipG = this.add.graphics().setDepth(0.64).setVisible(false);
     this.suggestG = this.add.graphics().setDepth(0.66).setVisible(false);
@@ -1440,6 +1589,10 @@ export class BoardScene extends Phaser.Scene {
    */
   private drawCells(f: Frame): void {
     const d = this.drag;
+    if (d?.kind === 'move') {
+      this.drawMoveCells(d, f);
+      return;
+    }
     const card = d?.kind === 'card' ? d.id : null;
     const at = card !== null ? this.over.slot : null;
     const state = at !== null ? this.overState() : null;
@@ -1482,6 +1635,36 @@ export class BoardScene extends Phaser.Scene {
       bad: colour === 'red' && bad.length === 0 ? cells : bad,
       colour,
     };
+    g.setVisible(true);
+  }
+
+  /**
+   * The footprint under a carried part: green where it would land, red on the cells that block it
+   * (its own cells count as free). Redrawn only when the spot or the parts change.
+   */
+  private drawMoveCells(d: Extract<Drag, { kind: 'move' }>, f: Frame): void {
+    const key = `move:${d.id}`;
+    if (key === this.cellsCard && d.at === this.cellsAt && f.parts === this.cellsParts) return;
+    this.cellsCard = key;
+    this.cellsAt = d.at;
+    this.cellsState = null;
+    this.cellsParts = f.parts;
+    const g = this.cellsG;
+    g.clear();
+    if (d.at === null) {
+      this.preview = null;
+      g.setVisible(false);
+      return;
+    }
+    const { cells, bad } = previewCells(d.part, d.at, f.parts, [d.id]);
+    for (const id of cells) {
+      const q = cellQuad(id);
+      if (!q) continue;
+      const c = bad.length > 0 ? FIT_RED : FIT_GREEN;
+      g.fillStyle(c, 0.32).fillPoints(asVectors(q), true);
+      g.lineStyle(2, c, 0.95).strokePoints(asVectors(q), true);
+    }
+    this.preview = { card: 'move', anchor: d.at, cells, bad, colour: bad.length > 0 ? 'red' : 'green' };
     g.setVisible(true);
   }
 
@@ -2151,7 +2334,8 @@ export class BoardScene extends Phaser.Scene {
    * changes; nothing shows during a drag.
    */
   private updatePlate(parts: readonly Part[], f: Frame): void {
-    const dragging = this.drag !== null && (this.drag.kind === 'card' || this.drag.moved);
+    const d = this.drag;
+    const dragging = d !== null && (d.kind !== 'wire' || d.moved);
     let partId: string | null = null;
     let wireKeyShown: string | null = null;
     let pinned = false;
@@ -2172,13 +2356,11 @@ export class BoardScene extends Phaser.Scene {
           (wireKeyShown !== null && wireKeyShown === this.selectedWire);
     }
     this.platePinned = pinned;
-    const plate = this.plate;
     if (partId === null && wireKeyShown === null) {
       if (this.plateFor !== null) {
         this.plateFor = null;
         this.plates.reset();
-        plate.setVisible(false);
-        this.plateG.clear();
+        this.showCard(false);
       }
       return;
     }
@@ -2193,7 +2375,7 @@ export class BoardScene extends Phaser.Scene {
       changed = this.plates.part(partId, part, v.look, this.skippedNow(part));
       const size = partSize(part);
       x = c.x;
-      y = c.y - size.h / 2 - 30;
+      y = c.y - size.h / 2 - 14;
     } else {
       const w = this.wireByKey.get(wireKeyShown!)!;
       const a = partById(parts, w.from);
@@ -2201,26 +2383,111 @@ export class BoardScene extends Phaser.Scene {
       if (!a || !b) return;
       changed = this.plates.wire(w.key, a, b, f.flow.wires[w.key] ?? 0);
       x = w.mid.x;
-      y = w.mid.y - 76;
+      y = w.mid.y - 64;
     }
     const target = partId ?? wireKeyShown;
-    if (changed || target !== this.plateFor) {
+    if ((changed || target !== this.plateFor) && this.plates.card) {
       this.plateFor = target;
-      plate.setText(this.plates.text);
-      const left = BOARD_AREA.left + 8 + plate.width / 2;
-      const right = BOARD_AREA.right - 8 - plate.width / 2;
-      const px = Phaser.Math.Clamp(x, left, right);
-      const py = Math.max(BOARD_AREA.top + 8 + plate.height, y);
-      plate.setPosition(px, py).setVisible(true);
-      const g = this.plateG;
-      g.clear();
-      g.lineStyle(2, AMBER, 0.9).strokeRect(
-        px - plate.width / 2,
-        py - plate.height,
-        plate.width,
-        plate.height,
+      this.drawCard(this.plates.card, x, y);
+    }
+  }
+
+  /** Show or hide every piece of the hover card. */
+  private showCard(on: boolean): void {
+    for (const o of [
+      this.plateG,
+      this.plateName,
+      this.plateChip,
+      this.plateBig,
+      this.plateUnit,
+      this.plateDetail,
+      this.plate,
+    ])
+      o.setVisible(on);
+    if (!on) this.plateG.clear();
+  }
+
+  /**
+   * Lay the hover card out above (x, y), its pointer on that point, kept inside what the feed
+   * shows. Runs only when what the card says changes, so steady frames draw nothing.
+   */
+  private drawCard(card: PlateCard, x: number, y: number): void {
+    const { w, pad } = CARD;
+    this.plateName.setText(card.name);
+    this.plateChip.setText(card.chip ?? '').setColor(TONE_TEXT[card.tone]);
+    this.plateBig.setText(card.big);
+    this.plateUnit.setText(card.unit);
+    this.plateDetail.setText(card.detail ?? '').setColor(TONE_TEXT[card.tone === 'ok' ? 'info' : card.tone]);
+    this.plate.setText(card.about);
+    // Heights, top to bottom: the title bar, the number row, the bar, the state line, the sentence.
+    const head = 34;
+    const numberH = 40;
+    const barH = card.bar === null ? 0 : 14;
+    const detailH = card.detail === null ? 0 : this.plateDetail.height + 4;
+    const h = head + 8 + numberH + barH + detailH + this.plate.height + pad;
+    const tail = 10;
+    const left = FEED_SHOWN.x + 8;
+    const right = FEED_SHOWN.x + FEED_SHOWN.w - 8 - w;
+    const cx = Phaser.Math.Clamp(x - w / 2, left, right);
+    const top = Math.max(FEED_SHOWN.y + 8, y - tail - h);
+    const g = this.plateG;
+    g.clear();
+    g.fillStyle(0x000000, 0.45).fillRoundedRect(cx + 4, top + 6, w, h, 9);
+    g.fillStyle(0x05070f, 0.95).fillRoundedRect(cx, top, w, h, 9);
+    g.fillStyle(AMBER, 0.13).fillRoundedRect(cx, top, w, head, { tl: 9, tr: 9, bl: 0, br: 0 });
+    g.lineStyle(1, 0x2b3d55, 1).lineBetween(cx, top + head, cx + w, top + head);
+    g.lineStyle(1.5, 0x3a5272, 1).strokeRoundedRect(cx, top, w, h, 9);
+    // The pointer down to the part, when the card sits above it.
+    const tx = Phaser.Math.Clamp(x, cx + 18, cx + w - 18);
+    if (top + h + tail <= y + 1) {
+      g.fillStyle(0x05070f, 0.95).fillTriangle(tx - 9, top + h - 1, tx + 9, top + h - 1, tx, top + h + tail);
+      g.lineStyle(1.5, 0x3a5272, 1)
+        .lineBetween(tx - 9, top + h, tx, top + h + tail)
+        .lineBetween(tx, top + h + tail, tx + 9, top + h);
+    }
+    // The name's accent square and the chip's pill.
+    g.fillStyle(AMBER, 1).fillRoundedRect(cx + pad, top + 11, 12, 12, 3);
+    this.plateName.setPosition(cx + pad + 20, top + (head - this.plateName.height) / 2);
+    const chipX = cx + w - pad;
+    this.plateChip.setPosition(chipX - 8, top + (head - this.plateChip.height) / 2);
+    if (card.chip) {
+      const cw = this.plateChip.width + 16;
+      g.lineStyle(1.5, TONE_HEX[card.tone], 1).strokeRoundedRect(
+        chipX - cw,
+        top + 7,
+        cw,
+        head - 14,
+        (head - 14) / 2,
       );
     }
+    let yy = top + head + 8;
+    this.plateBig.setPosition(cx + pad, yy);
+    this.plateUnit.setPosition(
+      cx + pad + this.plateBig.width + 8,
+      yy + this.plateBig.height - this.plateUnit.height - 3,
+    );
+    yy += numberH;
+    if (card.bar !== null) {
+      const bw = w - 2 * pad;
+      g.fillStyle(0x132033, 1).fillRoundedRect(cx + pad, yy, bw, 6, 3);
+      const k = Math.max(0, Math.min(1, card.bar));
+      if (k > 0)
+        g.fillStyle(TONE_HEX[cardBarTone(card.bar)], 1).fillRoundedRect(
+          cx + pad,
+          yy,
+          Math.max(6, bw * k),
+          6,
+          3,
+        );
+      yy += barH;
+    }
+    if (card.detail !== null) {
+      this.plateDetail.setPosition(cx + pad, yy);
+      yy += detailH;
+    }
+    this.plate.setPosition(cx + pad, yy);
+    this.showCard(true);
+    this.plateDetail.setVisible(card.detail !== null);
   }
 
   /** Whether the SKIPPED tag is on `part`'s footprint now. */
@@ -2264,7 +2531,9 @@ export class BoardScene extends Phaser.Scene {
 
   /** End the drag in hand, with or without a drop, and say so once on the bus. */
   private endDrag(): void {
-    const had = this.drag !== null && (this.drag.kind === 'card' || this.drag.moved);
+    const d = this.drag;
+    const had = d !== null && (d.kind === 'card' || (d.kind === 'wire' && d.moved));
+    if (d?.kind === 'move') this.setCarried(d.id, false);
     this.drag = null;
     this.ghost.setVisible(false);
     this.over.id = null;
@@ -2336,18 +2605,27 @@ export class BoardScene extends Phaser.Scene {
     this.emitDrag();
   }
 
+  /** Show a box of the board's space in its zone: the camera's viewport is the zone, at the view's scale. */
+  private fitView(cam: Phaser.Cameras.Scene2D.Camera, v: View): void {
+    cam.setViewport(v.screen.x, v.screen.y, v.screen.w, v.screen.h);
+    cam.setZoom(v.scale);
+    cam.centerOn(v.world.x + v.world.w / 2, v.world.y + v.world.h / 2);
+  }
+
   /** Whether a press at (x, y) lands on a round button that is showing. */
   private onButton(btn: Phaser.GameObjects.Container, x: number, y: number): boolean {
     return btn.visible && Math.hypot(x - btn.x, y - btn.y) <= BUTTON_RADIUS + 4;
   }
 
-  private onDown(p: Phaser.Input.Pointer): void {
+  private onDown(ptr: Phaser.Input.Pointer): void {
+    // The board draws in its own space; the pointer comes in screen pixels (its two views).
+    const p = screenToBoard(ptr);
     this.pointer.x = p.x;
     this.pointer.y = p.y;
     const r = run();
     const parts = r.session.board.parts;
 
-    if (p.rightButtonDown()) {
+    if (ptr.rightButtonDown()) {
       const part = partAt(parts, p.x, p.y);
       if (part) this.decommission(part.id);
       return;
@@ -2393,7 +2671,7 @@ export class BoardScene extends Phaser.Scene {
 
     const part = partAt(parts, p.x, p.y);
     if (part) {
-      this.drag = { kind: 'wire', from: part.id, x0: p.x, y0: p.y, moved: false };
+      this.drag = { kind: 'wire', from: part.id, x0: p.x, y0: p.y, moved: false, held: 0 };
       this.wireTo.id = null;
       return;
     }
@@ -2416,7 +2694,9 @@ export class BoardScene extends Phaser.Scene {
     return best ? best.key : null;
   }
 
-  private onMove(p: Phaser.Input.Pointer): void {
+  private onMove(ptr: Phaser.Input.Pointer): void {
+    // The board draws in its own space; the pointer comes in screen pixels (its two views).
+    const p = screenToBoard(ptr);
     this.pointer.x = p.x;
     this.pointer.y = p.y;
     const d = this.drag;
@@ -2429,6 +2709,10 @@ export class BoardScene extends Phaser.Scene {
     }
     this.hover.part = null;
     this.hover.wire = null;
+    if (d.kind === 'move') {
+      this.carry(d, p.x, p.y);
+      return;
+    }
     if (d.kind === 'card') {
       // Unsnapped, the card rides just above the pointer so the cells under it (green or red) stay in view.
       if (this.ghostShownFor === null) this.ghost.setPosition(p.x, p.y - this.ghost.displayHeight / 2 - 8);
@@ -2442,7 +2726,9 @@ export class BoardScene extends Phaser.Scene {
     if (d.moved) this.updateWireTo(p.x, p.y, d.from);
   }
 
-  private onUp(p: Phaser.Input.Pointer): void {
+  private onUp(ptr: Phaser.Input.Pointer): void {
+    // The board draws in its own space; the pointer comes in screen pixels (its two views).
+    const p = screenToBoard(ptr);
     this.pointer.x = p.x;
     this.pointer.y = p.y;
     const d = this.drag;
@@ -2451,6 +2737,11 @@ export class BoardScene extends Phaser.Scene {
     const r = run();
     const parts = r.session.board.parts;
 
+    if (d.kind === 'move') {
+      // Set down on a spot that fits; anywhere else the part simply stays where it was.
+      if (d.at !== null) r.move(d.id, d.at);
+      return;
+    }
     if (d.kind === 'card') {
       if (d.id === 'server') {
         // A dead box under the pointer is replaced on its cells; otherwise the server snaps to the
@@ -2513,6 +2804,44 @@ export class BoardScene extends Phaser.Scene {
     this.selectedWire = null;
   }
 
+  /**
+   * A press held still on a placed part for HOLD_TO_MOVE_MS lifts it: the wire drag in hand becomes
+   * a move, the part dims and the cells under the pointer show where it would land.
+   */
+  private liftHeld(deltaMs: number): void {
+    const d = this.drag;
+    if (d?.kind !== 'wire' || d.moved) return;
+    // Count the hold frame by frame, at most HOLD_FRAME_MS a frame: one stalled frame (a slow
+    // machine, a busy test runner) never turns a quick wire drag into a lift before its move lands.
+    d.held += Math.min(deltaMs, HOLD_FRAME_MS);
+    if (d.held < HOLD_TO_MOVE_MS) return;
+    const part = partById(run().session.board.parts, d.from);
+    if (!part || part.slot === null) return;
+    this.selectedPart = null;
+    this.selectedWire = null;
+    this.drag = { kind: 'move', id: part.id, part: part.kind, at: null };
+    this.setCarried(part.id, true);
+    const v = this.views.get(part.id);
+    if (v) this.ghost.setTexture(v.img.texture.key).setScale(v.img.scaleX).setVisible(true);
+    this.carry(this.drag, this.pointer.x, this.pointer.y);
+  }
+
+  /** The carried part follows the pointer: its footprint snaps to the grid, null off the table. */
+  private carry(d: Extract<Drag, { kind: 'move' }>, x: number, y: number): void {
+    d.at = dropAnchor(d.part, x, y);
+    // The copy in hand stands on the footprint while it fits there, else rides under the pointer.
+    const fits =
+      d.at !== null && previewCells(d.part, d.at, run().session.board.parts, [d.id]).bad.length === 0;
+    const c = fits && d.at !== null ? partCentre({ kind: d.part, slot: d.at }) : null;
+    if (c) this.ghost.setPosition(c.x, c.y);
+    else this.ghost.setPosition(x, y);
+  }
+
+  /** Dim a part's shadow while it is carried (the sync dims its art), and bring it back when it is set down. */
+  private setCarried(id: string, carried: boolean): void {
+    this.views.get(id)?.shadow.setAlpha(carried ? CARRIED_ALPHA : 1);
+  }
+
   private decommission(id: string): void {
     const res = run().decommission(id);
     if (res.ok) this.selectedPart = null;
@@ -2528,7 +2857,7 @@ export class BoardScene extends Phaser.Scene {
   private makeAnimObjects(): void {
     this.bakeHaze();
     this.animG = this.add.graphics().setDepth(4.5);
-    const feed = ZONES.feed;
+    const feed = FEED_SHOWN;
     this.shade = this.add
       .rectangle(feed.x, feed.y, feed.w, feed.h, 0x000000, 1)
       .setOrigin(0)
@@ -2540,7 +2869,7 @@ export class BoardScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(2.9);
     this.cableImg.setScale(CABLE_SCALE).setVisible(false);
-    this.kitImg = this.add.image(0, 0, 'overclock-kit').setDepth(32).setVisible(false);
+    this.kitImg = this.add.image(0, 0, 'server-overclocked').setDepth(32).setVisible(false);
     this.liftImg = this.add.image(0, 0, 'server').setDepth(7).setVisible(false);
     this.floatText = this.add
       .text(0, 0, '', {
@@ -2911,7 +3240,7 @@ export class BoardScene extends Phaser.Scene {
     const lbView = lb ? this.views.get(lb.id) : undefined;
     if (cable && lbView) {
       const end = lbView.img.y - lbView.img.displayHeight / 2 + 6;
-      const shown = Math.max(0, end - ZONES.feed.y);
+      const shown = Math.max(0, end - FEED_SHOWN.y);
       const h = this.cableImg.height;
       const cropH = Math.min(h, shown / CABLE_SCALE);
       this.cableImg
@@ -2964,15 +3293,17 @@ export class BoardScene extends Phaser.Scene {
     // once when calm), and the day plate darkens under it: the midnight plate is narrower, so the
     // day plate stays as the table's ends. A
     // rewind past midnight brings the day plate back.
+    // Table D has no midnight plate of its own: the day plate goes cold by tint instead.
     const mp = this.midnightPlate;
-    if (mp) {
+    if (mp || this.dayPlate) {
       if (f.midnight === null) this.midnightStruck = null;
       else if (this.midnightStruck === null) this.midnightStruck = now;
       const a = midnightPlateAlpha(this.midnightStruck === null ? null : now - this.midnightStruck, calm);
       if (a !== this.midnightShown) {
         this.midnightShown = a;
-        mp.img.setAlpha(a).setVisible(a > 0);
-        if (a > 0) this.dayPlate?.setTint(lerpColour(0xffffff, MIDNIGHT_DAY_TINT, a));
+        mp?.img.setAlpha(a).setVisible(a > 0);
+        const cold = mp ? MIDNIGHT_DAY_TINT : MIDNIGHT_SCENE_TINT;
+        if (a > 0) this.dayPlate?.setTint(lerpColour(0xffffff, cold, a));
         else this.dayPlate?.clearTint();
       }
     }
@@ -3002,9 +3333,10 @@ export class BoardScene extends Phaser.Scene {
       this.particles.emit('ember', at.x, at.y, EMBER_SIZE);
       return;
     }
-    const feed = ZONES.feed;
+    // In the sky the feed shows above the table.
+    const feed = FEED_SHOWN;
     const x = feed.x + feed.w * (0.3 + 0.45 * ((n * 0.618) % 1));
-    const y = feed.y + 70 + 50 * (n % 3);
+    const y = feed.y + 160 + 70 * (n % 3);
     this.particles.emit('firework', x, y, FIREWORK_SIZE);
   }
 
@@ -3039,8 +3371,10 @@ export class BoardScene extends Phaser.Scene {
     const f = this.snap.current ?? frame(run());
     const board = { parts: f.parts, credits: f.credits };
     const rect = this.game.canvas.getBoundingClientRect();
+    // Board-space boxes show through the feed's or the tray's view (src/scenes/live/layout.ts).
+    const boardPageRect = (r: Rect, c: DOMRect) => pageRect(boardRectToScreen(r), c);
     const page = (x: number, y: number) => toPage({ x, y }, rect, { width: GAME_WIDTH, height: GAME_HEIGHT });
-    const pageBox = (b: Box) => pageRect({ x: b.x - b.w / 2, y: b.y - b.h / 2, w: b.w, h: b.h }, rect);
+    const pageBox = (b: Box) => boardPageRect({ x: b.x - b.w / 2, y: b.y - b.h / 2, w: b.w, h: b.h }, rect);
     const offline = [...f.offline];
     const footBox = (kind: Part['kind'], anchor: string) => {
       const q = footprintQuad(kind, anchor)!;
@@ -3048,7 +3382,7 @@ export class BoardScene extends Phaser.Scene {
       const ys = q.map((p) => p.y);
       const x0 = Math.min(...xs);
       const y0 = Math.min(...ys);
-      return pageRect({ x: x0, y: y0, w: Math.max(...xs) - x0, h: Math.max(...ys) - y0 }, rect);
+      return boardPageRect({ x: x0, y: y0, w: Math.max(...xs) - x0, h: Math.max(...ys) - y0 }, rect);
     };
     const slots = SERVER_SPOTS.map((id) => {
       const c = parseCell(id)!;
@@ -3062,14 +3396,16 @@ export class BoardScene extends Phaser.Scene {
       };
     });
     const round = (n: number) => Math.round(n * 1000) / 1000;
-    const feed = ZONES.feed;
+    // All the feed's camera shows, the sky above the table included (layout A2).
+    const feed = FEED_SHOWN;
     const skyShown = this.sky.visible && this.sky.alpha > 0;
     return {
-      area: pageRect(feed, rect),
+      // What the feed camera shows is exactly the feed zone (FEED_SHOWN fitted into it).
+      area: pageRect(ZONES.feed, rect),
       backdrop: {
         // The band between the feed's top and the table's far edge, where only the city shows.
         skyline: skyShown
-          ? pageRect({ x: feed.x, y: feed.y, w: feed.w, h: TABLE.far.y - feed.y }, rect)
+          ? boardPageRect({ x: feed.x, y: feed.y, w: feed.w, h: TABLE.far.y - feed.y }, rect)
           : null,
         goggles:
           this.textures.exists('goggles') ||
@@ -3090,6 +3426,7 @@ export class BoardScene extends Phaser.Scene {
         price: c.price,
       })),
       inventory: {
+        // What the tray camera shows is exactly the inventory zone (TRAY_WORLD fitted into it).
         area: pageRect(ZONES.inventory, rect),
         counts: { ...this.counts },
         frames: Object.fromEntries(
@@ -3099,16 +3436,18 @@ export class BoardScene extends Phaser.Scene {
       art: {
         picked: [...this.picked],
         table: this.table.art,
-        tableRect: pageRect(this.table.place, rect),
+        tableRect: boardPageRect(this.table.place, rect),
         tableScale: round(this.table.place.scale),
-        channelPlate: this.channelPlate ? pageRect(this.channelPlate, rect) : null,
+        channelPlate: this.channelPlate ? boardPageRect(this.channelPlate, rect) : null,
         midnightPlate: this.midnightPlate
           ? {
-              rect: pageRect(this.midnightPlate.place, rect),
+              rect: boardPageRect(this.midnightPlate.place, rect),
               scale: round(this.midnightPlate.place.scale),
               alpha: round(this.midnightShown),
             }
           : null,
+        // How far the midnight change has come (the plate's fade, or table D's cold tint), 0 to 1.
+        midnight: round(this.midnightShown),
         packet: { texture: this.packetTex, scale: round(this.packetScaleNow) },
         pingMarks: this.pingIcons.filter((i) => i.visible).length,
         stamps: board.parts
@@ -3277,12 +3616,24 @@ export class BoardScene extends Phaser.Scene {
         chip: this.crewText.visible ? this.crewText.text : null,
       },
       rewinds: f.rewinds.map((w) => ({ at: round(w.at), to: w.to })),
+      coach: this.coachLit
+        ? {
+            step: this.coachLit.step,
+            cards: [...this.coachLit.cards],
+            parts: [...this.coachLit.parts],
+            wire: this.coachLit.wire,
+            path:
+              this.coachLit.wire && this.coachPath && this.coachPathFor === f.parts
+                ? this.coachPath.map((p) => page(p.x, p.y))
+                : null,
+          }
+        : null,
       selectedPart: this.selectedPart,
       selectedWire: this.selectedWire,
       cutButton: this.cutBtn.visible ? page(this.cutBtn.x, this.cutBtn.y) : null,
       binButton: this.binBtn.visible ? page(this.binBtn.x, this.binBtn.y) : null,
       refusal: this.refusalText.visible ? this.refusalText.text : null,
-      dragging: this.drag ? (this.drag.kind === 'card' ? this.drag.id : 'wire') : null,
+      dragging: this.drag ? (this.drag.kind === 'card' ? this.drag.id : this.drag.kind) : null,
       replaceButton: this.replaceBtn.visible ? page(this.replaceBtn.x, this.replaceBtn.y) : null,
       dragOver:
         this.drag?.kind === 'card'
@@ -3326,7 +3677,7 @@ export class BoardScene extends Phaser.Scene {
       hover: {
         part: this.hover.part,
         wire: this.hover.wire,
-        text: this.plate.visible ? this.plate.text : null,
+        text: this.plate.visible ? this.plates.text : null,
         target: this.plate.visible ? this.plateFor : null,
         pinned: this.plate.visible && this.platePinned,
       },
@@ -3431,6 +3782,48 @@ const SPOT_CENTRES: readonly Point[] = SERVER_SPOTS.map((id) => {
 });
 
 /** A dashed straight line from `a` to `b`: `dash` px drawn, `gap` px skipped. */
+/** A pulsing highlight ring (an outer glow and a crisp edge) round a box centred on (x, y). */
+function ringBox(
+  g: Phaser.GameObjects.Graphics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  a: number,
+): void {
+  g.lineStyle(10, CYAN, 0.22 * a).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 14);
+  g.lineStyle(3, CYAN, a).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 14);
+}
+
+/** Dashes along a whole path, shifted `offset` px forward so they march toward its end. */
+function marchingDashes(
+  g: Phaser.GameObjects.Graphics,
+  path: readonly Point[],
+  dash: number,
+  gap: number,
+  offset: number,
+): void {
+  const period = dash + gap;
+  let run = -offset;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len <= 0) continue;
+    const ux = (b.x - a.x) / len;
+    const uy = (b.y - a.y) / len;
+    // The first dash on this segment starts where the pattern left off on the last one.
+    let d = ((-run % period) + period) % period;
+    if (d > gap) d -= period;
+    for (; d < len; d += period) {
+      const s0 = Math.max(0, d);
+      const s1 = Math.min(len, d + dash);
+      if (s1 > s0) g.lineBetween(a.x + ux * s0, a.y + uy * s0, a.x + ux * s1, a.y + uy * s1);
+    }
+    run += len;
+  }
+}
+
 function dashedLine(g: Phaser.GameObjects.Graphics, a: Point, b: Point, dash: number, gap: number): void {
   const len = Math.hypot(b.x - a.x, b.y - a.y);
   if (len <= 0) return;

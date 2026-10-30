@@ -1,19 +1,19 @@
 // Session 0 (Brownout): every number from docs/GAME.md's "Rules and numbers" and "Flow", in one
 // object so Rolando can tune them by playing. No other file in src/sim/ hard-codes these numbers;
-// the rules read them from here. Times are seconds since the session clock opened at 23:51:30.
+// the rules read them from here. Times are seconds since the session clock opened at 23:54:25.
 
 import type { BoardRules } from './board';
 
 export const BROWNOUT = {
   clock: {
-    opensAt: '23:51:30',
+    opensAt: '23:54:25',
     secondsPerMinute: 60,
-    /** Seconds since the clock opened when midnight lands (8:30 in). */
-    midnight: 510,
+    /** Seconds since the clock opened when midnight lands (5:35 in; Rolando 29 Oct 2026: fewer dead stretches). */
+    midnight: 335,
   },
 
   /** When each challenge starts, from GAME.md's Flow table. */
-  challenges: { c0: 0, c1: 15, c2: 90, c3: 180, c4: 300, c5: 360, c6: 450, c7: 510, c8: 540 },
+  challenges: { c0: 0, c1: 15, c2: 45, c3: 90, c4: 165, c5: 215, c6: 275, c7: 335, c8: 365 },
 
   block: { flats: 120, callEverySeconds: 4 },
 
@@ -27,7 +27,7 @@ export const BROWNOUT = {
   demand: {
     /** Evening climb (C3): ramps from the block's base to this over climbRampSeconds, then holds. */
     climb: 90,
-    climbRampSeconds: 60,
+    climbRampSeconds: 45,
     /** District surge (C4). */
     surge: 250,
     surgeWithRetries: 375,
@@ -49,6 +49,21 @@ export const BROWNOUT = {
 
   ozzie: { front: 100, coverCap: 200 },
 
+  /**
+   * Viewer tips, the stream's donations (Rolando, 30 Oct 2026: earn credits the way streamers do).
+   * Milestones: the first serve, the lights back after a failing spell, the rescue, a held midnight.
+   * A trickle every 20 to 40 s while nothing fails. And when the block is failing and a server is out
+   * of reach, a viewer sends what it takes plus a little, so the player is never left with no move.
+   */
+  tips: {
+    milestone: { first: 40, recovered: 30, rescue: 50, midnight: 100 },
+    /** Errors held this long, then calm this long, earn the recovered tip (at most once per cooldown). */
+    recover: { spellSeconds: 3, calmSeconds: 3, cooldownSeconds: 30 },
+    trickle: { minSeconds: 20, maxSeconds: 40, min: 5, max: 20, step: 5 },
+    /** Failing this long with less than a server's price: a viewer covers it, plus `extra`. */
+    help: { afterSeconds: 4, extra: 10, cooldownSeconds: 20 },
+  },
+
   solace: {
     cost: 200,
     durationSeconds: 60,
@@ -65,8 +80,12 @@ export const BROWNOUT = {
    */
   retries: { maxDemandRise: 0.5, risePerSecond: 0.05, fallPerSecond: 0.1 },
   powerDip: { warningSeconds: 2, darkSeconds: 20, beforeMidnightSeconds: 10 },
-  regroup: { speed: 0.25, seconds: 10, charges: 1 },
-  rescue: { trustBelow: 30, surgeSeconds: 45 },
+  /**
+   * Regroup: quarter speed for 10 s, once. Kept for a later session but not handed over in Session 0
+   * (Rolando, 29 Oct 2026: "cool but maybe not a mechanic for the tutorial stage").
+   */
+  regroup: { speed: 0.25, seconds: 10, charges: 1, inSession: false },
+  rescue: { trustBelow: 30, surgeSeconds: 40 },
   finalSizing: { holds: 4, holdsWithFastReplacement: 3, drops: 2, waste: 5 },
   /** The C4 script: the power dip takes the overclocked server dark this long into the surge (a draft). */
   surgeScript: { dipAfterSeconds: 5 },

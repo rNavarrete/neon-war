@@ -72,6 +72,8 @@ export interface CommsTestState {
   triage: { mood: string } | null;
   /** The line's opacity (it fades over 250 ms when the band goes idle). */
   alpha: number;
+  /** The caller cam: its panel's alpha now, and the last caller line it keeps up between lines. */
+  call: { alpha: number; last: string | null };
   /** The band's zone, and what it draws (its display bounds), in page CSS pixels. */
   rect: Rect;
   drawn: Rect;

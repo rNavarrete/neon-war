@@ -97,6 +97,11 @@ export interface BoardTestState {
      * it is not loaded.
      */
     midnightPlate: { rect: Rect; scale: number; alpha: number } | null;
+    /**
+     * How far the board has crossed into midnight (0 before, 1 once in), whichever way it is shown:
+     * the midnight plate's fade, or the day plate's tint now table D has no midnight plate.
+     */
+    midnight: number;
     /** The packets' texture ('art:board/packet-cube' once picked, else the code 'packet') and draw scale. */
     packet: { texture: string; scale: number };
     pingMarks: number;
@@ -222,13 +227,25 @@ export interface BoardTestState {
   };
   /** Each rewind so far: the sim second it happened and the challenge start it went back to. */
   rewinds: { at: number; to: number }[];
+  /**
+   * What the tutorial coach lights on the board now (bus `coach`), or null: the step, the tray
+   * cards and parts ringed, the connection to make, and its ghost wire's corners in page CSS pixels
+   * (null until drawn, or with no wire).
+   */
+  coach: {
+    step: string | null;
+    cards: string[];
+    parts: string[];
+    wire: { from: string; to: string } | null;
+    path: { x: number; y: number }[] | null;
+  } | null;
   selectedPart: string | null;
   selectedWire: string | null;
   cutButton: Point | null;
   binButton: Point | null;
   /** The refusal reason on screen, or null. */
   refusal: string | null;
-  /** What the pointer is dragging: a tray card id, 'wire', or null. */
+  /** What the pointer is dragging: a tray card id, 'wire', 'move' (a placed part held and lifted), or null. */
   dragging: string | null;
   /** The REPLACE button under the selected dead box (board-8), in page CSS pixels, or null. */
   replaceButton: Point | null;

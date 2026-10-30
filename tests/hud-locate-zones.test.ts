@@ -2,7 +2,6 @@ import { Bus } from '../src/game/bus';
 import { readFrame } from '../src/game/frame';
 import { Run } from '../src/game/run';
 import { AlertView } from '../src/scenes/hud/AlertView';
-import { ChartView } from '../src/scenes/hud/ChartView';
 import { DeckView } from '../src/scenes/hud/DeckView';
 import { GaugeView } from '../src/scenes/hud/GaugeView';
 import { TitleView } from '../src/scenes/hud/TitleView';
@@ -84,7 +83,6 @@ describe('every zone a leader line names has a registering view', () => {
     const want: Record<string, string> = {
       gauge: 'GaugeView.ts',
       alert: 'AlertView.ts',
-      scope: 'ChartView.ts',
       credits: 'TitleView.ts',
       'key:one': 'DeckView.ts',
       'key:two': 'DeckView.ts',
@@ -95,10 +93,9 @@ describe('every zone a leader line names has a registering view', () => {
 });
 
 describe('the views register in create and unregister in shutdown', () => {
-  it('gauge, scope, credits and the keys answer a game-px point inside their zone, then nothing', () => {
+  it('gauge, credits and the keys answer a game-px point inside their zone, then nothing', () => {
     const cases: [LiveView, keyof typeof ZONES, string[]][] = [
       [new GaugeView(), 'gauge', ['gauge']],
-      [new ChartView(), 'scope', ['scope']],
       [new TitleView(), 'title', ['credits']],
       [new DeckView(), 'deck', ['key:one', 'key:two']],
     ];
@@ -119,11 +116,12 @@ describe('the views register in create and unregister in shutdown', () => {
     }
   });
 
-  it('the two keys sit left to right', () => {
+  // Option 2 (Rolando, 30 Oct 2026): the keys stack top to bottom in the strip right of the tray.
+  it('the two keys sit top to bottom', () => {
     const deck = new DeckView();
     build(deck, ZONES.deck);
     const [a, b] = KEY_NAMES.map((k) => locate(`key:${k}`)!);
-    expect(a.x).toBeLessThan(b.x);
+    expect(a.y).toBeLessThan(b.y);
     deck.shutdown();
   });
 

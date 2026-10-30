@@ -1,6 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { PerfSection } from '../../src/scenes/live/hook';
 import { ZONE_IDS } from '../../src/scenes/live/layout';
+import { BROWNOUT } from '../../src/sim/brownout';
 import { openBoard, reach, shot } from './live/reach';
 
 // The perf hook (tech-7): perf.* is measured from walks of both scenes' display lists once a second.
@@ -11,8 +12,9 @@ import { openBoard, reach, shot } from './live/reach';
 /** The registry's zones: every zone but the board's own two (feed, inventory). */
 const REGISTERED = ZONE_IDS.filter((z) => z !== 'feed' && z !== 'inventory');
 const OBJECTS_MAX = 750;
-const TEXTS_MAX = 110;
-/** The board's share of the 110 (docs/LIVE.md "Perf budget"). */
+/** 144 since layout A2's sixteen-row chat and Lux's cam caption (Rolando, 30 Oct 2026); 110 before. */
+const TEXTS_MAX = 144;
+/** The board's share of the 144 (docs/LIVE.md "Perf budget"). */
 const BOARD_TEXTS_MAX = 28;
 const PACKETS_MAX = 160;
 
@@ -70,7 +72,7 @@ function describe(p: PerfSection): string {
   );
 }
 
-test('perf: every view within its budget, the totals within 750 / 110 and the packet pool steady, at C4 and midnight', async ({
+test('perf: every view within its budget, the totals within 750 / 144 and the packet pool steady, at C4 and midnight', async ({
   page,
 }, testInfo) => {
   test.setTimeout(120_000);
@@ -80,7 +82,7 @@ test('perf: every view within its budget, the totals within 750 / 110 and the pa
   expect(first.samples).toBeGreaterThan(0);
 
   await reach(page, 'surge');
-  const surge = await sampleFrom(page, 300);
+  const surge = await sampleFrom(page, BROWNOUT.challenges.c4);
   expectWithinBudgets(surge, 'surge');
   testInfo.annotations.push({ type: 'surge', description: describe(surge) });
 

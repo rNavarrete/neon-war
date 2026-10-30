@@ -9,7 +9,7 @@
 //   next; enqueued earlier it waits at the front. It never cuts a CREW line, another WARNING or a
 //   lesson line;
 // - a queued HINT, CREW or HOUSE line older than its staleAfter is dropped unshown; LUX, WARNING and
-//   lesson lines are never stale-dropped. A line ages only while the band could have moved on: the
+//   lesson lines are never stale-dropped, except Lux's asides (LUX_ASIDES), which age like a HINT. A line ages only while the band could have moved on: the
 //   time a line ahead of it is held past its text dwell for its voice does not count, so a recorded
 //   clip never makes a line go stale that the text alone would have shown;
 // - the line's words fade over FADE_SECONDS once the queue runs dry.
@@ -25,8 +25,8 @@ import { typedChars } from '../../story/scripts';
 import { partAnchor } from '../board/layout';
 import { fileTexture } from '../plates';
 import { BARK_HISTORY, BARK_SECONDS } from './barks';
-import { CUES } from './cues';
-import { LEADER_FOR, type LineTag, type Subject, isLesson, tagOf } from './lineMeta';
+import { BOARD_CUES } from './cues';
+import { LEADER_FOR, LUX_ASIDES, type LineTag, type Subject, isLesson, tagOf } from './lineMeta';
 import { type LocatedPoint, locate } from './locate';
 
 export { BARK_SECONDS };
@@ -44,8 +44,11 @@ export const READ_LEAD = 1;
 export const READ_TAIL = 1.5;
 /** Lines waiting at most. */
 export const COMMS_QUEUE_MAX = 5;
-/** Shown lines the model remembers (the hook's history). */
-export const COMMS_HISTORY = BARK_HISTORY;
+/**
+ * Shown lines the model remembers (the hook's history): two bark histories, so the night's opening
+ * lines are still there at the C4 surge now Lux talks the player through it (30 Oct 2026).
+ */
+export const COMMS_HISTORY = 2 * BARK_HISTORY;
 /** A queued HINT, CREW or HOUSE line goes stale after this long. */
 export const STALE_SECONDS = 12;
 /** ...or this long for a line that follows another by a delay (its cue `follows` something). */
@@ -83,13 +86,16 @@ export function triageMood(id: LineId): string | null {
 
 /** Lines whose cue waits on another line by a delay. */
 const CHAINED: ReadonlySet<string> = new Set(
-  CUES.filter((c) => (c.follows?.length ?? 0) > 0).map((c) => c.id),
+  BOARD_CUES.filter((c) => (c.follows?.length ?? 0) > 0).map((c) => c.id),
 );
+
+/** Lux's reactions on the board: they go stale like a HINT, so they never hold up the night's lines. */
+const LUX_ASIDE_SET: ReadonlySet<LineId> = new Set(LUX_ASIDES);
 
 /** Seconds a queued line may wait before it is dropped unshown, or null if it never goes stale. */
 export function staleAfter(id: LineId): number | null {
   const t = tag(id);
-  if (t === 'LUX' || t === 'WARNING' || isLesson(id)) return null;
+  if ((t === 'LUX' && !LUX_ASIDE_SET.has(id)) || t === 'WARNING' || isLesson(id)) return null;
   return CHAINED.has(id) ? STALE_CHAINED_SECONDS : STALE_SECONDS;
 }
 
@@ -271,8 +277,65 @@ export interface CommsRect {
  */
 export function commsLayout(r: CommsRect) {
   const right = r.x + r.w;
+  if (r.w < 400 && r.h >= 300) {
+    // The caller cam (layout A2, Rolando 30 Oct 2026): a column at the right edge where whoever is
+    // talking to Lux pops in on their own cam, their name and words under it, and the roster of who
+    // can call along the bottom, its discs overlapping like a call's participant stack.
+    const step = (r.w - 16 - 84) / (COMMS_SLOTS.length - 1);
+    const tx = r.x + 16;
+    // The cam takes what the words leave (Rolando, 30 Oct 2026: a big caller cam, and no roster of
+    // round faces under it, "I don't think we need these avatars here": the cam shows who talks).
+    // The slots stay in the model (who is present, who speaks) but are not drawn in the column.
+    const tile = { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: r.h - 170 };
+    const under = tile.y + tile.h;
+    return {
+      title: { x: r.x + 16, y: r.y + 14 },
+      tile,
+      slots: COMMS_SLOTS.map((name, i) => ({
+        name,
+        x: Math.round(r.x + 8 + 42 + step * i),
+        y: r.y + r.h - 64,
+        r: 42,
+      })),
+      slotLabelY: r.y + r.h - 20,
+      /** No divider in the column: the tile sits above the words. */
+      divider: { x: r.x + 8, top: r.y + 8, bottom: r.y + 8 },
+      name: { x: tx, y: under + 8 },
+      /** The tag pill, right of the nameplate. */
+      tag: { x: tx, y: under + 8, h: 20 },
+      text: { x: tx, y: under + 36, w: r.w - 32 },
+      /** The reread log's three rows, oldest first. */
+      log: [under + 8, under + 44, under + 80].map((y) => ({ x: tx, y, w: r.w - 32 - 76 })),
+      /** The replay glyph, right of the newest row. */
+      replay: { x: right - 76, y: under + 80, w: 60, h: 34 },
+      roster: false,
+    };
+  }
+  if (r.h >= 200) {
+    // The call panel (layout A, Rolando 30 Oct 2026: "another camera feed... kind of like a Zoom
+    // chat"): the speaker's video tile on the left, their name and line beside it, and the roster of
+    // who can call under the line.
+    const tx = r.x + 262;
+    return {
+      title: { x: r.x + 24, y: r.y + 20 },
+      tile: { x: r.x + 14, y: r.y + 14, w: 232, h: r.h - 28 },
+      slots: COMMS_SLOTS.map((name, i) => ({ name, x: tx + 42 + 98 * i, y: r.y + r.h - 61, r: 42 })),
+      slotLabelY: r.y + r.h - 17,
+      divider: { x: r.x + 252, top: r.y + 14, bottom: r.y + r.h - 14 },
+      name: { x: tx, y: r.y + 14 },
+      /** The tag pill, right of the nameplate. */
+      tag: { x: tx, y: r.y + 14, h: 20 },
+      text: { x: tx, y: r.y + 44, w: right - tx - 24 },
+      /** The reread log's three rows, oldest first. */
+      log: [r.y + 16, r.y + 52, r.y + 88].map((y) => ({ x: tx, y, w: right - tx - 110 })),
+      /** The replay glyph, right of the newest row. */
+      replay: { x: right - 90, y: r.y + 88, w: 60, h: 34 },
+      roster: true,
+    };
+  }
   return {
     title: { x: r.x + 22, y: r.y + 8 },
+    tile: null,
     slots: COMMS_SLOTS.map((name, i) => ({ name, x: r.x + 62 + 98 * i, y: r.y + 75, r: 42 })),
     slotLabelY: r.y + 122,
     divider: { x: r.x + 520, top: r.y + 14, bottom: r.y + r.h - 14 },
@@ -284,7 +347,63 @@ export function commsLayout(r: CommsRect) {
     log: [r.y + 19, r.y + 59, r.y + 99].map((y) => ({ x: r.x + 545, y, w: 760 })),
     /** The replay glyph, right of the newest row. */
     replay: { x: right - 90, y: r.y + 99, w: 60, h: 34 },
+    roster: true,
   };
+}
+
+/** How long the call panel takes to pop up or away, in real seconds. */
+export const CALL_FADE_SECONDS = 0.2;
+/** How far the speaker's tile slides in from, in px. */
+export const CALL_SLIDE = 18;
+
+/** TRIAGE's video-tile art for each mood (her painted faces in public/art/chars/triage/). */
+export const TRIAGE_TILE: Readonly<Record<TriageMood, string>> = {
+  eager: 'art/chars/triage/eager.webp',
+  happy: 'art/chars/triage/happy.webp',
+  thinking: 'art/chars/triage/thinking.webp',
+  sheepish: 'art/chars/triage/sheepish.webp',
+  worried: 'art/chars/triage/worried.webp',
+  'wrong-and-proud': 'art/chars/triage/proud.webp',
+  panicking: 'art/chars/triage/panic.webp',
+};
+
+/**
+ * Whether the call panel is up: while one of the others (a slot's speaker) is on the line, or the
+ * reread log is open. Lux's own lines never pop it: her cam is already on screen and her words show
+ * as its caption (Rolando, 30 Oct 2026: the panel is for the other characters). Pure.
+ */
+export function callShows(current: LineId | null, logIsOpen: boolean): boolean {
+  return logIsOpen || (current !== null && slotOf(LINES[current].speaker) !== null);
+}
+
+/**
+ * The caller cam's alpha between lines once someone has called: it stays up, dimmed, on the last
+ * caller and their last line (Rolando, 30 Oct 2026: don't take the last speaker's screen away).
+ */
+export const CALL_IDLE_ALPHA = 0.6;
+
+/**
+ * Where the call panel's alpha is heading: 1 while a caller is on the line or the log is open,
+ * CALL_IDLE_ALPHA once anyone has called, 0 before the first call. Pure.
+ */
+export function callTarget(current: LineId | null, logIsOpen: boolean, lastCaller: LineId | null): number {
+  if (callShows(current, logIsOpen)) return 1;
+  return lastCaller !== null ? CALL_IDLE_ALPHA : 0;
+}
+
+/** True for a line the caller cam shows: one spoken by someone other than Lux. Pure. */
+export function isCallerLine(id: LineId): boolean {
+  return slotOf(LINES[id].speaker) !== null;
+}
+
+/**
+ * The call panel's alpha `dt` real seconds after `alpha`, moving toward `target` (callTarget) over
+ * CALL_FADE_SECONDS (at once when steady). Pure.
+ */
+export function callAlpha(alpha: number, target: number, dt: number, steady: boolean): number {
+  if (steady) return target;
+  const step = dt / CALL_FADE_SECONDS;
+  return target > alpha ? Math.min(target, alpha + step) : Math.max(target, alpha - step);
 }
 
 export type CommsLayout = ReturnType<typeof commsLayout>;
@@ -335,12 +454,16 @@ export function onRect(r: CommsRect, x: number, y: number): boolean {
 
 // ---- TRIAGE's iris, the speaker's glow, the crew light-up (comms-4) ----
 
-/** TRIAGE's six moods as docs/SCRIPT.md writes them in her speaker brackets. */
+/**
+ * TRIAGE's moods as docs/SCRIPT.md writes them in her speaker brackets: six, then seven with worried
+ * for the cold open's "you okay, Lux?" (Rolando's pick, 30 Oct 2026).
+ */
 export const TRIAGE_MOODS = [
   'eager',
   'happy',
   'thinking',
   'sheepish',
+  'worried',
   'wrong-and-proud',
   'panicking',
 ] as const;
@@ -383,6 +506,8 @@ const IRIS: Readonly<Record<TriageMood, IrisSpec>> = {
   thinking: { x: -5, y: -5, r: 9, ax: 2, ay: 1, hz: 0.3, blink: 5.1 },
   // Down and away, small.
   sheepish: { x: 5, y: 6, r: 8, ax: 1, ay: 0, hz: 0.4, blink: 2.9 },
+  // Looking up at her, soft and a little unsteady.
+  worried: { x: 0, y: -2, r: 9, ax: 1, ay: 0, hz: 1.1, blink: 3.3 },
   // Chin up, steady.
   'wrong-and-proud': { x: 0, y: -4, r: 12, ax: 0, ay: 0, hz: 0, blink: 4.7 },
   // Blown wide and shaking; she never blinks.

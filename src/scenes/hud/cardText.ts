@@ -44,8 +44,10 @@ const spec = (
 });
 
 /**
- * The job card's seven texts in game space (its container sits at 0, 0): the rate, the title, who,
- * what, the bar, the pay line, and OK on its button. Positions are inside the 864x1252 art, scaled.
+ * The job card's seven texts in game space (its container sits at 0, 0): the alarm mark, the title,
+ * the three numbered steps, the goal, and LET'S GO on its button. No numbers to work out: C1 is the
+ * hook (Rolando, 30 Oct 2026), and the debrief names the sum. Positions are inside the 864x1252 art,
+ * scaled.
  */
 export function jobCardTexts(): CardTextSpec[] {
   const j = CENTRE.jobCard;
@@ -54,13 +56,13 @@ export function jobCardTexts(): CardTextSpec[] {
     spec(j.x + (ax - JOB_ART.w / 2) * k, j.y + (ay - JOB_ART.h / 2) * k, s, size, color, { wrap: wrap * k });
   const id = (x: LineId): string => line(x);
   return [
-    at(153, 200, '120', 40, COLORS.amberText, 190),
-    at(540, 200, id('C1.card.title'), 30, COLORS.cyanText, 480),
-    at(419, 466, id('C1.card.who'), 24, COLORS.white, 680),
-    at(419, 679, id('C1.card.what'), 24, COLORS.white, 680),
-    at(419, 886, id('C1.card.bar'), 24, COLORS.white, 680),
-    at(432, 1107, id('C1.card.rate'), 23, COLORS.amberText, 560),
-    spec(CENTRE.jobCardOk.x, CENTRE.jobCardOk.y, 'OK', 26, COLORS.cyanText, { family: FONT }),
+    at(153, 200, '!', 72, COLORS.amberText, 190),
+    at(540, 200, id('C1.card.title'), 34, COLORS.cyanText, 480),
+    at(419, 466, `1   ${id('C1.card.step1')}`, 26, COLORS.white, 680),
+    at(419, 679, `2   ${id('C1.card.step2')}`, 26, COLORS.white, 680),
+    at(419, 886, `3   ${id('C1.card.step3')}`, 26, COLORS.white, 680),
+    at(432, 1107, id('C1.card.goal'), 26, COLORS.amberText, 560),
+    spec(CENTRE.jobCardOk.x, CENTRE.jobCardOk.y, id('C1.card.go'), 24, COLORS.cyanText, { family: FONT }),
   ];
 }
 

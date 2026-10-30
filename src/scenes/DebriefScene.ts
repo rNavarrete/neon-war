@@ -105,6 +105,8 @@ export class DebriefScene extends Phaser.Scene {
       where: 'room',
       chat: false,
       skippable: false,
+      // The results and the interview card fill the left (x 90 to 950): Rei and Ozzie stand right of them.
+      stage: { from: 1000, to: 1900 },
       onClick: () => this.click(),
       onSkip: () => {},
     });
