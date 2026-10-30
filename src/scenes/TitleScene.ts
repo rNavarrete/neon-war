@@ -4,9 +4,10 @@ import { startSession } from '../game/flow';
 import { settings, updateSettings } from '../game/settings';
 import { line } from '../strings';
 import { FrameClock } from '../story/view';
-import { gateForced, provideTestState, testHookEnabled } from '../testHook';
+import { attractSeconds, gateForced, provideTestState, testHookEnabled } from '../testHook';
 import { seededRandom } from './hud/chat';
 import { SCENES } from './keys';
+import { ATTRACT_IDLE_S, attractDue, playOpening } from './opening';
 import {
   CYAN,
   INK,
@@ -112,6 +113,9 @@ export class TitleScene extends Phaser.Scene {
   private gate: Phaser.GameObjects.Text | null = null;
   /** True for the frame the gate opens on, so the press that opened it doesn't also toggle the music. */
   private gateOpening = false;
+  /** Title seconds at the last input, and the idle seconds before attract mode (null: off). */
+  private lastInput = 0;
+  private attractLimit: number | null = null;
 
   constructor() {
     super(SCENES.title);
@@ -173,6 +177,14 @@ export class TitleScene extends Phaser.Scene {
     this.credits = this.buildCredits();
     this.showCredits(false);
     this.buildGate();
+    this.lastInput = 0;
+    this.attractLimit = attractSeconds(window.location.search, ATTRACT_IDLE_S);
+    const touched = (): void => {
+      this.lastInput = this.t;
+    };
+    this.input.on(Phaser.Input.Events.POINTER_MOVE, touched);
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, touched);
+    this.input.keyboard?.on(Phaser.Input.Keyboard.Events.ANY_KEY_DOWN, touched);
     provideTestState('title', () => this.snapshot());
     this.ready = true;
   }
@@ -188,6 +200,21 @@ export class TitleScene extends Phaser.Scene {
     this.dip = logoDips(this.t, reduce);
     this.logo?.setAlpha(this.dip ? 0.55 : 1);
     this.gate?.setAlpha(gateAlpha(this.t));
+    if (!this.gate && !this.creditsOpen && attractDue(this.lastInput, this.t, this.attractLimit)) {
+      this.playOpening();
+    }
+  }
+
+  /**
+   * The anime opening over the canvas (src/scenes/opening.ts). The title pauses underneath, which also
+   * fades its music out; back on the title, the music returns and the idle clock starts again.
+   */
+  private playOpening(): void {
+    this.scene.pause();
+    playOpening('attract', { muted: settings().musicMuted, volume: settings().volume }, () => {
+      this.lastInput = this.t;
+      this.scene.resume();
+    });
   }
 
   /** The "press any key" gate (GATE in titleFx.ts): shown in the menu's place while sound is held. */

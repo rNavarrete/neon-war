@@ -62,6 +62,17 @@ export function gateForced(search: string): boolean {
   return params.has('test') && params.has('gate');
 }
 
+/**
+ * Seconds of idle before the title's attract mode plays the opening: `normal` without the test hook;
+ * under it off (null) unless a test asks with `?test&attract=N` (1 to 60).
+ */
+export function attractSeconds(search: string, normal: number): number | null {
+  const params = new URLSearchParams(search);
+  if (!params.has('test')) return normal;
+  const n = Number(params.get('attract'));
+  return params.has('attract') && Number.isFinite(n) && n >= 1 && n <= 60 ? n : null;
+}
+
 /** Scene a browser test asks to start in with `?test&scene=<key>`, or null. */
 export function startScene(search: string): string | null {
   const params = new URLSearchParams(search);
