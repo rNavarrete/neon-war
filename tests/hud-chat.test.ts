@@ -53,6 +53,7 @@ import {
 } from '../src/scenes/hud/chat';
 import {
   CHAT_PACE,
+  HYPE_BURST,
   type ChatEvent,
   type ChatInputs,
   type ChatRow,
@@ -115,12 +116,14 @@ describe('chat', () => {
   it('picks filler from the pool for the error state', () => {
     expect(fillerPool('block', 'ok')).toHaveLength(10);
     expect(fillerPool('block', 'slow')).toHaveLength(5);
-    expect(fillerPool('stream', 'down')).toEqual([
+    // The four original down lines, then the hype pack's nine (Rolando, 30 Oct 2026).
+    expect(fillerPool('stream', 'down').slice(0, 4)).toEqual([
       'fill.stream.down.01',
       'fill.stream.down.02',
       'fill.stream.down.03',
       'fill.stream.down.04',
     ]);
+    expect(fillerPool('stream', 'down')).toHaveLength(13);
     const rand = seededRandom(1);
     for (let i = 0; i < 20; i++) expect(pickFiller('block', 'down', rand)).toMatch(/^fill\.block\.down\./);
     expect(pickFiller('stream', 'down', () => 0, 'fill.stream.down.01')).toBe('fill.stream.down.02');
@@ -398,7 +401,10 @@ describe('the chat in the host loop (chat-3)', () => {
     b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 1 });
     for (let c = 1; c < 3; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
     h = hudRead();
-    expect((h.chat as ChatTestState).stream).toEqual(['viewer: first try lol']);
+    // The scripted line first, then the first serve's hype burst pours in on top.
+    const feed = (h.chat as ChatTestState).feed;
+    expect(feed.find((r) => r.id === 'C1.chat.02')).toMatchObject({ chat: 'stream', scripted: true });
+    expect(feed.filter((r) => r.cause === 'hype').length).toBeGreaterThanOrEqual(HYPE_BURST.min);
     expect(h.audience).toEqual({ watching: 3 });
     view.shutdown();
   });
@@ -621,10 +627,10 @@ describe('the LIVE CHAT panel (chat-4)', () => {
 
   it('sits the rows back to alpha 0.4 while the chat is silent', () => {
     const { view, bus: b } = liveView();
-    // Before the first filler (3.5 s at the earliest), so no row is still fading in.
-    view.update(frameAt(), clockAt(3), []);
-    b.emit('cue', { id: 'C6.fail.chat', kind: 'chat', at: 3 });
-    view.update(frameAt(), clockAt(3.05), []);
+    // Before the first filler (2 s at the earliest), so no row is still fading in.
+    view.update(frameAt(), clockAt(1.5), []);
+    b.emit('cue', { id: 'C6.fail.chat', kind: 'chat', at: 1.5 });
+    view.update(frameAt(), clockAt(1.55), []);
     const c = chatRead();
     expect(c.silenced).toBe(true);
     expect(c.rows.every((r) => r.alpha === 0.4)).toBe(true);
@@ -732,9 +738,11 @@ function artView(picked: (key: string) => boolean, present: (key: string) => boo
   const view = new ChatFeedView(picked);
   view.preload(s.scene);
   view.create(s.scene, hostOn(s.scene, b));
-  b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 1 });
-  b.emit('cue', { id: 'C4.chat.03', kind: 'chat', at: 1.5 });
-  for (let c = 1; c < 3; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
+  // Let the first serve's hype burst pour in and settle first, then the two rows under test post.
+  for (let c = 0.05; c < 3.5; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
+  b.emit('cue', { id: 'C1.chat.02', kind: 'chat', at: 3.5 });
+  b.emit('cue', { id: 'C4.chat.03', kind: 'chat', at: 3.55 });
+  for (let c = 3.5; c < 3.7; c += 0.05) view.update(frameAt(SERVING), clockAt(c), []);
   return { view, ...s };
 }
 
@@ -928,7 +936,7 @@ describe('the 10 per 30 s cap with scripted rows', () => {
     lastPostAt: at,
   });
 
-  it('a surge of scripted cues, reactions and filler never posts more than 10 in 30 s, and every scripted id posts, in order', () => {
+  it('a surge of scripted cues, reactions and filler never paces more than windowMax in 30 s, and every scripted id posts, in order', () => {
     const rand = seededRandom(7);
     let s: ChatState = { ...initialChat(0, rand), servedOnce: true, servingMax: 1, watching: 3 };
     const rows: ChatRow[] = [];
@@ -961,7 +969,8 @@ describe('the 10 per 30 s cap with scripted rows', () => {
       s = step.state;
       rows.push(...step.posts);
     }
-    expect(most(rows)).toBeLessThanOrEqual(CHAT_PACE.windowMax);
+    // A hype burst's rows sit on top of the window; everything else is paced.
+    expect(most(rows.filter((r) => r.cause !== 'hype'))).toBeLessThanOrEqual(CHAT_PACE.windowMax);
     const scripted = rows.filter((r) => r.scripted).map((r) => r.id);
     // Every cue posted except a complaint whose errors stopped first (none here), in cue order.
     expect(scripted).toEqual(['C1.chat.01', ...cues.map(([, id]) => id)]);
@@ -1061,7 +1070,7 @@ describe('the 10 per 30 s cap with scripted rows', () => {
     const b = new Bus();
     const f = new ChatFeed(0);
     f.attach(b);
-    // The four seeds sit in the window; six cues fill it.
+    // The four seeds sit in the window; ten cues fill it.
     const fill: LineId[] = [
       'C1.chat.01',
       'C1.chat.02',
@@ -1069,7 +1078,12 @@ describe('the 10 per 30 s cap with scripted rows', () => {
       'C3.chat.02',
       'C3.chat.03',
       'C4.chat.04',
+      'C4.chat.01',
+      'C4.chat.02',
+      'C5.chat.01',
+      'C6.chat.hold.01',
     ];
+    expect(fill.length + 4).toBe(CHAT_PACE.windowMax);
     fill.forEach((id, i) => b.emit('cue', { id, kind: 'chat', at: 1 + i * 0.1 }));
     expect(f.posts).toBe(CHAT_PACE.windowMax);
     b.emit('cue', { id: 'C4.chat.cut', kind: 'chat', at: 2 });
@@ -1079,7 +1093,8 @@ describe('the 10 per 30 s cap with scripted rows', () => {
     expect(f.state.feed.some((r) => r.id === 'C4.chat.cut')).toBe(false);
     // The seeds at 0 leave the window at 30.
     f.step(frameAt(SERVING), 30.05, []);
-    expect(f.state.feed[f.state.feed.length - 1]).toMatchObject({
+    // (The first serve's hype burst may post on the same frame; it sits outside the window.)
+    expect(f.state.feed.filter((r) => r.cause !== 'hype').at(-1)).toMatchObject({
       id: 'C4.chat.cut',
       at: 30.05,
       scripted: true,

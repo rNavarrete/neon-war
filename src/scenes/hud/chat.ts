@@ -17,8 +17,9 @@ export interface ChatEntry {
 }
 
 export const CHAT_ROWS = 6;
-export const FILLER_MIN_SECONDS = 3.5;
-export const FILLER_MAX_SECONDS = 6.5;
+/** Filler every 2 to 4 s, so the feed always feels alive (Rolando, 30 Oct 2026: way more chat). */
+export const FILLER_MIN_SECONDS = 2;
+export const FILLER_MAX_SECONDS = 4;
 
 /** A small seeded random generator (mulberry32), returning numbers in [0, 1). */
 export function seededRandom(seed: number): () => number {
@@ -77,7 +78,7 @@ export function pickFiller(
   return options[Math.min(options.length - 1, Math.floor(rand() * options.length))];
 }
 
-/** Seconds until the next filler line: 6 to 10. */
+/** Seconds until the next filler line: FILLER_MIN_SECONDS to FILLER_MAX_SECONDS. */
 export function fillerDelay(rand: () => number): number {
   return FILLER_MIN_SECONDS + rand() * (FILLER_MAX_SECONDS - FILLER_MIN_SECONDS);
 }
@@ -124,6 +125,19 @@ export const VIEWER_HANDLES: readonly string[] = [
   'rainproxy',
   'void99',
   'tokyo.exe',
+  // The hype pack's regulars (Rolando, 30 Oct 2026).
+  'pixel_auntie',
+  'ramen.raccoon',
+  '404grandma',
+  'lagless_larry',
+  'byte_me',
+  'neonmoth',
+  'cablecat',
+  'sk8r.boi.99',
+  'mochi_dev',
+  'lowbatt',
+  'triage_fanclub',
+  'midnight.mango',
 ];
 
 /** What the panel needs from a chat row (chatEngine.ts ChatRow). */
@@ -215,7 +229,7 @@ export interface RowLook {
 }
 
 const RED_CAUSES: ReadonlySet<string> = new Set(['errorsRising', 'errorsHeavy', 'retriesRising']);
-const AMBER_CAUSES: ReadonlySet<string> = new Set(['recovered', 'held']);
+const AMBER_CAUSES: ReadonlySet<string> = new Set(['recovered', 'held', 'hype']);
 
 /** The 2 px cause tick: red for a complaint or an errors row, amber for thanks or a recovery. */
 export function tickOf(row: Pick<PanelRow, 'cause' | 'complaint' | 'thanks'>): TickColor {

@@ -305,14 +305,43 @@ errors (50% or more). Neighbours use the four chat avatars: kenji, mrs okafor, y
 | fill.stream.ok.07 | stream | all fine | is that her room? cozy |
 | fill.stream.ok.08 | stream | all fine | chat be nice it's NYE |
 | fill.stream.ok.09 | stream | all fine | lux drop the playlist |
+| fill.stream.ok.10 | stream | all fine | lux pls show the cat drone 🐱 |
+| fill.stream.ok.11 | stream | all fine | triage's little face 🥺 |
+| fill.stream.ok.12 | stream | all fine | chat is so cozy tonight ☕ |
+| fill.stream.ok.13 | stream | all fine | this is better than tv 📺 |
+| fill.stream.ok.14 | stream | all fine | the rain + lofi + servers 😌 |
+| fill.stream.ok.15 | stream | all fine | first NYE stream let's go 🎆 |
+| fill.stream.ok.16 | stream | all fine | who's here from block seven 👋 |
+| fill.stream.ok.17 | stream | all fine | brb getting noodles 🍜 |
+| fill.stream.ok.18 | stream | all fine | lux's backpack has an ANTENNA |
+| fill.stream.ok.19 | stream | all fine | low key learning stuff rn 🤓 |
+| fill.stream.ok.20 | stream | all fine | happy new year early 🎉 |
+| fill.stream.ok.21 | stream | all fine | the vibes are immaculate ✨ |
 | fill.stream.slow.01 | stream | some errors | number go up?? |
 | fill.stream.slow.02 | stream | some errors | triage is panicking again lol |
 | fill.stream.slow.03 | stream | some errors | the chart is doing something |
 | fill.stream.slow.04 | stream | some errors | lag on my end too |
+| fill.stream.slow.05 | stream | some errors | uh oh 👀 |
+| fill.stream.slow.06 | stream | some errors | buffering... ⏳ |
+| fill.stream.slow.07 | stream | some errors | the gauge is getting full 😬 |
+| fill.stream.slow.08 | stream | some errors | the server is sweating 💦 |
+| fill.stream.slow.09 | stream | some errors | triage's face is NOT ok |
+| fill.stream.slow.10 | stream | some errors | lux it's doing the thing |
+| fill.stream.slow.11 | stream | some errors | my video froze mid-dance 🕺 |
+| fill.stream.slow.12 | stream | some errors | chat hold the line 🫡 |
 | fill.stream.down.01 | stream | heavy errors | stream lagging bad |
 | fill.stream.down.02 | stream | heavy errors | rip |
 | fill.stream.down.03 | stream | heavy errors | f in the chat |
 | fill.stream.down.04 | stream | heavy errors | we lost her |
+| fill.stream.down.05 | stream | heavy errors | NOOOO 😱 |
+| fill.stream.down.06 | stream | heavy errors | F 💀 |
+| fill.stream.down.07 | stream | heavy errors | we're so cooked 🍳 |
+| fill.stream.down.08 | stream | heavy errors | the lights!!! 🌑 |
+| fill.stream.down.09 | stream | heavy errors | triage x_x mood |
+| fill.stream.down.10 | stream | heavy errors | lux save us 🙏 |
+| fill.stream.down.11 | stream | heavy errors | the lift is stuck again 😭 |
+| fill.stream.down.12 | stream | heavy errors | don't panic. (panicking) |
+| fill.stream.down.13 | stream | heavy errors | rip the countdown stream 🪦 |
 
 No filler line names a fix or a system-design term.
 
@@ -365,9 +394,17 @@ band, with no number. Wording is a draft until the owner approves it (decision D
 | fill.stream.placed.01 | stream | stream | a part is placed on the board | ooh new server |
 | fill.stream.placed.02 | stream | stream | a part is placed on the board | she's building it live lol |
 | fill.stream.placed.03 | stream | stream | a part is placed on the board | server acquired |
+| fill.stream.placed.04 | stream | stream | a part is placed on the board | ooh new server 🤖 |
+| fill.stream.placed.05 | stream | stream | a part is placed on the board | click! satisfying 😩 |
+| fill.stream.placed.06 | stream | stream | a part is placed on the board | two servers?? big brain 🧠 |
+| fill.stream.placed.07 | stream | stream | a part is placed on the board | speedrun any percent 🏃 |
+| fill.stream.placed.08 | stream | stream | a part is placed on the board | lux built that in a blink?? |
 | fill.stream.wired.01 | stream | stream | a wire is connected | cable management speedrun |
 | fill.stream.wired.02 | stream | stream | a wire is connected | is that thing plugged in now |
 | fill.stream.wired.03 | stream | stream | a wire is connected | click. nice. |
+| fill.stream.wired.04 | stream | stream | a wire is connected | cable management queen 👑 |
+| fill.stream.wired.05 | stream | stream | a wire is connected | plug it in plug it in 🔌 |
+| fill.stream.wired.06 | stream | stream | a wire is connected | the requests are flowing 🟡🟡🟡 |
 | fill.stream.overclock.01 | stream | stream | the player swaps in the bigger server | she's going for the big server?? brave |
 | fill.stream.overclock.02 | stream | stream | the player swaps in the bigger server | big server energy |
 | fill.stream.waiting.01 | stream | stream | the coach nudges about an empty grid | lux? you there? |
@@ -459,6 +496,44 @@ band, with no number. Wording is a draft until the owner approves it (decision D
 | fill.stream.held.01 | stream | stream | midnight held | clean midnight. no lag |
 | fill.stream.held.02 | stream | stream | midnight held | best stream of the year |
 | fill.stream.held.03 | stream | stream | midnight held | HAPPY NEW YEAR CHAT |
+| fill.stream.triage.01 | stream | stream | TRIAGE's fans: one filler in five, in any state | TRIAGE IS SO CUTE 😭 |
+| fill.stream.triage.02 | stream | stream | TRIAGE's fans: one filler in five, in any state | triage for president 🗳️ |
+| fill.stream.triage.03 | stream | stream | TRIAGE's fans: one filler in five, in any state | protect triage at all costs 🛡️ |
+| fill.stream.triage.04 | stream | stream | TRIAGE's fans: one filler in five, in any state | triage's x_x face lmaooo |
+| fill.stream.triage.05 | stream | stream | TRIAGE's fans: one filler in five, in any state | i'd buy a triage plushie 🧸 |
+| fill.stream.triage.06 | stream | stream | TRIAGE's fans: one filler in five, in any state | triage: confident. also triage: 🤡 |
+| fill.stream.triage.07 | stream | stream | TRIAGE's fans: one filler in five, in any state | triage yelled GO GO GO 📣 |
+| fill.stream.triage.08 | stream | stream | TRIAGE's fans: one filler in five, in any state | give triage a raise 💸 |
+| fill.stream.triage.09 | stream | stream | TRIAGE's fans: one filler in five, in any state | triage ^_^ ❤️ |
+| fill.stream.triage.10 | stream | stream | TRIAGE's fans: one filler in five, in any state | is triage ok?? 🥺 |
+| fill.stream.triage.11 | stream | stream | TRIAGE's fans: one filler in five, in any state | triage moodboard: 😃🤔😎😱😳😊 |
+| fill.stream.triage.12 | stream | stream | TRIAGE's fans: one filler in five, in any state | triage stop panicking 😭 |
+| fill.stream.triage.13 | stream | stream | TRIAGE's fans: one filler in five, in any state | triage blinked at me ❤️ |
+| fill.stream.triage.14 | stream | stream | TRIAGE's fans: one filler in five, in any state | trust triage? no. love triage? YES |
+| fill.stream.win.01 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | W |
+| fill.stream.win.02 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | W W W |
+| fill.stream.win.03 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | HUGE W |
+| fill.stream.win.04 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | W LUX |
+| fill.stream.win.05 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | W TRIAGE |
+| fill.stream.win.06 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | ❤️❤️❤️ |
+| fill.stream.win.07 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | 💙💙💙💙 |
+| fill.stream.win.08 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | 🔥🔥🔥 |
+| fill.stream.win.09 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | LETS GOOO |
+| fill.stream.win.10 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | she did it 😭❤️ |
+| fill.stream.win.11 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | lights are back!!! 💡💡💡 |
+| fill.stream.win.12 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | GOAT behaviour 🐐 |
+| fill.stream.win.13 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | clip that 📸 |
+| fill.stream.win.14 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | absolute cinema 🎬 |
+| fill.stream.win.15 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | certified block hero 🏅 |
+| fill.stream.win.16 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | mrs okafor's lift is FREE 🛗 |
+| fill.stream.win.17 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | my wifi said thank u lux 📶 |
+| fill.stream.win.18 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | the block is BLOCKING 💪 |
+| fill.stream.win.19 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | chat we're so back |
+| fill.stream.win.20 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | W W W W W W |
+| fill.stream.win.21 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | ❤️ from floor six |
+| fill.stream.win.22 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | ten outta ten no notes 🙌 |
+| fill.stream.win.23 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | standing ovation 👏👏👏 |
+| fill.stream.win.24 | stream | stream | a big moment: lights back, a surge survived, midnight (a burst) | noodle cam restored 🍜✨ |
 
 Reactions to what happens on the board (src/scenes/hud/chatEngine.ts REACTIONS), one pool per
 `fill.<chat>.<pool>.` prefix. None names a fix, a number or a system-design word. Wording is a draft

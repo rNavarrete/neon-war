@@ -37,10 +37,10 @@ import { isLesson } from './lineMeta';
 
 export const CHAT_PACE = Object.freeze({
   /** Minimum seconds between two posts, by the block's error state. */
-  minGap: Object.freeze({ ok: 2.5, slow: 1.8, down: 1.2 } as Record<ErrorState, number>),
-  /** At most `windowMax` posts in any `windowSeconds`. */
+  minGap: Object.freeze({ ok: 1.8, slow: 1.5, down: 1.2 } as Record<ErrorState, number>),
+  /** At most `windowMax` posts in any `windowSeconds` (a hype burst's rows do not count). */
   windowSeconds: 30,
-  windowMax: 10,
+  windowMax: 14,
   /** Reactions waiting to post; the oldest is dropped when a fifth arrives. */
   queueMax: 4,
   /** A queued reaction older than this is dropped. */
@@ -48,6 +48,17 @@ export const CHAT_PACE = Object.freeze({
   /** No reaction or filler for this long after a lesson line starts. */
   lessonQuiet: 2,
 });
+
+/**
+ * A hype burst: when something goes right (the first serve, a recovery, the rescue, a held midnight)
+ * the stream pours in `min` to `max` lines from the win pool, one every `every` seconds, then settles,
+ * the way a real stream floods after a big moment (Rolando, 30 Oct 2026: "way more hearts, way more
+ * W's"). Burst rows skip the gap, the quiet and the window: they sit on top of the paced feed.
+ */
+export const HYPE_BURST = Object.freeze({ min: 6, max: 10, every: 0.22, pool: 'fill.stream.win.' });
+/** One filler line in this many is from TRIAGE's fans, in any state: TRIAGE is the stream's mascot. */
+export const TRIAGE_FILLER_EVERY = 5;
+export const TRIAGE_POOL = 'fill.stream.triage.';
 
 /** Error share held this long before the block complains. */
 export const ERRORS_HOLD = 1;
@@ -85,6 +96,7 @@ export type ChatCause =
   | 'scaledDown'
   | 'seed'
   | 'cue'
+  | 'hype'
   | 'filler';
 
 export type ReactionKey =
@@ -428,6 +440,10 @@ export interface ChatState {
   /** How many of COUNTDOWN_MARKS the clock has passed. */
   readonly countdown: number;
   readonly rewinds: number;
+  /** Hype-burst rows still to post, when the next is due, and the win lines it has used. */
+  readonly burst: number;
+  readonly burstAt: number;
+  readonly burstUsed: readonly LineId[];
 }
 
 export interface ChatStep {
@@ -468,6 +484,9 @@ export function initialChat(clock: number, rand: () => number, rewinds = 0): Cha
     surgeLanded: null,
     countdown: 0,
     rewinds,
+    burst: 0,
+    burstAt: 0,
+    burstUsed: [],
   };
 }
 
@@ -578,6 +597,19 @@ function enqueue(d: Draft, key: ReactionKey, clock: number): void {
   d.queue = q.length > CHAT_PACE.queueMax ? q.slice(q.length - CHAT_PACE.queueMax) : q;
 }
 
+/** Start a hype burst at `clock` (a burst already running carries on with the larger count). */
+function startBurst(d: Draft, clock: number, rand: () => number): void {
+  if (d.silenced) return;
+  const n = HYPE_BURST.min + Math.floor(rand() * (HYPE_BURST.max - HYPE_BURST.min + 1));
+  if (d.burst > 0) {
+    d.burst = Math.max(d.burst, n);
+    return;
+  }
+  d.burst = n;
+  d.burstAt = clock;
+  d.burstUsed = [];
+}
+
 function post(d: Draft, row: ChatRow, clock: number, rand: () => number): void {
   d.feed = pushFeed(d.feed, row);
   d.recent = [...d.recent.filter((t) => clock - t < CHAT_PACE.windowSeconds - EPS), clock];
@@ -621,6 +653,7 @@ export function stepChat(
     x.surgeLanded = null;
     x.countdown = 0;
     x.quietUntil = -Infinity;
+    x.burst = 0;
   }
 
   // Events.
@@ -658,8 +691,11 @@ export function stepChat(
       case 'died':
       case 'dip':
       case 'skipped':
+        enqueue(x, o.kind, c);
+        break;
       case 'rescued':
         enqueue(x, o.kind, c);
+        startBurst(x, c, rand);
         break;
       case 'laundryCut':
         enqueue(x, 'laundryBlock', c);
@@ -668,6 +704,7 @@ export function stepChat(
       case 'held':
         enqueue(x, 'heldBlock', c);
         enqueue(x, 'heldStream', c);
+        startBurst(x, c, rand);
         break;
       case 'dark':
         if (o.id === undefined) {
@@ -719,12 +756,15 @@ export function stepChat(
     enqueue(x, 'recoveredBlock', c);
     enqueue(x, 'recoveredStream', c);
     if (x.left.length > 0) enqueue(x, 'rejoin', c);
+    startBurst(x, c, rand);
   }
   if (inp.served > 0 && !cur().servedOnce) {
     const x = draft();
     x.servedOnce = true;
     enqueue(x, 'servedBlock', c);
     enqueue(x, 'servedStream', c);
+    // The lights come back for the first time: the stream floods.
+    startBurst(x, c, rand);
   }
   if (inp.servingBoxes > cur().servingMax) {
     const x = draft();
@@ -805,6 +845,23 @@ export function stepChat(
     }
   }
 
+  // A hype burst posts on top of everything paced: one win line every HYPE_BURST.every seconds.
+  if (cur().burst > 0 && (cur().silenced || c >= cur().burstAt - EPS)) {
+    const x = draft();
+    if (x.silenced) x.burst = 0;
+    else {
+      const all = linesOf(HYPE_BURST.pool);
+      const pool = all.filter((id) => !x.burstUsed.includes(id));
+      const id = pickFrom(pool.length > 0 ? pool : all, rand);
+      const row = rowFor(id, 'hype', c, false);
+      x.feed = pushFeed(x.feed, row);
+      x.burst -= 1;
+      x.burstAt = c + HYPE_BURST.every;
+      x.burstUsed = [...x.burstUsed, id];
+      (posts ??= []).push(row);
+    }
+  }
+
   // Post at most one reaction, then filler if nothing else is due.
   const st = cur();
   const gap = CHAT_PACE.minGap[errorState(inp.errorShare)];
@@ -833,9 +890,11 @@ export function stepChat(
     }
   } else if (open && fillerAllowed(st, c)) {
     const x = draft();
-    const chat: ChatKind = x.fillers % 3 === 2 ? 'stream' : 'block';
+    // One in TRIAGE_FILLER_EVERY is TRIAGE's fans; of the rest, the block speaks twice per stream line.
+    const fan = x.fillers % TRIAGE_FILLER_EVERY === TRIAGE_FILLER_EVERY - 1;
+    const chat: ChatKind = fan || x.fillers % 3 === 2 ? 'stream' : 'block';
     const state = chatSetFor(inp.errorShare);
-    const pool = linesOf(`fill.${chat}.${state}.`).filter(
+    const pool = linesOf(fan ? TRIAGE_POOL : `fill.${chat}.${state}.`).filter(
       (id) => id !== x.lastFiller && !speaksForLeaver(id, x.left),
     );
     if (pool.length > 0) {
