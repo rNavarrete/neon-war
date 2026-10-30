@@ -463,6 +463,14 @@ describe('reactions from the Frame’s edges', () => {
 });
 
 describe('scripted extras', () => {
+  it('a neighbour who left posts none of her scripted lines either (Mrs Okafor\'s "it\'s gone again")', () => {
+    const m = sim(0);
+    const s = postScripted(m.s, 'C4.chat.03', 1, m.rand).state;
+    const late = postScripted(s, 'C4.chat.01', 2, m.rand);
+    expect(late.posts).toBe(NO_POSTS);
+    expect(late.state.scripted).toContain('C4.chat.01');
+  });
+
   it('a neighbour who left never speaks in filler; the dark direction silences without a row', () => {
     const m = sim(0);
     let s = postScripted(m.s, 'C4.chat.03', 1, m.rand).state;

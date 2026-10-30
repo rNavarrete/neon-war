@@ -841,6 +841,8 @@ export function stepChat(
       const r = key ? REACTIONS[key] : undefined;
       // A complaint whose errors stopped while it waited would be dishonest now: it goes.
       if (r?.whileErrors && inp.errorShare <= 0) continue;
+      // So would a neighbour who left the chat while her row waited.
+      if (leftBefore(w.id, x.left)) continue;
       (posts ??= []).push(postRow(x, w.id, w.cause, c, rand));
     }
   }
@@ -927,6 +929,26 @@ function speaksForLeaver(id: LineId, left: readonly string[]): boolean {
 
 // ---- scripted lines, seeding, the filter ----
 
+/** The challenge number of a scripted id (`C4.chat.01` is 4), or null. */
+const challengeOf = (id: LineId): number | null => {
+  const m = /^C(\d)\./.exec(id);
+  return m ? Number(m[1]) : null;
+};
+
+/**
+ * Whether a scripted line is spoken by a neighbour who left in its own challenge or an earlier one:
+ * Mrs Okafor's "it's gone again" (C4) after she left the chat (C4.chat.03).
+ */
+function leftBefore(id: LineId, left: readonly string[]): boolean {
+  if (!speaksForLeaver(id, left)) return false;
+  const at = challengeOf(id);
+  for (const [leave, who] of Object.entries(LEAVERS) as [LineId, string][]) {
+    const from = challengeOf(leave);
+    if (left.includes(who) && from !== null && at !== null && at >= from) return true;
+  }
+  return false;
+}
+
 /** Start a scripted id's reaction cooldown (and drop that reaction from the queue) at `clock`. */
 function coolScripted(d: Draft, id: LineId, clock: number): void {
   const key = SCRIPTED_REACTION[id];
@@ -964,6 +986,8 @@ export function postScripted(
 ): ChatStep {
   if (s.scripted.includes(id) || chatOf(id) === null) return { state: s, posts: NO_POSTS };
   const d: Draft = { ...s, scripted: [...s.scripted, id] };
+  // A neighbour who has left the chat says nothing more in the scenes after she left, scripted or not.
+  if (leftBefore(id, d.left)) return { state: d, posts: NO_POSTS };
   if (id === SILENCE_ID) {
     d.silenced = true;
     d.queue = [];
