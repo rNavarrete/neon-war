@@ -9,7 +9,7 @@ import { LINES, type LineId } from '../strings';
 import { LABELS } from './labels';
 import { StoryChat, chatMessage, preloadChat } from './chatPanel';
 import { chatText, scriptFaces, typedChars } from './scripts';
-import { HOVERING, bobAt, frameFor, hoverFor, slotsBetween, slotsFor } from './stage';
+import { HOVERING, TEXT_LINE, TEXT_POS, bobAt, frameFor, hoverFor, slotsBetween, slotsFor } from './stage';
 import { type PagePoint, type ViewSnapshot, playVoice, storyState } from './state';
 
 export const W = 1920;
@@ -125,12 +125,12 @@ export class VnView {
       .setOrigin(0.5)
       .setDepth(22);
     this.body = scene.add
-      .text(450, 865, '', {
+      .text(TEXT_POS.x, TEXT_POS.y, '', {
         fontFamily: BODY_FONT,
-        fontSize: '32px',
+        fontSize: `${TEXT_LINE.size}px`,
         color: '#f2ecff',
-        wordWrap: { width: 1020 },
-        lineSpacing: 6,
+        wordWrap: { width: 1000 },
+        lineSpacing: TEXT_LINE.gap,
       })
       .setDepth(22);
     this.more = scene.add

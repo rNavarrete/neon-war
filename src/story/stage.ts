@@ -5,6 +5,16 @@
 
 /** Top edge of the text box (game pixels); art standing behind it is cut off here. */
 export const BOX_TOP = 880;
+/**
+ * The text box's painted frame (art/hud/textbox.webp drawn at 1.3x, centred at y 945): its top bar's
+ * inner line is at y 869 and its bottom bar at y 1044 (game px). The line's text starts a clear gap
+ * under the top bar and right of the taped corner, so three wrapped lines sit centred in the box.
+ */
+export const TEXT_FRAME = { top: 869, bottom: 1044 } as const;
+export const TEXT_POS = { x: 470, y: 896 } as const;
+/** Body text size and line gap, so a test can check that three lines fit inside the frame. */
+export const TEXT_LINE = { size: 32, gap: 6 } as const;
+
 /** How tall a full sprite (cut at the waist or thighs) is drawn: its head in the upper sixth of the frame. */
 export const SPRITE_H = 900;
 /** Art at least this tall is a full sprite and stands on the bottom edge; shorter art is a bust. */

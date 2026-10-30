@@ -3,6 +3,9 @@ import {
   HOVERING,
   HOVER_BOB,
   SPRITE_H,
+  TEXT_FRAME,
+  TEXT_LINE,
+  TEXT_POS,
   bobAt,
   frameFor,
   hoverFor,
@@ -68,5 +71,11 @@ describe('flyers', () => {
       expect(x - 225).toBeGreaterThanOrEqual(1000);
       expect(x + 225).toBeLessThanOrEqual(1920);
     }
+  });
+
+  it("starts a line's text clear of the text box's top bar, with room for three lines above the bottom bar", () => {
+    expect(TEXT_POS.y - TEXT_FRAME.top).toBeGreaterThanOrEqual(20);
+    const threeLines = 3 * TEXT_LINE.size * 1.25 + 2 * TEXT_LINE.gap;
+    expect(TEXT_POS.y + threeLines).toBeLessThanOrEqual(TEXT_FRAME.bottom - 15);
   });
 });
