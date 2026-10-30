@@ -34,7 +34,7 @@ Twelve rects `{x, y, w, h}` in game pixels. No two overlap; all lie inside 1920x
 | `feed`      |  455 | 110 | 1455 | 530 | board   | The board: gateway, balancer, rack, database, packets      |
 | `comms`     |  455 | 645 | 1455 | 150 | comms   | The comms band: the crew's slots and the current line      |
 | `inventory` |  455 | 800 | 1055 | 165 | board   | The tray of parts                                          |
-| `deck`      |  455 | 970 | 1055 | 105 | gauges  | The deck of keys and the headroom bar                      |
+| `deck`      |  455 | 970 | 1055 | 105 | gauges  | The deck of keys                                           |
 | `chat`      | 1525 | 800 |  385 | 275 | chat    | Lux's stream chat                                          |
 
 The board's areas come straight from the table: `rectToArea(ZONES.feed)` is
@@ -91,9 +91,9 @@ prove none is left.
 | `clock` | `ClockView` (`src/scenes/hud/TitleView.ts`) | gauges |
 | `map`   | `MapView`                               | gauges |
 | `cam`   | `LuxCamView`                            | luxcam |
-| `gauge` | `GaugeView`                             | gauges |
+| `gauge` | `GaugeView` (with `HeadroomView`)       | gauges |
 | `comms` | `CommsView`                             | comms  |
-| `deck`  | `DeckView` (with `HeadroomView`)        | gauges |
+| `deck`  | `DeckView`                              | gauges |
 | `chat`  | `ChatFeedView`                          | chat   |
 
 `HudScene` hosts the registry: it makes every view in `init`, calls `preload`, `create` (first, so
@@ -268,7 +268,8 @@ The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard
 | `hud.alert` | AlertView | the alert up now and its kind, line, tag and text; `hint` and `hintText`, the start-of-C1 hint ("drag a SERVER card onto the grid") while no alert is up |
 | `hud.gauge`, `hud.chart` | GaugeView, the HUD host | the DEMAND req/s gauge; the host's `chart` mirrors demand and capacity (the LAST 60 s chart is gone) |
 | `hud.map` | MapView | the city map's dots, raid outlines and midnight |
-| `hud.deck`, `hud.headroom`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, the room-left bar, Regroup and the laundry cut |
+| `hud.deck`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, Regroup and the laundry cut |
+| `hud.headroom` | GaugeView (HeadroomView) | the headroom line under the gauge's number (the deck's bar until 30 Oct 2026) |
 | `hud.chatArt`, `hud.chatTrace` | ChatFeedView | which chat art loaded or fell back; the trace of rows posted, with their cause |
 | `hud.measure`, `hud.taught` | `src/scenes/hud/taught.ts` | the board's wires and when the first went in; the trace of moments the night taught, for the debrief's grey lines |
 
@@ -370,9 +371,9 @@ against the built views):
 | `clock` (ClockView)                                  |     2 |                  4 |
 | `map` (MapView)                                      |     3 |                 10 |
 | `cam` (LuxCamView)                                   |     2 |                 15 |
-| `gauge` (GaugeView)                                  |    10 |                 13 |
+| `gauge` (GaugeView with HeadroomView)                |    11 |                 14 |
 | `comms` (CommsView, with the leader line)            |    13 |                 29 |
-| `deck` (DeckView with HeadroomView)                  |     8 |                 21 |
+| `deck` (DeckView)                                    |     7 |                 18 |
 | `chat` (ChatFeedView)                                |    17 |                 31 |
 | `feed` and `inventory` (BoardScene)                  |    28 |                  - |
 | Cards (HUD host: job card, banner, dip)              |    13 |                  - |

@@ -3,13 +3,13 @@ import { bestPlay } from '../src/game/autopilot';
 import { Bus } from '../src/game/bus';
 import { readFrame } from '../src/game/frame';
 import { Run } from '../src/game/run';
-import { DeckView } from '../src/scenes/hud/DeckView';
+import { GaugeView } from '../src/scenes/hud/GaugeView';
+import { gaugeLayout } from '../src/scenes/hud/gauge';
 import {
   RED_SOUND_GAP,
   emptyHeadroom,
   headroomColour,
   headroomLabel,
-  headroomLayout,
   headroomPct,
   headroomState,
   litSegments,
@@ -85,7 +85,6 @@ describe('room left', () => {
       expect(lit).toBe(Math.round(Math.min(1, Math.max(0, 1 - d / 120)) * 30));
       last = lit;
     }
-    expect(headroomLayout(ZONES.deck).marker).toBe(9);
   });
 
   it('is labelled HEADROOM, the real term, with the absolute numbers', () => {
@@ -189,19 +188,16 @@ describe('the red state', () => {
   });
 });
 
-describe('the bar draws now only', () => {
+describe('the line draws now only', () => {
   it('has no reference to the scope’s series or its past', () => {
     expect(headroomViewSource).not.toMatch(/\bring\b|chartRing|ChartRing|ChartView|history|series\[/i);
   });
 
-  it('sits in the deck left of the keys', () => {
-    const L = headroomLayout(ZONES.deck);
-    expect(inside(L.plate, ZONES.deck)).toBe(true);
-    expect(L.plate.x + L.plate.w).toBeLessThanOrEqual(1232); // the first key's left edge
-    const s = L.segments;
-    expect(s.x).toBe(612);
-    expect(s.x + (s.count - 1) * s.pitch + s.w).toBeLessThanOrEqual(1225);
-    expect(L.icon.x).toBeGreaterThanOrEqual(470);
+  it('sits in the gauge under the big number, not in the deck (30 Oct 2026)', () => {
+    const L = gaugeLayout(ZONES.gauge);
+    expect(inside({ x: L.room.x - 1, y: L.room.y, w: 2, h: 20 }, ZONES.gauge)).toBe(true);
+    expect(L.room.y).toBeGreaterThan(L.readout.y);
+    expect(L.room.y).toBeLessThan(L.sub.y);
   });
 });
 
@@ -244,12 +240,13 @@ function stubScene() {
   return { scene, fills, texts };
 }
 
-describe('DeckView', () => {
-  it('draws 30 segments only when they change and mirrors hud.headroom', () => {
-    const { scene, fills, texts } = stubScene();
-    const view = new DeckView();
+describe('GaugeView’s headroom line', () => {
+  it('rewrites its words only when they change and mirrors hud.headroom', () => {
+    const { scene, texts } = stubScene();
+    const view = new GaugeView();
     const bus = new Bus();
-    view.create(scene as never, { scene: null as never, bus, rect: ZONES.deck, flags: { lite: true } });
+    view.create(scene as never, { scene: null as never, bus, rect: ZONES.gauge, flags: { lite: true } });
+    const words = (): string[] => texts.map((t) => t.text).filter((t) => t.startsWith('HEADROOM'));
     const r = new Run();
     r.now = C.c1;
     expect(r.placeServer(SERVER_SLOTS[0]).ok).toBe(true);
@@ -259,12 +256,9 @@ describe('DeckView', () => {
     r.now = C.c1 + BROWNOUT.server.bootSeconds + 1;
     const f = readFrame(r);
     view.update(f, { now: 1, dt: 0.016 });
-    expect(view.headroom.draws).toBe(1);
-    // The plate's own fill is cleared by the first segment draw's clear in this stub; count segments.
-    expect(fills.filter((x) => x.x >= 612).length).toBe(HEADROOM_SEGMENTS);
+    expect(words()).toEqual([headroomLabel(f.demand, f.wiredCapacity)]);
     view.update(f, { now: 1.02, dt: 0.016 });
     view.update(f, { now: 1.04, dt: 0.016 });
-    expect(view.headroom.draws).toBe(1);
 
     const hud = hudSection({} as HudTestState) as unknown as { headroom: Record<string, unknown> };
     expect(hud.headroom).toMatchObject({
@@ -274,9 +268,8 @@ describe('DeckView', () => {
       state: headroomColour(f.demand / f.wiredCapacity),
       lit: litSegments(f.demand, f.wiredCapacity),
     });
-    expect(texts[0].text).toBe(headroomLabel(f.demand, f.wiredCapacity));
-    expect(hud.headroom.label).toBe(texts[0].text);
-    expect(texts[0].text.startsWith('HEADROOM')).toBe(true);
+    expect(hud.headroom.label).toBe(headroomLabel(f.demand, f.wiredCapacity));
+    expect(hud.headroom.right).toBeLessThanOrEqual(ZONES.gauge.x + ZONES.gauge.w);
     view.shutdown();
   });
 });

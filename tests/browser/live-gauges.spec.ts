@@ -64,7 +64,7 @@ test('the title cluster: waiting for the first build, then live; WATCHING has no
   expect(second.errors).toEqual([]);
 });
 
-// gauges-4: the room-left bar in the deck goes red within one sim second of the district surge.
+// gauges-4: the headroom line (the deck's bar until 30 Oct 2026, now in the gauge) goes red within one sim second of the district surge.
 test('the headroom bar: red within one sim second of the district surge at speed 5, in the real terms', async ({
   page,
 }) => {
@@ -216,7 +216,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
       title: kit.title.panel,
       gauge: kit.gauge.panel,
       map: kit.map.panel,
-      headroom: kit.headroom.panel,
+      // No headroom plate: the bar is a line in the gauge now (30 Oct 2026).
     };
     for (const [name, p] of Object.entries(panels)) {
       expect(p, `${name}.panel`).toBeTruthy();
@@ -229,8 +229,8 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
     }
     for (const name of ['gauge', 'map'] as const)
       expect(panels[name]!.pieces, name).toContain('hud/live/label-tab');
-    for (const name of ['gauge', 'headroom'] as const)
-      expect(panels[name]!.pieces, name).toContain('hud/live/divider');
+    // The gauge's divider went with its right column: the readout sits under the dial now.
+    expect(panels.gauge!.pieces).not.toContain('hud/live/divider');
     expect(kit.map.base).toBe('hud/city-grid');
     // The LIVE pill shows exactly while the dot reads live.
     expect(kit.title.pill).toBe(kit.title.live === 'live');

@@ -1,8 +1,8 @@
 // The COMING /s gauge (ZONES.gauge) as a Live screen view: a fixed 0..400 arc with ticks every 100,
 // the cyan ROOM band to the wired capacity with a dashed extension for boxes still booting, the
-// amber needle easing toward demand, a red wedge from served to demand while calls drop, the big
-// number, and the crew's words
-// beside it ("room N/s", NO ROOM YET, OVER BY n/s). The rules are pure in gauge.ts; this file draws
+// amber needle easing toward demand, a red wedge from served to demand while calls drop, and under
+// the dial the big number, the headroom line (HeadroomView, once the deck's bar) and the crew's words
+// ("capacity N req/s", NO CAPACITY YET, OVER BY n/s). The rules are pure in gauge.ts; this file draws
 // them and mirrors hud.gauge for tests.
 //
 // Phaser is a type here only, so the registry and its node tests can import this file.
@@ -28,6 +28,7 @@ import {
   needleRotation,
   stepGauge,
 } from './gauge';
+import { type HeadroomTestState, HeadroomView } from './HeadroomView';
 import { LABELS } from './labels';
 import { COLORS, FONT } from './layout';
 import { provideHudSection } from './hook';
@@ -81,6 +82,8 @@ declare module './hook' {
   interface HudTestState {
     /** The COMING /s gauge (gauges-5). */
     gauge?: GaugeTestState;
+    /** The headroom line under the gauge's number (gauges-4; the deck's bar until 30 Oct 2026). */
+    headroom?: HeadroomTestState;
   }
 }
 
@@ -94,9 +97,13 @@ export class GaugeView implements LiveView {
   readonly zone = 'gauge' as const;
   /**
    * A plate, the moving parts, the painted needle, and title, readout, sub-line, strip, ROOM tag and
-   * five numbers.
+   * five numbers, and the headroom line.
    */
-  readonly budget: LiveBudget = { objects: 13, texts: 10 };
+  readonly budget: LiveBudget = {
+    objects: 13 + HeadroomView.budget.objects,
+    texts: 10 + HeadroomView.budget.texts,
+  };
+  readonly headroom = new HeadroomView();
   readonly made = { objects: 0, texts: 0 };
   readonly state: GaugeState = emptyGauge();
   private readonly memo = emptyGaugeMemo();
@@ -150,8 +157,7 @@ export class GaugeView implements LiveView {
     Object.assign(this.memo, emptyGaugeMemo());
 
     // The plate, baked once with the frame kit: the painted dial face (or, without it, the empty
-    // track and the ticks every 100), the label tab under the title, the divider before the right
-    // column and the four bracket corners.
+    // track and the ticks every 100), the label tab under the title and the four bracket corners.
     const loaded = (key: string): string | null => {
       const a = resolveArt(key);
       return !a.fallback && (scene.textures?.exists?.(a.texture) ?? false) ? a.texture : null;
@@ -167,7 +173,6 @@ export class GaugeView implements LiveView {
         frame: true,
         corners: GAUGE_CORNERS,
         tab: { x: L.title.x - 8, y: L.title.y - 4, h: TAB_H },
-        dividers: [{ x: L.readout.x - 16, y: L.plate.y + 16, h: L.plate.h - 32 }],
         face: face ? { key: KIT.gaugeFace, x: fp.x, y: fp.y, h: fp.h } : undefined,
       },
       {
@@ -190,7 +195,7 @@ export class GaugeView implements LiveView {
     this.plate = plate;
 
     this.dial = add.graphics();
-    // The painted needle at half its file, pivoting on its hub at the arc's centre.
+    // The painted needle at GAUGE_ART_K of its file, pivoting on its hub at the arc's centre.
     const needleTex = loaded(GAUGE_NEEDLE_KEY);
     this.needle =
       needleTex !== null && typeof add.image === 'function'
@@ -205,14 +210,15 @@ export class GaugeView implements LiveView {
     const text = (x: number, y: number, s: string, size: number, color: string): Phaser.GameObjects.Text =>
       add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color });
     this.title = text(L.title.x, L.title.y, LABELS.gauge.title, 15, COLORS.dim);
-    this.readout = text(L.readout.x, L.readout.y, '', 40, COLORS.amberText);
-    this.sub = text(L.sub.x, L.sub.y, '', 16, COLORS.cyanText);
-    this.strip = text(L.strip.x, L.strip.y, '', 15, COLORS.amberText);
-    this.roomTag = text(L.centre.x, L.centre.y, LABELS.gauge.room, 11, COLORS.cyanText);
+    this.readout = text(L.readout.x, L.readout.y, '', 44, COLORS.amberText).setOrigin(0.5, 0);
+    const room = this.headroom.create(scene, L.room, host.bus);
+    this.sub = text(L.sub.x, L.sub.y, '', 16, COLORS.cyanText).setOrigin(0.5, 0);
+    this.strip = text(L.strip.x, L.strip.y, '', 15, COLORS.amberText).setOrigin(0.5, 0);
+    this.roomTag = text(L.centre.x, L.centre.y, LABELS.gauge.room, 13, COLORS.cyanText);
     this.roomTag.setOrigin(0.5, 0.5);
     this.numbers = GAUGE_TICKS.map((v) => {
       const p = arcPoint(L, v, L.numbers);
-      return text(p.x, p.y, String(v), 12, COLORS.dim).setOrigin(0.5, 0.5);
+      return text(p.x, p.y, String(v), 14, COLORS.dim).setOrigin(0.5, 0.5);
     });
 
     const all = [
@@ -221,6 +227,7 @@ export class GaugeView implements LiveView {
       ...(this.needle ? [this.needle] : []),
       this.title,
       this.readout,
+      room,
       this.sub,
       this.strip,
       this.roomTag,
@@ -237,6 +244,7 @@ export class GaugeView implements LiveView {
     this.shownRoomX = NaN;
     this.drawn = { needle: NaN, capacity: NaN, booting: NaN, served: NaN, dropped: NaN };
     this.off.push(provideHudSection('gauge', () => this.snapshot()));
+    this.off.push(provideHudSection('headroom', () => this.headroom.snapshot()));
     // The leader line ends at the needle's hub (game px; one point, made once).
     const hub = { x: L.centre.x, y: L.centre.y };
     this.off.push(registerLocate('gauge', () => hub));
@@ -245,6 +253,7 @@ export class GaugeView implements LiveView {
   update(frame: Frame, clock: LiveClock): void {
     if (!this.dial || !this.readout || !this.sub || !this.strip || !this.plate || !this.roomTag) return;
     const st = stepGauge(this.state, this.memo, frame, clock.dt);
+    this.headroom.update(frame, clock.now);
 
     const d = this.drawn;
     if (
@@ -277,14 +286,14 @@ export class GaugeView implements LiveView {
       this.strip.setText(st.strip ?? '');
       this.strip.setColor(st.strip === LABELS.gauge.noRoom ? COLORS.amberText : COLORS.redText);
     }
-    // The ROOM tag rides inside the band's end; hidden with nothing wired.
+    // The ROOM tag rides inside the band's end, under the tick numbers; hidden with nothing wired.
     const roomX = st.capacity > 0 ? Math.round(st.capacity) : -1;
     if (roomX !== this.shownRoomX) {
       this.shownRoomX = roomX;
       this.roomTag.setVisible(roomX > 0);
       if (roomX > 0) {
         const L = this.layout;
-        const p = arcPoint(L, Math.min(st.capacity, GAUGE_MAX), L.inner - 34);
+        const p = arcPoint(L, Math.min(st.capacity, GAUGE_MAX), L.inner - 66);
         this.roomTag.setPosition(p.x, p.y);
       }
     }
@@ -374,6 +383,7 @@ export class GaugeView implements LiveView {
     for (const off of this.off) off();
     this.off = [];
     releasePanel(this.plate);
+    this.headroom.shutdown();
     for (const o of [
       this.dial,
       this.needle,

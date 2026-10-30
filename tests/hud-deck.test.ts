@@ -20,7 +20,6 @@ import {
 } from '../src/scenes/hud/deck';
 import { dismissJobCard } from '../src/scenes/hud/jobCard';
 import { LABELS } from '../src/scenes/hud/labels';
-import { headroomLayout } from '../src/scenes/hud/headroom';
 import { ZONES, inside } from '../src/scenes/live/layout';
 import { BROWNOUT } from '../src/sim/brownout';
 import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
@@ -179,9 +178,8 @@ describe('where the keys sit', () => {
       expect(r[k].h).toBe(64);
       expect(inside(r[k], ZONES.deck), k).toBe(true);
     }
-    // Right of the room-left bar.
-    const bar = headroomLayout(ZONES.deck).plate;
-    expect(r.one.x).toBeGreaterThanOrEqual(bar.x + bar.w);
+    // Right of where the room-left bar sat (it is a line in the gauge now, 30 Oct 2026).
+    expect(r.one.x).toBeGreaterThanOrEqual(1232);
     // The CUT tooltip's corner is in the deck's strip above the keys.
     const tip = tooltipAt(ZONES.deck);
     expect(tip.y).toBeGreaterThanOrEqual(ZONES.deck.y);

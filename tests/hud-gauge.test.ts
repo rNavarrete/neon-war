@@ -221,21 +221,23 @@ describe('the layout', () => {
   it('keeps the arc, its numbers and the readout inside ZONES.gauge', () => {
     const z = ZONES.gauge;
     const L = gaugeLayout(z);
-    expect(L.centre).toEqual({ x: 150, y: 858 });
-    expect(L.outer).toBe(110);
-    expect(L.needle).toBe(88);
+    // The dial fills the column's width since the chart went (30 Oct 2026), the readout under it.
+    expect(L.centre).toEqual({ x: 220, y: 908 });
+    expect(L.outer).toBe(154);
+    expect(L.needle).toBe(123);
     expect(L.centre.x - L.outer - 8).toBeGreaterThanOrEqual(z.x);
-    expect(L.centre.x + L.outer + 8).toBeLessThanOrEqual(L.readout.x);
+    expect(L.centre.x + L.outer + 8).toBeLessThanOrEqual(z.x + z.w);
+    expect(L.readout.y).toBeGreaterThan(L.centre.y);
     expect(L.centre.y - L.outer - 8).toBeGreaterThanOrEqual(L.title.y + 16);
     expect(L.centre.y).toBeLessThanOrEqual(z.y + z.h);
     for (const v of GAUGE_TICKS) {
       const p = arcPoint(L, v, L.numbers);
       expect(p.x).toBeGreaterThan(z.x);
-      expect(p.x).toBeLessThan(L.readout.x);
+      expect(p.x).toBeLessThan(z.x + z.w);
       expect(p.y).toBeGreaterThan(z.y);
       expect(p.y).toBeLessThan(z.y + z.h);
     }
-    for (const p of [L.readout, L.sub, L.strip]) {
+    for (const p of [L.readout, L.room, L.sub, L.strip]) {
       expect(p.x).toBeGreaterThanOrEqual(z.x);
       expect(p.y).toBeGreaterThanOrEqual(z.y);
       expect(p.y + 20).toBeLessThanOrEqual(z.y + z.h);
@@ -295,7 +297,8 @@ describe('GaugeView', () => {
     gauge.create(scene as never, { scene: null as never, bus, rect: ZONES.gauge, flags: { lite: true } });
     deck.create(scene as never, { scene: null as never, bus, rect: ZONES.deck, flags: { lite: true } });
     expect(withinBudget(gauge)).toBe(true);
-    expect(gauge.made).toEqual({ objects: 12, texts: 10 });
+    // One more of each since the headroom line moved in (30 Oct 2026).
+    expect(gauge.made).toEqual({ objects: 13, texts: 11 });
 
     const { r } = wiredRun();
     expect(r.placeServer(SERVER_SLOTS[1]).ok).toBe(true);

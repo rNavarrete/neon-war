@@ -215,32 +215,36 @@ export interface GaugeLayout {
   readonly numbers: number;
   /** The title, top-left. */
   readonly title: { readonly x: number; readonly y: number };
-  /** The right column: the big number, the sub-line, the strip. */
+  /**
+   * Under the dial, centred on `x`, top to bottom: the big number, the headroom line (it was the
+   * deck's bar), the sub-line and the strip. Each point is the top centre of its text.
+   */
   readonly readout: { readonly x: number; readonly y: number };
+  readonly room: { readonly x: number; readonly y: number };
   readonly sub: { readonly x: number; readonly y: number };
   readonly strip: { readonly x: number; readonly y: number };
 }
 
 /**
- * The gauge laid out in `rect` (ZONES.gauge, 408 x 170): the arc centred at (rect.x + 134,
- * rect.y + 148), so (150, 858) in the zone, outer radius 110 and a 88 px needle; the readout in the
- * right column from x rect.x + 268.
+ * The gauge laid out in `rect` (ZONES.gauge, 408 x 360, the whole left column's foot since the chart
+ * went): the arc centred across the zone at (rect.x + 204, rect.y + 198), so (220, 908), outer
+ * radius 154 and a 123 px needle; the readout stacked and centred under it.
  */
 export function gaugeLayout(rect: Rect): GaugeLayout {
-  const cx = rect.x + 134;
-  const cy = rect.y + 148;
-  const col = rect.x + 268;
+  const cx = rect.x + Math.round(rect.w / 2);
+  const cy = rect.y + 198;
   return {
     plate: { x: rect.x, y: rect.y, w: rect.w, h: rect.h },
     centre: { x: cx, y: cy },
-    outer: 110,
-    inner: 94,
-    needle: 88,
-    numbers: 76,
+    outer: 154,
+    inner: 132,
+    needle: 123,
+    numbers: 106,
     title: { x: rect.x + 12, y: rect.y + 8 },
-    readout: { x: col, y: rect.y + 44 },
-    sub: { x: col, y: rect.y + 96 },
-    strip: { x: col, y: rect.y + 124 },
+    readout: { x: cx, y: rect.y + 232 },
+    room: { x: cx, y: rect.y + 286 },
+    sub: { x: cx, y: rect.y + 312 },
+    strip: { x: cx, y: rect.y + 334 },
   };
 }
 
@@ -250,13 +254,13 @@ export function arcPoint(L: GaugeLayout, v: number, r: number): { x: number; y: 
   return { x: L.centre.x + Math.cos(a) * r, y: L.centre.y + Math.sin(a) * r };
 }
 
-// ---- the picked dial (batch 5): the painted face and needle, drawn at half their files ----
+// ---- the picked dial (batch 5): the painted face and needle, drawn at 0.7 of their files ----
 
 /** The painted dial face (480 x 269) and its needle (24 x 162), by art key. */
 export const GAUGE_FACE_KEY = 'hud/gauge-face'; // KIT.gaugeFace: baked into the plate
 export const GAUGE_NEEDLE_KEY = 'hud/gauge-needle';
-/** Both are drawn at half their file size: the face 240 x 134.5, the needle 12 x 81. */
-export const GAUGE_ART_K = 0.5;
+/** Both are drawn at 0.7 of their file size (under 1:1): the face 336 x 188.3, the needle 16.8 x 113.4. */
+export const GAUGE_ART_K = 0.7;
 /** The face file's size and the dial's centre in it (where the 0 and 400 ticks meet under 200). */
 export const FACE_FILE = { w: 480, h: 269 } as const;
 export const FACE_HUB = { x: 241, y: 225 } as const;
@@ -266,7 +270,7 @@ export const NEEDLE_PIVOT = { x: 0.5, y: 150 / 162 } as const;
 
 /**
  * Where the face draws at GAUGE_ART_K: its hub on the arc's centre, kept inside the plate. Its
- * height is the file's at k (134.5), so the face is never drawn above its file's size. Pure.
+ * height is the file's at k (188.3), so the face is never drawn above its file's size. Pure.
  */
 export function gaugeFacePlace(L: GaugeLayout): { x: number; y: number; w: number; h: number } {
   const w = FACE_FILE.w * GAUGE_ART_K;

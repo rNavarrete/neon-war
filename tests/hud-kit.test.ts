@@ -344,11 +344,12 @@ describe('the gauges lane views with the kit loaded', () => {
       const madeHere = made.filter((m) => m.kind !== 'MadeGraphics');
       expect(madeHere.length, name).toBeLessThanOrEqual(v.budget.objects);
       expect(madeHere.filter((m) => m.kind === 'Text').length).toBeLessThanOrEqual(v.budget.texts);
-      const plateName = name === 'deck' ? 'headroom' : name;
-      expect(
-        rec.images.some((i) => i.key === `live-kit:${plateName}`),
-        name,
-      ).toBe(true);
+      // The deck has no plate since the headroom bar moved into the gauge (30 Oct 2026).
+      if (name !== 'deck')
+        expect(
+          rec.images.some((i) => i.key === `live-kit:${name}`),
+          name,
+        ).toBe(true);
       v.update(readFrame(new Run()), { now: 1, dt: 0.016 }, []);
       v.shutdown();
       // The alert band destroys its container with its children (Phaser's destroy(true)).
@@ -366,7 +367,7 @@ describe('the gauges lane views with the kit loaded', () => {
     v.update(readFrame(new Run()), { now: 1, dt: 0.016 });
     const h = hudSection({} as HudTestState);
     for (const k of ['one', 'two'] as const) expect(h.deck!.keys[k].cap).toBe(KIT.keyIdle);
-    expect(h.headroom!.panel!.pieces).toEqual([KIT.divider, KIT.frame, KIT.corner]);
+    expect(h.headroom).toBeUndefined();
     v.shutdown();
   });
 
@@ -385,11 +386,11 @@ describe('the gauges lane views with the kit loaded', () => {
 // ---- batch 5 on the gauges lane: the painted dial and the lit city ----
 
 describe('batch 5: the painted gauge face and needle', () => {
-  it('knows both files at their manifest cut, and draws them at half', () => {
+  it('knows both files at their manifest cut, and draws them at 0.7', () => {
     expect(artRequest(GAUGE_FACE_KEY)!.cut).toEqual(FACE_FILE);
     expect(artRequest(GAUGE_NEEDLE_KEY)!.cut).toEqual(NEEDLE_FILE);
     expect(KIT_FILE[KIT.gaugeFace]).toEqual(FACE_FILE);
-    expect(GAUGE_ART_K).toBe(0.5);
+    expect(GAUGE_ART_K).toBe(0.7);
   });
 
   it('puts the face inside the gauge plate with its hub on the arc centre, at most 1:1', () => {
@@ -409,7 +410,7 @@ describe('batch 5: the painted gauge face and needle', () => {
     const st = panelStamps(z, { face: { key: KIT.gaugeFace, ...at } });
     expect(st).toHaveLength(1);
     expect(inBox(st[0], z.w, z.h)).toBe(true);
-    expect(maxScale(st)).toBeLessThanOrEqual(0.51);
+    expect(maxScale(st)).toBeLessThanOrEqual(0.71);
   });
 
   it('turns the needle with the arc: pointing left at 0, up at 200, right at 400', () => {
@@ -421,7 +422,7 @@ describe('batch 5: the painted gauge face and needle', () => {
     expect(needleRotation(123)).toBeCloseTo(gaugeAngle(123) + Math.PI / 2, 9);
   });
 
-  it('GaugeView bakes the face into its plate at half and draws the needle at half, inside its budget', () => {
+  it('GaugeView bakes the face into its plate at 0.7 and draws the needle at 0.7, inside its budget', () => {
     const { scene, rec, made } = bakingScene();
     const v = new GaugeView();
     v.create(scene as never, {
@@ -432,14 +433,14 @@ describe('batch 5: the painted gauge face and needle', () => {
     });
     const face = rec.stamps.filter((x) => x.texture === artTexture(GAUGE_FACE_KEY));
     expect(face).toHaveLength(1);
-    expect(face[0].scaleX).toBe(0.5);
-    expect(face[0].scaleY).toBeLessThanOrEqual(0.51);
+    expect(face[0].scaleX).toBe(0.7);
+    expect(face[0].scaleY).toBeLessThanOrEqual(0.71);
     expect(rec.images.filter((i) => i.key === artTexture(GAUGE_NEEDLE_KEY))).toHaveLength(1);
     expect(made.filter((m) => m.kind !== 'MadeGraphics').length).toBeLessThanOrEqual(v.budget.objects);
     v.update(readFrame(new Run()), { now: 1, dt: 0.016 });
     const g = hudSection({} as HudTestState).gauge!;
     expect(g.face).toBe(GAUGE_FACE_KEY);
-    expect(g.needleArt).toEqual({ key: GAUGE_NEEDLE_KEY, scale: 0.5 });
+    expect(g.needleArt).toEqual({ key: GAUGE_NEEDLE_KEY, scale: 0.7 });
     expect(g.panel!.pieces).toContain(GAUGE_FACE_KEY);
     expect(g.panel!.maxScale).toBeLessThanOrEqual(1);
     v.shutdown();
