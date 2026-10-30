@@ -94,9 +94,9 @@ describe('voice manifest', () => {
 
   it('lists every spoken line in each language, apart from the known gaps', () => {
     // Two more since the idle-server nudges (30 Oct 2026), both still to record.
-    expect(voicedLines()).toHaveLength(105);
+    expect(voicedLines()).toHaveLength(132);
     const KNOWN_GAPS = knownGaps();
-    expect(KNOWN_GAPS.ja.size).toBe(20);
+    expect(KNOWN_GAPS.ja.size).toBe(47);
     for (const lang of LANGS) {
       const listed = new Set(manifest[lang]);
       const gaps = voicedLines().filter((id) => !listed.has(id));

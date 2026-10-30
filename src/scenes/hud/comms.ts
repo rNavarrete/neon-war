@@ -9,7 +9,7 @@
 //   next; enqueued earlier it waits at the front. It never cuts a CREW line, another WARNING or a
 //   lesson line;
 // - a queued HINT, CREW or HOUSE line older than its staleAfter is dropped unshown; LUX, WARNING and
-//   lesson lines are never stale-dropped. A line ages only while the band could have moved on: the
+//   lesson lines are never stale-dropped, except Lux's asides (LUX_ASIDES), which age like a HINT. A line ages only while the band could have moved on: the
 //   time a line ahead of it is held past its text dwell for its voice does not count, so a recorded
 //   clip never makes a line go stale that the text alone would have shown;
 // - the line's words fade over FADE_SECONDS once the queue runs dry.
@@ -25,8 +25,8 @@ import { typedChars } from '../../story/scripts';
 import { partAnchor } from '../board/layout';
 import { fileTexture } from '../plates';
 import { BARK_HISTORY, BARK_SECONDS } from './barks';
-import { CUES } from './cues';
-import { LEADER_FOR, type LineTag, type Subject, isLesson, tagOf } from './lineMeta';
+import { BOARD_CUES } from './cues';
+import { LEADER_FOR, LUX_ASIDES, type LineTag, type Subject, isLesson, tagOf } from './lineMeta';
 import { type LocatedPoint, locate } from './locate';
 
 export { BARK_SECONDS };
@@ -83,13 +83,16 @@ export function triageMood(id: LineId): string | null {
 
 /** Lines whose cue waits on another line by a delay. */
 const CHAINED: ReadonlySet<string> = new Set(
-  CUES.filter((c) => (c.follows?.length ?? 0) > 0).map((c) => c.id),
+  BOARD_CUES.filter((c) => (c.follows?.length ?? 0) > 0).map((c) => c.id),
 );
+
+/** Lux's reactions on the board: they go stale like a HINT, so they never hold up the night's lines. */
+const LUX_ASIDE_SET: ReadonlySet<LineId> = new Set(LUX_ASIDES);
 
 /** Seconds a queued line may wait before it is dropped unshown, or null if it never goes stale. */
 export function staleAfter(id: LineId): number | null {
   const t = tag(id);
-  if (t === 'LUX' || t === 'WARNING' || isLesson(id)) return null;
+  if ((t === 'LUX' && !LUX_ASIDE_SET.has(id)) || t === 'WARNING' || isLesson(id)) return null;
   return CHAINED.has(id) ? STALE_CHAINED_SECONDS : STALE_SECONDS;
 }
 

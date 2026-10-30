@@ -78,6 +78,16 @@ export interface CueView {
   rewinds?: number;
   /** Where the newest rewind went back to, in sim seconds (default 0). */
   rewoundTo?: number;
+  /** A server on the board has no wire into it (default false). */
+  unwiredServer?: boolean;
+  /** Credits in hand (default 0). */
+  credits?: number;
+  /** A viewer has covered the move that would help (a `help` tip came in; default false). */
+  helpTip?: boolean;
+  /** A viewer has tipped for the lights coming back (a `recovered` tip; default false). */
+  recoveredTip?: boolean;
+  /** Placed parts the player has moved this run (default 0). */
+  moves?: number;
 }
 
 /** What only the HUD knows, handed to cueViewOf each frame. */
@@ -88,6 +98,8 @@ export interface CueHost {
   readonly bannerShown: boolean;
   /** Decommissions made since midnight. */
   readonly decommissionsAfterMidnight: number;
+  /** Placed parts the player has moved this run (default 0). */
+  readonly moves?: number;
 }
 
 export interface Cue {
@@ -318,6 +330,115 @@ export const CUES: readonly Cue[] = [
   },
 ];
 
+/** C3.lux.near: demand this close to capacity reads as "close to the limit". */
+const NEAR_LIMIT = 0.85;
+/** C3.lux.broke: under the cheapest thing that adds room (the scale-up kit). */
+const BROKE_BELOW = BROWNOUT.overclock.cost;
+
+/**
+ * Lux on the board (docs/SCRIPT.md "Lux on the board"; Rolando, 30 Oct 2026: give her more lines
+ * about how to play). Her reactions to what the player does and sees, in her own voice. They are a
+ * layer over the scripted night: the director runs them after CUES (BOARD_CUES), and the comms band
+ * drops one that has waited too long (lineMeta LUX_ASIDES), so they never hold up a scripted line.
+ */
+export const LUX_CUES: readonly Cue[] = [
+  // C1: the lights go out and the first server.
+  { id: 'C1.lux.alarm', follows: ['C1.triage.02'], when: (v, f) => after(f, 'C1.triage.02', 1, at(v)) },
+  {
+    id: 'C1.lux.placed',
+    holdFor: 3,
+    when: (v) => v.cardClosed && v.now < C.c3 && v.capacity === 0 && (v.unwiredServer ?? false),
+  },
+  {
+    id: 'C1.lux.live',
+    follows: ['C1.triage.03'],
+    when: (v, f) => v.now < C.c3 && after(f, 'C1.triage.03', 1, at(v)),
+  },
+  {
+    id: 'C1.lux.chat',
+    follows: ['C1.chat.02'],
+    when: (v, f) => v.now < C.c3 && after(f, 'C1.chat.02', 4, at(v)),
+  },
+  { id: 'C1.lux.goodcall', follows: ['C1.triage.06'], when: (v, f) => after(f, 'C1.triage.06', 1, at(v)) },
+  { id: 'C1.lux.moved', when: (v) => (v.moves ?? 0) > 0 },
+
+  // C2: room to spare.
+  {
+    id: 'C2.lux.headroom',
+    follows: ['C2.triage.after'],
+    when: (v, f) => after(f, 'C2.triage.after', 2, at(v)),
+  },
+
+  // C3: the climb, the limit, the money.
+  { id: 'C3.lux.climbing', when: (v) => between(v.now, C.c3 - SURGE_WARNING_LEAD, C.c3 + 5) && alone(v) },
+  {
+    id: 'C3.lux.watch',
+    follows: ['C3.lux.climbing'],
+    when: (v, f) => v.now < C.c4 && after(f, 'C3.lux.climbing', 5, at(v)),
+  },
+  {
+    id: 'C3.lux.father',
+    follows: ['C3.chat.01'],
+    when: (v, f) => v.now < C.c4 && after(f, 'C3.chat.01', 3, at(v)),
+  },
+  {
+    id: 'C3.lux.near',
+    holdFor: 1,
+    when: (v) =>
+      v.now >= C.c3 - SURGE_WARNING_LEAD &&
+      v.now < MIDNIGHT &&
+      alone(v) &&
+      v.capacity > 0 &&
+      v.dropped === 0 &&
+      v.demand >= NEAR_LIMIT * v.capacity,
+  },
+  {
+    id: 'C3.lux.over',
+    holdFor: 2,
+    when: (v) => v.now >= C.c3 && v.now < MIDNIGHT && alone(v) && v.dropped > 0,
+  },
+  { id: 'C3.lux.eyes', follows: ['C3.triage.04'], when: (v, f) => after(f, 'C3.triage.04', 1, at(v)) },
+  { id: 'C3.lux.scaledup', follows: ['C3.triage.03'], when: (v, f) => after(f, 'C3.triage.03', 3, at(v)) },
+  {
+    id: 'C3.lux.broke',
+    holdFor: 3,
+    when: (v) => v.now >= C.c3 && v.now < MIDNIGHT && v.servers > 0 && (v.credits ?? 0) < BROKE_BELOW,
+  },
+  { id: 'C3.lux.tip', when: (v) => v.now >= C.c3 && (v.helpTip ?? false) },
+  { id: 'C3.lux.thanks', when: (v) => v.recoveredTip ?? false },
+
+  // C4: the district surge, while she is alone.
+  { id: 'C4.lux.forecast', follows: ['C4.triage.01'], when: (v, f) => after(f, 'C4.triage.01', 1, at(v)) },
+  {
+    id: 'C4.lux.forecast2',
+    when: (v) => between(v.now, C.c4 - 5, C.c4) && alone(v) && v.capacity < BROWNOUT.demand.surge,
+  },
+  { id: 'C4.lux.dark', follows: ['C4.triage.02'], when: (v, f) => after(f, 'C4.triage.02', 1, at(v)) },
+  { id: 'C4.lux.retry', follows: ['C4.triage.03'], when: (v, f) => after(f, 'C4.triage.03', 1, at(v)) },
+  {
+    id: 'C4.lux.okafor',
+    follows: ['C4.chat.01'],
+    when: (v, f) => v.now < C.c5 && alone(v) && after(f, 'C4.chat.01', 2, at(v)),
+  },
+
+  // C5 to C7: back on her feet, midnight, the morning after.
+  { id: 'C5.lux.recover', follows: ['C5.chat.01'], when: (v, f) => after(f, 'C5.chat.01', 2, at(v)) },
+  {
+    id: 'C6.lux.spare',
+    follows: ['C6.triage.02'],
+    when: (v, f) => v.now < MIDNIGHT && v.dropped === 0 && after(f, 'C6.triage.02', 3, at(v)),
+  },
+  {
+    id: 'C6.lux.countdown',
+    when: (v) => between(v.now, MIDNIGHT - 10, MIDNIGHT - 5) && (v.midnightHeld ?? null) === null,
+  },
+  { id: 'C6.lux.midnight', follows: ['C6.lux.hold'], when: (v, f) => after(f, 'C6.lux.hold', 2, at(v)) },
+  { id: 'C7.lux.count', follows: ['C7.triage.01'], when: (v, f) => after(f, 'C7.triage.01', 1, at(v)) },
+];
+
+/** Every cue the board's director runs: the scripted night, then Lux's asides. */
+export const BOARD_CUES: readonly Cue[] = [...CUES, ...LUX_CUES];
+
 /**
  * Lines with no cue. C4.triage.04 waits on the database choking on the repeats, which the sim never
  * shows (route() caps the database at 200): decision D2 retires the beat, so it stays unfired.
@@ -430,7 +551,18 @@ export function emptyCueView(): CueView {
     midnightHeld: null,
     rewinds: 0,
     rewoundTo: 0,
+    unwiredServer: false,
+    credits: 0,
+    helpTip: false,
+    recoveredTip: false,
+    moves: 0,
   };
+}
+
+/** Whether any wire runs into `to`. */
+function wiredInto(f: Frame, to: string): boolean {
+  for (const w of f.wires) if (w.to === to) return true;
+  return false;
 }
 
 /** Whether a wire runs from `from` to `to`. */
@@ -465,6 +597,7 @@ export function cueViewOf(
   const dropped = f.dropped > 1e-6 ? f.dropped : 0;
 
   let servers = 0;
+  let unwired = false;
   let idle = false;
   let overloaded = false;
   let overclockedId: string | null = null;
@@ -473,6 +606,7 @@ export function cueViewOf(
     if (p.kind === 'balancer' && lb === null) lb = p.id;
     if (p.kind !== 'server') continue;
     servers++;
+    if (!unwired && !wiredInto(f, p.id)) unwired = true;
     if ((p.boost ?? 1) > 1 && overclockedId === null) overclockedId = p.id;
     if (f.offline.includes(p.id)) continue;
     const load = f.flow.load[p.id] ?? 0;
@@ -532,5 +666,16 @@ export function cueViewOf(
   v.midnightHeld = f.midnight ? f.midnight.held : null;
   v.rewinds = rewinds;
   v.rewoundTo = rewinds > 0 ? f.rewinds[rewinds - 1].to : 0;
+  v.unwiredServer = unwired;
+  v.credits = f.credits;
+  let helpTip = false;
+  let recoveredTip = false;
+  for (const t of f.tips) {
+    if (t.kind === 'help') helpTip = true;
+    else if (t.kind === 'recovered') recoveredTip = true;
+  }
+  v.helpTip = helpTip;
+  v.recoveredTip = recoveredTip;
+  v.moves = host.moves ?? 0;
   return v;
 }

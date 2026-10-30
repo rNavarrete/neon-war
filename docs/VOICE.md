@@ -120,6 +120,33 @@ lists them in `shell.voice.missing`) until they are recorded and added to the ma
 - `C5.lux.nudge.behind`
 - `C5.triage.nudge.replace.1`
 - `C5.lux.nudge.replace`
+- `C1.lux.alarm`
+- `C1.lux.placed`
+- `C1.lux.live`
+- `C1.lux.chat`
+- `C1.lux.goodcall`
+- `C1.lux.moved`
+- `C2.lux.headroom`
+- `C3.lux.climbing`
+- `C3.lux.watch`
+- `C3.lux.father`
+- `C3.lux.near`
+- `C3.lux.over`
+- `C3.lux.eyes`
+- `C3.lux.scaledup`
+- `C3.lux.broke`
+- `C3.lux.tip`
+- `C3.lux.thanks`
+- `C4.lux.forecast`
+- `C4.lux.forecast2`
+- `C4.lux.dark`
+- `C4.lux.retry`
+- `C4.lux.okafor`
+- `C5.lux.recover`
+- `C6.lux.spare`
+- `C6.lux.countdown`
+- `C6.lux.midnight`
+- `C7.lux.count`
 
 ## Speaker changed
 

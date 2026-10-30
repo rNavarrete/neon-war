@@ -15,6 +15,7 @@ import { DEMAND_SCALE_MAX } from './hud/thresholds';
 import { ChatFeedView } from './hud/ChatFeedView';
 import { chatOf } from './hud/chat';
 import {
+  BOARD_CUES,
   type CueView,
   type DirectorState,
   NEW_DIRECTOR,
@@ -134,6 +135,8 @@ export class HudScene extends Phaser.Scene {
   };
   private bannerShown = false;
   private decommissionsAfterMidnight = 0;
+  /** Placed parts the player has moved this run. */
+  private moves = 0;
   private lastSurgeAt = -1;
   /** Sim time the current surge warning first went on screen. */
   private surgeShownAt = -1;
@@ -149,10 +152,12 @@ export class HudScene extends Phaser.Scene {
     cardClosed: boolean;
     bannerShown: boolean;
     decommissionsAfterMidnight: number;
+    moves: number;
   } = {
     cardClosed: false,
     bannerShown: false,
     decommissionsAfterMidnight: 0,
+    moves: 0,
   };
 
   // Views, built in create().
@@ -251,6 +256,7 @@ export class HudScene extends Phaser.Scene {
     this.unsubscribe.push(
       bus.on('action', (a) => {
         if (a.type === 'decommission' && run().now >= MIDNIGHT) this.decommissionsAfterMidnight++;
+        if (a.type === 'move') this.moves++;
       }),
       bus.on('drag', (d) => {
         this.dragging = d.kind !== null;
@@ -366,6 +372,7 @@ export class HudScene extends Phaser.Scene {
     this.chatFeed?.reset(this.clock);
     this.bannerShown = false;
     this.decommissionsAfterMidnight = 0;
+    this.moves = 0;
     // A fresh run: nothing carries over from the last run's view (dropped in C6, the rescue clock).
     Object.assign(this.view, emptyCueView());
     this.firedCues = [];
@@ -540,8 +547,9 @@ export class HudScene extends Phaser.Scene {
     host.cardClosed = !this.cardOpen;
     host.bannerShown = this.bannerShown;
     host.decommissionsAfterMidnight = this.decommissionsAfterMidnight;
+    host.moves = this.moves;
     const v = cueViewOf(this.view, f, this.occurrences, this.clock, host, this.view);
-    const out = direct(this.director, v);
+    const out = direct(this.director, v, BOARD_CUES);
     this.director = out.state;
     for (let i = 0; i < out.fired.length; i++) this.cue(out.fired[i]);
   }

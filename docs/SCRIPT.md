@@ -13,7 +13,8 @@ two differ, GAME.md wins on rules and numbers, and this file wins on wording.
 - **Speakers:** Lux, TRIAGE (her drone AI, with its mood in brackets), Rei (crew lead, name not final), Mika,
   Ozzie, Grandma (heard through the door, never seen), neighbours in the block chat, viewers in Lux's stream chat,
   the TV downstairs, and the Solace banner.
-- Lux speaks only in short lines to TRIAGE and the crew. TRIAGE is the only voice before the crew arrives.
+- Lux speaks in short lines: to TRIAGE, the crew, her block and her stream chat. TRIAGE and Lux are the only voices on
+  the board before the crew arrive.
 - System-design words stay out of every line until the debrief (C8).
 
 ## C0 Cold open (23:51:30, click to advance)
@@ -217,6 +218,43 @@ The crew go quiet and the call is Lux's. The outcome lines branch on what holds 
 | C7.triage.01 | bark | TRIAGE (thinking) | 00:00:15 | "40 requests a second. That's... one server and a bit?" |
 | C7.ozzie.down | bark | Ozzie | player decommissions to 2 | "Now that's a New Year's resolution." |
 | C7.ozzie.none | bark | Ozzie | 00:00:35, still 4 or more running | "Paying for fireworks we're not watching." |
+
+## Lux on the board (C1 to C7)
+
+Lux reacting to what the player does and sees, so she guides the night in her own voice: dry, quick, protective of
+her block, teasing the TRIAGE she built (Rolando, 30 Oct 2026). Each fires once a run, like every cue, and a rewind lets
+the rewound challenges fire again. These are asides: unlike her scripted lines, the comms band drops one that has waited
+too long, so they never hold up a hint.
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+| C1.lux.alarm | bark | Lux | TRIAGE's lights-going-out line, 1 s later | "Not on New Year's. Not my block." |
+| C1.lux.placed | bark | Lux | a server sits on the table with no wire into it for 3 s | "Good. Now give it a wire, or it's just a very expensive box." |
+| C1.lux.live | bark | Lux | 1 s after C1.triage.03 (the lights come back) | "There. Hi, block. Missed you." |
+| C1.lux.chat | bark | Lux | 4 s after the stream's "first try lol" | "Chat, I literally plugged in one cable. Calm down. ...Thank you." |
+| C1.lux.goodcall | bark | Lux | 1 s after C1.triage.06 (TRIAGE gets headroom right) | "...Fine. Good call. Don't let it go to your lens." |
+| C1.lux.moved | bark | Lux | the first time the player moves a placed part | "Tidy board, tidy mind." |
+| C2.lux.headroom | bark | Lux | 2 s after C2.triage.after ("Nothing to protect yet") | "Plenty of room. Enjoy it. It never lasts." |
+| C3.lux.climbing | bark | Lux | the evening climb's forecast comes up, while Lux is alone | "Uh-oh. More requests coming in. Everyone's waking up for midnight." |
+| C3.lux.watch | bark | Lux | 5 s after C3.lux.climbing | "Watch the dial. If the needle passes the line, we're in trouble." |
+| C3.lux.father | bark | Lux | 3 s after the young father's buffering line | "You'll make your call. I promise." |
+| C3.lux.near | bark | Lux | from the C3 forecast on, demand at 85% of capacity or more with nothing dropped, for 1 s | "We're close to the limit. I need more room before it tips." |
+| C3.lux.over | bark | Lux | from C3 on, requests dropping for 2 s, while Lux is alone | "Too many! Calls are bouncing. I need more capacity, now." |
+| C3.lux.eyes | bark | Lux | 1 s after TRIAGE panics about the heat (C3.triage.04) | "TRIAGE. Eyes. Normal. Now." |
+| C3.lux.scaledup | bark | Lux | 3 s after the scale-up lands (C3.triage.03) | "Bigger server, same spot. That buys us time. Not forever." |
+| C3.lux.broke | bark | Lux | from C3 to midnight, under 60 credits with a server on the board, for 3 s | "I'm broke. Chat, I'm not begging. ...I'm a little bit begging." |
+| C3.lux.tip | bark | Lux | a viewer covers the move that would help (the help tip) | "Thank you! That's going straight into servers." |
+| C3.lux.thanks | bark | Lux | the first lights-are-back tip | "Whoa. Okay. Somebody's getting a shout-out at midnight." |
+| C4.lux.forecast | bark | Lux | 1 s after the district surge forecast (C4.triage.01) | "Big wave coming. Build before it hits, not after." |
+| C4.lux.forecast2 | bark | Lux | 5 s before the surge, capacity still under it, while Lux is alone | "Five seconds. Come on, come on..." |
+| C4.lux.dark | bark | Lux | 1 s after the big server goes dark (C4.triage.02) | "Lost one! Everybody stay calm. That includes you, TRIAGE." |
+| C4.lux.retry | bark | Lux | 1 s after TRIAGE asks about refresh (C4.triage.03) | "Right. Every refresh is one more request. Stop it, guys!" |
+| C4.lux.okafor | bark | Lux | 2 s after Mrs Okafor's "it's gone again", while Lux is alone | "Hang on, Mrs Okafor. Lift's next." |
+| C5.lux.recover | bark | Lux | 2 s after the young father's "it's back!!!" | "Okay. Okay. We're back. Breathe." |
+| C6.lux.spare | bark | Lux | 3 s after the midnight dip takes a box dark, with nothing dropping | "See? That's why you keep a spare." |
+| C6.lux.countdown | bark | Lux | ten seconds to midnight | "Ten seconds. Baachan, if you're watching... watch this." |
+| C6.lux.midnight | bark | Lux | 2 s after C6.lux.hold | "Happy New Year, block. Lights stay on." |
+| C7.lux.count | bark | Lux | 1 s after TRIAGE's "one server and a bit?" | "I built you, and you still can't count." |
 
 ## C8 Debrief and Night Book (00:01:00)
 
