@@ -383,7 +383,6 @@ export const LINES = {
   'C7.ozzie.down': { kind: 'bark', speaker: 'Ozzie', text: "Now that's a New Year's resolution." },
   'C7.ozzie.none': { kind: 'bark', speaker: 'Ozzie', text: "Paying for fireworks we're not watching." },
   // Lux reacting to the board as she plays (Rolando, 30 Oct 2026: give her more lines about how to play).
-  'C1.lux.alarm': { kind: 'bark', speaker: 'Lux', text: "Not on New Year's. Not my block." },
   'C1.lux.placed': {
     kind: 'bark',
     speaker: 'Lux',

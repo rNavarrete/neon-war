@@ -45,7 +45,7 @@ const host: CueHost = { cardClosed: true, bannerShown: true, decommissionsAfterM
 describe("Lux's asides", () => {
   it('are short Lux barks, each with one cue and a band row, all listed as asides', () => {
     const ids = LUX_CUES.map((c) => c.id);
-    expect(ids).toHaveLength(27);
+    expect(ids).toHaveLength(26);
     expect(new Set(ids).size).toBe(ids.length);
     expect([...LUX_ASIDES].sort()).toEqual([...ids].sort());
     for (const id of ids) {
@@ -74,12 +74,6 @@ describe("Lux's asides", () => {
       for (const m of src.matchAll(/(?:after\(f, |f\[)'([\w.]+)'/g))
         expect(c.follows ?? [], `${c.id} waits on ${m[1]}`).toContain(m[1]);
     }
-  });
-
-  it('C1: Lux answers the lights going out a second after TRIAGE', () => {
-    const fired = play([0, 2, 3, 4].map((t) => ({ now: C.c1 + t, clock: t })));
-    expect(fired.indexOf('C1.lux.alarm')).toBeGreaterThan(fired.indexOf('C1.triage.02'));
-    expect(fired.indexOf('C1.lux.alarm')).toBeLessThan(fired.indexOf('C1.lux.01'));
   });
 
   it('C1: a server left with no wire into it for 3 s gets "give it a wire"', () => {
@@ -207,7 +201,7 @@ describe("Lux's asides", () => {
     }
     const said = LUX_ASIDES.filter((id) => fired.has(id));
     expect(said.length, said.join(', ')).toBeGreaterThanOrEqual(8);
-    for (const id of ['C1.lux.alarm', 'C3.lux.climbing', 'C6.lux.countdown', 'C6.lux.midnight'] as LineId[])
+    for (const id of ['C3.lux.climbing', 'C6.lux.countdown', 'C6.lux.midnight'] as LineId[])
       expect(fired.has(id), id).toBe(true);
   });
 });

@@ -120,7 +120,6 @@ lists them in `shell.voice.missing`) until they are recorded and added to the ma
 - `C5.lux.nudge.behind`
 - `C5.triage.nudge.replace.1`
 - `C5.lux.nudge.replace`
-- `C1.lux.alarm`
 - `C1.lux.placed`
 - `C1.lux.live`
 - `C1.lux.chat`

@@ -228,7 +228,6 @@ too long, so they never hold up a hint.
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| C1.lux.alarm | bark | Lux | TRIAGE's lights-going-out line, 1 s later | "Not on New Year's. Not my block." |
 | C1.lux.placed | bark | Lux | a server sits on the table with no wire into it for 3 s | "Good. Now give it a wire, or it's just a very expensive box." |
 | C1.lux.live | bark | Lux | 1 s after C1.triage.03 (the lights come back) | "There. Hi, block. Missed you." |
 | C1.lux.chat | bark | Lux | 4 s after the stream's "first try lol" | "Chat, I literally plugged in one cable. Calm down. ...Thank you." |

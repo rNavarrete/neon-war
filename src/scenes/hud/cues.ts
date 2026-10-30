@@ -342,8 +342,7 @@ const BROKE_BELOW = BROWNOUT.overclock.cost;
  * drops one that has waited too long (lineMeta LUX_ASIDES), so they never hold up a scripted line.
  */
 export const LUX_CUES: readonly Cue[] = [
-  // C1: the lights go out and the first server.
-  { id: 'C1.lux.alarm', follows: ['C1.triage.02'], when: (v, f) => after(f, 'C1.triage.02', 1, at(v)) },
+  // C1: the first server.
   {
     id: 'C1.lux.placed',
     holdFor: 3,

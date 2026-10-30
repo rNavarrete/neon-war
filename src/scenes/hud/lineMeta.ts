@@ -117,7 +117,6 @@ export const LESSON_IDS: readonly LineId[] = [
  * hold up a hint.
  */
 export const LUX_ASIDES: readonly LineId[] = [
-  'C1.lux.alarm',
   'C1.lux.placed',
   'C1.lux.live',
   'C1.lux.chat',
