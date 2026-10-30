@@ -28,7 +28,18 @@ export interface ShellButton {
   setVisible(visible: boolean): void;
 }
 
-const registry = new Map<string, ShellButton & { scene: Phaser.Scene }>();
+/** What the test hook needs of a clickable thing: where it is and whether it takes clicks now. */
+type Clickable = Pick<Phaser.GameObjects.Zone, 'x' | 'y' | 'visible' | 'input'>;
+
+const registry = new Map<string, { scene: Phaser.Scene; image: Clickable }>();
+
+/** Report a clickable that is not a button (the title's speaker icon) to the test hook under `id`. */
+export function registerClickable(scene: Phaser.Scene, id: string, target: Clickable): void {
+  registry.set(id, { scene, image: target });
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    if (registry.get(id)?.image === target) registry.delete(id);
+  });
+}
 
 /**
  * A button from the HUD button art with a text label. Hover and press swap the art; release over the
@@ -71,10 +82,7 @@ export function addButton(
       if (!v) image.setTexture('shell:button');
     },
   };
-  registry.set(id, { ...button, scene });
-  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-    if (registry.get(id)?.image === image) registry.delete(id);
-  });
+  registerClickable(scene, id, image);
   return button;
 }
 

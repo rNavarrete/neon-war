@@ -24,6 +24,8 @@ export interface Settings {
   voices: VoiceSetting;
   /** The voice channel's level under the master volume, 0 to 1. */
   voiceVolume: number;
+  /** The speaker icon on the title: true silences the music (title and board), effects and voices play on. */
+  musicMuted: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,6 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceFlicker: false,
   voices: 'ja',
   voiceVolume: 1,
+  musicMuted: false,
 };
 
 /** Characters per second the typewriter text box reveals at each text speed. */
@@ -64,6 +67,7 @@ export function parseSettings(raw: string | null): Settings {
       ? (v.voices as VoiceSetting)
       : DEFAULT_SETTINGS.voices,
     voiceVolume: unit(v.voiceVolume, DEFAULT_SETTINGS.voiceVolume),
+    musicMuted: v.musicMuted === true,
   };
 }
 

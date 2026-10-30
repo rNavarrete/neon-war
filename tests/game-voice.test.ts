@@ -135,6 +135,8 @@ describe('voices and voiceVolume settings', () => {
       reduceFlicker: true,
       voices: 'ja',
       voiceVolume: 1,
+      // And the title's music mute (30 Oct 2026), unmuted.
+      musicMuted: false,
     });
   });
 

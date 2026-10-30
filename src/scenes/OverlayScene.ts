@@ -1,5 +1,16 @@
 import Phaser from 'phaser';
-import { MUSIC_FILES, MUSIC_KEY, SFX_KEYS, audio, musicWanted, sfxPath } from '../game/audio';
+import {
+  MUSIC_FILES,
+  MUSIC_KEY,
+  SFX_KEYS,
+  TITLE_MUSIC_FADE,
+  TITLE_MUSIC_FILES,
+  TITLE_MUSIC_KEY,
+  audio,
+  musicWanted,
+  sfxPath,
+  titleMusicWanted,
+} from '../game/audio';
 import { bus } from '../game/bus';
 import { frame } from '../game/frame';
 import { type SoundPort, VOICE_CUT_FADE_MS, type VoiceTestState, bundledLiveSfx, mixer } from '../game/mixer';
@@ -30,6 +41,8 @@ export interface ShellTestState {
   voice: VoiceTestState & Pick<VoiceHookFields, 'lang' | 'volume' | 'lastVoice' | 'ducked'>;
   /** True while the board music loop is playing (or queued to start once audio unlocks). */
   musicPlaying: boolean;
+  /** True while the title music loop is playing (or queued to start once audio unlocks). */
+  titleMusicPlaying: boolean;
   settings: {
     volume: number;
     textSpeed: string;
@@ -39,6 +52,8 @@ export interface ShellTestState {
     voices: string;
     /** The voice volume, 0 to 1. */
     voiceVolume: number;
+    /** The title's speaker icon: true when the music is muted. */
+    musicMuted: boolean;
   };
   /** True while the pause menu is open. */
   paused: boolean;
@@ -78,6 +93,8 @@ export class OverlayScene extends Phaser.Scene {
   ready = false;
   private music: Phaser.Sound.BaseSound | null = null;
   private musicOn = false;
+  private titleMusic: Phaser.Sound.BaseSound | null = null;
+  private titleMusicOn = false;
   private pauseButton: ShellButton | null = null;
   /** The mixer's clock: real seconds times the test speed, stopped while the board is held (the HUD clock). */
   private mixClock = 0;
@@ -138,11 +155,17 @@ export class OverlayScene extends Phaser.Scene {
    * for before its file arrives is recorded but silent.
    */
   private loadAudio(): void {
+    // The title's loop first: it is what the first screen plays.
+    this.load.audio(TITLE_MUSIC_KEY, [...TITLE_MUSIC_FILES]);
     this.load.audio(MUSIC_KEY, [...MUSIC_FILES]);
     for (const key of SFX_KEYS) this.load.audio(key, sfxPath(key));
     // The Live effects load only once their files have landed (public/audio/sfx/manifest.json).
     for (const key of bundledLiveSfx()) this.load.audio(key, sfxPath(key));
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      if (this.cache.audio.exists(TITLE_MUSIC_KEY)) {
+        this.titleMusic = this.sound.add(TITLE_MUSIC_KEY, { loop: true, volume: mixer.gain('music') });
+        if (this.titleMusicOn) this.playTitleMusic(true);
+      }
       if (!this.cache.audio.exists(MUSIC_KEY)) return;
       this.music = this.sound.add(MUSIC_KEY, { loop: true, volume: mixer.gain('music') });
       if (this.musicOn) this.playMusic(true);
@@ -158,7 +181,9 @@ export class OverlayScene extends Phaser.Scene {
     const sm = this.scene;
     const boardOpen = sm.isActive(SCENES.board) || sm.isPaused(SCENES.board);
     const sceneOpen = sm.isActive(SCENES.title) || sm.isActive(SCENES.story) || sm.isActive(SCENES.debrief);
-    this.setMusic(musicWanted({ boardOpen, sceneOpen }));
+    const muted = settings().musicMuted;
+    this.setMusic(musicWanted({ boardOpen, sceneOpen }) && !muted);
+    this.setTitleMusic(titleMusicWanted({ titleOpen: sm.isActive(SCENES.title), muted }));
     this.pauseButton?.setVisible(sm.isActive(SCENES.board));
   }
 
@@ -207,12 +232,13 @@ export class OverlayScene extends Phaser.Scene {
       setGain: (channel, gain) => {
         if (channel === 'music') {
           (this.music as Phaser.Sound.WebAudioSound | null)?.setVolume?.(gain);
+          if (this.titleMusicOn) (this.titleMusic as Phaser.Sound.WebAudioSound | null)?.setVolume?.(gain);
           return;
         }
         this.sfxGain = gain;
         // Effects already sounding (the rain loop) follow the duck too; the music and the voice do not.
         for (const s of this.sound.getAllPlaying()) {
-          if (s !== this.music && s !== this.voiceSound && !this.fadingVoices.has(s))
+          if (s !== this.music && s !== this.titleMusic && s !== this.voiceSound && !this.fadingVoices.has(s))
             (s as Phaser.Sound.WebAudioSound).setVolume?.(gain);
         }
       },
@@ -250,6 +276,39 @@ export class OverlayScene extends Phaser.Scene {
     this.playMusic(on);
   }
 
+  private setTitleMusic(on: boolean): void {
+    if (on === this.titleMusicOn) return;
+    this.titleMusicOn = on;
+    this.playTitleMusic(on);
+  }
+
+  /**
+   * Start the title loop from the top at the music level, or fade it out over TITLE_MUSIC_FADE and
+   * stop it. Played while audio is still locked, it starts on the first click or key press.
+   */
+  private playTitleMusic(on: boolean): void {
+    const m = this.titleMusic as Phaser.Sound.WebAudioSound | null;
+    if (!m) return;
+    try {
+      this.tweens.killTweensOf(m);
+      if (on) {
+        m.setVolume(mixer.gain('music'));
+        m.play();
+      } else if (m.isPlaying) {
+        this.tweens.add({
+          targets: m,
+          volume: 0,
+          duration: TITLE_MUSIC_FADE * 1000,
+          onComplete: () => {
+            if (!this.titleMusicOn) m.stop();
+          },
+        });
+      }
+    } catch {
+      // Locked or missing audio never stops the game.
+    }
+  }
+
   private playMusic(on: boolean): void {
     try {
       if (on) this.music?.play();
@@ -271,6 +330,7 @@ export class OverlayScene extends Phaser.Scene {
       recentSfx: [...audio.recentSfx],
       voice: { ...v, ...voiceHookFields(v, s), requested: v.requested },
       musicPlaying: this.musicOn && this.music !== null,
+      titleMusicPlaying: this.titleMusicOn && this.titleMusic !== null,
       settings: {
         volume: s.volume,
         textSpeed: s.textSpeed,
@@ -278,6 +338,7 @@ export class OverlayScene extends Phaser.Scene {
         fullscreen: this.scale.isFullscreen,
         voices: s.voices,
         voiceVolume: s.voiceVolume,
+        musicMuted: s.musicMuted,
       },
       paused: this.scene.isActive(SCENES.pause) || this.scene.isPaused(SCENES.pause),
       simNow: run().now,

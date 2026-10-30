@@ -5,8 +5,12 @@ import {
   isSfxKey,
   musicWanted,
   sfxForAction,
+  TITLE_MUSIC_FILES,
+  TITLE_MUSIC_KEY,
   sfxPath,
+  titleMusicWanted,
 } from '../src/game/audio';
+import { DEFAULT_SETTINGS, parseSettings } from '../src/game/settings';
 import { Bus } from '../src/game/bus';
 
 describe('sound keys', () => {
@@ -40,6 +44,21 @@ describe('sound keys', () => {
     expect(musicWanted({ boardOpen: true, sceneOpen: false })).toBe(true);
     expect(musicWanted({ boardOpen: true, sceneOpen: true })).toBe(false);
     expect(musicWanted({ boardOpen: false, sceneOpen: false })).toBe(false);
+  });
+
+  it('plays "Euphoric Menace" on the title only, and never while the music is muted', () => {
+    expect(TITLE_MUSIC_KEY).not.toBe('music');
+    expect(TITLE_MUSIC_FILES).toEqual(['audio/music/euphoric-menace.ogg', 'audio/music/euphoric-menace.mp3']);
+    expect(titleMusicWanted({ titleOpen: true, muted: false })).toBe(true);
+    expect(titleMusicWanted({ titleOpen: true, muted: true })).toBe(false);
+    expect(titleMusicWanted({ titleOpen: false, muted: false })).toBe(false);
+  });
+
+  it('remembers the speaker icon’s mute in settings, unmuted by default', () => {
+    expect(DEFAULT_SETTINGS.musicMuted).toBe(false);
+    expect(parseSettings(JSON.stringify({ musicMuted: true })).musicMuted).toBe(true);
+    expect(parseSettings(JSON.stringify({ musicMuted: 'yes' })).musicMuted).toBe(false);
+    expect(parseSettings(null).musicMuted).toBe(false);
   });
 });
 

@@ -108,6 +108,35 @@ test('the title is the picked rooftop art: logo and menu clear of Lux, rain, sea
   await page.screenshot({ path: 'test-results/screens/title-rooftop.png' });
 });
 
+test('the title plays its own music; the speaker icon mutes it, shows it muted and remembers it', async ({
+  page,
+}) => {
+  await page.goto('/?test');
+  await waitForScene(page, 'title');
+  // The loop is asked for at once; a locked browser starts it on the first click or key press.
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying, { timeout: 15_000 }).toBe(true);
+  expect((await state(page)).title!.speaker.muted).toBe(false);
+  await page.screenshot({ path: 'test-results/screens/title-speaker.png' });
+
+  await press(page, 'musicMute');
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying).toBe(false);
+  expect((await state(page)).title!.speaker.muted).toBe(true);
+  expect((await state(page)).shell!.settings.musicMuted).toBe(true);
+  await page.screenshot({ path: 'test-results/screens/title-speaker-muted.png' });
+
+  await page.reload();
+  await waitForScene(page, 'title');
+  expect((await state(page)).shell!.settings.musicMuted).toBe(true);
+  expect((await state(page)).shell!.titleMusicPlaying).toBe(false);
+
+  // M toggles it too, and Start leaves the title music behind.
+  await page.keyboard.press('m');
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying).toBe(true);
+  await press(page, 'start');
+  await expect.poll(async () => (await state(page)).scene, { timeout: 15_000 }).toMatch(/^(story|board)$/);
+  await expect.poll(async () => (await state(page)).shell!.titleMusicPlaying).toBe(false);
+});
+
 test('Esc and the pause button open Pause; the sim clock holds still while paused', async ({ page }) => {
   await openBoard(page);
   await page.screenshot({ path: 'test-results/screens/board-pause-button.png' });

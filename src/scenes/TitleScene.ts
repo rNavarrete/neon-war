@@ -1,12 +1,23 @@
 import Phaser from 'phaser';
+import { bus } from '../game/bus';
 import { startSession } from '../game/flow';
-import { settings } from '../game/settings';
+import { settings, updateSettings } from '../game/settings';
 import { line } from '../strings';
 import { FrameClock } from '../story/view';
 import { provideTestState } from '../testHook';
 import { seededRandom } from './hud/chat';
 import { SCENES } from './keys';
-import { CYAN, MAGENTA, UI_FONT, type ShellButton, addButton, addPanel, preloadButtons } from './shellUi';
+import {
+  CYAN,
+  INK,
+  MAGENTA,
+  UI_FONT,
+  type ShellButton,
+  addButton,
+  addPanel,
+  preloadButtons,
+  registerClickable,
+} from './shellUi';
 import {
   ART,
   BEAMS,
@@ -41,6 +52,8 @@ const LOGO = { x: 640, y: 300, scale: 0.6 } as const;
 const SUBTITLE_Y = 530;
 const MENU = { y: 660, xs: [330, 640, 950], scale: 0.55 } as const;
 const MAX_BURSTS = 4;
+/** The speaker icon that mutes the music: top right, clear of the searchlights' bases and of Lux. */
+const SPEAKER = { x: 1840, y: 80, r: 44 } as const;
 
 /** What the browser tests read about the title (only with ?test). */
 export interface TitleTestState {
@@ -58,6 +71,8 @@ export interface TitleTestState {
   bursts: number;
   /** True while the logo's neon dips. */
   logoDip: boolean;
+  /** The speaker icon's box in game px, and whether it shows the music muted. */
+  speaker: Box & { muted: boolean };
 }
 
 declare module '../testHook' {
@@ -87,6 +102,8 @@ export class TitleScene extends Phaser.Scene {
   private dip = false;
   private readonly spark = { dx: 0, dy: 0 };
   private frames = new FrameClock();
+  private speakerG: Phaser.GameObjects.Graphics | null = null;
+  private speakerHover = false;
 
   constructor() {
     super(SCENES.title);
@@ -144,6 +161,7 @@ export class TitleScene extends Phaser.Scene {
       addButton(this, 'credits', MENU.xs[2], MENU.y, 'CREDITS', () => this.showCredits(true), MENU.scale),
     ];
 
+    this.buildSpeaker();
     this.credits = this.buildCredits();
     this.showCredits(false);
     provideTestState('title', () => this.snapshot());
@@ -225,6 +243,59 @@ export class TitleScene extends Phaser.Scene {
     }
   }
 
+  /** The speaker icon: click it or press M to mute or unmute the music, remembered in settings. */
+  private buildSpeaker(): void {
+    this.speakerG = this.add.graphics();
+    const d = SPEAKER.r * 2;
+    const hit = this.add.zone(SPEAKER.x, SPEAKER.y, d, d).setInteractive({ useHandCursor: true });
+    hit.on('pointerover', () => {
+      this.speakerHover = true;
+      this.drawSpeaker();
+    });
+    hit.on('pointerout', () => {
+      this.speakerHover = false;
+      this.drawSpeaker();
+    });
+    hit.on('pointerup', () => this.toggleMusic());
+    this.input.keyboard?.on('keydown-M', () => this.toggleMusic());
+    registerClickable(this, 'musicMute', hit);
+    this.drawSpeaker();
+  }
+
+  private toggleMusic(): void {
+    updateSettings({ musicMuted: !settings().musicMuted });
+    bus.emit('sfx', { key: 'ui-click' });
+    this.drawSpeaker();
+  }
+
+  /** A round plate with a speaker: sound waves while the music plays, a cross while it is muted. */
+  private drawSpeaker(): void {
+    const g = this.speakerG!;
+    const { x, y, r } = SPEAKER;
+    const muted = settings().musicMuted;
+    const color = this.speakerHover ? 0xff3fa4 : 0x2de2e6;
+    g.clear();
+    g.fillStyle(INK, 0.7).fillCircle(x, y, r);
+    g.lineStyle(3, color, 0.9).strokeCircle(x, y, r);
+    // The speaker: a box and a cone, a little left of centre to leave room for the waves.
+    const cx = x - 10;
+    g.fillStyle(color, 1);
+    g.fillRect(cx - 14, y - 8, 10, 16);
+    g.fillTriangle(cx - 4, y - 8, cx + 10, y - 20, cx + 10, y + 20);
+    g.fillTriangle(cx - 4, y - 8, cx + 10, y + 20, cx - 4, y + 8);
+    g.lineStyle(4, color, 1);
+    if (muted) {
+      g.lineBetween(cx + 18, y - 10, cx + 34, y + 10);
+      g.lineBetween(cx + 18, y + 10, cx + 34, y - 10);
+    } else {
+      for (const wr of [14, 26]) {
+        g.beginPath();
+        g.arc(cx + 8, y, wr, -Math.PI / 4, Math.PI / 4);
+        g.strokePath();
+      }
+    }
+  }
+
   private snapshot(): TitleTestState {
     const lw = (this.logo?.width ?? 0) * LOGO.scale;
     const lh = (this.logo?.height ?? 0) * LOGO.scale;
@@ -239,6 +310,13 @@ export class TitleScene extends Phaser.Scene {
       beams: BEAMS.map((b) => beamAngle(b, this.t)),
       bursts: this.burstCount,
       logoDip: this.dip,
+      speaker: {
+        x: SPEAKER.x - SPEAKER.r,
+        y: SPEAKER.y - SPEAKER.r,
+        w: SPEAKER.r * 2,
+        h: SPEAKER.r * 2,
+        muted: settings().musicMuted,
+      },
     };
   }
 
