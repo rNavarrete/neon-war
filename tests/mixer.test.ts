@@ -307,9 +307,10 @@ describe('missing voices', () => {
     const m = bundledVoiceManifest();
     expect(m.ja).toContain('C1.triage.02');
     expect(m.en).toContain('C1.lux.01');
-    // 85 until Lux's 26 board lines were recorded (Rolando, 30 Oct 2026).
-    expect(m.ja).toHaveLength(111);
-    expect(m.en).toHaveLength(111);
+    // 85 until Lux's 26 board lines were recorded, then 111 until the 20 coach nudges were
+    // (Rolando, 30 Oct 2026): every spoken line now.
+    expect(m.ja).toHaveLength(131);
+    expect(m.en).toHaveLength(131);
   });
 
   it('keeps the last 20 requests', () => {

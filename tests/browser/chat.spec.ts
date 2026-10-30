@@ -1,6 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import { BROWNOUT } from '../../src/sim/brownout';
 import { CHAT_PACE } from '../../src/scenes/hud/chatEngine';
+import { LINES } from '../../src/strings';
 import type { HudTestState } from '../../src/scenes/hud/hook';
 import { type ChatTraceTestState, chatArtOf } from '../../src/scenes/hud/ChatFeedView';
 import type { AudienceTestState, ChatTestState } from '../../src/scenes/live/views/chat';
@@ -48,7 +49,10 @@ test('the chat opens with the phone messages, reacts to the first serve and togg
 
   h = await chatOf(page);
   const c = h.chat;
-  expect(c.stream).toContain('viewer: first try lol');
+  // "first try lol" (C1.chat.02) posted on the stream side. Read from the feed, not the last few
+  // stream rows: a hype burst (Rolando's 30 Oct pack) can scroll it out of those before this read.
+  expect(c.feed.find((r) => r.id === 'C1.chat.02')?.chat).toBe('stream');
+  expect(LINES['C1.chat.02'].text).toBe('first try lol');
   // Four or five rows, bottom-up inside the body (y 840-1060), none over the header.
   expect(c.shown).toBe(c.rows.length);
   expect(c.rows.length).toBeGreaterThanOrEqual(4);

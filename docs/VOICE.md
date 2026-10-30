@@ -1,6 +1,6 @@
 # Recorded voices
 
-Every spoken line of Session 0 recorded so far (111 lines: the scene lines and the barks of `docs/SCRIPT.md`) has
+Every spoken line of Session 0 (131 lines: the scene lines and the barks of `docs/SCRIPT.md`) has
 a recorded clip in Japanese and in English. This page covers where the clips come from, how to
 re-record one and which takes are out of date. How the game plays them (channels, the duck, one
 voice at a time, lazy groups) is in `docs/AUDIO.md`.
@@ -22,7 +22,10 @@ as delivery, not as words). `log.jsonl` there records one row per take.
   from. Refresh it whenever you re-record.
 
 Lux's 26 board lines (30 Oct 2026, `C1.lux.placed` to `C7.lux.count`) were recorded the same way, with the
-same Lux voices, from the project's cloud session at Rolando's request.
+same Lux voices, from the project's cloud session at Rolando's request. The same session then
+re-recorded the 23 stale takes and recorded the 20 coach nudges (30 Oct 2026, after Rolando heard
+the TV say "ten minutes" over a "five minutes" caption), from
+`redo-lines-2026-10-30.json` in the voice pipeline folder.
 
 ## The manifest
 
@@ -58,42 +61,7 @@ would be the wrong voice.
 Lines whose words changed in `src/strings.ts` since they were recorded. Words are compared without
 the performance tags, the stage directions in brackets and quotes.
 
-- `C1.triage.01`: "Ooh, a dial!" became "Ooh, a card!" when the estimate dial was removed. The
-  old take still plays until it is re-recorded.
-- `C1.triage.02`: "480 a second!" became TRIAGE's alarm about the lift when the opening dropped its
-  sums (30 Oct 2026).
-- `C1.lux.01`: "You multiplied. Divide." became "Okay. Breathe. I know this one." (same change).
-- `C1.triage.03`: "...30. That's what I meant." became TRIAGE taking credit for the lights coming
-  back (same change). `C1.triage.01`, `C1.triage.05` and `C1.triage.06` changed again in it too.
-  These old takes say different words, so the six C1 lines want new takes first.
-- `C0.tv.01`: "ten minutes from midnight" became "five minutes" when the countdown was shortened
-  (29 Oct 2026).
-- `C3.triage.01`: "The kit makes a box bigger..." became "A bigger box, or a second box..." when
-  the overclock kit became the bigger box (29 Oct 2026).
-- `C3.triage.03`: "Rebooting..." became "Swapping in the big one..." (same change).
-- `C4.grandma.01`: "Three minutes, love!" became "Two minutes, love!" (shorter countdown).
-- `C5.triage.02`: "The big box fried. It's a normal box again." became "The big box cooked. The
-  crew put a normal one back." (bigger box).
-
-Real system-design terms (Rolando, 29 Oct 2026: "keep all the terminology and system design jargon
-intact"): "box" became "server", "splitter" became "load balancer", "room" became "capacity" or
-"headroom", and "coming" became "requests a second" or "demand". `C1.triage.01`, `C3.triage.01` and
-`C5.triage.02` above changed again in the same pass. These need new takes too:
-
-- `C1.triage.05`
-- `C1.triage.06`
-- `C2.triage.after`
-- `C3.lux.01`
-- `C4.triage.02`
-- `C4.triage.cut`
-- `C5.rei.03`
-- `C5.ozzie.02`
-- `C5.triage.03`
-- `C5.mika.05`
-- `C6.triage.01`
-- `C7.ozzie.01`
-- `C7.triage.01`
-- `C8.rei.waste`
+None. Every take says the words the script says now.
 
 Two lines differ only in stage directions written into the text (`C5.rei.cut` has "(beat)",
 `C5.rei.04` has "(to Lux)"); the spoken words match the takes.
@@ -103,26 +71,7 @@ Two lines differ only in stage directions written into the text (`C5.rei.cut` ha
 Spoken lines added since the last recording session. They show as text with no voice (the mixer
 lists them in `shell.voice.missing`) until they are recorded and added to the manifest.
 
-- `C1.triage.nudge.place.1`
-- `C1.triage.nudge.place.2`
-- `C1.lux.nudge.place`
-- `C1.triage.nudge.feed.1`
-- `C1.triage.nudge.feed.2`
-- `C1.lux.nudge.feed`
-- `C1.triage.nudge.store.1`
-- `C1.triage.nudge.store.2`
-- `C1.lux.nudge.store`
-- `C3.triage.nudge.choose.1`
-- `C3.triage.nudge.choose.2`
-- `C3.triage.nudge.idle`
-- `C3.lux.nudge.idle`
-- `C5.triage.nudge.splitter`
-- `C5.lux.nudge.splitter`
-- `C5.triage.nudge.behind.1`
-- `C5.triage.nudge.behind.2`
-- `C5.lux.nudge.behind`
-- `C5.triage.nudge.replace.1`
-- `C5.lux.nudge.replace`
+None.
 
 ## Speaker changed
 

@@ -29,8 +29,8 @@ const manifest = JSON.parse(
 
 /**
  * Voiced lines with no clip in a language, written out so a gap is a decision, not an accident:
- * the lines docs/VOICE.md lists under "Not recorded yet" (the tutorial coach's nudges, 29 Oct 2026),
- * missing in both languages. The owner's drop had all 85 older lines in both.
+ * the lines docs/VOICE.md lists under "Not recorded yet", missing in both languages (none since the
+ * coach's nudges were recorded, 30 Oct 2026).
  */
 const knownGaps = (): Record<(typeof LANGS)[number], ReadonlySet<string>> => {
   const notRecorded = new Set(idsUnder('Not recorded yet'));
@@ -93,10 +93,11 @@ describe('voice manifest', () => {
   });
 
   it('lists every spoken line in each language, apart from the known gaps', () => {
-    // Two more since the idle-server nudges (30 Oct 2026), both still to record.
+    // Two more since the idle-server nudges (30 Oct 2026).
     expect(voicedLines()).toHaveLength(131);
     const KNOWN_GAPS = knownGaps();
-    expect(KNOWN_GAPS.ja.size).toBe(20);
+    // 20 coach nudges until they were recorded (Rolando, 30 Oct 2026): none left.
+    expect(KNOWN_GAPS.ja.size).toBe(0);
     for (const lang of LANGS) {
       const listed = new Set(manifest[lang]);
       const gaps = voicedLines().filter((id) => !listed.has(id));

@@ -2,8 +2,8 @@
   [
     "C0.tv.01",
     "tv",
-    "[shouting excitedly] ...and Halation, we are ten minutes from midnight!",
-    "[興奮して叫ぶ] ……ハレーションの皆さん、真夜中まであと10分です！"
+    "[shouting excitedly] ...and Halation, we are five minutes from midnight!",
+    "[興奮して叫ぶ] ……ハレーションの皆さん、真夜中まであと5分です！"
   ],
   [
     "C0.tv.02",
@@ -28,21 +28,26 @@
   [
     "C1.triage.01",
     "triage",
-    "[excited] Ooh, a dial! How many a second are coming? I'll guess first.",
-    "[興奮して] おおっ、ダイヤルだ！毎秒いくつ来るかな？先に当てちゃうよ。"
+    "[alarmed] Lux! The lights are going out all over the block!",
+    "[慌てて] ルクス！ブロック中の明かりが消えてくよ！"
   ],
   [
     "C1.triage.02",
     "triage",
-    "[proudly] 480 a second! I'm great at math.",
-    "[得意げに] 毎秒480！ぼく、計算得意なんだ。"
+    "[alarmed, fast] Mrs Okafor's stuck in the lift! Kenji's stream froze!",
+    "[早口で慌てて] オカフォーさんがエレベーターに閉じ込められた！ケンジの配信も止まっちゃった！"
   ],
-  ["C1.lux.01", "lux", "[flatly] You multiplied. Divide.", "[淡々と] 掛け算したでしょ。割り算。"],
+  [
+    "C1.lux.01",
+    "lux",
+    "[steadying herself, quiet] Okay. Breathe. I know this one.",
+    "[自分を落ち着かせて、小声] よし。深呼吸。これは分かる。"
+  ],
   [
     "C1.triage.03",
     "triage",
-    "[sheepishly] ...30. That's what I meant. Obviously.",
-    "[気まずそうに] ……30。そう言いたかったの。もちろん。"
+    "[proud] The lights are back! I knew my plan would work!",
+    "[得意げに] 明かりが戻った！ぼくの作戦どおりだね！"
   ],
   [
     "C1.triage.04",
@@ -53,14 +58,14 @@
   [
     "C1.triage.05",
     "triage",
-    "[excited] One scrap box does 60. Rack it and wire it: gateway, box, database.",
-    "[興奮して] スクラップの箱ひとつで60。ラックに入れて配線して。ゲートウェイ、箱、データベース。"
+    "[excited] Server on the grid, then wire it up. Go go go!",
+    "[興奮して] サーバーをグリッドに置いて、配線して。ほら早く早く！"
   ],
   [
     "C1.triage.06",
     "triage",
-    "[happily] 30 coming, 60 of room. Look at all that room.",
-    "[嬉しそうに] 来るのは30、余裕は60。見て、この余裕！"
+    "[happy] See the gauge? Your server's barely trying. That's headroom.",
+    "[嬉しそうに] ゲージ見て？サーバー、全然本気出してない。それがヘッドルームだよ。"
   ],
   [
     "C2.triage.01",
@@ -85,14 +90,14 @@
   [
     "C2.triage.after",
     "triage",
-    "[thoughtfully] 30 coming, 60 of room. Nothing to protect yet.",
-    "[考えながら] 来るのは30、余裕は60。まだ守るものはないね。"
+    "[thinking] 30 requests a second, capacity 60. Nothing to protect yet.",
+    "[考えながら] 毎秒30リクエスト、キャパシティは60。まだ守るものはないね。"
   ],
   [
     "C3.triage.01",
     "triage",
-    "[excited] New toys! The kit makes a box bigger. A second box makes... more box.",
-    "[興奮して] 新しいおもちゃ！キットで箱が大きくなる。二台目の箱は……箱が増える。"
+    "[excited] New toys! Scale up to a bigger server, or scale out with two?",
+    "[興奮して] 新しいおもちゃ！スケールアップで大きいサーバーにする？それともスケールアウトで二台？"
   ],
   [
     "C3.triage.02",
@@ -100,12 +105,17 @@
     "[puzzled] It's on! Why is it doing nothing? Is it shy?",
     "[不思議そうに] 電源入った！なんで何もしないの？人見知り？"
   ],
-  ["C3.lux.01", "lux", "The gateway only feeds one box.", "ゲートウェイは一台にしか流さないよ。"],
+  [
+    "C3.lux.01",
+    "lux",
+    "[flat] The gateway only feeds one server.",
+    "[淡々と] ゲートウェイは一台のサーバーにしか流さないよ。"
+  ],
   [
     "C3.triage.03",
     "triage",
-    "[excited] Rebooting... 3, 2, 1... it's huge now. 120!",
-    "[興奮して] 再起動中……3、2、1……でっかくなった。120！"
+    "[excited] Swapping in the big one... 3, 2, 1... it's huge now. 120!",
+    "[興奮して] 大きいのに入れ替え中……3、2、1……でっかくなった。120！"
   ],
   [
     "C3.triage.04",
@@ -135,8 +145,8 @@
   [
     "C4.triage.02",
     "triage",
-    "[panicked] Big box is down! Big box is DOWN!",
-    "[パニックで] デカい箱が落ちた！デカい箱が落ちたってば！"
+    "[panicking] Big server is down! Big server is DOWN!",
+    "[パニックで] 大きいサーバーが落ちた！大きいサーバーが落ちたってば！"
   ],
   [
     "C4.triage.03",
@@ -159,14 +169,14 @@
   [
     "C4.triage.cut",
     "triage",
-    "[relieved] Less coming in. The database is breathing again. Barely.",
-    "[ほっとして] 入ってくるのが減った。データベースがまた息してる。ぎりぎりだけど。"
+    "[relieved] Less demand. The database is breathing again. Barely.",
+    "[ほっとして] デマンドが減った。データベースがまた息してる。ぎりぎりだけど。"
   ],
   [
     "C4.grandma.01",
     "grandma",
-    "[calling through a door] Three minutes, love! Come down!",
-    "[ドア越しに呼ぶ] あと三分よ！降りておいで！"
+    "[calling through a door] Two minutes, love! Come down!",
+    "[ドア越しに呼ぶ] あと二分よ！降りておいで！"
   ],
   [
     "C4.lux.02",
@@ -203,8 +213,8 @@
   [
     "C5.rei.03",
     "rei",
-    "Here. It splits traffic across every box you wire behind it, and it skips any box that's dark.",
-    "ほら。後ろにつないだ箱全部にトラフィックを振り分けて、落ちてる箱は飛ばしてくれる。"
+    "Here. A load balancer. It spreads traffic across every server behind it, and its health check skips any that's dark.",
+    "ほら。ロードバランサー。後ろのサーバー全部にトラフィックを振り分けて、ヘルスチェックで落ちてるのは飛ばしてくれる。"
   ],
   [
     "C5.rei.cut",
@@ -219,7 +229,12 @@
     "[smoothly] I'll front you 100. It goes on my tab.",
     "[さらりと] 100貸してやる。俺のツケでな。"
   ],
-  ["C5.ozzie.02", "ozzie", "Six boxes. Buy six, sleep tonight.", "6台。6台買えば、今夜はぐっすりだ。"],
+  [
+    "C5.ozzie.02",
+    "ozzie",
+    "Six servers. Buy six, sleep tonight.",
+    "サーバー6台。6台買えば、今夜はぐっすりだ。"
+  ],
   ["C5.mika.03", "mika", "Six is a waste. Two will do.", "6台は無駄。2台で足りる。"],
   [
     "C5.ozzie.03",
@@ -242,30 +257,30 @@
   [
     "C5.triage.02",
     "triage",
-    "[sheepishly] The big box fried. It's a normal box again. Sorry, big box.",
-    "[しょんぼり] デカい箱、焼けちゃった。普通の箱に戻ったよ。ごめんね、デカい箱。"
+    "[sheepish] The big server cooked. The crew put a normal one back. Sorry.",
+    "[しょんぼり] 大きいサーバー、焼けちゃった。クルーが普通のに戻してくれた。ごめんね。"
   ],
   [
     "C5.triage.03",
     "triage",
-    "[thoughtfully] 120 coming. Each box does 60. I'm not saying the answer.",
-    "[考えながら] 来るのは120。箱ひとつで60。答えは言わないよ。"
+    "[thinking] 120 requests a second. Each server does 60. I'm not saying.",
+    "[考えながら] 毎秒120リクエスト。サーバー一台で60。答えは言わないよ。"
   ],
   ["C5.rei.05", "rei", "[satisfied] There it is.", "[満足げに] それだよ。"],
   ["C5.ozzie.04", "ozzie", "[smug] See? Six. Sleep tonight.", "[得意げに] ほらな？6台。今夜はぐっすりだ。"],
   [
     "C5.mika.05",
     "mika",
-    "Look at the chart. Half of that is just heating your room.",
-    "チャート見て。その半分は、部屋を暖めてるだけ。"
+    "Look at the chart. Half of that capacity is just heating your room.",
+    "チャート見て。そのキャパシティの半分は、部屋を暖めてるだけ。"
   ],
   ["C5.rei.rewind", "rei", "Again. Slower.", "もう一回。ゆっくり。"],
   ["C6.rei.01", "rei", "Your call. How many?", "あんたが決めて。何台？"],
   [
     "C6.triage.01",
     "triage",
-    "[thoughtfully] 150 coming, 60 a box. That's two and a half boxes. You can't buy half a box.",
-    "[考えながら] 来るのは150、箱ひとつで60。二台半だね。半分の箱は買えないけど。"
+    "[thinking] 150 req/s, 60 per server. Two and a half. Can't buy half a server.",
+    "[考えながら] 毎秒150、サーバー一台で60。二台半だね。半分のサーバーは買えないけど。"
   ],
   ["C6.ozzie.01", "ozzie", "[pleased] Now you're talking.", "[満足げに] そうこなくちゃ。"],
   ["C6.mika.01", "mika", "[dryly] Brave.", "[淡々と] 大胆だね。"],
@@ -295,14 +310,14 @@
   [
     "C7.ozzie.01",
     "ozzie",
-    "Every box still running is still costing. Just saying.",
-    "動いてる箱は、動いてる間ずっと金がかかる。一応言っとく。"
+    "Every server still running is still costing. Just saying.",
+    "動いてるサーバーは、動いてる間ずっと金がかかる。一応言っとく。"
   ],
   [
     "C7.triage.01",
     "triage",
-    "[thoughtfully] 40 coming. That's... one box and a bit?",
-    "[考えながら] 来るのは40。それって……一台とちょっと？"
+    "[thinking] 40 requests a second. That's... one server and a bit?",
+    "[考えながら] 毎秒40リクエスト。それって……サーバー一台とちょっと？"
   ],
   [
     "C7.ozzie.down",
@@ -343,7 +358,12 @@
   ],
   ["C8.rei.debt", "rei", "You owe Ozzie. He will remember.", "オジーに借りがある。あいつは忘れないよ。"],
   ["C8.ozzie.debt", "ozzie", "[smiling] I'll remember.", "[にやりと] 忘れないぜ。"],
-  ["C8.rei.waste", "rei", "Half those boxes did nothing but cost.", "その箱の半分は、金を食っただけ。"],
+  [
+    "C8.rei.waste",
+    "rei",
+    "Half those servers did nothing but cost.",
+    "そのサーバーの半分は、金を食っただけ。"
+  ],
   [
     "C8.rei.down",
     "rei",
@@ -524,5 +544,125 @@
     "lux",
     "[teasing] I built you, and you still can't count.",
     "[からかうように] あなたを作ったの私なのに、まだ数えられないんだね。"
+  ],
+  [
+    "C1.triage.nudge.place.1",
+    "triage",
+    "[excited] SERVER card, from the tray, onto the grid. Go on!",
+    "[興奮して] トレイのサーバーカードを、グリッドに。ほら！"
+  ],
+  [
+    "C1.triage.nudge.place.2",
+    "triage",
+    "[thinking] Lux? Still dark. A server goes on the grid first.",
+    "[考えながら] ルクス？まだ真っ暗だよ。まずサーバーをグリッドに置かなきゃ。"
+  ],
+  [
+    "C1.lux.nudge.place",
+    "lux",
+    "[to herself] Right. Server card, onto the table.",
+    "[独り言] よし。サーバーカードを、テーブルに。"
+  ],
+  [
+    "C1.triage.nudge.feed.1",
+    "triage",
+    "[thinking] It's just sitting there. Is it even plugged in?",
+    "[考えながら] ただ置いてあるだけだよ。そもそもつながってる？"
+  ],
+  [
+    "C1.triage.nudge.feed.2",
+    "triage",
+    "[excited] Drag from the gateway onto the server. Requests get in!",
+    "[興奮して] ゲートウェイからサーバーへドラッグ。リクエストが入ってくるよ！"
+  ],
+  [
+    "C1.lux.nudge.feed",
+    "lux",
+    "[to herself] Don't forget to connect it. Gateway first, then the server.",
+    "[独り言] つなぐのを忘れないで。まずゲートウェイ、それからサーバー。"
+  ],
+  [
+    "C1.triage.nudge.store.1",
+    "triage",
+    "[thinking] Requests go in... and stop. Where do they go next?",
+    "[考えながら] リクエストが入って……止まっちゃう。次はどこに行くの？"
+  ],
+  [
+    "C1.triage.nudge.store.2",
+    "triage",
+    "[excited] Drag from the server onto the database! Gateway, server, database!",
+    "[興奮して] サーバーからデータベースへドラッグ！ゲートウェイ、サーバー、データベース！"
+  ],
+  [
+    "C1.lux.nudge.store",
+    "lux",
+    "[to herself] Connect it. Server to the database.",
+    "[独り言] つないで。サーバーからデータベースへ。"
+  ],
+  [
+    "C3.triage.nudge.choose.1",
+    "triage",
+    "[thinking] Too much for one server! The tray has two ideas.",
+    "[考えながら] サーバー一台じゃ足りない！トレイにアイデアが二つあるよ。"
+  ],
+  [
+    "C3.triage.nudge.choose.2",
+    "triage",
+    "[playful] Scale up, or scale out? I'm not saying. I'm pointing.",
+    "[いたずらっぽく] スケールアップ？スケールアウト？言わないよ。指さすだけ。"
+  ],
+  [
+    "C3.triage.nudge.idle",
+    "triage",
+    "[thinking] That one gets nothing. Right-click it: full refund!",
+    "[考えながら] そのサーバー、何も来てないよ。右クリックで全額返金！"
+  ],
+  [
+    "C3.lux.nudge.idle",
+    "lux",
+    "[to herself] Sell the spare. Make the first one bigger.",
+    "[独り言] 余ったのは売ろう。最初のを大きくする。"
+  ],
+  [
+    "C5.triage.nudge.splitter",
+    "triage",
+    "[thinking] The gateway isn't feeding the load balancer. Connect them!",
+    "[考えながら] ゲートウェイがロードバランサーにつながってないよ。つないで！"
+  ],
+  [
+    "C5.lux.nudge.splitter",
+    "lux",
+    "[to herself] Gateway into the load balancer. Connect it.",
+    "[独り言] ゲートウェイからロードバランサーへ。つなごう。"
+  ],
+  [
+    "C5.triage.nudge.behind.1",
+    "triage",
+    "[thinking] That server isn't behind the load balancer. Nothing reaches it.",
+    "[考えながら] そのサーバー、ロードバランサーの後ろにないよ。何も届かない。"
+  ],
+  [
+    "C5.triage.nudge.behind.2",
+    "triage",
+    "[excited] Load balancer onto the server. Then server onto the database!",
+    "[興奮して] ロードバランサーからサーバーへ。それからサーバーからデータベースへ！"
+  ],
+  [
+    "C5.lux.nudge.behind",
+    "lux",
+    "[to herself] Wire it behind the load balancer.",
+    "[独り言] ロードバランサーの後ろに配線しよう。"
+  ],
+  [
+    "C5.triage.nudge.replace.1",
+    "triage",
+    "[sheepish] That server cooked! Click it, then press REPLACE.",
+    "[しょんぼり] そのサーバー焼けちゃった！クリックして、REPLACEを押して。"
+  ],
+  [
+    "C5.lux.nudge.replace",
+    "lux",
+    "[to herself] Swap the dead server.",
+    "[独り言] 落ちたサーバーを交換しよう。"
   ]
 ]
