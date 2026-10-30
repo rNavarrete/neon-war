@@ -183,6 +183,8 @@ const DRAG_START = 10;
  * before then draws a wire as always (the long press that rearranges a phone's home screen).
  */
 const HOLD_TO_MOVE_MS = 350;
+/** The most one frame adds to a hold, so a stalled frame never completes it alone. */
+const HOLD_FRAME_MS = 50;
 /** The lifted part's alpha while it is carried. */
 const CARRIED_ALPHA = 0.45;
 const BUTTON_RADIUS = 28;
@@ -327,7 +329,7 @@ const SKY_HORIZON = { art: 0.5, screen: TABLE.far.y - 8 } as const;
 
 type Drag =
   | { kind: 'card'; id: string }
-  | { kind: 'wire'; from: string; x0: number; y0: number; moved: boolean; t0: number }
+  | { kind: 'wire'; from: string; x0: number; y0: number; moved: boolean; held: number }
   | { kind: 'move'; id: string; part: PartKind; at: string | null }
   | null;
 
@@ -838,7 +840,7 @@ export class BoardScene extends Phaser.Scene {
     const seconds = this.game.loop.rawDelta / 1000;
     const r = run();
     r.tick(seconds);
-    this.liftHeld();
+    this.liftHeld(this.game.loop.rawDelta);
     this.director?.flush(this);
     this.syncBoard(seconds);
   }
@@ -2501,7 +2503,7 @@ export class BoardScene extends Phaser.Scene {
 
     const part = partAt(parts, p.x, p.y);
     if (part) {
-      this.drag = { kind: 'wire', from: part.id, x0: p.x, y0: p.y, moved: false, t0: this.time.now };
+      this.drag = { kind: 'wire', from: part.id, x0: p.x, y0: p.y, moved: false, held: 0 };
       this.wireTo.id = null;
       return;
     }
@@ -2634,9 +2636,13 @@ export class BoardScene extends Phaser.Scene {
    * A press held still on a placed part for HOLD_TO_MOVE_MS lifts it: the wire drag in hand becomes
    * a move, the part dims and the cells under the pointer show where it would land.
    */
-  private liftHeld(): void {
+  private liftHeld(deltaMs: number): void {
     const d = this.drag;
-    if (d?.kind !== 'wire' || d.moved || this.time.now - d.t0 < HOLD_TO_MOVE_MS) return;
+    if (d?.kind !== 'wire' || d.moved) return;
+    // Count the hold frame by frame, at most HOLD_FRAME_MS a frame: one stalled frame (a slow
+    // machine, a busy test runner) never turns a quick wire drag into a lift before its move lands.
+    d.held += Math.min(deltaMs, HOLD_FRAME_MS);
+    if (d.held < HOLD_TO_MOVE_MS) return;
     const part = partById(run().session.board.parts, d.from);
     if (!part || part.slot === null) return;
     this.selectedPart = null;
