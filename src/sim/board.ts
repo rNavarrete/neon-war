@@ -130,6 +130,24 @@ export function decommission(board: Board, rules: BoardRules, id: string): Board
   };
 }
 
+/**
+ * Move a placed part so its footprint's anchor is `slot`. The part keeps its id, so every wire stays
+ * on it, and it keeps its upgrade; moving is free. The fixed parts (slot null) never move, and the
+ * new spot must fit as a fresh placement would, the part's own cells counting as free.
+ */
+export function move(board: Board, id: string, slot: string): BoardResult {
+  const part = partById(board, id);
+  if (!part) return fail(`no part ${id}`);
+  if (part.slot === null) return fail('that part stays where it is');
+  if (part.slot === slot) return { ok: true, board };
+  const fit = fits(board.slots, board.parts, part.kind, slot, [id]);
+  if (!fit.ok) return fail(fit.reason);
+  return {
+    ok: true,
+    board: { ...board, parts: board.parts.map((p) => (p.id === id ? { ...p, slot } : p)) },
+  };
+}
+
 export function connect(board: Board, rules: BoardRules, from: string, to: string): BoardResult {
   const a = partById(board, from);
   const b = partById(board, to);

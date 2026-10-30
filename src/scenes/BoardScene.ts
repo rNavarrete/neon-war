@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { type GameEvents, bus, dragVerdict } from '../game/bus';
 import { Director } from '../game/director';
 import { run } from '../game/run';
-import { type Part, wireKey } from '../sim/board';
+import { type Part, type PartKind, wireKey } from '../sim/board';
 import { provideTestState } from '../testHook';
 import { type Frame, frame } from '../game/frame';
 import { balancerGiven, balancerGivenIn, placeBalancer } from './board/crew';
@@ -178,6 +178,13 @@ const DARK_TINT = 0x3a3f55;
 const REFUSAL_MS = 2000;
 /** Pointer travel (game px) before a press on a part counts as a wire drag rather than a click. */
 const DRAG_START = 10;
+/**
+ * How long (ms) a press on a placed part must hold still before the part lifts to be moved; a drag
+ * before then draws a wire as always (the long press that rearranges a phone's home screen).
+ */
+const HOLD_TO_MOVE_MS = 350;
+/** The lifted part's alpha while it is carried. */
+const CARRIED_ALPHA = 0.45;
 const BUTTON_RADIUS = 28;
 
 const ART: Readonly<Record<string, string>> = {
@@ -320,7 +327,8 @@ const SKY_HORIZON = { art: 0.5, screen: TABLE.far.y - 8 } as const;
 
 type Drag =
   | { kind: 'card'; id: string }
-  | { kind: 'wire'; from: string; x0: number; y0: number; moved: boolean }
+  | { kind: 'wire'; from: string; x0: number; y0: number; moved: boolean; t0: number }
+  | { kind: 'move'; id: string; part: PartKind; at: string | null }
   | null;
 
 /**
@@ -830,6 +838,7 @@ export class BoardScene extends Phaser.Scene {
     const seconds = this.game.loop.rawDelta / 1000;
     const r = run();
     r.tick(seconds);
+    this.liftHeld();
     this.director?.flush(this);
     this.syncBoard(seconds);
   }
@@ -1245,7 +1254,8 @@ export class BoardScene extends Phaser.Scene {
       else v.img.clearTint();
       v.lit = flickerLit(f.flickering.includes(part.id), t, reduce);
       const base = !painted && (look.status === 'booting' || look.status === 'rebooting') ? pulse + 0.2 : 1;
-      v.img.setAlpha(v.lit ? base : FLICKER_DIM);
+      const carried = this.drag?.kind === 'move' && this.drag.id === part.id ? CARRIED_ALPHA : 1;
+      v.img.setAlpha((v.lit ? base : FLICKER_DIM) * carried);
       if (v.readout.update(look)) v.label.setText(v.readout.text).setColor(v.readout.colour);
       this.drawPartState(part, v);
       // The balancer skips this box: grey dashed footprint, SKIPPED sticky for 1 s after.
@@ -1501,6 +1511,10 @@ export class BoardScene extends Phaser.Scene {
    */
   private drawCells(f: Frame): void {
     const d = this.drag;
+    if (d?.kind === 'move') {
+      this.drawMoveCells(d, f);
+      return;
+    }
     const card = d?.kind === 'card' ? d.id : null;
     const at = card !== null ? this.over.slot : null;
     const state = at !== null ? this.overState() : null;
@@ -1543,6 +1557,36 @@ export class BoardScene extends Phaser.Scene {
       bad: colour === 'red' && bad.length === 0 ? cells : bad,
       colour,
     };
+    g.setVisible(true);
+  }
+
+  /**
+   * The footprint under a carried part: green where it would land, red on the cells that block it
+   * (its own cells count as free). Redrawn only when the spot or the parts change.
+   */
+  private drawMoveCells(d: Extract<Drag, { kind: 'move' }>, f: Frame): void {
+    const key = `move:${d.id}`;
+    if (key === this.cellsCard && d.at === this.cellsAt && f.parts === this.cellsParts) return;
+    this.cellsCard = key;
+    this.cellsAt = d.at;
+    this.cellsState = null;
+    this.cellsParts = f.parts;
+    const g = this.cellsG;
+    g.clear();
+    if (d.at === null) {
+      this.preview = null;
+      g.setVisible(false);
+      return;
+    }
+    const { cells, bad } = previewCells(d.part, d.at, f.parts, [d.id]);
+    for (const id of cells) {
+      const q = cellQuad(id);
+      if (!q) continue;
+      const c = bad.length > 0 ? FIT_RED : FIT_GREEN;
+      g.fillStyle(c, 0.32).fillPoints(asVectors(q), true);
+      g.lineStyle(2, c, 0.95).strokePoints(asVectors(q), true);
+    }
+    this.preview = { card: 'move', anchor: d.at, cells, bad, colour: bad.length > 0 ? 'red' : 'green' };
     g.setVisible(true);
   }
 
@@ -2212,7 +2256,8 @@ export class BoardScene extends Phaser.Scene {
    * changes; nothing shows during a drag.
    */
   private updatePlate(parts: readonly Part[], f: Frame): void {
-    const dragging = this.drag !== null && (this.drag.kind === 'card' || this.drag.moved);
+    const d = this.drag;
+    const dragging = d !== null && (d.kind !== 'wire' || d.moved);
     let partId: string | null = null;
     let wireKeyShown: string | null = null;
     let pinned = false;
@@ -2325,7 +2370,9 @@ export class BoardScene extends Phaser.Scene {
 
   /** End the drag in hand, with or without a drop, and say so once on the bus. */
   private endDrag(): void {
-    const had = this.drag !== null && (this.drag.kind === 'card' || this.drag.moved);
+    const d = this.drag;
+    const had = d !== null && (d.kind === 'card' || (d.kind === 'wire' && d.moved));
+    if (d?.kind === 'move') this.setCarried(d.id, false);
     this.drag = null;
     this.ghost.setVisible(false);
     this.over.id = null;
@@ -2454,7 +2501,7 @@ export class BoardScene extends Phaser.Scene {
 
     const part = partAt(parts, p.x, p.y);
     if (part) {
-      this.drag = { kind: 'wire', from: part.id, x0: p.x, y0: p.y, moved: false };
+      this.drag = { kind: 'wire', from: part.id, x0: p.x, y0: p.y, moved: false, t0: this.time.now };
       this.wireTo.id = null;
       return;
     }
@@ -2490,6 +2537,10 @@ export class BoardScene extends Phaser.Scene {
     }
     this.hover.part = null;
     this.hover.wire = null;
+    if (d.kind === 'move') {
+      this.carry(d, p.x, p.y);
+      return;
+    }
     if (d.kind === 'card') {
       // Unsnapped, the card rides just above the pointer so the cells under it (green or red) stay in view.
       if (this.ghostShownFor === null) this.ghost.setPosition(p.x, p.y - this.ghost.displayHeight / 2 - 8);
@@ -2512,6 +2563,11 @@ export class BoardScene extends Phaser.Scene {
     const r = run();
     const parts = r.session.board.parts;
 
+    if (d.kind === 'move') {
+      // Set down on a spot that fits; anywhere else the part simply stays where it was.
+      if (d.at !== null) r.move(d.id, d.at);
+      return;
+    }
     if (d.kind === 'card') {
       if (d.id === 'server') {
         // A dead box under the pointer is replaced on its cells; otherwise the server snaps to the
@@ -2572,6 +2628,40 @@ export class BoardScene extends Phaser.Scene {
     this.lastKey = event?.key === 'Backspace' ? 'Backspace' : 'Delete';
     run().cut(w.from, w.to);
     this.selectedWire = null;
+  }
+
+  /**
+   * A press held still on a placed part for HOLD_TO_MOVE_MS lifts it: the wire drag in hand becomes
+   * a move, the part dims and the cells under the pointer show where it would land.
+   */
+  private liftHeld(): void {
+    const d = this.drag;
+    if (d?.kind !== 'wire' || d.moved || this.time.now - d.t0 < HOLD_TO_MOVE_MS) return;
+    const part = partById(run().session.board.parts, d.from);
+    if (!part || part.slot === null) return;
+    this.selectedPart = null;
+    this.selectedWire = null;
+    this.drag = { kind: 'move', id: part.id, part: part.kind, at: null };
+    this.setCarried(part.id, true);
+    const v = this.views.get(part.id);
+    if (v) this.ghost.setTexture(v.img.texture.key).setScale(v.img.scaleX).setVisible(true);
+    this.carry(this.drag, this.pointer.x, this.pointer.y);
+  }
+
+  /** The carried part follows the pointer: its footprint snaps to the grid, null off the table. */
+  private carry(d: Extract<Drag, { kind: 'move' }>, x: number, y: number): void {
+    d.at = dropAnchor(d.part, x, y);
+    // The copy in hand stands on the footprint while it fits there, else rides under the pointer.
+    const fits =
+      d.at !== null && previewCells(d.part, d.at, run().session.board.parts, [d.id]).bad.length === 0;
+    const c = fits && d.at !== null ? partCentre({ kind: d.part, slot: d.at }) : null;
+    if (c) this.ghost.setPosition(c.x, c.y);
+    else this.ghost.setPosition(x, y);
+  }
+
+  /** Dim a part's shadow while it is carried (the sync dims its art), and bring it back when it is set down. */
+  private setCarried(id: string, carried: boolean): void {
+    this.views.get(id)?.shadow.setAlpha(carried ? CARRIED_ALPHA : 1);
   }
 
   private decommission(id: string): void {
@@ -3355,7 +3445,7 @@ export class BoardScene extends Phaser.Scene {
       cutButton: this.cutBtn.visible ? page(this.cutBtn.x, this.cutBtn.y) : null,
       binButton: this.binBtn.visible ? page(this.binBtn.x, this.binBtn.y) : null,
       refusal: this.refusalText.visible ? this.refusalText.text : null,
-      dragging: this.drag ? (this.drag.kind === 'card' ? this.drag.id : 'wire') : null,
+      dragging: this.drag ? (this.drag.kind === 'card' ? this.drag.id : this.drag.kind) : null,
       replaceButton: this.replaceBtn.visible ? page(this.replaceBtn.x, this.replaceBtn.y) : null,
       dragOver:
         this.drag?.kind === 'card'

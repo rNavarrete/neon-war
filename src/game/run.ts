@@ -3,7 +3,7 @@
 // whole session: failures, the rescue, Regroup, rewinds, midnight). Not pure itself: it is the
 // boundary between the pure sim and Phaser, and it turns changes in the sim into bus events.
 
-import { type Flow, connect, decommission, disconnect, wireKey } from '../sim/board';
+import { type Flow, connect, decommission, disconnect, move, wireKey } from '../sim/board';
 import { BROWNOUT, BROWNOUT_RULES } from '../sim/brownout';
 import { type BannerChoice, placeServer } from '../sim/economy';
 import { type DebriefNumbers, type Play, type PlayResult, createPlay, debriefNumbers } from '../sim/play';
@@ -216,6 +216,13 @@ export class Run {
   connect(from: string, to: string): ActionResult {
     return this.applyBoard(connect(this.session.board, BROWNOUT_RULES, from, to), () =>
       bus.emit('action', { type: 'wire', from, to }),
+    );
+  }
+
+  /** Pick a placed part up and set it down with its anchor at `slot`: free, instant, wires kept. */
+  move(id: string, slot: string): ActionResult {
+    return this.applyBoard(move(this.session.board, id, slot), () =>
+      bus.emit('action', { type: 'move', id, slot }),
     );
   }
 

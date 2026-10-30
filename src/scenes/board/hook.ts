@@ -240,7 +240,7 @@ export interface BoardTestState {
   binButton: Point | null;
   /** The refusal reason on screen, or null. */
   refusal: string | null;
-  /** What the pointer is dragging: a tray card id, 'wire', or null. */
+  /** What the pointer is dragging: a tray card id, 'wire', 'move' (a placed part held and lifted), or null. */
   dragging: string | null;
   /** The REPLACE button under the selected dead box (board-8), in page CSS pixels, or null. */
   replaceButton: Point | null;

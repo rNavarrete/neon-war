@@ -5,6 +5,7 @@ import {
   connect,
   capacityOf,
   loseUpgrade,
+  move,
   upgrade,
   createBoard,
   decommission,
@@ -93,6 +94,36 @@ describe('decommission', () => {
       ok: false,
       reason: 'only placed parts can be decommissioned',
     });
+  });
+});
+
+describe('move', () => {
+  it('sets a placed part down elsewhere, free, keeping its id, its wires and its upgrade', () => {
+    let b = ok(place(start(), RULES, 'slot-1', 'server'));
+    b = ok(connect(b, RULES, 'server-p1', 'database'));
+    b = ok(upgrade(b, RULES, 'server-p1'));
+    const moved = ok(move(b, 'server-p1', 'slot-3'));
+    expect(partById(moved, 'server-p1')).toEqual({ ...partById(b, 'server-p1'), slot: 'slot-3' });
+    expect(moved.wires).toEqual(b.wires);
+    expect(moved.credits).toBe(b.credits);
+    expect(moved.parts.map((p) => p.id)).toEqual(b.parts.map((p) => p.id));
+  });
+
+  it('refuses a taken spot, an unknown spot, a fixed part and an unknown part; the same spot is a no-op', () => {
+    let b = ok(place(start(), RULES, 'slot-1', 'server'));
+    b = ok(place(b, RULES, 'slot-2', 'server'));
+    expect(move(b, 'server-p1', 'slot-2')).toEqual({ ok: false, reason: 'that slot is taken' });
+    expect(move(b, 'server-p1', 'slot-9')).toEqual({ ok: false, reason: 'no slot slot-9' });
+    expect(move(b, 'gateway', 'slot-3')).toEqual({ ok: false, reason: 'that part stays where it is' });
+    expect(move(b, 'nope', 'slot-3')).toEqual({ ok: false, reason: 'no part nope' });
+    expect(move(b, 'server-p1', 'slot-1')).toEqual({ ok: true, board: b });
+  });
+
+  it('never changes the board it was given', () => {
+    const b = ok(place(start(), RULES, 'slot-1', 'server'));
+    const copy = structuredClone(b);
+    move(b, 'server-p1', 'slot-2');
+    expect(b).toEqual(copy);
   });
 });
 

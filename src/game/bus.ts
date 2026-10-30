@@ -29,6 +29,7 @@ export interface GameEvents {
   /** Something the player did on the board that worked. */
   action:
     | { type: 'place'; id: string }
+    | { type: 'move'; id: string; slot: string }
     | { type: 'wire'; from: string; to: string }
     | { type: 'cut'; from: string; to: string }
     | { type: 'decommission'; id: string; refund: number }

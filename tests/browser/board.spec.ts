@@ -67,6 +67,49 @@ async function waitOnline(page: Page, id: string): Promise<void> {
   await expect.poll(async () => (await part(page, id))?.status, { timeout: 20_000 }).toBe('online');
 }
 
+test('holding a placed server lifts it: it moves to a free spot with every wire kept, and stays put when set down off the table', async ({
+  page,
+}) => {
+  await openBoard(page);
+  const id = await placeServer(page, SERVER_SLOTS[0]);
+  await wire(page, 'gateway', id);
+  await wire(page, id, 'database');
+  const wiresOf = async () =>
+    (await board(page)).wires
+      .filter((w) => w.from === id || w.to === id)
+      .map((w) => w.key)
+      .sort();
+  await expect.poll(wiresOf).toEqual([`${id}>database`, `gateway>${id}`].sort());
+  const credits = (await board(page)).credits;
+
+  // Press and hold still: the server lifts (a quick drag would draw a wire instead).
+  const from = (await part(page, id))!;
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await expect.poll(async () => (await board(page)).dragging, { timeout: 5000 }).toBe('move');
+  const to = await slot(page, SERVER_SLOTS[2]);
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await page.screenshot({ path: 'test-results/screens/board-move-carry.png' });
+  await page.mouse.up();
+  await expect.poll(async () => (await part(page, id))?.slot).toBe(SERVER_SLOTS[2]);
+  expect(await wiresOf()).toEqual([`${id}>database`, `gateway>${id}`].sort());
+  // Free: only a moment's upkeep comes off.
+  expect((await board(page)).credits).toBeGreaterThan(credits - 1);
+  expect((await board(page)).dragging).toBeNull();
+
+  // Set down off the table (over the tray), it stays where it was.
+  const again = (await part(page, id))!;
+  const gate = await tray(page, 'server');
+  await page.mouse.move(again.x, again.y);
+  await page.mouse.down();
+  await expect.poll(async () => (await board(page)).dragging, { timeout: 5000 }).toBe('move');
+  await page.mouse.move(gate.x, gate.y, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await board(page)).dragging).toBeNull();
+  expect((await part(page, id))?.slot).toBe(SERVER_SLOTS[2]);
+  expect(await wiresOf()).toEqual([`${id}>database`, `gateway>${id}`].sort());
+});
+
 test('the tray shows the server, the kit and a locked load balancer, and the rest of the catalog locked', async ({
   page,
 }) => {

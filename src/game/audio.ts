@@ -62,6 +62,7 @@ export function isSfxKey(key: string): key is SfxKey | LiveSfxKey {
 export function sfxForAction(action: GameEvents['action']): SfxKey | null {
   switch (action.type) {
     case 'place':
+    case 'move':
       return 'place-part';
     case 'wire':
       return 'wire-connect';
