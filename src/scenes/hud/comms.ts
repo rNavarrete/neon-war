@@ -283,9 +283,10 @@ export function commsLayout(r: CommsRect) {
     // can call along the bottom, its discs overlapping like a call's participant stack.
     const step = (r.w - 16 - 84) / (COMMS_SLOTS.length - 1);
     const tx = r.x + 16;
-    // The cam takes what the words and the roster leave (Rolando, 30 Oct 2026: a big caller cam):
-    // 210 tall in a 460 column, 250 in the 500 one.
-    const tile = { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: r.h - 250 };
+    // The cam takes what the words leave (Rolando, 30 Oct 2026: a big caller cam, and no roster of
+    // round faces under it, "I don't think we need these avatars here": the cam shows who talks).
+    // The slots stay in the model (who is present, who speaks) but are not drawn in the column.
+    const tile = { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: r.h - 170 };
     const under = tile.y + tile.h;
     return {
       title: { x: r.x + 16, y: r.y + 14 },
@@ -307,6 +308,7 @@ export function commsLayout(r: CommsRect) {
       log: [under + 8, under + 44, under + 80].map((y) => ({ x: tx, y, w: r.w - 32 - 76 })),
       /** The replay glyph, right of the newest row. */
       replay: { x: right - 76, y: under + 80, w: 60, h: 34 },
+      roster: false,
     };
   }
   if (r.h >= 200) {
@@ -328,6 +330,7 @@ export function commsLayout(r: CommsRect) {
       log: [r.y + 16, r.y + 52, r.y + 88].map((y) => ({ x: tx, y, w: right - tx - 110 })),
       /** The replay glyph, right of the newest row. */
       replay: { x: right - 90, y: r.y + 88, w: 60, h: 34 },
+      roster: true,
     };
   }
   return {
@@ -344,6 +347,7 @@ export function commsLayout(r: CommsRect) {
     log: [r.y + 19, r.y + 59, r.y + 99].map((y) => ({ x: r.x + 545, y, w: 760 })),
     /** The replay glyph, right of the newest row. */
     replay: { x: right - 90, y: r.y + 99, w: 60, h: 34 },
+    roster: true,
   };
 }
 

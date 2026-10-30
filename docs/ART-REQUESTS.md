@@ -64,11 +64,11 @@ Sheet A is the three server frames (`board/server-dark`, `board/server-booting-a
 | `hud/icons/ping` | the ping mark over a part the balancer checks | 44x44 | 128x128 | one | board | feed | an amber glyph like hud/icons/warning.webp: a radar ping | baked: a cyan-rimmed disc (0x08202a) |
 | `hud/icons/skipped` | the SKIPPED stamp on a pad the balancer passes over | 64x64 | 128x128 | one | board | feed | an amber glyph like hud/icons/warning.webp: a dashed box | baked: an amber-rimmed square (0x2a1d08) |
 | `hud/chat-plate-wide` | the landscape LIVE CHAT plate with a 36 px header | 385x275 | 770x550 | one | chat | chat | dark navy glass, thin amber rim, lighter header band, empty, the brush of hud/chat-panel.webp | `hud/chat-panel.webp` (untinted): the portrait chat panel, nine-sliced |
-| `chars/avatars/stream-1` | stream viewer avatar 1 | 36x36 | 256x256 | one | chat | chat | a cyan-rimmed disc: a hooded teen | baked: a cyan ring with the viewer initial (0x08202a) |
-| `chars/avatars/stream-2` | stream viewer avatar 2 | 36x36 | 256x256 | one | chat | chat | a cyan-rimmed disc: a noodle-shop cat sticker | baked: a cyan ring with the viewer initial (0x08202a) |
-| `chars/avatars/stream-3` | stream viewer avatar 3 | 36x36 | 256x256 | one | chat | chat | a cyan-rimmed disc: a glitch mask | baked: a cyan ring with the viewer initial (0x08202a) |
-| `chars/avatars/stream-4` | stream viewer avatar 4 | 36x36 | 256x256 | one | chat | chat | a cyan-rimmed disc: a rain-soaked commuter | baked: a cyan ring with the viewer initial (0x08202a) |
-| `chars/avatars/unnamed-neighbour` | a faceless neighbour for the seeded chat line | 36x36 | 256x256 | one | chat | chat | a cyan-rimmed disc: a backlit faceless silhouette | baked: a cyan ring (0x08202a) |
+| `chars/avatars/stream-1` | stream viewer avatar 1 | 56x56 | 256x256 | one | chat | chat | a cyan-rimmed disc: a hooded teen | baked: a cyan ring with the viewer initial (0x08202a) |
+| `chars/avatars/stream-2` | stream viewer avatar 2 | 56x56 | 256x256 | one | chat | chat | a cyan-rimmed disc: a noodle-shop cat sticker | baked: a cyan ring with the viewer initial (0x08202a) |
+| `chars/avatars/stream-3` | stream viewer avatar 3 | 56x56 | 256x256 | one | chat | chat | a cyan-rimmed disc: a glitch mask | baked: a cyan ring with the viewer initial (0x08202a) |
+| `chars/avatars/stream-4` | stream viewer avatar 4 | 56x56 | 256x256 | one | chat | chat | a cyan-rimmed disc: a rain-soaked commuter | baked: a cyan ring with the viewer initial (0x08202a) |
+| `chars/avatars/unnamed-neighbour` | a faceless neighbour for the seeded chat line | 56x56 | 256x256 | one | chat | chat | a cyan-rimmed disc: a backlit faceless silhouette | baked: a cyan ring (0x08202a) |
 
 ## Batch 3: cam
 

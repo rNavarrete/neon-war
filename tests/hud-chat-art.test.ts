@@ -66,8 +66,9 @@ describe('the landed chat art draws at display size, never upscaled (chat-6)', (
     });
   });
 
-  // 36 px since the layout A chat's bigger rows (Rolando, 30 Oct 2026); 32 before.
-  it('draws the 36 px row discs and the 20 px system glyph from larger files', () => {
+  // 56 px since Rolando asked for bigger faces in the taller chat (30 Oct 2026); 36 before, 32
+  // before layout A.
+  it('draws the 56 px row discs and the 20 px system glyph from larger files', () => {
     for (const key of [...STREAM_AVATARS, BLOCK_AVATARS['unnamed neighbour']]) {
       const r = artRequest(key)!;
       expect(r.display, key).toEqual({ w: ROW_AVATAR, h: ROW_AVATAR });

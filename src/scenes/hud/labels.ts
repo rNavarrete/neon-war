@@ -103,6 +103,17 @@ export const LABELS = {
       dead: 'drop a SERVER card on it or press REPLACE',
       offline: 'off',
     },
+    /** The coloured chip on the hover card's title bar, by how the part is doing. */
+    chips: {
+      running: 'RUNNING',
+      booting: 'BOOTING',
+      dark: 'DARK',
+      dead: 'DEAD',
+      off: 'OFF',
+      skipped: 'SKIPPED',
+      over: 'TOO MUCH',
+      unfed: 'UNFED',
+    },
     /** The button on a dead server's pinned plate. */
     replace: 'REPLACE',
   },

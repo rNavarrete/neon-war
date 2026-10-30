@@ -487,19 +487,21 @@ const chatRead = (): ChatTestState => hudRead().chat as ChatTestState;
 describe('the LIVE CHAT panel (chat-4)', () => {
   // Layout A2 (Rolando, 30 Oct 2026): the chat is the tall slim left column (410x680), its text
   // bigger, so the body fits up to fourteen rows (nine when every row wraps) at y 430-1050.
-  it('fits the newest nine to fourteen rows into the 620 px body, bottom-up', () => {
+  // Rolando, 30 Oct 2026: bigger faces (56 px discs), so a one-line row is 62 tall (43 before) and
+  // the body fits ten of them (fourteen before).
+  it('fits the newest nine to ten rows into the 620 px body, bottom-up', () => {
     const one = { text: 'x'.repeat(ONE_LINE_CHARS) };
     const two = { text: 'x'.repeat(ONE_LINE_CHARS + 1) };
-    expect(rowHeight(one.text)).toBe(43);
+    expect(rowHeight(one.text)).toBe(62);
     expect(rowHeight(two.text)).toBe(63);
-    expect(fitRows(Array(20).fill(one), 16)).toHaveLength(14);
+    expect(fitRows(Array(20).fill(one), 16)).toHaveLength(10);
     expect(fitRows(Array(20).fill(two), 16)).toHaveLength(9);
     // The worst mix still leaves nine, the newest ones.
     const mix = [one, two, two, two, one, two, two, one, two, two, two, one, two, two, two, two, one, two];
     const fit = fitRows(mix, 16);
     expect(fit.length).toBeGreaterThanOrEqual(9);
     expect(fit[fit.length - 1]).toBe(mix[mix.length - 1]);
-    for (const rows of [Array(14).fill(one), Array(9).fill(two), fit]) {
+    for (const rows of [Array(10).fill(one), Array(9).fill(two), fit]) {
       const heights = rows.map((r: { text: string }) => rowHeight(r.text));
       const tops = stackRows(heights);
       // Inside y 430-1050, the newest on the bottom edge, none over the header.

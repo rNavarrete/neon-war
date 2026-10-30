@@ -102,10 +102,10 @@ export const CHAT_HEADER = Object.freeze({
   h: CHAT_BODY.y - RIGHT.chat.y,
 });
 
-/** A row's badge (a painted avatar for residents, a ring for viewers), in px. */
-export const ROW_AVATAR = 36;
+/** A row's badge (a painted avatar for residents, a ring for viewers), in px: 56 since Rolando asked for bigger faces (30 Oct 2026). */
+export const ROW_AVATAR = 56;
 /** The words start this far right of the body's left edge (tick, badge, gap). */
-export const ROW_TEXT_X = 54;
+export const ROW_TEXT_X = 74;
 /** The name line, then each 16 px message line (bigger since the chat got its own column). */
 export const ROW_NAME_H = 17;
 export const ROW_LINE_H = 20;
@@ -159,7 +159,7 @@ export function rowLines(text: string): 1 | 2 {
   return text.length <= ONE_LINE_CHARS ? 1 : 2;
 }
 
-/** A row's height in the panel, gap included: 43 for one line, 63 for two. */
+/** A row's height in the panel, gap included: 62 for one line, 63 for two. */
 export function rowHeight(text: string): number {
   return Math.max(ROW_AVATAR, ROW_NAME_H + rowLines(text) * ROW_LINE_H) + ROW_GAP;
 }

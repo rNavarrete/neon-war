@@ -562,10 +562,9 @@ export class CommsView implements LiveView {
     }
     this.callA = L.tile ? 0 : 1;
 
-    this.root = add.container(0, 0, [
-      plate,
-      ...tileParts,
-      title,
+    // The roster of round faces: hidden in the caller column (Rolando, 30 Oct 2026), where the cam
+    // shows who talks; the slots still track who is present and who speaks.
+    const roster = [
       slots,
       ...this.faces,
       rims,
@@ -574,6 +573,13 @@ export class CommsView implements LiveView {
       this.houseGlyph,
       ...this.labels,
       this.ring,
+    ];
+    if (!L.roster) for (const o of roster) o.setVisible(false);
+    this.root = add.container(0, 0, [
+      plate,
+      ...tileParts,
+      title,
+      ...roster,
       this.pill,
       this.nameText,
       this.tagText,
@@ -1044,7 +1050,7 @@ export class CommsView implements LiveView {
     if (chip?.texture) {
       // The picked chip fitted in its 64 px box at its own aspect, inside the slot's disc.
       const size = this.chipSize[which] ?? { w: CHIP_SIZE, h: CHIP_SIZE };
-      face.setTexture(chip.texture).setDisplaySize(size.w, size.h).setVisible(true);
+      face.setTexture(chip.texture).setDisplaySize(size.w, size.h).setVisible(this.L!.roster);
       face.setTint(0xffffff).setAlpha(1);
       this.faceScale[i] = face.scaleX;
       return;

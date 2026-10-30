@@ -89,7 +89,7 @@ import {
 import { flagsFrom } from './live/flags';
 import { BROWNOUT, BROWNOUT_RULES } from '../sim/brownout';
 import { type GhostInfo, ghostInfo } from './board/ghost';
-import { PlateCache, REPLACE_LABEL } from './board/plate';
+import { type CardTone, type PlateCard, PlateCache, REPLACE_LABEL, cardBarTone } from './board/plate';
 import { BoardSnapshot } from './board/snapshot';
 import { type InventoryArt, InventoryView } from './board/InventoryView';
 import {
@@ -183,6 +183,23 @@ export const GAME_WIDTH = 1920;
 export const GAME_HEIGHT = 1080;
 
 const CYAN = 0x2de2e6;
+/** The hover card's width, padding and font sizes, in the feed's space (shown at FEED_VIEW's scale). */
+const CARD = { w: 380, pad: 14, name: 19, chip: 14, big: 34, unit: 16, detail: 16, about: 17 } as const;
+/** The hover card's tones as text colours and as fills. */
+const TONE_TEXT: Readonly<Record<CardTone, string>> = {
+  ok: '#59f2a0',
+  info: '#2de2e6',
+  warn: '#ffb02e',
+  bad: '#ff4d5e',
+  idle: '#8aa0b4',
+};
+const TONE_HEX: Readonly<Record<CardTone, number>> = {
+  ok: 0x59f2a0,
+  info: 0x2de2e6,
+  warn: 0xffb02e,
+  bad: 0xff4d5e,
+  idle: 0x8aa0b4,
+};
 const AMBER = 0xffb02e;
 const GREY = 0x6b7385;
 const DARK_TINT = 0x3a3f55;
@@ -537,6 +554,12 @@ export class BoardScene extends Phaser.Scene {
   private plates = new PlateCache();
   private plate!: Phaser.GameObjects.Text;
   private plateG!: Phaser.GameObjects.Graphics;
+  /** The hover card's other lines: the name, the chip, the big number, its unit, the state. */
+  private plateName!: Phaser.GameObjects.Text;
+  private plateChip!: Phaser.GameObjects.Text;
+  private plateBig!: Phaser.GameObjects.Text;
+  private plateUnit!: Phaser.GameObjects.Text;
+  private plateDetail!: Phaser.GameObjects.Text;
   private plateFor: string | null = null;
   private platePinned = false;
   private replaceBtn!: Phaser.GameObjects.Container;
@@ -762,17 +785,35 @@ export class BoardScene extends Phaser.Scene {
       .setOrigin(1, 1)
       .setDepth(0.8)
       .setVisible(false);
-    this.plateG = this.add.graphics().setDepth(37);
+    // The hover card (Rolando, 30 Oct 2026: option A, the part card): a title bar with the name and
+    // a state chip, one big number and its unit, the load bar, the state in words when it is not
+    // simply running, and one plain sentence. `plate` is that sentence; drawCard lays them all out.
+    this.plateG = this.add.graphics().setDepth(37).setVisible(false);
+    const cardText = (size: number, color: string, bold = false) =>
+      this.add
+        .text(0, 0, '', {
+          fontFamily: 'monospace',
+          fontSize: `${size}px`,
+          color,
+          fontStyle: bold ? 'bold' : 'normal',
+        })
+        .setOrigin(0, 0)
+        .setDepth(38)
+        .setVisible(false);
+    this.plateName = cardText(CARD.name, '#ffb02e', true);
+    this.plateChip = cardText(CARD.chip, '#59f2a0', true).setOrigin(1, 0);
+    this.plateBig = cardText(CARD.big, '#2de2e6', true);
+    this.plateUnit = cardText(CARD.unit, '#8aa0b4');
+    this.plateDetail = cardText(CARD.detail, '#ffb02e');
     this.plate = this.add
       .text(0, 0, '', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#ffe2b0',
-        backgroundColor: '#05070fee',
-        padding: { x: 10, y: 6 },
-        lineSpacing: 4,
+        fontFamily: 'sans-serif',
+        fontSize: `${CARD.about}px`,
+        color: '#b9c8d6',
+        lineSpacing: 3,
+        wordWrap: { width: CARD.w - 2 * CARD.pad },
       })
-      .setOrigin(0.5, 1)
+      .setOrigin(0, 0)
       .setDepth(38)
       .setVisible(false);
     this.replaceBtn = this.makeReplaceButton();
@@ -2316,13 +2357,11 @@ export class BoardScene extends Phaser.Scene {
           (wireKeyShown !== null && wireKeyShown === this.selectedWire);
     }
     this.platePinned = pinned;
-    const plate = this.plate;
     if (partId === null && wireKeyShown === null) {
       if (this.plateFor !== null) {
         this.plateFor = null;
         this.plates.reset();
-        plate.setVisible(false);
-        this.plateG.clear();
+        this.showCard(false);
       }
       return;
     }
@@ -2337,7 +2376,7 @@ export class BoardScene extends Phaser.Scene {
       changed = this.plates.part(partId, part, v.look, this.skippedNow(part));
       const size = partSize(part);
       x = c.x;
-      y = c.y - size.h / 2 - 30;
+      y = c.y - size.h / 2 - 14;
     } else {
       const w = this.wireByKey.get(wireKeyShown!)!;
       const a = partById(parts, w.from);
@@ -2345,26 +2384,111 @@ export class BoardScene extends Phaser.Scene {
       if (!a || !b) return;
       changed = this.plates.wire(w.key, a, b, f.flow.wires[w.key] ?? 0);
       x = w.mid.x;
-      y = w.mid.y - 76;
+      y = w.mid.y - 64;
     }
     const target = partId ?? wireKeyShown;
-    if (changed || target !== this.plateFor) {
+    if ((changed || target !== this.plateFor) && this.plates.card) {
       this.plateFor = target;
-      plate.setText(this.plates.text);
-      const left = BOARD_AREA.left + 8 + plate.width / 2;
-      const right = BOARD_AREA.right - 8 - plate.width / 2;
-      const px = Phaser.Math.Clamp(x, left, right);
-      const py = Math.max(BOARD_AREA.top + 8 + plate.height, y);
-      plate.setPosition(px, py).setVisible(true);
-      const g = this.plateG;
-      g.clear();
-      g.lineStyle(2, AMBER, 0.9).strokeRect(
-        px - plate.width / 2,
-        py - plate.height,
-        plate.width,
-        plate.height,
+      this.drawCard(this.plates.card, x, y);
+    }
+  }
+
+  /** Show or hide every piece of the hover card. */
+  private showCard(on: boolean): void {
+    for (const o of [
+      this.plateG,
+      this.plateName,
+      this.plateChip,
+      this.plateBig,
+      this.plateUnit,
+      this.plateDetail,
+      this.plate,
+    ])
+      o.setVisible(on);
+    if (!on) this.plateG.clear();
+  }
+
+  /**
+   * Lay the hover card out above (x, y), its pointer on that point, kept inside what the feed
+   * shows. Runs only when what the card says changes, so steady frames draw nothing.
+   */
+  private drawCard(card: PlateCard, x: number, y: number): void {
+    const { w, pad } = CARD;
+    this.plateName.setText(card.name);
+    this.plateChip.setText(card.chip ?? '').setColor(TONE_TEXT[card.tone]);
+    this.plateBig.setText(card.big);
+    this.plateUnit.setText(card.unit);
+    this.plateDetail.setText(card.detail ?? '').setColor(TONE_TEXT[card.tone === 'ok' ? 'info' : card.tone]);
+    this.plate.setText(card.about);
+    // Heights, top to bottom: the title bar, the number row, the bar, the state line, the sentence.
+    const head = 34;
+    const numberH = 40;
+    const barH = card.bar === null ? 0 : 14;
+    const detailH = card.detail === null ? 0 : this.plateDetail.height + 4;
+    const h = head + 8 + numberH + barH + detailH + this.plate.height + pad;
+    const tail = 10;
+    const left = FEED_SHOWN.x + 8;
+    const right = FEED_SHOWN.x + FEED_SHOWN.w - 8 - w;
+    const cx = Phaser.Math.Clamp(x - w / 2, left, right);
+    const top = Math.max(FEED_SHOWN.y + 8, y - tail - h);
+    const g = this.plateG;
+    g.clear();
+    g.fillStyle(0x000000, 0.45).fillRoundedRect(cx + 4, top + 6, w, h, 9);
+    g.fillStyle(0x05070f, 0.95).fillRoundedRect(cx, top, w, h, 9);
+    g.fillStyle(AMBER, 0.13).fillRoundedRect(cx, top, w, head, { tl: 9, tr: 9, bl: 0, br: 0 });
+    g.lineStyle(1, 0x2b3d55, 1).lineBetween(cx, top + head, cx + w, top + head);
+    g.lineStyle(1.5, 0x3a5272, 1).strokeRoundedRect(cx, top, w, h, 9);
+    // The pointer down to the part, when the card sits above it.
+    const tx = Phaser.Math.Clamp(x, cx + 18, cx + w - 18);
+    if (top + h + tail <= y + 1) {
+      g.fillStyle(0x05070f, 0.95).fillTriangle(tx - 9, top + h - 1, tx + 9, top + h - 1, tx, top + h + tail);
+      g.lineStyle(1.5, 0x3a5272, 1)
+        .lineBetween(tx - 9, top + h, tx, top + h + tail)
+        .lineBetween(tx, top + h + tail, tx + 9, top + h);
+    }
+    // The name's accent square and the chip's pill.
+    g.fillStyle(AMBER, 1).fillRoundedRect(cx + pad, top + 11, 12, 12, 3);
+    this.plateName.setPosition(cx + pad + 20, top + (head - this.plateName.height) / 2);
+    const chipX = cx + w - pad;
+    this.plateChip.setPosition(chipX - 8, top + (head - this.plateChip.height) / 2);
+    if (card.chip) {
+      const cw = this.plateChip.width + 16;
+      g.lineStyle(1.5, TONE_HEX[card.tone], 1).strokeRoundedRect(
+        chipX - cw,
+        top + 7,
+        cw,
+        head - 14,
+        (head - 14) / 2,
       );
     }
+    let yy = top + head + 8;
+    this.plateBig.setPosition(cx + pad, yy);
+    this.plateUnit.setPosition(
+      cx + pad + this.plateBig.width + 8,
+      yy + this.plateBig.height - this.plateUnit.height - 3,
+    );
+    yy += numberH;
+    if (card.bar !== null) {
+      const bw = w - 2 * pad;
+      g.fillStyle(0x132033, 1).fillRoundedRect(cx + pad, yy, bw, 6, 3);
+      const k = Math.max(0, Math.min(1, card.bar));
+      if (k > 0)
+        g.fillStyle(TONE_HEX[cardBarTone(card.bar)], 1).fillRoundedRect(
+          cx + pad,
+          yy,
+          Math.max(6, bw * k),
+          6,
+          3,
+        );
+      yy += barH;
+    }
+    if (card.detail !== null) {
+      this.plateDetail.setPosition(cx + pad, yy);
+      yy += detailH;
+    }
+    this.plate.setPosition(cx + pad, yy);
+    this.showCard(true);
+    this.plateDetail.setVisible(card.detail !== null);
   }
 
   /** Whether the SKIPPED tag is on `part`'s footprint now. */
@@ -3551,7 +3675,7 @@ export class BoardScene extends Phaser.Scene {
       hover: {
         part: this.hover.part,
         wire: this.hover.wire,
-        text: this.plate.visible ? this.plate.text : null,
+        text: this.plate.visible ? this.plates.text : null,
         target: this.plate.visible ? this.plateFor : null,
         pinned: this.plate.visible && this.platePinned,
       },

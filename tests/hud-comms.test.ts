@@ -137,17 +137,21 @@ describe('comms tags and slots', () => {
     expect(l.slots.map((s) => ({ name: s.name, x: s.x, y: s.y, r: s.r }))).toEqual(BOTTOM.slots);
     // Option 2 (Rolando, 30 Oct 2026: "too much wasted space"): the column is 344x500 from y 135 and the cam
     // tile takes the extra height (250 tall), the words and slots moving down with it.
-    expect(l.tile).toEqual({ x: 1574, y: 143, w: 328, h: 250 });
+    // Rolando, 30 Oct 2026 ("I don't think we need these avatars here"): the roster of round faces
+    // is not drawn in the column, so the cam takes its space too (330 tall) and the words follow.
+    expect(l.roster).toBe(false);
+    expect(l.tile).toEqual({ x: 1574, y: 143, w: 328, h: 330 });
     expect(l.slots.map((s) => s.x)).toEqual([1616, 1677, 1738, 1799, 1860]);
     expect(l.slots.every((s) => s.y === 571)).toBe(true);
-    expect(l.name).toEqual({ x: 1582, y: 401 });
-    expect(l.text).toEqual({ x: 1582, y: 429, w: 312 });
-    expect(l.log.map((r) => r.y)).toEqual([401, 437, 473]);
+    expect(l.name).toEqual({ x: 1582, y: 481 });
+    expect(l.text).toEqual({ x: 1582, y: 509, w: 312 });
+    expect(l.log.map((r) => r.y)).toEqual([481, 517, 553]);
     const z = ZONES.comms;
     expect(inside(l.tile!, z)).toBe(true);
     expect(l.name.y).toBeGreaterThanOrEqual(l.tile!.y + l.tile!.h);
-    // Three 26 px lines of words end above the slots.
-    expect(l.text.y + 3 * 26).toBeLessThanOrEqual(l.slots[0].y - l.slots[0].r);
+    // Four 26 px lines of words end inside the panel (the slots under them are not drawn since
+    // Rolando's 30 Oct 2026 call; before, three lines ended above the slots).
+    expect(l.text.y + 4 * 26).toBeLessThanOrEqual(z.y + z.h);
     for (const s of l.slots) {
       expect(s.x - s.r).toBeGreaterThanOrEqual(z.x);
       expect(s.x + s.r).toBeLessThanOrEqual(z.x + z.w);
@@ -159,7 +163,7 @@ describe('comms tags and slots', () => {
     expect(l.slotLabelY + 16).toBeLessThanOrEqual(z.y + z.h);
     expect(l.text.x + l.text.w).toBeLessThanOrEqual(z.x + z.w);
     expect(l.replay.x + l.replay.w).toBeLessThanOrEqual(z.x + z.w);
-    expect(l.replay.y + l.replay.h).toBeLessThanOrEqual(l.slots[0].y - l.slots[0].r);
+    expect(l.replay.y + l.replay.h).toBeLessThanOrEqual(z.y + z.h);
   });
 
   it('keeps the layout A call panel for a wide panel rect (under the tray, before A2)', () => {
