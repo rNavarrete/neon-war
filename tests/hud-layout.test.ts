@@ -94,10 +94,11 @@ describe('hud layout owner-fixed internals', () => {
   });
 
   // Side by side in the strip under the tray since layout A2 (Rolando, 30 Oct 2026).
-  it('puts the keys 120x52 at (924, 1041.5) and (1056, 1041.5) labelled 1 REGROUP and 2 CUT 3F', () => {
+  // Option 2 (Rolando, 30 Oct 2026): stacked in the strip right of the tray instead.
+  it('puts the keys 120x52 at (1494, 954) and (1494, 1014) labelled 1 REGROUP and 2 CUT 3F', () => {
     expect(BOTTOM.keys.map((k) => [k.x, k.y, k.w, k.h])).toEqual([
-      [924, 1041.5, 120, 52],
-      [1056, 1041.5, 120, 52],
+      [1494, 954, 120, 52],
+      [1494, 1014, 120, 52],
     ]);
     expect(BOTTOM.keys.map((k) => `${k.digit} ${k.word}`)).toEqual(['1 REGROUP', '2 CUT 3F']);
     expect(KEY).toEqual({ regroup: 0, cut: 1 });

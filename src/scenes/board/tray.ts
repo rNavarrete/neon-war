@@ -9,6 +9,7 @@ import { LINES } from '../../strings';
 import { LABELS } from '../hud/labels';
 import { BOARD_CELLS, roomFor } from '../../sim/grid';
 import type { Box } from './layout';
+import { TRAY_WORLD } from '../live/layout';
 
 export type TrayId = 'server' | 'overclock' | 'balancer';
 
@@ -54,11 +55,16 @@ export const LOCKED_KINDS: readonly string[] = [
 /** A main card, and where the three sit: left of the drawer, centred on the row. */
 export const CARD_SIZE = { w: 120, h: 140 } as const;
 const CARD_X = [530, 660, 790] as const;
-const CARD_Y = 882;
+const CARD_Y = TRAY_WORLD.y + 82;
 /** A drawer mini, and the drawer's two rows of ten. */
 export const MINI_SIZE = { w: 40, h: 72 } as const;
 /** The drawer of locked minis: its left and right edges and its two rows' centres. */
-export const DRAWER = { left: 935, right: 1495, rows: [848, 922] as const, perRow: 10 } as const;
+export const DRAWER = {
+  left: 935,
+  right: 1495,
+  rows: [TRAY_WORLD.y + 48, TRAY_WORLD.y + 122] as const,
+  perRow: 10,
+} as const;
 const MINI_PITCH = (DRAWER.right - DRAWER.left - MINI_SIZE.w) / (DRAWER.perRow - 1);
 
 /** The inventory row's cards with their place in game space. The balancer unlocks once the crew gives it. */

@@ -85,11 +85,14 @@ export const BOTTOM = {
     y: comms.y + comms.h - 64,
     r: 42,
   })),
-  /** The deck's keys, 120x52, side by side across the strip under the tray; each shows only while it can act. */
+  /**
+   * The deck's keys, 120x52, stacked in the strip right of the tray (option 2, Rolando 30 Oct 2026),
+   * under a row for the CUT tooltip; each shows only while it can act.
+   */
   keys: KEY_LABELS.map((k, i) => ({
     ...k,
-    x: deck.x + deck.w / 2 + (i - 0.5) * 132,
-    y: deck.y + deck.h / 2 + 4,
+    x: deck.x + deck.w / 2,
+    y: deck.y + 50 + i * 60,
     w: 120,
     h: 52,
   })),

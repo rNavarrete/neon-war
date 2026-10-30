@@ -45,8 +45,10 @@ describe('inventory row', () => {
     // Rolando, 30 Oct 2026).
     expect(TRAY_AREA).toEqual(rectToArea(TRAY_WORLD));
     expect(TRAY_VIEW.screen).toEqual(ZONES.inventory);
-    expect(TRAY_VIEW.scale).toBe(1);
-    expect(TRAY_AREA).toEqual({ left: 455, right: 1510, top: 800, bottom: 965 });
+    // Option 2 (Rolando, 30 Oct 2026): the tray runs to the bottom edge beside the deck's keys, shown at
+    // 1000/1055 of its size, and its space moved below the taller feed's (y 1000).
+    expect(TRAY_VIEW.scale).toBeCloseTo(1000 / 1055);
+    expect(TRAY_AREA).toEqual({ left: 455, right: 1510, top: 1000, bottom: 1165 });
   });
 
   it('lays out three 120x140 cards and a drawer of twenty 40x72 minis', () => {
@@ -55,9 +57,10 @@ describe('inventory row', () => {
       const main = cards.filter((c) => c.main);
       expect(main.map((c) => c.id)).toEqual(['server', 'overclock', 'balancer']);
       expect(main.map((c) => [c.x, c.y])).toEqual([
-        [530, 882],
-        [660, 882],
-        [790, 882],
+        // Option 2 (Rolando, 30 Oct 2026): the tray's space moved down 200 (y 1000).
+        [530, 1082],
+        [660, 1082],
+        [790, 1082],
       ]);
       for (const c of main) expect({ w: c.w, h: c.h }).toEqual(CARD_SIZE);
       expect(CARD_SIZE).toEqual({ w: 120, h: 140 });
@@ -269,10 +272,11 @@ describe('InventoryView', () => {
     const view = new InventoryView(scene);
     const cards = trayCards(false);
     view.create(cards);
-    expect(view.cardAt(530, 882)?.id).toBe('server');
-    expect(view.cardAt(790, 882)?.locked).toBe(true);
+    // Option 2 (Rolando, 30 Oct 2026): the tray's space moved down 200 (y 1000).
+    expect(view.cardAt(530, 1082)?.id).toBe('server');
+    expect(view.cardAt(790, 1082)?.locked).toBe(true);
     expect(view.cardAt(cards[3].x, cards[3].y)?.id).toBe(LOCKED_KINDS[0]);
-    expect(view.cardAt(470, 810)).toBeNull();
+    expect(view.cardAt(470, 1010)).toBeNull();
 
     const first = setTextCalls();
     view.setCounts({ server: 5, overclock: 0, balancer: 0 });
@@ -288,6 +292,6 @@ describe('InventoryView', () => {
     expect(drawn.some((o) => o.kind === 'text' && o.text === '4')).toBe(true);
 
     view.setLocks(trayCards(true));
-    expect(view.cardAt(790, 882)?.locked).toBe(false);
+    expect(view.cardAt(790, 1082)?.locked).toBe(false);
   });
 });

@@ -8,7 +8,8 @@
 
 import type { Part } from '../../sim/board';
 import { type Size, artRequest } from '../../game/artManifest';
-import { BOARD_AREA, CHANNEL, TABLE, TABLE_FACE } from './layout';
+import { CHANNEL, TABLE, TABLE_FACE } from './layout';
+import { platePlace } from './glass';
 import type { PartStatus } from './view';
 
 /** The table under the rack: the empty plate (pads are still drawn in code). */
@@ -47,7 +48,8 @@ export const SKIPPED_ICON_KEY = 'hud/icons/skipped';
 /** Every key the board resolves through the art manifest, in the order it preloads them. */
 export const BOARD_ART_KEYS: readonly string[] = [
   TABLE_PLATE_KEY,
-  TABLE_MIDNIGHT_KEY,
+  // No midnight plate since table D (Rolando, 30 Oct 2026): the old one was painted for the old
+  // table, so midnight is a cold tint on the day plate (BoardScene).
   CHANNEL_PLATE_KEY,
   PACKET_CUBE_KEY,
   ...Object.values(PART_ART),
@@ -149,21 +151,12 @@ export const TABLE_TRAPEZOID = {
 } as const;
 
 /**
- * Where the painted table plate draws for a file of size `cut`. Its display is the trapezoid's
- * 1441 x 408 box (top and face), but a plate is never drawn larger than its file: the scale is the
- * smaller of 1 and what fits the box, so a 1228 x 416 file draws at 1228 x 416 scaled to fit the
- * feed. It is centred on the table's centre line, and its foot sits on the feed's floor (never
- * lower than BOARD_AREA.bottom), so its far rim lines up with the trapezoid's far edge. Pure.
+ * Where the painted table plate draws for a file of size `cut`: covering what the feed's camera
+ * shows, centred, its foot on the feed's floor, never above its file's size (glass.ts platePlace).
+ * Pure.
  */
 export function tablePlatePlace(cut: Size): PlatePlace {
-  const boxW = TABLE_TRAPEZOID.right - TABLE_TRAPEZOID.left;
-  const roomH = BOARD_AREA.bottom - TABLE_TRAPEZOID.top;
-  const scale = Math.min(1, boxW / cut.w, roomH / cut.h);
-  const w = cut.w * scale;
-  const h = cut.h * scale;
-  const cx = (TABLE_TRAPEZOID.left + TABLE_TRAPEZOID.right) / 2;
-  const bottom = BOARD_AREA.bottom;
-  return { x: cx - w / 2, y: bottom - h, w, h, scale };
+  return platePlace(cut);
 }
 
 /**

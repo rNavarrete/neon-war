@@ -45,8 +45,10 @@ import {
   portNode,
 } from '../src/sim/grid';
 import { blockCentre, cellQuad, nodeAt } from '../src/scenes/board/cells';
+import { GLASS } from '../src/scenes/board/glass';
 import { edgeBlocked, orthogonal, traceNodes } from '../src/scenes/board/lattice';
 import {
+  FEED_SHOWN,
   FEED_VIEW,
   FEED_WORLD,
   ZONES,
@@ -299,18 +301,30 @@ describe('feed geometry (board-1)', () => {
     // The board draws in its own space and the feed's view shows it in ZONES.feed (layout A, Rolando,
     // 30 Oct 2026): the area is that space, the box the table was painted for.
     expect(BOARD_AREA).toEqual(rectToArea(FEED_WORLD));
-    expect(BOARD_AREA).toEqual({ left: 455, right: 1910, top: 110, bottom: 640 });
+    // Option 2 (Rolando, 30 Oct 2026, table D): the table's box is taller, the steeper table standing in it.
+    expect(BOARD_AREA).toEqual({ left: 455, right: 1910, top: 110, bottom: 870 });
     expect(FEED_VIEW.screen).toEqual(ZONES.feed);
   });
 
-  it('projects the table with a narrow far edge at y 222 and a wide near edge at y 612', () => {
-    expect(project(0, 0)).toEqual({ x: 575, y: 222 });
-    expect(project(1, 0)).toEqual({ x: 1790, y: 222 });
-    expect(project(0, 1)).toEqual({ x: 462, y: 612 });
-    expect(project(1, 1)).toEqual({ x: 1903, y: 612 });
+  // Option 2 (Rolando, 30 Oct 2026, table D): the table top is the painting's glass (glass.ts GLASS), its far edge at
+  // y 149.5 and its near edge at y 667 (it was y 222 and 612 on the old, flatter table).
+  it('projects the table with a narrow far edge at y 149.5 and a wide near edge at y 667', () => {
+    const near = (p: { x: number; y: number }, x: number, y: number) => {
+      expect(p.x).toBeCloseTo(x, 1);
+      expect(p.y).toBeCloseTo(y, 1);
+    };
+    near(project(0, 0), 705.8, 149.5);
+    near(project(1, 0), 1656.2, 149.5);
+    near(project(0, 1), 572.5, 667);
+    near(project(1, 1), 1793.5, 667);
+    expect(project(0, 0)).toEqual({ x: GLASS[0].x, y: GLASS[0].y });
+    expect(project(1, 0)).toEqual({ x: GLASS[1].x, y: GLASS[0].y });
+    expect(project(0, 1)).toEqual({ x: GLASS[3].x, y: GLASS[3].y });
     expect(TABLE.far.right - TABLE.far.left).toBeLessThan(TABLE.near.right - TABLE.near.left);
-    // The table sits inside the feed, with the skyline showing above its far edge.
-    expect(TABLE.far.y).toBeGreaterThan(BOARD_AREA.top + 100);
+    // The table sits inside the feed, with the rooftop and the skyline showing above its far edge
+    // (table D, Rolando 30 Oct 2026: the scene above the table is the painting's, above the box's top).
+    expect(TABLE.far.y).toBeGreaterThan(FEED_SHOWN.y + 200);
+    expect(TABLE.far.y).toBeGreaterThan(BOARD_AREA.top);
     expect(TABLE.near.y + TABLE_FACE).toBeLessThanOrEqual(BOARD_AREA.bottom);
     expect(TABLE.near.left).toBeGreaterThanOrEqual(BOARD_AREA.left);
     expect(TABLE.near.right).toBeLessThanOrEqual(BOARD_AREA.right);
@@ -423,15 +437,17 @@ describe('feed geometry (board-1)', () => {
 
   it('brings the stream in from x 452 through a mouth at x 455 that narrows toward the gateway port', () => {
     expect(INBOUND_FROM).toBe(452);
-    expect(CHANNEL.mouth).toEqual({ x: 455, top: 322, bottom: 502 });
-    expect(CHANNEL.port.x).toBe(585);
+    // Option 2 (Rolando, 30 Oct 2026, table D): the channel is centred on the gateway's in-port, its port on the
+    // steeper table's left rim (it was 322-502 to x 585 on the old table).
+    expect(CHANNEL.mouth).toEqual({ x: 455, top: 352, bottom: 532 });
+    expect(CHANNEL.port.x).toBe(607);
     // The channel ends on the table's left rim, short of the gateway on the grid, level with its in-port.
     expect(CHANNEL.port.x).toBeLessThan(inPort(gateway)!.x);
     expect(CHANNEL.port.bottom - CHANNEL.port.top).toBeLessThan(CHANNEL.mouth.bottom - CHANNEL.mouth.top);
     expect(inPort(gateway)!.y).toBeGreaterThan(CHANNEL.port.top);
     expect(inPort(gateway)!.y).toBeLessThan(CHANNEL.port.bottom);
-    expect(channelAt(455)).toEqual({ top: 322, bottom: 502 });
-    expect(channelAt(585)).toEqual({ top: CHANNEL.port.top, bottom: CHANNEL.port.bottom });
+    expect(channelAt(455)).toEqual({ top: 352, bottom: 532 });
+    expect(channelAt(607)).toEqual({ top: CHANNEL.port.top, bottom: CHANNEL.port.bottom });
     // Every lane starts at x 452 and stays between the channel's walls up to the port.
     const at = { x: 0, y: 0 };
     for (const lane of INBOUND_LANES) {

@@ -17,7 +17,6 @@ import {
   SKIPPED_ICON_KEY,
   TABLE_MIDNIGHT_KEY,
   TABLE_PLATE_KEY,
-  TABLE_TRAPEZOID,
   badgeScale,
   bootFrameKey,
   cardFrameKey,
@@ -30,6 +29,7 @@ import {
   tablePlatePlace,
 } from '../src/scenes/board/art';
 import { BOARD_AREA, CHANNEL, DATABASE, GATEWAY, TABLE } from '../src/scenes/board/layout';
+import { FEED_SHOWN } from '../src/scenes/live/layout';
 
 const cutOf = (key: string) => artRequest(key)!.cut!;
 
@@ -38,7 +38,7 @@ describe('board-12: the board resolves its art through the manifest', () => {
     expect([...BOARD_ART_KEYS].sort()).toEqual(
       [
         'board/table-plate',
-        'board/table-plate-midnight',
+        // No midnight plate since table D (Rolando, 30 Oct 2026): it was painted for the old table.
         'board/packet-cube',
         'board/server-dark',
         'board/server-booting-a',
@@ -87,33 +87,40 @@ describe('board-12: the board resolves its art through the manifest', () => {
 });
 
 describe('board-12: nothing upscales', () => {
-  it('the table plate draws at most at its file size, inside the feed, under the trapezoid', () => {
+  // Table D (Rolando, 30 Oct 2026, option 2): the plate is the whole rooftop scene, so it covers
+  // everything the feed's camera shows instead of sitting under a trapezoid inside it.
+  it('the table plate draws at most at its file size, covering the feed, the glass on it', () => {
     const cut = cutOf(TABLE_PLATE_KEY);
     const p = tablePlatePlace(cut);
     expect(p.scale).toBeLessThanOrEqual(1);
     expect(p.w).toBeLessThanOrEqual(cut.w);
     expect(p.h).toBeLessThanOrEqual(cut.h);
     expect(p.w).toBeCloseTo(cut.w * p.scale);
-    // Inside the feed zone and the trapezoid's width, centred on it, its foot on the feed's floor.
-    expect(p.x).toBeGreaterThanOrEqual(TABLE_TRAPEZOID.left);
-    expect(p.x + p.w).toBeLessThanOrEqual(TABLE_TRAPEZOID.right);
-    expect(p.x + p.w / 2).toBeCloseTo((TABLE.near.left + TABLE.near.right) / 2);
+    // Covering what the feed's camera shows, centred across it, its foot on the feed's floor.
+    expect(p.x).toBeLessThanOrEqual(FEED_SHOWN.x);
+    expect(p.x + p.w).toBeGreaterThanOrEqual(FEED_SHOWN.x + FEED_SHOWN.w);
+    expect(p.y).toBeLessThanOrEqual(FEED_SHOWN.y + 1e-9);
+    expect(p.x + p.w / 2).toBeCloseTo(FEED_SHOWN.x + FEED_SHOWN.w / 2);
     expect(p.y + p.h).toBeCloseTo(BOARD_AREA.bottom);
-    expect(p.y).toBeGreaterThanOrEqual(BOARD_AREA.top);
-    // The far rim sits at the trapezoid's far edge (within the plate's painted rim).
-    expect(Math.abs(p.y - TABLE.far.y)).toBeLessThanOrEqual(12);
-    // The gateway and the database stand over it.
+    // The glass (the table top) lies on the plate, and the gateway and the database stand on it.
+    for (const x of [TABLE.far.left, TABLE.far.right, TABLE.near.left, TABLE.near.right]) {
+      expect(x).toBeGreaterThan(Math.max(p.x, FEED_SHOWN.x));
+      expect(x).toBeLessThan(Math.min(p.x + p.w, FEED_SHOWN.x + FEED_SHOWN.w));
+    }
+    expect(TABLE.far.y).toBeGreaterThan(FEED_SHOWN.y);
+    expect(TABLE.near.y).toBeLessThan(BOARD_AREA.bottom);
     for (const c of [GATEWAY, DATABASE]) {
-      expect(c.x).toBeGreaterThan(p.x);
-      expect(c.x).toBeLessThan(p.x + p.w);
+      expect(c.x).toBeGreaterThan(TABLE.near.left);
+      expect(c.x).toBeLessThan(TABLE.near.right);
     }
   });
 
-  it('a plate larger than the trapezoid is scaled down to fit, never up', () => {
-    const big = tablePlatePlace({ w: 3072, h: 832 });
+  it('a plate larger than the feed is scaled down to cover it, never up', () => {
+    const big = tablePlatePlace({ w: 3072, h: 2048 });
     expect(big.scale).toBeLessThan(1);
-    expect(big.w).toBeLessThanOrEqual(TABLE_TRAPEZOID.right - TABLE_TRAPEZOID.left + 1e-9);
-    expect(big.h).toBeLessThanOrEqual(BOARD_AREA.bottom - TABLE_TRAPEZOID.top + 1e-9);
+    expect(big.w).toBeGreaterThanOrEqual(FEED_SHOWN.w - 1e-9);
+    expect(big.h).toBeGreaterThanOrEqual(FEED_SHOWN.h - 1e-9);
+    expect(Math.min(big.w - FEED_SHOWN.w, big.h - FEED_SHOWN.h)).toBeCloseTo(0);
     expect(tablePlatePlace({ w: 100, h: 40 }).scale).toBe(1);
   });
 

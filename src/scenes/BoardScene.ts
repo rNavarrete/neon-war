@@ -332,6 +332,8 @@ const INBOUND_KEYS: readonly string[] = INBOUND.map((w) => w.key);
 const RED = 0xff4d5e;
 /** The day plate's tint under the midnight plate, once it has faded in: the ends of the table go cold. */
 const MIDNIGHT_DAY_TINT = 0x4a5468;
+/** The whole rooftop scene's tint at midnight (table D, no midnight plate): colder, not as dark. */
+const MIDNIGHT_SCENE_TINT = 0x8894b0;
 /** strokePoints reads only x and y, so a plain point list will do. */
 const asVectors = (path: readonly Point[]) => path as unknown as Phaser.Math.Vector2[];
 /** How much the skyline above the table is dimmed, so the board reads first but the city still shows. */
@@ -1487,6 +1489,23 @@ export class BoardScene extends Phaser.Scene {
     // No rack bands or RACK labels (Rolando, 30 Oct 2026: just capacity and the servers covering it,
     // as in an interview). The layer stays for the grid's static drawing.
     this.rackG = this.add.graphics().setDepth(0.6);
+    // The grid itself, drawn in code on the picked table's plain glass (table D, Rolando 30 Oct
+    // 2026): a faint cyan line on every cell edge, a brighter one every fourth, the border brightest.
+    const g = this.rackG;
+    for (let i = 0; i <= GRID.cols; i++) {
+      const edge = i === 0 || i === GRID.cols;
+      g.lineStyle(edge ? 2 : 1, CYAN, edge ? 0.55 : i % 4 ? 0.14 : 0.28);
+      const a = nodeAt(i, 0);
+      const b = nodeAt(i, GRID.rows);
+      g.lineBetween(a.x, a.y, b.x, b.y);
+    }
+    for (let j = 0; j <= GRID.rows; j++) {
+      const edge = j === 0 || j === GRID.rows;
+      g.lineStyle(edge ? 2 : 1, CYAN, edge ? 0.55 : j % 4 ? 0.14 : 0.28);
+      const a = nodeAt(0, j);
+      const b = nodeAt(GRID.cols, j);
+      g.lineBetween(a.x, a.y, b.x, b.y);
+    }
     this.dipG = this.add.graphics().setDepth(0.64).setVisible(false);
     this.suggestG = this.add.graphics().setDepth(0.66).setVisible(false);
     this.heldG = this.add.graphics().setDepth(0.68).setVisible(false);
@@ -3151,15 +3170,17 @@ export class BoardScene extends Phaser.Scene {
     // once when calm), and the day plate darkens under it: the midnight plate is narrower, so the
     // day plate stays as the table's ends. A
     // rewind past midnight brings the day plate back.
+    // Table D has no midnight plate of its own: the day plate goes cold by tint instead.
     const mp = this.midnightPlate;
-    if (mp) {
+    if (mp || this.dayPlate) {
       if (f.midnight === null) this.midnightStruck = null;
       else if (this.midnightStruck === null) this.midnightStruck = now;
       const a = midnightPlateAlpha(this.midnightStruck === null ? null : now - this.midnightStruck, calm);
       if (a !== this.midnightShown) {
         this.midnightShown = a;
-        mp.img.setAlpha(a).setVisible(a > 0);
-        if (a > 0) this.dayPlate?.setTint(lerpColour(0xffffff, MIDNIGHT_DAY_TINT, a));
+        mp?.img.setAlpha(a).setVisible(a > 0);
+        const cold = mp ? MIDNIGHT_DAY_TINT : MIDNIGHT_SCENE_TINT;
+        if (a > 0) this.dayPlate?.setTint(lerpColour(0xffffff, cold, a));
         else this.dayPlate?.clearTint();
       }
     }

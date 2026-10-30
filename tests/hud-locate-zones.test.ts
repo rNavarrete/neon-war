@@ -116,11 +116,12 @@ describe('the views register in create and unregister in shutdown', () => {
     }
   });
 
-  it('the two keys sit left to right', () => {
+  // Option 2 (Rolando, 30 Oct 2026): the keys stack top to bottom in the strip right of the tray.
+  it('the two keys sit top to bottom', () => {
     const deck = new DeckView();
     build(deck, ZONES.deck);
     const [a, b] = KEY_NAMES.map((k) => locate(`key:${k}`)!);
-    expect(a.x).toBeLessThan(b.x);
+    expect(a.y).toBeLessThan(b.y);
     deck.shutdown();
   });
 

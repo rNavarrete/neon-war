@@ -183,8 +183,8 @@ describe('live hook sections', () => {
     expect(live.layoutVersion).toBe(LAYOUT_VERSION);
     expect(Object.keys(live.zones)).toEqual(ZONE_IDS);
     for (const id of ZONE_IDS) expect(live.zones[id]).toEqual(pageRect(ZONES[id], canvas));
-    // The feed's zone since layout A2 (Rolando, 30 Oct 2026).
-    expect(live.zones.feed).toEqual({ x: 284, y: 80, w: 752, h: 470.7 });
+    // The feed's zone since option 2 (Rolando, 30 Oct 2026, table D); it was {284, 80, 752, 470.7}.
+    expect(live.zones.feed).toEqual({ x: 284, y: 68, w: 752, h: 526.7 });
     expect(live.placeholders).toEqual(STILL_PLACEHOLDERS);
   });
 

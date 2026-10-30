@@ -168,19 +168,20 @@ describe('the guards: when a press acts', () => {
 describe('where the keys sit', () => {
   // Layout A2 (Rolando, 30 Oct 2026): the deck is the strip under the tray, its keys 120x52 side by
   // side, each shown only while it can be pressed (keyShown).
-  it('puts the two 120x52 keys at (924, 1041.5) and (1056, 1041.5) inside ZONES.deck; slot 3 stays empty', () => {
+  // Option 2 (Rolando, 30 Oct 2026): the keys stack in the strip right of the tray, which runs to the bottom edge.
+  it('puts the two 120x52 keys at (1494, 954) and (1494, 1014) inside ZONES.deck; slot 3 stays empty', () => {
     const r = keyRects();
     const centres = KEY_NAMES.map((k) => ({ x: r[k].x + r[k].w / 2, y: r[k].y + r[k].h / 2 }));
     expect(centres).toEqual([
-      { x: 924, y: 1041.5 },
-      { x: 1056, y: 1041.5 },
+      { x: 1494, y: 954 },
+      { x: 1494, y: 1014 },
     ]);
     for (const k of KEY_NAMES) {
       expect(r[k].w).toBe(120);
       expect(r[k].h).toBe(52);
       expect(inside(r[k], ZONES.deck), k).toBe(true);
     }
-    expect(r.one.x + r.one.w).toBeLessThanOrEqual(r.two.x);
+    expect(r.one.y + r.one.h).toBeLessThanOrEqual(r.two.y);
     // The CUT tooltip's corner is in the deck's strip above the keys.
     const tip = tooltipAt(ZONES.deck);
     expect(tip.y).toBeGreaterThanOrEqual(ZONES.deck.y);

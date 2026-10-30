@@ -69,15 +69,15 @@ Notes:
 - Round 2 replaced `hud/comms-plate` (1455x149, a divider 520 px in), `hud/icons/system` (an antenna, 41x64), `board/channel-plate` (300x233, shorter than before), `board/server-overclocked-dark` (466x629), the three `hud/live/card-frame-*` (240x280 each, nine-sliced at k 0.5 into the 120x140 card) and `hud/live/corner-marks`.
 - `hud/live/corner-marks` is a 96x96 set of all four brackets, one per 48x48 quadrant: a panel draws each corner from its own quadrant, unturned, at 48 px or smaller (`cornerStamps` in `src/scenes/hud/kit.ts`).
 - `hud/live/topbar-strip` is 1536x33, short of the 1920x100 bar. It is drawn 1:1 (its request's display is the file size) and the rest of the bar is filled in code, so it is never stretched.
-- `hud/comms-plate` (1455x149) and `board/table-plate` (1228x416) are drawn at their file size, centred in the band and under the feed.
-- `board/table-plate-midnight` (1061x416) is narrower than the day plate: it is drawn at its own size, centred like the day plate, and cross-fades in at midnight.
+- `hud/comms-plate` (1455x149) is drawn at its file size, centred in the band. `board/table-plate` (1536x1024) is table D, Rolando's pick of 30 Oct 2026: the whole rooftop scene, drawn just under its file size to cover the feed, with the grid drawn in code on its glass.
+- `board/table-plate-midnight` (1061x416) was painted for the old table and is no longer drawn: since table D, midnight is a cold tint on the scene.
 - `chars/comms/triage` is rebuilt from the triage-cat-moods eager face (Rolando's pick, 30 Oct 2026) with its LED screen left blank: the comms band's code iris is drawn on it as the screen's eye.
 - The cam busts `chars/lux/cam/*` are 924x548 with transparent sides; cheer has the same framing as lean-in and relieved.
 - `hud/live/night-shift-sticker` is a blank plate: any words on it are drawn in code.
 
 | Folder | Files (size) | From |
 | --- | --- | --- |
-| `art/board/` | table-plate (1228x416), server-dark (425x638), server-booting-a (427x638), server-booting-b (420x638), server-overclocked-dark (466x629), balancer-ping-a (449x306), balancer-ping-b (449x306), channel-plate (300x233), table-plate-midnight (1061x416), packet-cube (59x48) | batch 1: table plate, sheet A, sheet B, channel plate; batch 5 midnight plate, packet cube |
+| `art/board/` | table-plate (1536x1024), server-dark (425x638), server-booting-a (427x638), server-booting-b (420x638), server-overclocked-dark (466x629), balancer-ping-a (449x306), balancer-ping-b (449x306), channel-plate (300x233), table-plate-midnight (1061x416), packet-cube (59x48) | batch 1: table plate, sheet A, sheet B, channel plate; batch 5 midnight plate, packet cube |
 | `art/hud/` | city-grid (816x620), comms-plate (1455x149), chat-plate-wide (770x485), cam-backdrop (824x504), gauge-face (480x269), gauge-needle (24x162), cam-frame (408x243), city-grid-lit (816x620) | batch 1 city-grid; batch 2 comms-plate, chat-plate-wide; batch 3 backdrop; batch 5 gauge, cam frame, lit city grid |
 | `art/hud/icons/` | door (128x120), tv (128x120), system (41x64), play (128x123), ping (128x123), skipped (128x124) | batch 2 icons |
 | `art/hud/live/` | avatar-luxnet (243x256), panel-frame (192x192), label-tab (380x72), tag-chip (216x72), rec-badge (121x48), live-pill (189x56), corner-marks (96x96), divider (8x160), keycap-idle (160x128), keycap-ready (160x128), keycap-pressed (160x128), card-frame-idle (240x280), card-frame-ready (240x280), card-frame-locked (240x280), count-badge (49x56), topbar-strip (1536x33), alert-plate (1040x168), alert-endcap (135x168), night-shift-sticker (320x136) | batch 2 round avatars; batch 4 panel kit, keycaps and cards, topbar-strip, alert-plate; batch 5 sticker |

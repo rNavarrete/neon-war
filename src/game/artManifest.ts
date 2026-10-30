@@ -111,10 +111,11 @@ const size = (w: number, h: number): Size => ({ w, h });
  *   hairline, so the view draws it 1:1 (centred, or repeated at scale 1 along the bar) and fills
  *   the rest of the bar in code.
  * - hud/comms-plate is 1455x149 in the 1455x150 band: CommsView centres it on whole pixels.
- * - board/table-plate is 1228x416 under a 1441 px feed: the board centres it (tablePlatePlace).
+ * - board/table-plate is table D (Rolando's pick, 30 Oct 2026), the whole 1536x1024 rooftop scene
+ *   behind the feed; the board covers the feed with it (tablePlatePlace).
  */
 const PICKED_CUTS: Readonly<Record<string, Size>> = {
-  'board/table-plate': size(1228, 416),
+  'board/table-plate': size(1536, 1024),
   'board/server-dark': size(425, 638),
   'board/server-booting-a': size(427, 638),
   'board/server-booting-b': size(420, 638),
@@ -793,16 +794,16 @@ export const ART_REQUESTS: readonly ArtRequest[] = [
   // Batch 1: board and map.
   {
     key: 'board/table-plate',
-    what: 'perspective PCB table under the parts, no pads painted (code draws any number of pads)',
+    what: "the board table in place on Lux's wet rooftop, steeper top-down camera, plain glass (code draws the grid and pads)",
     batch: 1,
     lane: 'board',
     zone: 'feed',
-    display: size(1228, 416),
-    target: size(1536, 416),
+    display: size(1528, 1019),
+    target: size(1536, 1024),
     cut: picked('board/table-plate'),
     states: 'one; midnight is a tint',
     prompt:
-      'PCB desk 30 degrees from above, an even cyan silkscreen grid edge to edge, no pads or footprints (code places 6 to 24+ pads), amber rim at the near lip, empty; trapezoid 1215 px wide at the far edge, 1441 px at the near edge',
+      'table D (Rolando 30 Oct 2026): the board table on a wet neon rooftop seen from about 60 degrees, plain teal glass, brass near rail, a thin strip of skyline at the top',
     fallback: bake(NAVY, 0.9, 'the code-baked slab the board draws today'),
   },
   {

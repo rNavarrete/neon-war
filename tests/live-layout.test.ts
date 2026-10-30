@@ -48,10 +48,10 @@ describe('live layout contract', () => {
       map: { x: 1632, y: 913, w: 212, h: 160 },
       cam: { x: 6, y: 110, w: 410, h: 270 },
       gauge: { x: 1566, y: 645, w: 344, h: 260 },
-      feed: { x: 426, y: 120, w: 1128, h: 706 },
+      feed: { x: 426, y: 102, w: 1128, h: 790 },
       comms: { x: 1566, y: 135, w: 344, h: 500 },
-      inventory: { x: 426, y: 834, w: 1055, h: 165 },
-      deck: { x: 426, y: 1005, w: 1128, h: 65 },
+      inventory: { x: 426, y: 904, w: 1000, h: 156 },
+      deck: { x: 1434, y: 904, w: 120, h: 156 },
       chat: { x: 6, y: 390, w: 410, h: 680 },
     });
     expect(ZONE_IDS).toEqual([
@@ -95,10 +95,12 @@ describe('live layout contract', () => {
   it('gives the board its areas as edges', () => {
     // Since layout A (Rolando, 30 Oct 2026) the board draws in its own space and views show it in the
     // zones: the areas are that space's boxes, the ones the table was painted for.
-    expect(rectToArea(FEED_WORLD)).toEqual({ left: 455, right: 1910, top: 110, bottom: 640 });
-    expect(rectToArea(TRAY_WORLD)).toEqual({ left: 455, right: 1510, top: 800, bottom: 965 });
-    expect(rectToArea(ZONES.feed)).toEqual({ left: 426, right: 1554, top: 120, bottom: 826 });
-    expect(rectToArea(ZONES.inventory)).toEqual({ left: 426, right: 1481, top: 834, bottom: 999 });
+    // Option 2 (Rolando, 30 Oct 2026), table D: a taller table box, the tray's space below it, the feed taller
+    // and the tray running to the bottom edge beside the keys.
+    expect(rectToArea(FEED_WORLD)).toEqual({ left: 455, right: 1910, top: 110, bottom: 870 });
+    expect(rectToArea(TRAY_WORLD)).toEqual({ left: 455, right: 1510, top: 1000, bottom: 1165 });
+    expect(rectToArea(ZONES.feed)).toEqual({ left: 426, right: 1554, top: 102, bottom: 892 });
+    expect(rectToArea(ZONES.inventory)).toEqual({ left: 426, right: 1426, top: 904, bottom: 1060 });
   });
 
   it("shows the board's space in its zones through one-scale views, both ways", () => {
@@ -110,13 +112,15 @@ describe('live layout contract', () => {
     expect(FEED_SHOWN.y + FEED_SHOWN.h).toBe(FEED_WORLD.y + FEED_WORLD.h);
     expect(FEED_VIEW.scale).toBeCloseTo(1128 / 1455, 9);
     expect(Math.abs(FEED_SHOWN.h * FEED_VIEW.scale - ZONES.feed.h)).toBeLessThan(1);
-    expect(TRAY_VIEW.scale).toBe(1);
-    expect(boardToScreen({ x: 455, y: -271 })).toEqual({ x: 426, y: 120 });
-    expect(boardToScreen({ x: 455, y: 800 })).toEqual({ x: 426, y: 834 });
+    // Option 2 (Rolando, 30 Oct 2026): the tray shows at 1000/1055 (it was 1:1), its shape kept to within a pixel.
+    expect(TRAY_VIEW.scale).toBeCloseTo(1000 / 1055, 9);
+    expect(Math.abs(TRAY_WORLD.h * TRAY_VIEW.scale - ZONES.inventory.h)).toBeLessThan(1);
+    expect(boardToScreen({ x: 455, y: -149 })).toEqual({ x: 426, y: 102 });
+    expect(boardToScreen({ x: 455, y: 1000 })).toEqual({ x: 426, y: 904 });
     for (const p of [
       { x: 700, y: 300 },
       { x: 1900, y: 630 },
-      { x: 600, y: 900 },
+      { x: 600, y: 1100 },
     ]) {
       const back = screenToBoard(boardToScreen(p));
       expect(back.x).toBeCloseTo(p.x, 6);
@@ -178,7 +182,8 @@ describe('live layout contract', () => {
         expect(Math.abs(r.y + r.h - end.y)).toBeLessThanOrEqual(0.1 + 1e-9);
       }
     }
-    expect(pageRect(ZONES.feed, canvases[0])).toEqual({ x: 284, y: 80, w: 752, h: 470.7 });
+    // Option 2 (Rolando, 30 Oct 2026, table D): the taller feed; it was {284, 80, 752, 470.7}.
+    expect(pageRect(ZONES.feed, canvases[0])).toEqual({ x: 284, y: 68, w: 752, h: 526.7 });
   });
 
   it('publishes every card rect in the docs/LIVE.md Cards table', () => {

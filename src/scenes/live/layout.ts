@@ -71,13 +71,13 @@ export const ZONES = {
   /** Right column, under the callers: the demand gauge, the one demand widget (smaller since A2). */
   gauge: { x: 1566, y: 645, w: 344, h: 260 },
   /** Middle: the board itself, Lux's feed of the block's traffic, with the sky above the table. */
-  feed: { x: 426, y: 120, w: 1128, h: 706 },
+  feed: { x: 426, y: 102, w: 1128, h: 790 },
   /** Right column, top: the cam of whoever is talking to Lux, popping in and out with their line. */
   comms: { x: 1566, y: 135, w: 344, h: 500 },
   /** Middle, under the board: the board's inventory (the tray of parts). */
-  inventory: { x: 426, y: 834, w: 1055, h: 165 },
-  /** Middle, under the tray: the deck's keys, shown only while one can be pressed. */
-  deck: { x: 426, y: 1005, w: 1128, h: 65 },
+  inventory: { x: 426, y: 904, w: 1000, h: 156 },
+  /** Middle, right of the tray: the deck's keys, stacked, shown only while one can be pressed. */
+  deck: { x: 1434, y: 904, w: 120, h: 156 },
   /** Left column, under the cam: Lux's stream chat, nearly full height. */
   chat: { x: 6, y: 390, w: 410, h: 680 },
 } as const satisfies Record<string, Rect>;
@@ -108,15 +108,21 @@ export const CARDS = {
 // every part's place were painted and measured in), and two cameras show them in their zones. A
 // view maps a box of that space onto a zone at one scale: the feed keeps its painted shape.
 
-/** The board's drawing space for the feed: the table and its skyline were painted for this box. */
-export const FEED_WORLD: Rect = { x: 455, y: 110, w: 1455, h: 530 };
 /**
- * What the feed's camera shows: FEED_WORLD with the rest of the painted sky above it (the skyline art
- * is 1536x1024, drawn 1455 wide with its horizon at y 214, so its top is at y 214 - 485 = -271).
+ * The board's drawing space for the feed: the table stands in this box (since option 2, Rolando
+ * 30 Oct 2026, the steeper table B fills its width, its foot on the box's floor).
  */
-export const FEED_SHOWN: Rect = { x: 455, y: -271, w: 1455, h: 911 };
-/** The board's drawing space for the tray of parts. */
-export const TRAY_WORLD: Rect = { x: 455, y: 800, w: 1055, h: 165 };
+export const FEED_WORLD: Rect = { x: 455, y: 110, w: 1455, h: 760 };
+/**
+ * What the feed's camera shows: FEED_WORLD with a band of the city's sky above it, at the feed
+ * zone's shape (1455 x 1019 onto 1128 x 790).
+ */
+export const FEED_SHOWN: Rect = { x: 455, y: -149, w: 1455, h: 1019 };
+/**
+ * The board's drawing space for the tray of parts, below everything the feed's camera shows (moved
+ * down from y 800 when option 2's taller feed took that space, Rolando 30 Oct 2026).
+ */
+export const TRAY_WORLD: Rect = { x: 455, y: 1000, w: 1055, h: 165 };
 
 /** How a box of the board's space shows on screen: drawn at `scale` with its corner at the zone's. */
 export interface View {

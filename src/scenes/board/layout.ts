@@ -27,6 +27,7 @@ import {
 } from '../../sim/grid';
 import { FEED_WORLD, TRAY_WORLD, boardToScreen, rectToArea } from '../live/layout';
 import { anchorAt, blockCentre, blockQuad, nodePoint } from './cells';
+import { GLASS } from './glass';
 import { type Block, traceNodes } from './lattice';
 
 export interface Point {
@@ -41,17 +42,20 @@ export interface Box extends Point {
 }
 
 /**
- * The feed in the board's own space, as edges: {left 455, right 1910, top 110, bottom 640}. The
+ * The feed in the board's own space, as edges: {left 455, right 1910, top 110, bottom 870}. The
  * board draws here and its feed camera shows it in ZONES.feed (src/scenes/live/layout.ts FEED_VIEW).
  */
 export const BOARD_AREA = rectToArea(FEED_WORLD);
-/** The tray in the board's own space, as edges: {left 455, right 1510, top 800, bottom 965}. */
+/** The tray in the board's own space, as edges: {left 455, right 1510, top 1000, bottom 1165}. */
 export const TRAY_AREA = rectToArea(TRAY_WORLD);
 
-/** The table top: its far edge (y 222, x 575-1790) and its near edge (y 612, x 462-1903). */
+/**
+ * The table top: the picked painting's glass (glass.ts GLASS), its far edge narrower than its near
+ * edge (table D since option 2, Rolando 30 Oct 2026).
+ */
 export const TABLE = {
-  far: { y: 222, left: 575, right: 1790 },
-  near: { y: 612, left: 462, right: 1903 },
+  far: { y: GLASS[0].y, left: GLASS[0].x, right: GLASS[1].x },
+  near: { y: GLASS[3].y, left: GLASS[3].x, right: GLASS[2].x },
 } as const;
 /** How deep the table's lit front face is, below the near edge. */
 export const TABLE_FACE = 18;
@@ -374,15 +378,23 @@ export function distToPath(px: number, py: number, path: readonly Point[]): numb
 /** Where the inbound stream starts: just off the feed's left edge, from under the HUD's left column. */
 export const INBOUND_FROM = BOARD_AREA.left - 3;
 
+/** The gateway's in-port height, where the channel is centred. */
+const PORT_Y = nodePoint(portNode({ kind: 'gateway', slot: null }, 'in')!).y;
+/** The table's left rim at the port's height: the glass's left edge there, less the frame. */
+const RIM_X = (() => {
+  const k = (PORT_Y - TABLE.far.y) / (TABLE.near.y - TABLE.far.y);
+  return Math.round(TABLE.far.left + (TABLE.near.left - TABLE.far.left) * k - 24);
+})();
+
 /**
- * The channel the block's traffic arrives along: a mouth on the feed's left edge (x 455, y 322-502)
- * that narrows to its port on the table's left rim (x 585), level with the gateway's in-port; the
- * stream runs on from there across the rim into the gateway standing on the grid. Geometry only; how
- * full it is (the demand level) is a later ticket's.
+ * The channel the block's traffic arrives along: a mouth on the feed's left edge, 180 tall, that
+ * narrows to its port on the table's left rim, level with the gateway's in-port; the stream runs on
+ * from there across the rim into the gateway standing on the grid. Geometry only; how full it is
+ * (the demand level) is a later ticket's.
  */
 export const CHANNEL = {
-  mouth: { x: BOARD_AREA.left, top: 322, bottom: 502 },
-  port: { x: 585, top: 372, bottom: 452 },
+  mouth: { x: BOARD_AREA.left, top: Math.round(PORT_Y - 90), bottom: Math.round(PORT_Y + 90) },
+  port: { x: RIM_X, top: Math.round(PORT_Y - 40), bottom: Math.round(PORT_Y + 40) },
 } as const;
 
 /** The channel's walls at x, between the mouth and the port. */
