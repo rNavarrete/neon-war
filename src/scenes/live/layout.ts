@@ -41,7 +41,7 @@ const centred = (cx: number, cy: number, w: number, h: number): Rect => ({
 });
 
 /**
- * The twelve zones of the Live screen (frame 54 of the picked mockup). Zones never overlap and
+ * The eleven zones of the Live screen (frame 54 of the picked mockup). Zones never overlap and
  * together they leave only the gutters between them. Each is owned by one lane (docs/LIVE.md).
  */
 export const ZONES = {
@@ -55,10 +55,11 @@ export const ZONES = {
   map: { x: 16, y: 110, w: 408, h: 310 },
   /** Left column, middle: Lux's cam frame. */
   cam: { x: 16, y: 430, w: 408, h: 270 },
-  /** Left column, lower: the demand gauge. */
-  gauge: { x: 16, y: 710, w: 408, h: 170 },
-  /** Left column, bottom: the scope, the chart with the demand and capacity lines. */
-  scope: { x: 16, y: 890, w: 408, h: 180 },
+  /**
+   * Left column, bottom: the demand gauge, the one demand widget (Rolando, 30 Oct 2026: the chart and
+   * the headroom bar measured the same thing). It took the old scope's space.
+   */
+  gauge: { x: 16, y: 710, w: 408, h: 360 },
   /** Centre: the board itself, Lux's feed of the block's traffic. */
   feed: { x: 455, y: 110, w: 1455, h: 530 },
   /** Under the feed: the comms band with the crew's slots and the current line. */

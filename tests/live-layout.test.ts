@@ -26,15 +26,14 @@ describe('live layout contract', () => {
     expect(SCREEN).toEqual({ width: 1920, height: 1080 });
   });
 
-  it('has the twelve zones of the plan, exactly', () => {
+  it("has the eleven zones of the plan, exactly (the gauge took the scope's space, 30 Oct 2026)", () => {
     expect(ZONES).toEqual({
       title: { x: 0, y: 0, w: 440, h: 100 },
       alert: { x: 460, y: 8, w: 1040, h: 84 },
       clock: { x: 1520, y: 0, w: 400, h: 100 },
       map: { x: 16, y: 110, w: 408, h: 310 },
       cam: { x: 16, y: 430, w: 408, h: 270 },
-      gauge: { x: 16, y: 710, w: 408, h: 170 },
-      scope: { x: 16, y: 890, w: 408, h: 180 },
+      gauge: { x: 16, y: 710, w: 408, h: 360 },
       feed: { x: 455, y: 110, w: 1455, h: 530 },
       comms: { x: 455, y: 645, w: 1455, h: 150 },
       inventory: { x: 455, y: 800, w: 1055, h: 165 },
@@ -48,7 +47,6 @@ describe('live layout contract', () => {
       'map',
       'cam',
       'gauge',
-      'scope',
       'feed',
       'comms',
       'inventory',

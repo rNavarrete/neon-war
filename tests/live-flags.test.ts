@@ -53,8 +53,7 @@ describe('live registry', () => {
       'chat',
     ]);
     expect(BOARD_ZONES).toEqual(['feed', 'inventory']);
-    // ZONES.scope stays reserved, drawn by nobody, until the gauge grows into it.
-    expect([...REGISTRY_ZONES, ...BOARD_ZONES, 'scope'].sort()).toEqual([...ZONE_IDS].sort());
+    expect([...REGISTRY_ZONES, ...BOARD_ZONES].sort()).toEqual([...ZONE_IDS].sort());
     expect(new Set(REGISTRY_ZONES).size).toBe(REGISTRY.length);
     for (const e of REGISTRY)
       expect(['board', 'gauges', 'comms', 'chat', 'luxcam', 'learning']).toContain(e.lane);

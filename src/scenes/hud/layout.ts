@@ -48,20 +48,6 @@ export const boxAround = (cx: number, cy: number, w: number, h: number): Rect =>
 // The title cluster and the clock are TitleView's (title.ts), the alert band AlertView's (alerts.ts):
 // each places its pieces from its own zone, so nothing for the top strip is left here.
 
-// ---- the left column: the scope ----
-
-const scope = Z.scope;
-
-export const LEFT = {
-  /** The chart's panel is the scope zone; the plot is x 46-400, y 905-1050. */
-  chart: { x: scope.x, y: scope.y, w: scope.w, h: scope.h },
-  plot: { left: scope.x + 30, right: scope.x + 384, top: scope.y + 15, bottom: scope.y + 160 },
-  /** The y-axis top, right-aligned over the plot's top-right corner. */
-  chartTop: { right: scope.x + 384, y: scope.y + 1, w: 90, h: 16 },
-  /** The demand and room numbers under the plot. */
-  chartLegend: { x: scope.x + 30, y: scope.y + 163, w: 354, h: 16 },
-};
-
 // ---- the right: the chat ----
 
 const chat = Z.chat;
@@ -154,28 +140,6 @@ const bannerArt = boxAround(
 );
 
 export const HUD_RECTS: readonly HudRect[] = [
-  { id: 'scope.panel', rect: LEFT.chart, home: 'scope' },
-  {
-    id: 'scope.plot',
-    rect: {
-      x: LEFT.plot.left,
-      y: LEFT.plot.top,
-      w: LEFT.plot.right - LEFT.plot.left,
-      h: LEFT.plot.bottom - LEFT.plot.top,
-    },
-    home: 'scope',
-  },
-  {
-    id: 'scope.top',
-    rect: {
-      x: LEFT.chartTop.right - LEFT.chartTop.w,
-      y: LEFT.chartTop.y,
-      w: LEFT.chartTop.w,
-      h: LEFT.chartTop.h,
-    },
-    home: 'scope',
-  },
-  { id: 'scope.legend', rect: LEFT.chartLegend, home: 'scope' },
   { id: 'chat.panel', rect: RIGHT.chat, home: 'chat' },
   { id: 'chat.body', rect: RIGHT.chatBody, home: 'chat' },
   ...BOTTOM.slots.map((s): HudRect => ({ id: `comms.slot.${s.name}`, rect: circle(s), home: 'comms' })),

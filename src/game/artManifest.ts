@@ -335,8 +335,8 @@ export const PICKED_ART: readonly PickedArt[] = [
     file: 'art/hud/chart-window.webp',
     cut: size(1008, 454),
     display: size(408, 180),
-    zone: 'scope',
-    use: 'SCOPE plate',
+    zone: 'gauge',
+    use: 'the retired SCOPE plate (the LAST 60 s chart is gone); kept for a later instrument',
     nineSlice: { k: 0.4 },
   },
   {

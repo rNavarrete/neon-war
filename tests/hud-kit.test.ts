@@ -3,7 +3,6 @@ import { Bus } from '../src/game/bus';
 import { type Frame, readFrame } from '../src/game/frame';
 import { Run } from '../src/game/run';
 import { AlertView } from '../src/scenes/hud/AlertView';
-import { ChartView } from '../src/scenes/hud/ChartView';
 import { DeckView } from '../src/scenes/hud/DeckView';
 import { GaugeView } from '../src/scenes/hud/GaugeView';
 import { type HudTestState, hudSection } from '../src/scenes/hud/hook';
@@ -313,7 +312,7 @@ describe('bakePanel', () => {
 
   it('skips a piece whose file is not loaded, and draws the frame as a code rim instead', () => {
     const { scene, rec } = bakingScene(false);
-    const p = bakePanel(scene as never, 'kit-unloaded', ZONES.scope, { frame: true, corners: 30 });
+    const p = bakePanel(scene as never, 'kit-unloaded', ZONES.map, { frame: true, corners: 30 });
     expect(p.state.texture).toBe('live-kit:kit-unloaded');
     expect(p.state.pieces).toEqual([]);
     expect(p.state.missing).toEqual([KIT.frame, KIT.corner]);
@@ -333,7 +332,6 @@ describe('the gauges lane views with the kit loaded', () => {
   const cases: [string, () => LiveView, Rect][] = [
     ['title', () => new TitleView(), ZONES.title],
     ['gauge', () => new GaugeView(), ZONES.gauge],
-    ['scope', () => new ChartView(), ZONES.scope],
     ['map', () => new MapView(), ZONES.map],
     ['deck', () => new DeckView(), ZONES.deck],
     ['alert', () => new AlertView(), ZONES.alert],

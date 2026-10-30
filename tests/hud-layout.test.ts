@@ -5,7 +5,6 @@ import {
   FEED_CARDS,
   HUD_RECTS,
   KEY,
-  LEFT,
   RIGHT,
   homeRect,
 } from '../src/scenes/hud/layout';
@@ -19,7 +18,8 @@ describe('hud layout inside the zones', () => {
   it('puts every rect inside the zone or card it belongs to', () => {
     // 30 once the title cluster's, the alert band's, the clock's and the comms band's own rows were
     // retired with the legacy code that drew them (TitleView, AlertView and CommsView place theirs).
-    expect(HUD_RECTS.length).toBeGreaterThanOrEqual(20);
+    // 17 since the scope's four rows went with the LAST 60 s chart (30 Oct 2026).
+    expect(HUD_RECTS.length).toBeGreaterThanOrEqual(17);
     for (const { id, rect, home } of HUD_RECTS) {
       expect(inside(rect, homeRect(home)), `${id} in ${home}`).toBe(true);
     }
@@ -43,7 +43,8 @@ describe('hud layout inside the zones', () => {
     const homes = new Set(HUD_RECTS.map((r) => r.home));
     // title, alert and clock are drawn by their views from their own layouts (title.ts, alerts.ts),
     // not from this file any more: their rows tested deleted code and are gone.
-    for (const zone of ['scope', 'comms', 'deck', 'chat'] as const) {
+    // No scope: the LAST 60 s chart is gone (30 Oct 2026).
+    for (const zone of ['comms', 'deck', 'chat'] as const) {
       expect(homes.has(zone), zone).toBe(true);
     }
     for (const card of ['jobCard', 'banner', 'dipFallback'] as const) {
@@ -63,9 +64,9 @@ describe('hud layout owner-fixed internals', () => {
     );
   });
 
-  it('puts the chart in the scope with the plot at x 46-400, y 905-1050', () => {
-    expect(LEFT.chart).toEqual(ZONES.scope);
-    expect(LEFT.plot).toEqual({ left: 46, right: 400, top: 905, bottom: 1050 });
+  it("has no chart: the gauge took the scope's space (Rolando, 30 Oct 2026)", () => {
+    expect(Object.keys(ZONES)).not.toContain('scope');
+    expect(ZONES.gauge).toEqual({ x: 16, y: 710, w: 408, h: 360 });
   });
 
   it('merges both chats into one column with the body at x 1545-1890, y 840-1060', () => {

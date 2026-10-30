@@ -30,8 +30,7 @@ Twelve rects `{x, y, w, h}` in game pixels. No two overlap; all lie inside 1920x
 | `clock`     | 1520 |   0 |  400 | 100 | gauges  | The in-world clock, the countdown, trust and credits       |
 | `map`       |   16 | 110 |  408 | 310 | gauges  | The city map with the block's dots                         |
 | `cam`       |   16 | 430 |  408 | 270 | luxcam  | Lux's cam frame                                            |
-| `gauge`     |   16 | 710 |  408 | 170 | gauges  | The demand gauge                                           |
-| `scope`     |   16 | 890 |  408 | 180 | gauges  | The scope: the chart with the demand and capacity lines    |
+| `gauge`     |   16 | 710 |  408 | 360 | gauges  | The demand gauge, the one demand widget (took the scope's space, 30 Oct 2026) |
 | `feed`      |  455 | 110 | 1455 | 530 | board   | The board: gateway, balancer, rack, database, packets      |
 | `comms`     |  455 | 645 | 1455 | 150 | comms   | The comms band: the crew's slots and the current line      |
 | `inventory` |  455 | 800 | 1055 | 165 | board   | The tray of parts                                          |
@@ -93,7 +92,6 @@ prove none is left.
 | `map`   | `MapView`                               | gauges |
 | `cam`   | `LuxCamView`                            | luxcam |
 | `gauge` | `GaugeView`                             | gauges |
-| `scope` | `ChartView`                             | gauges |
 | `comms` | `CommsView`                             | comms  |
 | `deck`  | `DeckView` (with `HeadroomView`)        | gauges |
 | `chat`  | `ChatFeedView`                          | chat   |
@@ -268,7 +266,7 @@ The sections the views add, beside the host's own keys (`ready`, `now`, `jobCard
 | `hud.bark` | the host, from CommsView | `{current, text, history}`, the band's shown lines (the older name) |
 | `hud.luxCam` | LuxCamView | the mood, the art, `history` of moods, REC, the frame, `speaking`, `motion` |
 | `hud.alert` | AlertView | the alert up now and its kind, line, tag and text; `hint` and `hintText`, the start-of-C1 hint ("drag a SERVER card onto the grid") while no alert is up |
-| `hud.gauge`, `hud.chart` | GaugeView, ChartView | the DEMAND req/s gauge; the scope's series over the host's `chart` |
+| `hud.gauge`, `hud.chart` | GaugeView, the HUD host | the DEMAND req/s gauge; the host's `chart` mirrors demand and capacity (the LAST 60 s chart is gone) |
 | `hud.map` | MapView | the city map's dots, raid outlines and midnight |
 | `hud.deck`, `hud.headroom`, `hud.regroup`, `hud.laundry` | DeckView | the keys and their states, the room-left bar, Regroup and the laundry cut |
 | `hud.chatArt`, `hud.chatTrace` | ChatFeedView | which chat art loaded or fell back; the trace of rows posted, with their cause |
@@ -311,7 +309,7 @@ that lane. `src/sim/` is frozen (only decision D2 could open it), and the protec
 | --- | --- | --- | --- |
 | tech | none (the host, the contract) | `src/game/run.ts`, `flow.ts`, `director.ts`, `frame.ts`, `occurrences.ts`, `bus.ts`, `mixer.ts`, `audio.ts`, `src/main.ts`, `src/testHook.ts`, `src/scenes/live/` (`layout.ts`, `view.ts`, `registry.ts`, `flags.ts`, `hook.ts`; lanes edit only their registry line), `src/scenes/HudScene.ts`, `src/scenes/hud/layout.ts`, `src/scenes/hud/hook.ts`, `src/scenes/OverlayScene.ts`, `docs/LIVE.md`, `docs/AUDIO.md` | `live-layout`, `frame`, `occurrences`, `live-flags`, `live-docs`, `mixer`, `hud-layout`; `tests/browser/live/reach.ts`, `live-skeleton`, `live-perf`, `live-tour`, `voice`, and the existing `hud`, `board`, `story`, `boot`, `shell` specs |
 | board | `feed`, `inventory` | `src/scenes/BoardScene.ts`, `src/scenes/board/` (layout, tray, view, packets, hook, crew, channel, anim, ghost, InventoryView) | `board-layout`, `board-view`, `board-packets`, `board-channel`, `board-anim`; `board-live.spec.ts` |
-| gauges | `title`, `alert`, `clock`, `map`, `gauge`, `scope`, `deck` | `src/scenes/hud/` TitleView, title, alerts, AlertView, gauge, GaugeView, headroom, HeadroomView, thresholds, cityMap, MapView, deck, DeckView, ChartView, chartRing, warnings, pending503, regroup, jobCard, format, panel | `hud-title`, `hud-alerts`, `hud-chart`, `hud-gauge`, `hud-headroom`, `hud-map`, `hud-deck`, `hud-format`; `live-gauges.spec.ts` |
+| gauges | `title`, `alert`, `clock`, `map`, `gauge`, `deck` | `src/scenes/hud/` TitleView, title, alerts, AlertView, gauge, GaugeView, headroom, HeadroomView, thresholds, cityMap, MapView, deck, DeckView, warnings, pending503, regroup, jobCard, format, panel | `hud-title`, `hud-alerts`, `hud-gauge`, `hud-headroom`, `hud-map`, `hud-deck`, `hud-format`; `live-gauges.spec.ts` |
 | comms | `comms` | `src/scenes/hud/comms.ts`, `CommsView.ts`, `locate.ts`; `src/game/voice.ts`, `settings.ts`, `settingsControls.ts`, `src/scenes/SettingsScene.ts`; the voice emits in `StoryScene.ts`, `src/story/view.ts`, `src/story/state.ts` | `hud-comms`, `game-voice`, `shell-audio`; `comms.spec.ts` |
 | chat | `chat` | `src/scenes/hud/chatEngine.ts`, `ChatFeedView.ts`, `chat.ts` | `hud-chat`, `hud-chat-engine`; `chat.spec.ts` |
 | luxcam | `cam` | `src/scenes/hud/luxcam.ts`, `LuxCamView.ts`, `src/game/portraits.ts` | `hud-luxcam`; `luxcam.spec.ts` |

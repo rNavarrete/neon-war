@@ -1,5 +1,4 @@
 import { type Page, expect, test } from '@playwright/test';
-import type { ScopeTestState } from '../../src/scenes/hud/ChartView';
 import type { KeyName } from '../../src/scenes/hud/deck';
 import type { HudTestState } from '../../src/scenes/hud/hook';
 import { BROWNOUT } from '../../src/sim/brownout';
@@ -115,7 +114,7 @@ const NOT_BEFORE_DEBRIEF = /\bcoming\b|\broom\b|no box|\bsplitter\b/i;
 
 type LaneHud = HudTestState &
   Required<Pick<HudTestState, 'title' | 'gauge' | 'alert' | 'map' | 'headroom' | 'deck'>> & {
-    chart: ScopeTestState;
+    chart: { demand: number; capacity: number; ceiling: number; plot?: unknown };
   };
 
 /** Read hud with every gauges-lane section present. */
