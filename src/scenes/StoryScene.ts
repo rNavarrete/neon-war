@@ -69,6 +69,9 @@ export class StoryScene extends Phaser.Scene {
   /** The jack-in CG shown under the last line, waiting for the click that plays the outro. */
   private jackin: Phaser.GameObjects.Image | null = null;
   private outro = false;
+  private outroT = 0;
+  private dissolve: Phaser.GameObjects.Image | null = null;
+  private flash: Phaser.GameObjects.Rectangle | null = null;
   private frames = new FrameClock();
 
   constructor() {
@@ -108,6 +111,9 @@ export class StoryScene extends Phaser.Scene {
     storyState.photo = false;
     this.jackin = null;
     this.outro = false;
+    this.outroT = 0;
+    this.dissolve = null;
+    this.flash = null;
     storyState.cg = null;
     storyState.jackin = null;
 
@@ -162,6 +168,7 @@ export class StoryScene extends Phaser.Scene {
       this.updateRewindClock(Math.min(1, this.rewinding / REWIND_SECONDS));
       if (this.rewinding >= REWIND_SECONDS) this.finish();
     }
+    if (this.outro) this.updateJackin(dt);
   }
 
   /** A click finishes the typing line, or goes on to the next one. */
@@ -246,37 +253,34 @@ export class StoryScene extends Phaser.Scene {
   /**
    * The click after her last line: the box goes, her room dissolves into the grid (the second CG
    * crossfades in and holds), then a cyan flash cuts to the board; under reduce flicker a dark fade
-   * replaces the flash. Clicks are ignored from here; Skip still ends it at once.
+   * replaces the flash. Clicks are ignored from here; Skip still ends it at once. It runs on the wall
+   * clock in update() (like the rewind), not on tweens, whose time stalls when frames come slowly.
    */
   private playJackin(): void {
     this.outro = true;
+    this.outroT = 0;
     this.view.hideBox();
-    const speed = run().speed;
-    const dissolve = cover(this, fileKey(EXTRA.jackinDissolve)).setDepth(16).setAlpha(0);
+    this.dissolve = cover(this, fileKey(EXTRA.jackinDissolve)).setDepth(16).setAlpha(0);
+    this.flash = this.add
+      .rectangle(0, 0, W, H, settings().reduceFlicker ? 0x05070f : 0x9ff6ff)
+      .setOrigin(0)
+      .setDepth(45)
+      .setAlpha(0);
     storyState.cg = EXTRA.jackinDissolve;
     storyState.jackin = 'dissolve';
-    this.tweens.add({
-      targets: dissolve,
-      alpha: 1,
-      duration: JACKIN_MS.dissolve / speed,
-      onComplete: () => {
-        this.time.delayedCall(JACKIN_MS.hold / speed, () => {
-          if (this.done) return;
-          storyState.jackin = 'flash';
-          const flash = this.add
-            .rectangle(0, 0, W, H, settings().reduceFlicker ? 0x05070f : 0x9ff6ff)
-            .setOrigin(0)
-            .setDepth(45)
-            .setAlpha(0);
-          this.tweens.add({
-            targets: flash,
-            alpha: 1,
-            duration: JACKIN_MS.flash / speed,
-            onComplete: () => this.finish(),
-          });
-        });
-      },
-    });
+  }
+
+  /** Advance the jack-in outro by `dt` seconds (at test speed); ends the scene after the flash. */
+  private updateJackin(dt: number): void {
+    this.outroT += dt * 1000;
+    const { dissolve, hold, flash } = JACKIN_MS;
+    this.dissolve?.setAlpha(Math.min(1, this.outroT / dissolve));
+    const f = (this.outroT - dissolve - hold) / flash;
+    if (f > 0) {
+      storyState.jackin = 'flash';
+      this.flash?.setAlpha(Math.min(1, f));
+    }
+    if (f >= 1) this.finish();
   }
 
   private finish(): void {
