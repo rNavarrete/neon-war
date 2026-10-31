@@ -21,6 +21,7 @@ import { type VoiceHookFields, voiceHookFields } from '../game/voice';
 import { provideTestState, testHookEnabled } from '../testHook';
 import { ZONES } from './live/layout';
 import { SCENES } from './keys';
+import { titleMusicGain } from './opening';
 import { openPause } from './PauseScene';
 import type { PauseScene } from './PauseScene';
 import type { SettingsScene } from './SettingsScene';
@@ -45,6 +46,10 @@ export interface ShellTestState {
   musicPlaying: boolean;
   /** True while the title music loop is playing (or queued to start once audio unlocks). */
   titleMusicPlaying: boolean;
+  /** The title loop's volume as last set (it follows the anime opening's fades). */
+  titleMusicVolume: number;
+  /** The level the title loop sits at when no opening is fading it (the music level under the mixer). */
+  titleMusicLevel: number;
   settings: {
     volume: number;
     textSpeed: string;
@@ -91,6 +96,14 @@ declare global {
 // Always running, drawn over every scene: the pause button and Esc while the board runs, and all
 // audio (the board music loop and every effect the bus asks for, at the volume in settings). The
 // mixer (src/game/mixer.ts) decides the voice clips and the duck; this scene is its SoundPort.
+/**
+ * The volume a sound was last set to. Phaser keeps it on `currentConfig` (typed only on NoAudioSound);
+ * `volume` reads the Web Audio gain's value, which lags the setting and stalls without an audio device.
+ */
+function volumeSet(s: Phaser.Sound.BaseSound): number {
+  return (s as unknown as { currentConfig: Phaser.Types.Sound.SoundConfig }).currentConfig.volume ?? 0;
+}
+
 export class OverlayScene extends Phaser.Scene {
   ready = false;
   private music: Phaser.Sound.BaseSound | null = null;
@@ -206,6 +219,20 @@ export class OverlayScene extends Phaser.Scene {
     const muted = settings().musicMuted;
     this.setMusic(musicWanted({ boardOpen, sceneOpen }) && !muted);
     this.setTitleMusic(titleMusicWanted({ titleOpen: sm.isActive(SCENES.title), muted }));
+    // The anime opening fades the title loop out and back in (src/scenes/opening.ts): follow its gain.
+    // Only when the level moves: each setVolume queues an event on the Web Audio gain's timeline, and a
+    // write every frame for as long as the title shows piles thousands of them up.
+    const tm = this.titleMusic;
+    if (this.titleMusicOn && tm && !this.tweens.isTweening(tm)) {
+      const level = MUSIC_LEVEL * mixer.gain('music') * titleMusicGain();
+      if (Math.abs(level - volumeSet(tm)) > 1e-4) {
+        try {
+          (tm as Phaser.Sound.WebAudioSound).setVolume(level);
+        } catch {
+          // Locked or missing audio never stops the game.
+        }
+      }
+    }
     this.pauseButton?.setVisible(sm.isActive(SCENES.board));
   }
 
@@ -315,7 +342,7 @@ export class OverlayScene extends Phaser.Scene {
     try {
       this.tweens.killTweensOf(m);
       if (on) {
-        m.setVolume(MUSIC_LEVEL * mixer.gain('music'));
+        m.setVolume(MUSIC_LEVEL * mixer.gain('music') * titleMusicGain());
         m.play();
       } else if (m.isPlaying) {
         this.tweens.add({
@@ -354,6 +381,9 @@ export class OverlayScene extends Phaser.Scene {
       voice: { ...v, ...voiceHookFields(v, s), requested: v.requested },
       musicPlaying: this.musicOn && this.music !== null,
       titleMusicPlaying: this.titleMusicOn && this.titleMusic !== null,
+      // The volume the game last set (the audio thread's gain.value lags it, and stalls without a device).
+      titleMusicVolume: this.titleMusic ? volumeSet(this.titleMusic) : 0,
+      titleMusicLevel: MUSIC_LEVEL * mixer.gain('music'),
       settings: {
         volume: s.volume,
         textSpeed: s.textSpeed,
