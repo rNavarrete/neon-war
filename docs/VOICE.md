@@ -1,6 +1,6 @@
 # Recorded voices
 
-Every spoken line of Session 0 (145 lines since the 31 Oct 2026 story pass; 133 of them recorded: the scene lines and the barks of `docs/SCRIPT.md`) has
+Every spoken line of Session 0 (145 lines: the scene lines and the barks of `docs/SCRIPT.md`) has
 a recorded clip in Japanese and in English. This page covers where the clips come from, how to
 re-record one and which takes are out of date. How the game plays them (channels, the duck, one
 voice at a time, lazy groups) is in `docs/AUDIO.md`.
@@ -26,6 +26,10 @@ same Lux voices, from the project's cloud session at Rolando's request. The same
 re-recorded the 23 stale takes and recorded the 20 coach nudges (30 Oct 2026, after Rolando heard
 the TV say "ten minutes" over a "five minutes" caption), from
 `redo-lines-2026-10-30.json` in the voice pipeline folder.
+
+Rolando's story pass (31 Oct 2026) re-recorded 19 changed lines and recorded 12 new ones, in both
+languages, from `redo-lines-2026-10-31.json` in the voice pipeline folder (run on Rolando's Mac).
+The old takes were moved, not deleted, to `out/lines/_old-2026-10-31/`.
 
 ## The manifest
 
@@ -61,51 +65,17 @@ would be the wrong voice.
 Lines whose words changed in `src/strings.ts` since they were recorded. Words are compared without
 the performance tags, the stage directions in brackets and quotes.
 
-Rolando's story pass (31 Oct 2026, clarity and pacing) rewrote these. The old takes play until they
-are re-recorded in Japanese and English:
+None since the story pass's lines were recorded (31 Oct 2026).
 
-- `C2.triage.pay`
-- `C3.triage.01`
-- `C3.lux.01`
-- `C3.triage.nudge.choose.1`
-- `C3.triage.nudge.choose.2`
-- `C3.lux.nudge.idle`
-- `C4.triage.01`
-- `C5.rei.01`
-- `C5.lux.01`
-- `C5.rei.02`
-- `C5.mika.01`
-- `C5.ozzie.01`
-- `C5.rei.04`
-- `C5.ozzie.04`
-- `C1.lux.chat`
-- `C4.lux.forecast`
-- `C4.lux.dark`
-- `C4.lux.retry`
-- `C6.lux.countdown`
-
-Two lines differ only in stage directions written into the text (`C5.rei.cut` has "(beat)",
-`C5.rei.04` has "(to Lux)"); the spoken words match the takes.
+One line has a stage direction written into the text (`C5.rei.cut` has "(beat)"); the spoken
+words match the take.
 
 ## Not recorded yet
 
 Spoken lines added since the last recording session. They show as text with no voice (the mixer
 lists them in `shell.voice.missing`) until they are recorded and added to the manifest.
 
-Rolando's story pass (31 Oct 2026) added these; they show as text until they are recorded:
-
-- `C0.lux.04`
-- `C2.triage.expired`
-- `C2.lux.expired`
-- `C4.lux.shed`
-- `C4.triage.05`
-- `C4.lux.03`
-- `C4.triage.06`
-- `C4.lux.04`
-- `C4.triage.nudge.shed`
-- `C6.lux.forecast`
-- `C6.triage.03`
-- `C8.rei.ack`
+None since the story pass's 12 new lines were recorded (31 Oct 2026).
 
 ## Speaker changed
 
