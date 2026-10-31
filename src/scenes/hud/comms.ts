@@ -179,6 +179,27 @@ export function enqueueComms(s: CommsState, id: LineId, clock: number): CommsSta
 }
 
 /**
+ * Take back lines that went out of date (the player did what they asked: cues.ts SUPERSEDED, or the
+ * coach's problem was solved). Waiting ones leave the queue unshown, into `dropped`; one showing now
+ * ends at `clock`. Returns `s` itself when none of `ids` is waiting or showing, so a per-frame call
+ * allocates nothing.
+ */
+export function withdrawComms(s: CommsState, ids: readonly LineId[], clock: number): CommsState {
+  let inQueue = false;
+  for (let i = 0; i < s.queue.length && !inQueue; i++) inQueue = ids.includes(s.queue[i].id);
+  const cur = s.current;
+  const cutNow = cur !== null && clock < cur.until && ids.includes(cur.id);
+  if (!inQueue && !cutNow) return s;
+  const gone = inQueue ? s.queue.filter((q) => ids.includes(q.id)) : [];
+  return {
+    ...s,
+    current: cutNow && cur ? { ...cur, until: clock, readUntil: Math.min(cur.readUntil, clock) } : cur,
+    queue: inQueue ? s.queue.filter((q) => !ids.includes(q.id)) : s.queue,
+    dropped: gone.length > 0 ? keepLast([...s.dropped, ...gone.map((q) => q.id)], COMMS_HISTORY) : s.dropped,
+  };
+}
+
+/**
  * The band at `clock`: ends the current line when its time is up, drops stale lines, and starts the
  * next one with its dwell at `cps` characters a second. Returns `s` itself when nothing changed.
  */

@@ -21,5 +21,7 @@ export const LABELS = {
   yes: 'Yes',
   no: 'No',
   card: 'THE INTERVIEW VERSION',
+  closeBook: 'CLOSE BOOK',
+  turnPage: 'click to turn the page',
   clickOn: 'click to continue',
 } as const;

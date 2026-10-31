@@ -36,6 +36,7 @@ plays on a timer. The run's clock holds at 23:51:30 until the goggles come down,
 | C0.chat.03 | chat | block: mrs okafor | with C0.chat.01 | Countdown stream keeps freezing. Is it you or the rain? |
 | C0.chat.04 | chat | block: kenji | with C0.chat.01 | lux pls |
 | C0.triage.02 | bark | TRIAGE (thinking) | same click, reading the chat as it rolls in | "Uh... your chat's blowing up. The block's net is dropping again." |
+| C0.lux.04 | scene | Lux | click: the smile comes back, half a joke, half the streamer voice | "This is what I get for rebuilding the block's power app. Lifetime tech support." |
 | C0.lux.02 | scene | Lux | click: the jack-in CG fills the screen, a finger on the visor as it boots; the next click dissolves her room into the grid (a second CG) and a cyan flash cuts to the board | "Yeah. Let's go look." |
 
 ## C1 to C3: the board, alone with TRIAGE (23:51:45 to 23:56:30)
@@ -58,7 +59,7 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C1.lux.01 | bark | Lux | 2 s after TRIAGE's alarm | "Okay. Breathe. I know this one." |
 | C1.triage.03 | bark | TRIAGE (wrong-and-proud) | first server live, 2 s or more after Lux | "The lights are back! I knew my plan would work!" |
 | C1.triage.04 | bark | TRIAGE (thinking) | not played (the estimate step is gone; the take stays recorded) | "Hm. Let's watch the real line and see who's right." |
-| C1.triage.05 | bark | TRIAGE (eager) | 2 s after Lux, tray glows | "Server on the grid, then wire it up. Go go go!" |
+| C1.triage.05 | bark | TRIAGE (eager) | 2 s after Lux, tray glows, only while no server is on the grid; withdrawn once one is | "Server on the grid, then wire it up. Go go go!" |
 | C1.chat.01 | chat | block: mrs okafor | server goes live | It's back! Bless you Lux |
 | C1.chat.02 | chat | stream: viewer | server goes live | first try lol |
 | C1.triage.06 | bark | TRIAGE (happy) | 10 s at 30 against 60 | "See the gauge? Your server's barely trying. That's headroom." |
@@ -81,28 +82,30 @@ TRIAGE does the talking here: eager, often wrong, never gives the answer. Lux co
 | C2.banner.buttons | ui | Solace banner | | Pay / Ignore / Bin |
 | C2.triage.01 | bark | TRIAGE (eager) | banner appears | "Guaranteed! That's the best kind of capacity, right?" |
 | C2.lux.pay | bark | Lux | Pay | "Fine. It's New Year's." |
-| C2.triage.pay | bark | TRIAGE (thinking) | 3 s after Pay | "The chart didn't move. Was it supposed to move?" |
+| C2.triage.pay | bark | TRIAGE (thinking) | 3 s after Pay | "Solace is on. The gauge won't move: we weren't short of room." |
+| C2.triage.expired | bark | TRIAGE (sheepish) | paid, the banner's 60 s run out and it caught nothing | "Solace's minute is up. It caught zero requests." |
+| C2.lux.expired | bark | Lux | 2 s after C2.triage.expired | "Two hundred credits for a countdown. Noted." |
 | C2.lux.ignore | bark | Lux | Ignore | "Not tonight." |
 | C2.lux.bin | bark | Lux | Bin | "Solace selling us our own power back." |
 | C2.triage.after | bark | TRIAGE (thinking) | any choice, 5 s later | "30 requests a second, capacity 60. Nothing to protect yet." |
 
-### C3 Bigger or more?
+### C3 Scale up first
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C3.warn.01 | ui | Forecast | 23:55:55 | Everyone's getting ready to film. Demand climbing to 90 a second. |
 | C3.chat.01 | chat | block: young father | forecast | video keeps buffering, my son's on in 5 |
 | C3.chat.02 | chat | block: kenji | forecast | heating alarm on 3rd floor beeping?? |
-| C3.triage.01 | bark | TRIAGE (eager) | tray shows the bigger server and a second server | "New toys! Scale up to a bigger server, or scale out with two?" |
+| C3.triage.01 | bark | TRIAGE (eager) | C3 starts with the SCALE UP card lit (the one target), unless the server is already bigger | "New toy! SCALE UP swaps your server for one twice as big." |
 | C3.triage.02 | bark | TRIAGE (thinking) | player racks a second server | "It's on! Why is it doing nothing? Is it shy?" |
-| C3.lux.01 | bark | Lux | 5 s after an idle second server | "The gateway only feeds one server." |
+| C3.lux.01 | bark | Lux | 5 s after an idle second server | "The gateway feeds one server. A second one needs a load balancer." |
 | C3.triage.03 | bark | TRIAGE (eager) | player swaps in the bigger server | "Swapping in the big one... 3, 2, 1... it's huge now. 120!" |
 | C3.triage.04 | bark | TRIAGE (panicking) | server over 100% for 4 s | "It's getting hot. Like, smell-it hot." |
 | C3.chat.03 | chat | stream: viewer | server dies | F |
-| C3.triage.nudge.choose.1 | bark | TRIAGE (thinking) | coach: the one server over its limit and dropping calls, both tray cards lit | "Too much for one server! The tray has two ideas." |
-| C3.triage.nudge.choose.2 | bark | TRIAGE (thinking) | coach: still over, 9 s later (then again every 25 s) | "Scale up, or scale out? I'm not saying. I'm pointing." |
+| C3.triage.nudge.choose.1 | bark | TRIAGE (thinking) | coach: C3, the gateway feeds one stock server, SCALE UP card lit, 10 s after C3 starts | "Too much for one server! Try the SCALE UP card." |
+| C3.triage.nudge.choose.2 | bark | TRIAGE (thinking) | coach: still not scaled up, 9 s later (then again every 25 s) | "SCALE UP onto your server. Same spot, twice the room!" |
 | C3.triage.nudge.idle | bark | TRIAGE (thinking) | coach: before the crew, a second server the gateway cannot feed, the idle server lit | "That one gets nothing. Right-click it: full refund!" |
-| C3.lux.nudge.idle | bark | Lux | coach: still idle, 9 s later (then again every 25 s) | "Sell the spare. Make the first one bigger." |
+| C3.lux.nudge.idle | bark | Lux | coach: still idle, 9 s later (then again every 25 s) | "Sell it back. SCALE UP the first one instead." |
 | C3.triage.rewind | scene | TRIAGE (sheepish) | a failure in C1 to C3 | "I recorded the last minute. Want to try that again?" |
 | C3.lux.rewind | scene | Lux | rewind accepted | "Yeah. Rewind." |
 
@@ -111,15 +114,23 @@ The rewind lines are used for a failure in C1, C2 or C3; only the challenge they
 ## C4 The district surge (23:56:30, a scripted near-loss)
 
 The block is meant to start failing here, whatever the player does. The lines escalate, the chat goes quiet one
-neighbour at a time, and TRIAGE panics.
+neighbour at a time, and TRIAGE panics. The player gets one clear task (Rolando, 31 Oct 2026): the CUT 3F key pulses
+and Lux names it once (`C4.lux.shed`); while it waits, TRIAGE says more and Lux says less. The crew break in 5 s after
+the cut, or on trust or time as before. Lines about the task are taken back the moment it is done.
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C4.warn.01 | ui | Surge warning | 10 s before | NEIGHBOURING BLOCKS CUT OFF. About 250 a second rerouting here in 10 s. |
-| C4.triage.01 | bark | TRIAGE (panicking) | warning | "250? We're built for 120! I did that math right, I checked!" |
+| C4.triage.01 | bark | TRIAGE (panicking) | warning | "250? We're built for 120! I checked! Twice! Okay, three times!" |
 | C4.lux.01 | bark | Lux | surge lands | "Hold. Hold. Hold." |
+| C4.lux.shed | bark | Lux | 1 s after "Hold", the CUT 3F key pulsing (the one task); withdrawn once it is cut | "Laundry floor. Cut it loose. Now." |
 | C4.flicker.01 | ui | Dip warning | 2 s before the dip | POWER FLICKER |
 | C4.triage.02 | bark | TRIAGE (panicking) | the big server goes dark | "Big server is down! Big server is DOWN!" |
+| C4.triage.05 | bark | TRIAGE (worried) | 1 s after C4.lux.shed, while the cut is still open | "Lux?" |
+| C4.lux.03 | bark | Lux | 1 s after C4.triage.05 | "I see it." |
+| C4.triage.06 | bark | TRIAGE (worried) | 1 s after C4.lux.03 | "There's more of it now." |
+| C4.lux.04 | bark | Lux | 1 s after C4.triage.06 | "I see that too." |
+| C4.triage.nudge.shed | bark | TRIAGE (eager) | still not cut, 6 s after C4.lux.04 | "The CUT key! It's glowing! It's glowing at you!" |
 | C4.chat.01 | chat | block: mrs okafor | 5 s into errors | it's gone again |
 | C4.chat.02 | chat | block: young father | retries climb | calling... calling... calling... |
 | C4.chat.seed | chat | block: unnamed neighbour | 15 s into the surge | wait isn't she the Takaha— |
@@ -128,7 +139,7 @@ neighbour at a time, and TRIAGE panics.
 | C4.cut.button | ui | Laundry cut | becomes available | Cut the laundry floor loose (about 40 a second) |
 | C4.lux.cut | bark | Lux | player cuts the laundry floor | "Sorry, laundry. Washers can wait till next year." |
 | C4.chat.cut | chat | block: kenji | after the cut | who turned off the arcade |
-| C4.triage.cut | bark | TRIAGE (thinking) | 3 s after the cut | "Less demand. The database is breathing again. Barely." |
+| C4.triage.cut | bark | TRIAGE (thinking) | 3 s after the cut; the crew break in 5 s after the cut | "Less demand. The database is breathing again. Barely." |
 | C4.chat.03 | chat | block (system) | 20 s into the surge | Mrs Okafor left the chat |
 | C4.chat.04 | chat | stream: viewer | 25 s | is the stream frozen or is it just me |
 | C4.grandma.01 | bark | Grandma (through the door) | 30 s | "Two minutes, love! Come down!" |
@@ -139,26 +150,27 @@ C4.chat.seed is a story seed: the message is cut off mid-word, the chat drops, a
 ## C5 The rescue (23:57:30, scene then board)
 
 The crew break into her goggles uninvited, and the board goes fully immersive for the only time. The scene plays
-while the sim is frozen; the lines after it are barks.
+while the sim is frozen; the lines after it are barks. Tightened (Rolando, 31 Oct 2026): Rei takes command and sets
+the test, Mika points at the demand gauge, Ozzie supplies the money and one joke, and control comes straight back.
 
 ### Scene
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C5.triage.01 | scene | TRIAGE (panicking) | goggles glitch | "Someone's in our goggles. Someone is IN our goggles." |
-| C5.rei.01 | scene | Rei | hologram lands | "Cute setup. Move over." |
-| C5.lux.01 | scene | Lux | | "Who are you? Get out of my—" |
-| C5.rei.02 | scene | Rei | | "Night Shift. We've been watching your block. You were doing fine. Then you weren't." |
-| C5.mika.01 | scene | Mika | | "Breathe. Read the chart." |
-| C5.mika.02 | scene | Mika | | "The surge is settling. About 120 a second for the next minute." |
+| C5.rei.01 | scene | Rei | hologram lands | "You built this?" |
+| C5.lux.01 | scene | Lux |  | "Are you here to complain?" |
+| C5.rei.02 | scene | Rei |  | "Night Shift. We brought the parts. You're doing the wiring." |
+| C5.mika.01 | scene | Mika |  | "Breathe. Watch the demand gauge. It's settling to about 120 a second." |
+| C5.mika.02 | scene | Mika | not played (31 Oct 2026: folded into C5.mika.01) | "The surge is settling. About 120 a second for the next minute." |
 | C5.rei.03 | scene | Rei | crew cable drops | "Here. A load balancer. It spreads traffic across every server behind it, and its health check skips any that's dark." |
 | C5.rei.cut | scene | Rei | only if the laundry floor was cut | "You cut the laundry loose." (beat) "...Who taught you that?" |
 | C5.lux.cut | scene | Lux | only after C5.rei.cut | "Nobody." |
-| C5.ozzie.01 | scene | Ozzie | | "I'll front you 100. It goes on my tab." |
-| C5.ozzie.02 | scene | Ozzie | | "Six servers. Buy six, sleep tonight." |
-| C5.mika.03 | scene | Mika | | "Six is a waste. Two will do." |
-| C5.ozzie.03 | scene | Ozzie | | "Two is how you end up here again." |
-| C5.rei.04 | scene | Rei | | "Stop. She can count." (to Lux) "So count." |
+| C5.ozzie.01 | scene | Ozzie |  | "I'll front you 100. Waste it and I'm telling your grandma." |
+| C5.ozzie.02 | scene | Ozzie | not played (31 Oct 2026: the server-count argument is cut) | "Six servers. Buy six, sleep tonight." |
+| C5.mika.03 | scene | Mika | not played (31 Oct 2026: the server-count argument is cut) | "Six is a waste. Two will do." |
+| C5.ozzie.03 | scene | Ozzie | not played (31 Oct 2026: the server-count argument is cut) | "Two is how you end up here again." |
+| C5.rei.04 | scene | Rei | last line: control goes back to the player | "Clock's running. Show us." |
 | C5.mika.04 | scene | Mika | not played in Session 0 (Regroup is kept for a later session) | "One more thing. When it gets fast, hit this. Time slows down. You get it once." |
 
 ### Back on the board
@@ -168,7 +180,7 @@ while the sim is frozen; the lines after it are barks.
 | C5.triage.02 | bark | TRIAGE (sheepish) | board returns | "The big server cooked. The crew put a normal one back. Sorry." |
 | C5.triage.03 | bark | TRIAGE (thinking) | 10 s, if under 3 live servers | "120 requests a second. Each server does 60. I'm not saying." |
 | C5.rei.05 | bark | Rei | 3 servers live behind the balancer | "There it is." |
-| C5.ozzie.04 | bark | Ozzie | 5 or more servers | "See? Six. Sleep tonight." |
+| C5.ozzie.04 | bark | Ozzie | 5 or more servers | "That's a lot of servers. I respect it." |
 | C5.mika.05 | bark | Mika | 5 or more servers | "Look at the chart. Half of that capacity is just heating your room." |
 | C5.chat.01 | chat | block: young father | errors stop | it's back!!! |
 | C5.triage.nudge.splitter | bark | TRIAGE (thinking) | coach: the gateway does not feed the load balancer, ghost wire lit | "The gateway isn't feeding the load balancer. Connect them!" |
@@ -195,7 +207,9 @@ The crew go quiet and the call is Lux's. The outcome lines branch on what holds 
 | --- | --- | --- | --- | --- |
 | C6.warn.01 | ui | Forecast | 23:59:00 | MIDNIGHT: everyone calls and streams at once. About 150 a second. |
 | C6.rei.01 | bark | Rei | the midnight forecast shows | "Your call. How many?" |
+| C6.lux.forecast | bark | Lux | 2 s after C6.rei.01 (moved here from the surge: now she has the tools) | "Midnight wave. Build before it hits, not after." |
 | C6.triage.01 | bark | TRIAGE (thinking) | forecast up 8 s | "150 req/s, 60 per server. Two and a half. Can't buy half a server." |
+| C6.triage.03 | bark | TRIAGE (thinking) | 3 s after C6.triage.01 | "And one's going to lose power..." |
 | C6.ozzie.01 | bark | Ozzie | forecast up, 5 or more boxes running | "Now you're talking." |
 | C6.mika.01 | bark | Mika | forecast up, 2 or fewer boxes running | "Brave." |
 | C6.tv.01 | bark | TV downstairs | 23:59:30 | "Thirty seconds, Halation!" |
@@ -232,7 +246,7 @@ too long, so they never hold up a hint.
 | --- | --- | --- | --- | --- |
 | C1.lux.placed | bark | Lux | a server sits on the table with no wire into it for 3 s | "Good. Now give it a wire, or it's just a very expensive box." |
 | C1.lux.live | bark | Lux | 1 s after C1.triage.03 (the lights come back) | "There. Hi, block. Missed you." |
-| C1.lux.chat | bark | Lux | 4 s after the stream's "first try lol" | "Chat, I literally plugged in one cable. Calm down. ...Thank you." |
+| C1.lux.chat | bark | Lux | 4 s after the stream's "first try lol" | "Chat, I literally connected a box. Calm down. ...Thank you." |
 | C1.lux.goodcall | bark | Lux | 1 s after C1.triage.06 (TRIAGE gets headroom right) | "...Fine. Good call. Don't let it go to your lens." |
 | C1.lux.moved | bark | Lux | the first time the player moves a placed part | "Tidy board, tidy mind." |
 | C2.lux.headroom | bark | Lux | 2 s after C2.triage.after ("Nothing to protect yet") | "Plenty of room. Enjoy it. It never lasts." |
@@ -246,37 +260,41 @@ too long, so they never hold up a hint.
 | C3.lux.broke | bark | Lux | from C3 to midnight, under 60 credits with a server on the board, for 3 s | "I'm broke. Chat, I'm not begging. ...I'm a little bit begging." |
 | C3.lux.tip | bark | Lux | a viewer covers the move that would help (the help tip) | "Thank you! That's going straight into servers." |
 | C3.lux.thanks | bark | Lux | the first lights-are-back tip | "Whoa. Okay. Somebody's getting a shout-out at midnight." |
-| C4.lux.forecast | bark | Lux | 1 s after the district surge forecast (C4.triage.01) | "Big wave coming. Build before it hits, not after." |
+| C4.lux.forecast | bark | Lux | 1 s after the district surge forecast (C4.triage.01) | "250. Nothing on this board holds that." |
 | C4.lux.forecast2 | bark | Lux | 5 s before the surge, capacity still under it, while Lux is alone | "Five seconds. Come on, come on..." |
-| C4.lux.dark | bark | Lux | 1 s after the big server goes dark (C4.triage.02) | "Lost one! Everybody stay calm. That includes you, TRIAGE." |
-| C4.lux.retry | bark | Lux | 1 s after TRIAGE asks about refresh (C4.triage.03) | "Right. Every refresh is one more request. Stop it, guys!" |
+| C4.lux.dark | bark | Lux | 1 s after the big server goes dark (C4.triage.02) | "Lost one. Stay calm, TRIAGE." |
+| C4.lux.retry | bark | Lux | 1 s after TRIAGE asks about refresh (C4.triage.03) | "Every refresh is another request. Stop. Refreshing." |
 | C4.lux.okafor | bark | Lux | 2 s after Mrs Okafor's "it's gone again", while Lux is alone | "Hang on, Mrs Okafor. Lift's next." |
 | C5.lux.recover | bark | Lux | 2 s after the young father's "it's back!!!" | "Okay. Okay. We're back. Breathe." |
-| C6.lux.spare | bark | Lux | 3 s after the midnight dip takes a box dark, with nothing dropping | "See? That's why you keep a spare." |
-| C6.lux.countdown | bark | Lux | ten seconds to midnight | "Ten seconds. Baachan, if you're watching... watch this." |
+| C6.lux.spare | bark | Lux | 4 s after the midnight dip takes a box dark, with nothing dropping (time for the reroute to show) | "See? That's why you keep a spare." |
+| C6.lux.countdown | bark | Lux | twenty seconds to midnight, clear of the dip | "Almost there. Baachan, if you're watching... watch this." |
 | C6.lux.midnight | bark | Lux | 2 s after C6.lux.hold | "Happy New Year, block. Lights stay on." |
 | C7.lux.count | bark | Lux | 1 s after TRIAGE's "one server and a bit?" | "I built you, and you still can't count." |
 
 ## C8 Debrief and Night Book (00:01:00)
 
-Goggles up, back in the rainy room with fireworks outside. Rei grades the night over her earbuds, and the real
-terms are named for the first time. Grade lines branch on the raw results; the thresholds behind "some requests
-dropped" are not set yet, so a ticket that needs exact numbers stops and asks.
+Goggles up, back in the rainy room with fireworks outside. Kept short (Rolando, 31 Oct 2026): Rei acknowledges the
+night and grades the build in a line each, calling out only the Solace money and Ozzie's tab when they cost; then
+TRIAGE's "Stream saved" and Rei's invitation while the block is still celebrating. The real terms and the interview
+answer are in the Night Book, a page per click, and CLOSE BOOK skips to the title card. Grade lines branch on the raw
+results; the thresholds behind "some requests dropped" are not set yet, so a ticket that needs exact numbers stops
+and asks.
 
 ### Rei grades the night
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| C8.rei.open | scene | Rei | debrief opens | "Right. Let's see what you did." |
+| C8.rei.open | scene | Rei | not played (31 Oct 2026: the debrief opens on C8.rei.ack) | "Right. Let's see what you did." |
+| C8.rei.ack | scene | Rei | debrief opens | "Whole block lit through midnight. On your first night." |
 | C8.rei.sizing.good | scene | Rei | midnight held on fewer than 5 boxes | "You counted before you built. Most people don't." |
 | C8.rei.sizing.bad | scene | Rei | midnight failed, or 5 or more boxes ran | "You built first and counted later. Count first." |
 | C8.rei.banner.pay | scene | Rei | paid the banner | "And you paid Solace. For a minute of nothing." |
-| C8.rei.banner.skip | scene | Rei | ignored or binned it | "You didn't take Solace's offer. Good." |
+| C8.rei.banner.skip | scene | Rei | not played (31 Oct 2026: the debrief keeps one acknowledgement; the rest is in the Night Book) | "You didn't take Solace's offer. Good." |
 | C8.rei.debt | scene | Rei | Ozzie's tab above 100 | "You owe Ozzie. He will remember." |
 | C8.ozzie.debt | scene | Ozzie | after C8.rei.debt | "I'll remember." |
-| C8.rei.waste | scene | Rei | 5 or more boxes at midnight | "Half those servers did nothing but cost." |
-| C8.rei.down | scene | Rei | scaled down in C7 | "And you turned them off after. That's rarer than it should be." |
-| C8.rei.close | scene | Rei | grades done | "Now the words for it. You'll need them." |
+| C8.rei.waste | scene | Rei | not played (31 Oct 2026: the debrief keeps one acknowledgement; the rest is in the Night Book) | "Half those servers did nothing but cost." |
+| C8.rei.down | scene | Rei | not played (31 Oct 2026: the debrief keeps one acknowledgement; the rest is in the Night Book) | "And you turned them off after. That's rarer than it should be." |
+| C8.rei.close | scene | Rei | not played (31 Oct 2026: the debrief keeps one acknowledgement; the rest is in the Night Book) | "Now the words for it. You'll need them." |
 
 ### The terms, named (three groups)
 
@@ -290,7 +308,7 @@ dropped" are not set yet, so a ticket that needs exact numbers stops and asks.
 
 | ID | Kind | Speaker | Line |
 | --- | --- | --- | --- |
-| C8.rei.interview | scene | Rei | "Someday somebody in a nice shirt will ask you how to scale a web app from one server. Here's your answer." |
+| C8.rei.interview | scene | Rei (Night Book, the interview page, read when the player turns to it) | "Someday somebody in a nice shirt will ask you how to scale a web app from one server. Here's your answer." |
 | C8.card.title | ui | Card | How would you scale a web app from a single server? |
 | C8.card.1 | ui | Card | 1. Pin down who uses it and what must stay up. |
 | C8.card.2 | ui | Card | 2. Estimate requests per second: users times how often they call. Size for the peak, not the average. |

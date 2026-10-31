@@ -181,6 +181,7 @@ Every `Frame` field (`tests/live-docs.test.ts` checks this list against the inte
 | `rescue` | When and why the crew came in (`{at, by}`), or null |
 | `regroup` | `{charges, handedOver, left}` for the Regroup key |
 | `banner` | The C2 banner's answer (`{choice, at}`), or null |
+| `solaceCaught` | Requests the paid Solace banner has caught this run: overflow only, so zero while nothing drops (31 Oct 2026) |
 | `midnight` | The stroke of twelve's result, or null before it |
 | `failure` | The failure the board froze on, or null |
 | `rewinds` | Every rewind so far |

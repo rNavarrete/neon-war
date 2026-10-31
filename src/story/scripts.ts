@@ -73,6 +73,8 @@ const COLD_OPEN: SceneScript = {
     { lineId: 'C0.chat.03' },
     { lineId: 'C0.chat.04' },
     { lineId: 'C0.triage.02' },
+    // The block needs fixing again: grief gives way to her dry, confident streamer voice (31 Oct 2026).
+    { lineId: 'C0.lux.04', face: 'lux/vn/relieved' },
     { lineId: 'C0.lux.02', face: 'lux/vn/neutral', cue: 'jackin' },
   ],
 };
@@ -84,19 +86,17 @@ const RESCUE: SceneScript = {
   where: 'board',
   look: 'vn',
   steps: [
+    // Rolando, 31 Oct 2026: the densest moment, tightened. Rei takes command and sets the test,
+    // Mika points at the demand gauge, Ozzie brings the money and one joke, then the board is hers.
     { lineId: 'C5.triage.01' },
     { lineId: 'C5.rei.01' },
     { lineId: 'C5.lux.01', face: 'lux/vn/board-shocked' },
     { lineId: 'C5.rei.02' },
-    { lineId: 'C5.mika.01' },
-    { lineId: 'C5.mika.02', face: 'mika/vn/explain' },
+    { lineId: 'C5.mika.01', face: 'mika/vn/explain' },
     { lineId: 'C5.rei.03', cue: 'cable' },
     { lineId: 'C5.rei.cut', onlyIf: 'laundryCut', face: 'rei/vn/impressed' },
     { lineId: 'C5.lux.cut', onlyIf: 'laundryCut', face: 'lux/vn/board-deadpan' },
     { lineId: 'C5.ozzie.01', face: 'ozzie/vn/sums' },
-    { lineId: 'C5.ozzie.02' },
-    { lineId: 'C5.mika.03', face: 'mika/vn/focused' },
-    { lineId: 'C5.ozzie.03', face: 'ozzie/vn/sceptical' },
     { lineId: 'C5.rei.04', face: 'rei/vn/stern' },
     // C5.mika.04 (Mika hands over Regroup) is not in Session 0: BROWNOUT.regroup.inSession.
   ],

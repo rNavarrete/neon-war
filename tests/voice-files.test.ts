@@ -95,11 +95,12 @@ describe('voice manifest', () => {
   it('lists every spoken line in each language, apart from the known gaps', () => {
     // Two more since the idle-server nudges (30 Oct 2026); 133 since the cold open's check-in beat
     // (Rolando, 30 Oct 2026) added C0.lux.03 and C0.triage.02.
-    expect(voicedLines()).toHaveLength(133);
+    // 145 since Rolando's story pass (31 Oct 2026) added 12 spoken lines, not recorded yet.
+    expect(voicedLines()).toHaveLength(145);
     const KNOWN_GAPS = knownGaps();
-    // 20 coach nudges until they were recorded (Rolando, 30 Oct 2026): none left. The cold open's
-    // check-in beat was three until it was recorded the same day.
-    expect(KNOWN_GAPS.ja.size).toBe(0);
+    // 20 coach nudges until they were recorded (Rolando, 30 Oct 2026). The story pass's 12 new lines
+    // are the gaps now, listed under "Not recorded yet" in docs/VOICE.md.
+    expect(KNOWN_GAPS.ja.size).toBe(12);
     for (const lang of LANGS) {
       const listed = new Set(manifest[lang]);
       const gaps = voicedLines().filter((id) => !listed.has(id));

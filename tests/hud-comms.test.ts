@@ -47,6 +47,7 @@ import {
   cutShort,
   dwellFor,
   enqueueComms,
+  withdrawComms,
   extendForVoice,
   logLines,
   logOpen,
@@ -82,7 +83,14 @@ import { mixerLangFor } from '../src/game/mixer';
 import { type Occurrence, detectOccurrences } from '../src/game/occurrences';
 import { newRun } from '../src/game/run';
 import { chatOf } from '../src/scenes/hud/chat';
-import { type CueHost, NEW_DIRECTOR, cueViewOf, direct, emptyCueView } from '../src/scenes/hud/cues';
+import {
+  type CueHost,
+  NEW_DIRECTOR,
+  SUPERSEDED,
+  cueViewOf,
+  direct,
+  emptyCueView,
+} from '../src/scenes/hud/cues';
 import { isLesson } from '../src/scenes/hud/lineMeta';
 import { BROWNOUT } from '../src/sim/brownout';
 
@@ -915,6 +923,8 @@ function clipSeconds(id: LineId, voices: 'ja' | 'en' | 'off'): number {
 interface Fired {
   readonly id: LineId;
   readonly at: number;
+  /** Lines the HUD withdraws at this clock (cues.ts SUPERSEDED) instead of a line to enqueue. */
+  readonly withdraw?: readonly LineId[];
 }
 
 /** The band lines the cue table fires through best play, on the HUD clock from c1, at speed 1. */
@@ -929,6 +939,7 @@ function nightCues(): Fired[] {
   let s = NEW_DIRECTOR;
   let clock = 0;
   const out: Fired[] = [];
+  const withdrawn = new Set<number>();
   for (let n = 0; n < 20_000 && r.now < C.c8 && !r.play.failure; n++) {
     r.tick(0.1);
     clock = Math.round((clock + 0.1) * 1e6) / 1e6;
@@ -944,6 +955,13 @@ function nightCues(): Fired[] {
     const o = direct(s, v);
     s = o.state;
     for (const id of o.fired) if (!chatOf(id) && LINES[id].kind === 'bark') out.push({ id, at: clock });
+    // As HudScene does: instructions already done are taken back (once each here).
+    SUPERSEDED.forEach((sup, i) => {
+      if (!withdrawn.has(i) && sup.done(v)) {
+        withdrawn.add(i);
+        out.push({ id: sup.ids[0], at: clock, withdraw: sup.ids });
+      }
+    });
   }
   return out;
 }
@@ -959,7 +977,8 @@ function replayBand(cues: readonly Fired[], voices: 'ja' | 'en' | 'off') {
     const clock = f / 60;
     while (k < cues.length && cues[k].at <= clock) {
       const prev = s;
-      s = enqueueComms(s, cues[k++].id, clock);
+      const q = cues[k++];
+      s = q.withdraw ? withdrawComms(s, q.withdraw, clock) : enqueueComms(s, q.id, clock);
       const c = cutShort(prev, s);
       if (c) cut.push(c);
     }
@@ -971,7 +990,11 @@ function replayBand(cues: readonly Fired[], voices: 'ja' | 'en' | 'off') {
       shown.push({ id, since: clock, fired: cues.find((q) => q.id === id)!.at });
     }
   }
-  const dropped = cues.filter((q) => !shown.some((x) => x.id === q.id)).map((q) => q.id);
+  // A line taken back because the player already did it (or the crew came) is not a drop.
+  const taken = new Set(cues.flatMap((q) => q.withdraw ?? []));
+  const dropped = cues
+    .filter((q) => !q.withdraw && !taken.has(q.id) && !shown.some((x) => x.id === q.id))
+    .map((q) => q.id);
   return { shown, cut, dropped, state: s };
 }
 
@@ -1038,6 +1061,9 @@ describe('comms-6: voiced lines and the queue at speed 1', () => {
         t,
       ).toBe(true);
     const off = replayBand(cues, 'off');
+    // Withdrawals, and the lines they took back on purpose (cues.ts SUPERSEDED), are not drops.
+    const takenBack = new Set(cues.flatMap((c) => c.withdraw ?? []));
+    const gone = (c: Fired): boolean => c.withdraw !== undefined || takenBack.has(c.id);
     const kept = (id: LineId): boolean =>
       ['LUX', 'CREW', 'HOUSE', 'WARNING'].includes(tag(id)) || isLesson(id);
     for (const voices of ['ja', 'en'] as const) {
@@ -1052,10 +1078,10 @@ describe('comms-6: voiced lines and the queue at speed 1', () => {
         expect(tag(id), id).toBe('HINT');
       }
       // Every crew and HOUSE line the night fires shows.
-      for (const q of cues.filter((c) => ['CREW', 'HOUSE', 'LUX'].includes(tag(c.id))))
+      for (const q of cues.filter((c) => !gone(c) && ['CREW', 'HOUSE', 'LUX'].includes(tag(c.id))))
         expect(on.state.history.includes(q.id) || on.shown.some((x) => x.id === q.id), q.id).toBe(true);
       // Every WARNING shows, and pre-empts exactly as it does without voices.
-      for (const q of cues.filter((c) => tag(c.id) === 'WARNING'))
+      for (const q of cues.filter((c) => !gone(c) && tag(c.id) === 'WARNING'))
         expect(
           on.shown.some((x) => x.id === q.id),
           q.id,

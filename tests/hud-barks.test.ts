@@ -144,9 +144,22 @@ describe('bark and chat cues', () => {
     expect(fired).toEqual(expect.arrayContaining(['C3.triage.02', 'C3.lux.01']));
   });
 
-  it('C6: the forecast opens with Rei, TRIAGE does the math after 8 s, and the boxes running get a reaction', () => {
+  it('C6: the forecast opens with Rei, Lux says build before it hits, TRIAGE does the math after 8 s, and the boxes running get a reaction', () => {
     const open = { now: C.c6 - 10, cardClosed: true, servers: 3 };
-    expect(play([view(open), view({ ...open, now: C.c6 - 2 })])).toEqual(['C6.rei.01', 'C6.triage.01']);
+    // "Build before it hits" moved here from the surge (Rolando, 31 Oct 2026): now she has the tools.
+    expect(play([view(open), view({ ...open, now: C.c6 - 2 })])).toEqual([
+      'C6.rei.01',
+      'C6.lux.forecast',
+      'C6.triage.01',
+    ]);
+    // Then TRIAGE points back at the failure the forecast names, 3 s after its sum.
+    expect(play([view(open), view({ ...open, now: C.c6 - 2 }), view({ ...open, now: C.c6 + 1 })])).toEqual([
+      'C6.rei.01',
+      'C6.lux.forecast',
+      'C6.triage.01',
+      'C6.triage.03',
+    ]);
+    expect(LINES['C6.triage.03'].text).toBe("And one's going to lose power...");
     expect(play([view({ ...open, servers: 2 })])).toContain('C6.mika.01');
     expect(play([view({ ...open, servers: 6 })])).toContain('C6.ozzie.01');
     expect(play([view({ ...open, now: C.c6 - 11 })])).toEqual([]);

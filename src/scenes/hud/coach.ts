@@ -18,16 +18,15 @@
 //   store   a server is fed but has no wire on to the database
 //   behind  after the crew arrive, a server sits outside the splitter
 //   replace a box cooked and waits to be swapped (after the crew; before them a death rewinds)
-//   choose  C3: the one box is over its limit and nothing has changed yet (both options light up;
-//           the coach never says which one)
+//   choose  C3: the one box the gateway feeds is still stock (the SCALE UP card lights at once; the
+//           nudges name it if nothing happens: scale up first, the second server needs the crew)
 //
 // The nudges only explain how the board works (drag this onto that). They never give a number or
 // a sizing answer: TRIAGE hints, never answers. Pure: no Phaser, no clock; time comes in as `dt`
 // (HUD seconds, counted only while the board runs). Allocates only when the step changes.
 
 import type { Part, Wire } from '../../sim/board';
-import { capacityOf } from '../../sim/board';
-import { BROWNOUT, BROWNOUT_RULES } from '../../sim/brownout';
+import { BROWNOUT } from '../../sim/brownout';
 import type { LineId } from '../../strings';
 
 const C = BROWNOUT.challenges;
@@ -88,8 +87,9 @@ export const COACH_TIMING = Object.freeze({
 const STEP_TIMING: Readonly<Partial<Record<CoachStep, { highlightAfter: number; firstNudge: number }>>> = {
   // The first drag is the very first thing anyone does: give them a moment to look around first.
   place: { highlightAfter: 4, firstNudge: 8 },
-  // A box going over its limit is the C3 puzzle: help late, and only with "look at the tray".
-  choose: { highlightAfter: 3, firstNudge: 4 },
+  // C3's one tool (Rolando, 31 Oct 2026: scale up first, the second server waits for the crew): the
+  // SCALE UP card lights as TRIAGE names it, and the nudges come only if nothing happens.
+  choose: { highlightAfter: 0, firstNudge: 10 },
 };
 
 /** The nudges for each step, gentlest first; past the last, the last one comes back now and then. */
@@ -206,16 +206,12 @@ export function coachProblem(f: CoachInput): CoachProblem | null {
     if (idle) return problem('idle', `idle:${idle.id}`, NO_IDS, [idle.id], null);
   }
 
-  // C3: the box the gateway feeds is over its limit and drops calls, with no bigger box yet.
-  if (!f.rescued && f.now >= C.c3 && f.now < C.c4 && f.dropped > 0 && gwTo !== null) {
+  // C3: the box the gateway feeds is still stock while the climb comes. One target: the SCALE UP
+  // card (Rolando, 31 Oct 2026: a second server leaves its twin idle until the load balancer).
+  if (!f.rescued && f.now >= C.c3 && f.now < C.c4 && gwTo !== null) {
     const box = servers.find((s) => s.id === gwTo);
-    if (
-      box &&
-      box.boost === undefined &&
-      !f.offline.includes(box.id) &&
-      (f.load[box.id] ?? 0) >= capacityOf(box, BROWNOUT_RULES) - 1e-6
-    )
-      return problem('choose', 'choose', ['overclock', 'server'], [box.id], null);
+    if (box && box.boost === undefined && wired(f.wires, box.id, 'database'))
+      return problem('choose', 'choose', ['overclock'], [box.id], null);
   }
   return null;
 }

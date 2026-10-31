@@ -35,18 +35,30 @@ export type PendingResults = Pick<
   'droppedRequests' | 'wastedCredits' | 'scaledDown' | 'midnightHeld' | 'serversAtMidnight'
 >;
 
-/** Rei's grade lines for these results, in the order docs/SCRIPT.md lists them. */
+/**
+ * Rei's lines for these results, in the order docs/SCRIPT.md lists them. Rolando, 31 Oct 2026: the
+ * tail after midnight was too long, so Rei acknowledges the night in a line, grades the build in one
+ * more, and calls out only what costs the player later (the Solace money, Ozzie's tab). The terms and
+ * the interview answer moved into the Night Book, read at the player's own pace.
+ */
 export function debriefLines(r: DebriefResults): LineId[] {
-  const lines: LineId[] = ['C8.rei.open'];
+  const lines: LineId[] = ['C8.rei.ack'];
   // Graded on what was built (GAME.md "Final sizing"): midnight held without boxes that only cost.
   const sizedRight = r.midnightHeld && r.serversAtMidnight < BROWNOUT.finalSizing.waste;
   lines.push(sizedRight ? 'C8.rei.sizing.good' : 'C8.rei.sizing.bad');
-  lines.push(r.banner === 'pay' ? 'C8.rei.banner.pay' : 'C8.rei.banner.skip');
+  if (r.banner === 'pay') lines.push('C8.rei.banner.pay');
   if (r.ozzieTab > BROWNOUT.ozzie.front) lines.push('C8.rei.debt', 'C8.ozzie.debt');
-  if (r.serversAtMidnight >= BROWNOUT.finalSizing.waste) lines.push('C8.rei.waste');
-  if (r.scaledDown) lines.push('C8.rei.down');
-  lines.push('C8.rei.close');
   return lines;
+}
+
+/** The Night Book's pages, in the order a click turns them; the player can close it on any one. */
+export const BOOK_PAGES = ['lesson', 'terms', 'interview'] as const;
+export type BookPage = (typeof BOOK_PAGES)[number];
+
+/** The page a click turns to from `page`, or null past the last one (the book closes). */
+export function nextBookPage(page: BookPage): BookPage | null {
+  const i = BOOK_PAGES.indexOf(page);
+  return i + 1 < BOOK_PAGES.length ? BOOK_PAGES[i + 1] : null;
 }
 
 /** Build the results from the run's session plus what only ENG-503's sim knows. */
