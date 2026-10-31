@@ -18,6 +18,8 @@ import {
 } from '../src/sim/play';
 import type { Part } from '../src/sim/board';
 import { LINES, type LineId } from '../src/strings';
+import { SCRIPTS } from '../src/story/scripts';
+import { fillerGap } from '../src/story/chatPanel';
 
 const C = BROWNOUT.challenges;
 const MIDNIGHT = BROWNOUT.clock.midnight;
@@ -283,5 +285,35 @@ describe('Solace: an unmistakable failed promise, and nobody left stuck', () => 
     p = ok(rackServer(p, 's2'));
     const r = fitKit(p, 'server-p1');
     expect(r.ok).toBe(true);
+  });
+});
+
+describe('the cold open: the chat blows up before TRIAGE says so (Rolando, 31 Oct 2026)', () => {
+  it('lands every block message before TRIAGE wakes', () => {
+    expect(SCRIPTS.C0.steps.map((s) => s.lineId)).toEqual([
+      'C0.tv.01',
+      'C0.chat.01',
+      'C0.tv.02',
+      'C0.chat.02',
+      'C0.grandma.01',
+      'C0.chat.03',
+      'C0.lux.01',
+      'C0.chat.04',
+      'C0.triage.01',
+      'C0.lux.03',
+      'C0.triage.02',
+      'C0.lux.04',
+      'C0.lux.02',
+    ]);
+  });
+
+  it('speeds the filler up each time, down to a floor', () => {
+    expect(fillerGap(0, 0)).toBe(3);
+    expect(fillerGap(0, 0.5)).toBe(4.5);
+    expect(fillerGap(1, 0)).toBe(2.25);
+    expect(fillerGap(2, 0)).toBe(1.6875);
+    expect(fillerGap(4, 0)).toBe(0.94921875);
+    expect(fillerGap(5, 0)).toBe(0.9);
+    expect(fillerGap(20, 0.99)).toBe(0.9);
   });
 });

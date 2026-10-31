@@ -19,23 +19,25 @@ two differ, GAME.md wins on rules and numbers, and this file wins on wording.
 
 ## C0 Cold open (23:51:30, click to advance)
 
-Rain, test fireworks, Lux alone on her bed with her mum's photo; the clock flickers to 02:14 for one frame; the
-drone wakes and checks on her; the phone lights up; goggles down. Every line waits for a click, like every other scene; nothing
+Rain, test fireworks, Lux alone on her bed with her mum's photo. Her stream chat starts blowing up from the
+TV's second line, before anyone in the room says a word about it (Rolando, 31 Oct 2026): one block message
+per click, and the filler between them comes faster and faster. The clock flickers to 02:14 for one frame; the
+buzzing wakes the drone, which checks on her and only then reads the chat out; goggles down. Every line waits for a click, like every other scene; nothing
 plays on a timer. The run's clock holds at 23:51:30 until the goggles come down, then C1 starts at 23:51:45.
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C0.tv.01 | scene | TV downstairs | first line, under the rain | "...and Halation, we are five minutes from midnight!" |
+| C0.chat.01 | chat | block: kenji | lands with C0.tv.02's click: the phone buzzes on the bed and the stream chat wakes before anyone in the room notices | lux the net's doing the thing again |
 | C0.tv.02 | scene | TV downstairs | click | "Get your people close. Get your cameras ready!" |
+| C0.chat.02 | chat | block: young father | lands with C0.grandma.01's click; the filler starts and speeds up behind it | I need to call my son at midnight!! |
 | C0.grandma.01 | scene | Grandma (through the door) | click | "Lux, it's almost midnight, love. Come downstairs." |
+| C0.chat.03 | chat | block: mrs okafor | lands with C0.lux.01's click, while she stares at the photo | Countdown stream keeps freezing. Is it you or the rain? |
 | C0.lux.01 | scene | Lux | click, still looking at the photo; the clock flickers to 02:14 | "In a minute, Baachan." |
+| C0.chat.04 | chat | block: kenji | lands with C0.triage.01's click: the buzzing wakes the drone | lux pls |
 | C0.triage.01 | bark | TRIAGE (worried) | click, the drone wakes and sees her teary over the photo | "Hey... you okay, Lux?" |
 | C0.lux.03 | scene | Lux | click, wiping her eyes (composing face) | "Yeah. I'm fine." |
-| C0.chat.01 | chat | block: kenji | click: the phone lights up, the four messages roll in one by one | lux the net's doing the thing again |
-| C0.chat.02 | chat | block: young father | with C0.chat.01 | I need to call my son at midnight!! |
-| C0.chat.03 | chat | block: mrs okafor | with C0.chat.01 | Countdown stream keeps freezing. Is it you or the rain? |
-| C0.chat.04 | chat | block: kenji | with C0.chat.01 | lux pls |
-| C0.triage.02 | bark | TRIAGE (thinking) | same click, reading the chat as it rolls in | "Uh... your chat's blowing up. The block's net is dropping again." |
+| C0.triage.02 | bark | TRIAGE (thinking) | click, after Lux says she's fine: TRIAGE finally reads the chat that has been blowing up all scene | "Uh... your chat's blowing up. The block's net is dropping again." |
 | C0.lux.04 | scene | Lux | click: the smile comes back, half a joke, half the streamer voice | "This is what I get for rebuilding the block's power app. Lifetime tech support." |
 | C0.lux.02 | scene | Lux | click: the jack-in CG fills the screen, a finger on the visor as it boots; the next click dissolves her room into the grid (a second CG) and a cyan flash cuts to the board | "Yeah. Let's go look." |
 

@@ -73,30 +73,34 @@ test('the cold open waits for a click on every line, then hands over to the boar
   expect(s.active).toBe(true);
   expect(s.runHeld).toBe(true);
 
+  // The chat blows up before anyone in the room says so (Rolando, 31 Oct 2026): one block message
+  // lands with each click from the TV's second line, before TRIAGE is even awake.
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.tv.02');
+  expect(s.chat).toEqual(["kenji: lux the net's doing the thing again"]);
+  expect(s.onStage).toEqual([]);
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.grandma.01');
+  expect(s.chat).toHaveLength(2);
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.01');
   expect(s.nameplate).toBe('Lux');
   expect(s.portrait).toBe('portrait:lux/vn/photo');
-  expect(s.chat).toEqual([]);
+  expect(s.chat).toHaveLength(3);
+  expect(s.onStage).toEqual(['Lux']);
 
-  // TRIAGE wakes and checks on her before the phone lights up (Rolando, 30 Oct 2026: the old "it's the
-  // net again" came before the chat had said anything), so the chat stays empty for two more lines.
+  // The fourth message wakes TRIAGE, who checks on her first...
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.triage.01');
-  expect(s.chat).toEqual([]);
+  expect(s.chat).toHaveLength(4);
+  expect(s.chat[3]).toBe('kenji: lux pls');
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.03');
-  expect(s.chat).toEqual([]);
 
-  // The phone lights up with the block's four messages as TRIAGE reads them out.
+  // ...and only then reads out the chat that has been blowing up all scene.
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.triage.02');
   expect(s.chat).toHaveLength(4);
-  expect(s.chat[0]).toBe("kenji: lux the net's doing the thing again");
   await page.screenshot({ path: 'test-results/screens/cold-open.png' });
 
   // The block needs her again (Rolando, 31 Oct 2026): the power-app line, her dry streamer voice back.
@@ -525,28 +529,37 @@ test('the cold open shows the photo as an insert, then Lux holding it on the lef
   expect(s.lineId).toBe('C0.tv.01');
   expect(s.photo).toBe(true);
   await page.screenshot({ path: 'test-results/screens/story-photo-insert.png' });
+  // The chat blows up before anyone says so (Rolando, 31 Oct 2026): the first block message comes
+  // with the TV's second line, while TRIAGE is still asleep.
+  while (s.lineId !== 'C0.tv.02') {
+    if (!s.typingDone) await clickStory(page);
+    s = await clickStory(page);
+  }
+  expect(s.chat).toEqual(["kenji: lux the net's doing the thing again"]);
+  expect(s.onStage).toEqual([]);
   while (s.lineId !== 'C0.lux.01') {
     if (!s.typingDone) await clickStory(page);
     s = await clickStory(page);
   }
   expect(s.photo).toBe(false);
   expect(s.onStage).toEqual(['Lux']);
+  expect(s.chat).toHaveLength(3);
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'test-results/screens/story-lux-staged.png' });
-  // The phone lights up: four rows in the stream chat, and TRIAGE hovers beside Lux. Since the check-in
-  // beat (Rolando, 30 Oct 2026) that is C0.triage.02, after TRIAGE asks if she's okay.
+  // TRIAGE wakes to the fourth message, checks on her, and only then reads the chat out.
   while (s.lineId !== 'C0.triage.02') {
     if (!s.typingDone) await clickStory(page);
     s = await clickStory(page);
   }
   expect(s.chat).toHaveLength(4);
   expect(s.onStage).toEqual(['Lux', 'TRIAGE']);
-  // The four messages roll in one at a time rather than all at once...
-  expect(s.chatShown.length).toBeLessThan(4);
+  // The four script messages land in order, one at a time, with filler between them once it starts.
   await expect
-    .poll(async () => (await story(page)).chatShown.length, { timeout: 10_000 })
-    .toBeGreaterThanOrEqual(4);
-  expect((await story(page)).chatShown.slice(0, 4)).toEqual(s.chat);
+    .poll(async () => (await story(page)).chatShown.filter((m) => s.chat.includes(m)).length, {
+      timeout: 10_000,
+    })
+    .toBe(4);
+  expect((await story(page)).chatShown.filter((m) => s.chat.includes(m))).toEqual(s.chat);
   await page.screenshot({ path: 'test-results/screens/story-triage-chat.png' });
   // ...and the chat keeps talking while the player reads.
   await expect.poll(async () => (await story(page)).chatShown.length, { timeout: 10_000 }).toBeGreaterThan(4);
