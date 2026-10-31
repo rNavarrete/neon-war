@@ -184,7 +184,7 @@ describe('lineMeta', () => {
     for (const id of WARNING_IDS) expect(LINES[id].speaker).toBe('TRIAGE (panicking)');
   });
 
-  it('flags the 11 lesson ids from the design as lessons and no other line', () => {
+  it('flags the 12 lesson ids from the design as lessons and no other line', () => {
     const lessons: LineId[] = [
       'C1.triage.06',
       'C2.triage.after',
@@ -195,6 +195,8 @@ describe('lineMeta', () => {
       'C5.triage.03',
       'C5.mika.05',
       'C6.triage.01',
+      // Rolando, 31 Oct 2026: back to the forecast's failure, not more arithmetic.
+      'C6.triage.03',
       'C7.ozzie.01',
       'C7.triage.01',
     ];

@@ -52,6 +52,7 @@ import {
   crewTint,
   cutShort,
   enqueueComms,
+  withdrawComms,
   extendForVoice,
   irisFor,
   type LeaderTarget,
@@ -624,6 +625,17 @@ export class CommsView implements LiveView {
   enqueue(id: LineId): void {
     const prev = this.state;
     this.state = enqueueComms(prev, id, this.clock);
+    const cut = cutShort(prev, this.state);
+    if (cut) this.emit('voiceStop', cut);
+  }
+
+  /**
+   * Take back out-of-date lines (comms.ts withdrawComms): the player already did what they asked. A
+   * line cut while showing stops its voice too.
+   */
+  withdraw(ids: readonly LineId[]): void {
+    const prev = this.state;
+    this.state = withdrawComms(prev, ids, this.clock);
     const cut = cutShort(prev, this.state);
     if (cut) this.emit('voiceStop', cut);
   }

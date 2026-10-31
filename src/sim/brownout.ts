@@ -85,7 +85,11 @@ export const BROWNOUT = {
    * (Rolando, 29 Oct 2026: "cool but maybe not a mechanic for the tutorial stage").
    */
   regroup: { speed: 0.25, seconds: 10, charges: 1, inSession: false },
-  rescue: { trustBelow: 30, surgeSeconds: 40 },
+  /**
+   * The crew break in at trust under 30, 40 s into the surge, or this long after the laundry floor
+   * is cut (Rolando, 31 Oct 2026: give the player one clear task in the surge, then the crew promptly).
+   */
+  rescue: { trustBelow: 30, surgeSeconds: 40, afterCutSeconds: 5 },
   finalSizing: { holds: 4, holdsWithFastReplacement: 3, drops: 2, waste: 5 },
   /** The C4 script: the power dip takes the overclocked server dark this long into the surge (a draft). */
   surgeScript: { dipAfterSeconds: 5 },

@@ -6,7 +6,7 @@ import { type DebriefResults, type SeenLine, debriefLines, resultRows, seenLines
 import { LABELS } from '../story/labels';
 import { parseBold, runWords } from '../story/markup';
 import { type DebriefStep, playSfx, setLiveView, stopSfx, storyState } from '../story/state';
-import { FrameClock, H, VnView, W, cover, fileKey, preloadView } from '../story/view';
+import { FrameClock, H, VnView, W, cover, fileKey, preloadView, toPage } from '../story/view';
 import { storyWiring } from '../story/wiring';
 import { LINES, type LineId, line } from '../strings';
 import { provideTestState } from '../testHook';
@@ -79,6 +79,8 @@ export class DebriefScene extends Phaser.Scene {
   private frames = new FrameClock();
   /** The grey lines drawn under the terms, for the test hook. */
   private seen: SeenLine[] = [];
+  /** The Night Book's CLOSE BOOK button while the book is open. */
+  private closeButton: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super(SCENES.debrief);
@@ -88,6 +90,7 @@ export class DebriefScene extends Phaser.Scene {
     this.results = data.results ?? defaultDebriefResults();
     this.ready = false;
     this.seen = [];
+    this.closeButton = null;
   }
 
   preload(): void {
@@ -120,11 +123,22 @@ export class DebriefScene extends Phaser.Scene {
         line: id,
         enter: i === 0 ? () => this.drawResults() : undefined,
       })),
+      // The invitation lands while the block is still celebrating, before any reading.
+      { step: 'invite', line: 'C8.triage.end' },
+      { step: 'invite', line: 'C8.rei.end' },
+      // The Night Book (Rolando, 31 Oct 2026): page 1, then the words and the interview answer for
+      // whoever wants them. A click turns the page; CLOSE BOOK goes straight to the title card.
+      {
+        step: 'book',
+        line: 'C8.book.open',
+        enter: () => {
+          this.drawBook();
+          this.writePage();
+          this.showCloseBook();
+        },
+      },
       { step: 'terms', enter: () => this.drawTerms() },
       { step: 'interview', line: 'C8.rei.interview', enter: () => this.drawCard() },
-      { step: 'book', line: 'C8.book.open', enter: () => this.drawBook() },
-      { step: 'book', line: 'C8.triage.end', enter: () => this.writePage() },
-      { step: 'book', line: 'C8.rei.end' },
       { step: 'title', enter: () => this.drawTitle() },
     ];
     this.beat = -1;
@@ -136,7 +150,15 @@ export class DebriefScene extends Phaser.Scene {
       backdrop: BG,
       look: 'vn',
       fireworks: { bursts: 0, flashes: 0 },
-      debrief: { step: 'grades', results: this.results, terms: [], card: [], page: null, title: null },
+      debrief: {
+        step: 'grades',
+        results: this.results,
+        terms: [],
+        card: [],
+        page: null,
+        title: null,
+        closeBook: null,
+      },
     });
     playSfx('rain-loop', true);
     playSfx('fireworks');
@@ -180,6 +202,35 @@ export class DebriefScene extends Phaser.Scene {
     b.enter?.();
     if (b.line) this.view.say(b.line);
     else this.view.hideBox();
+  }
+
+  /** The CLOSE BOOK button over the open Night Book: it skips the rest of the book to the title card. */
+  private showCloseBook(): void {
+    const x = 1690;
+    const y = 70;
+    const b = this.add
+      .text(x, y, LABELS.closeBook, {
+        fontFamily: FONT,
+        fontSize: '30px',
+        fontStyle: 'bold',
+        color: '#2de2e6',
+        backgroundColor: '#0b0820',
+        padding: { x: 22, y: 12 },
+      })
+      .setOrigin(0.5)
+      .setDepth(60)
+      .setInteractive({ useHandCursor: true });
+    b.on('pointerdown', () => this.closeBook());
+    this.closeButton = b;
+    if (storyState.debrief) storyState.debrief.closeBook = toPage(this, x, y);
+  }
+
+  /** Close the Night Book: on to the title card, whatever page it is on. */
+  private closeBook(): void {
+    if (!this.closeButton) return;
+    storyState.clicks++;
+    this.beat = this.beats.length - 2;
+    this.advance();
   }
 
   private layer(depth: number): Phaser.GameObjects.Container {
@@ -379,6 +430,9 @@ export class DebriefScene extends Phaser.Scene {
 
   /** The title card, with the fireworks over it. */
   private drawTitle(): void {
+    this.closeButton?.destroy();
+    this.closeButton = null;
+    if (storyState.debrief) storyState.debrief.closeBook = null;
     const c = this.layer(50);
     c.add(this.add.rectangle(0, 0, W, H, 0x05070f, 0.94).setOrigin(0));
     const title = this.add

@@ -99,6 +99,11 @@ test('the cold open waits for a click on every line, then hands over to the boar
   expect(s.chat[0]).toBe("kenji: lux the net's doing the thing again");
   await page.screenshot({ path: 'test-results/screens/cold-open.png' });
 
+  // The block needs her again (Rolando, 31 Oct 2026): the power-app line, her dry streamer voice back.
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.lux.04');
+  expect(s.portrait).toBe('portrait:lux/vn/relieved');
+
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.02');
   expect(s.sfx).toContain('goggles-on');
@@ -369,7 +374,7 @@ for (const r of REWINDS) {
   });
 }
 
-test('the debrief grades the night, names the terms, ends with the interview card, then Night Book page 1 and the title card', async ({
+test('the debrief is short: Rei acknowledges and grades, the invitation, then the Night Book a page per click and the title card', async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -385,7 +390,7 @@ test('the debrief grades the night, names the terms, ends with the interview car
     serversAtMidnight: 5,
   } as const;
   await page.evaluate((r) => window.__neonStory!.playDebrief(r), results);
-  await expect.poll(async () => (await story(page)).lineId).toBe('C8.rei.open');
+  await expect.poll(async () => (await story(page)).lineId).toBe('C8.rei.ack');
 
   let s = await story(page);
   expect(s.debrief?.step).toBe('grades');
@@ -398,23 +403,39 @@ test('the debrief grades the night, names the terms, ends with the interview car
   expect(s.figures.Rei!.facesLeft).toBe(true);
   await page.screenshot({ path: 'test-results/screens/debrief.png' });
 
+  // Rolando, 31 Oct 2026: one acknowledgement and one grade, then only what costs the player later.
   const grades = [s.lineId];
-  while (s.lineId !== 'C8.rei.close') {
+  while (s.debrief?.step === 'grades') {
     s = await nextLine(page);
-    grades.push(s.lineId);
+    if (s.debrief?.step === 'grades') grades.push(s.lineId);
   }
   expect(grades).toEqual([
-    'C8.rei.open',
+    'C8.rei.ack',
     // Graded on the boxes built: midnight held, but on 5 (one only cost).
     'C8.rei.sizing.bad',
     'C8.rei.banner.pay',
     'C8.rei.debt',
     'C8.ozzie.debt',
-    'C8.rei.waste',
-    'C8.rei.down',
-    'C8.rei.close',
   ]);
 
+  // The invitation lands while the fireworks are still going, before any reading.
+  expect(s.debrief?.step).toBe('invite');
+  expect(s.lineId).toBe('C8.triage.end');
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C8.rei.end');
+  expect(s.debrief?.closeBook).toBeNull();
+
+  // The Night Book: page 1, written as it opens, with CLOSE BOOK.
+  s = await nextLine(page);
+  expect(s.debrief?.step).toBe('book');
+  expect(s.lineId).toBe('C8.book.open');
+  expect(s.nameplate).toBeNull();
+  expect(s.debrief?.page).toMatch(/^Demand decides the design\./);
+  expect(s.debrief?.closeBook).not.toBeNull();
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: 'test-results/screens/night-book.png' });
+
+  // A click turns to the words, named in three groups...
   s = await nextLine(page);
   expect(s.debrief?.step).toBe('terms');
   expect(s.debrief?.terms.map((t) => t.group)).toEqual(['Sizing', 'Scaling', 'Failure']);
@@ -422,6 +443,7 @@ test('the debrief grades the night, names the terms, ends with the interview car
   expect(s.debrief?.terms[2].bold).toContain('Redundancy, N+1');
   await page.screenshot({ path: 'test-results/screens/debrief-terms.png' });
 
+  // ...and to the interview answer, with Rei's note read out.
   s = await nextLine(page);
   expect(s.debrief?.step).toBe('interview');
   expect(s.lineId).toBe('C8.rei.interview');
@@ -430,20 +452,9 @@ test('the debrief grades the night, names the terms, ends with the interview car
   await page.screenshot({ path: 'test-results/screens/interview-card.png' });
 
   s = await nextLine(page);
-  expect(s.debrief?.step).toBe('book');
-  expect(s.lineId).toBe('C8.book.open');
-  expect(s.nameplate).toBeNull();
-  s = await nextLine(page);
-  expect(s.lineId).toBe('C8.triage.end');
-  expect(s.debrief?.page).toMatch(/^Demand decides the design\./);
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: 'test-results/screens/night-book.png' });
-  s = await nextLine(page);
-  expect(s.lineId).toBe('C8.rei.end');
-
-  s = await nextLine(page);
   expect(s.debrief?.step).toBe('title');
   expect(s.debrief?.title).toBe('Session 0: Brownout');
+  expect(s.debrief?.closeBook).toBeNull();
   expect(s.fireworks.bursts).toBeGreaterThan(0);
   expect(s.fireworks.flashes).toBeGreaterThan(0);
   expect(s.sfx).toContain('fireworks');
@@ -452,6 +463,24 @@ test('the debrief grades the night, names the terms, ends with the interview car
 
   await clickStory(page);
   await expect.poll(async () => (await state(page)).scene).toBe('title');
+});
+
+test('CLOSE BOOK on page 1 skips the rest of the Night Book to the title card', async ({ page }) => {
+  test.setTimeout(60_000);
+  await toBoard(page);
+  await page.evaluate(() => window.__neonStory!.playDebrief());
+  await expect.poll(async () => (await story(page)).lineId).toBe('C8.rei.ack');
+  let s = await story(page);
+  for (let guard = 0; s.debrief?.step !== 'book' && guard < 20; guard++) s = await nextLine(page);
+  expect(s.debrief?.step).toBe('book');
+  const close = s.debrief!.closeBook!;
+  await page.mouse.click(close.x, close.y);
+  await expect.poll(async () => (await story(page)).debrief?.step).toBe('title');
+  s = await story(page);
+  expect(s.debrief?.title).toBe('Session 0: Brownout');
+  // Nothing in between was shown: no terms, no card.
+  expect(s.debrief?.terms).toEqual([]);
+  expect(s.debrief?.card).toEqual([]);
 });
 
 test('reduce flicker keeps the debrief fireworks without flashes', async ({ page }) => {

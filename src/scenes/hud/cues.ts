@@ -88,6 +88,10 @@ export interface CueView {
   recoveredTip?: boolean;
   /** Placed parts the player has moved this run (default 0). */
   moves?: number;
+  /** When the Solace banner was answered, in sim seconds, or null (default null). */
+  bannerAt?: number | null;
+  /** Requests the paid banner has caught so far (default 0): zero while nothing was dropping. */
+  solaceCaught?: number;
 }
 
 /** What only the HUD knows, handed to cueViewOf each frame. */
@@ -137,6 +141,12 @@ const MIDNIGHT = BROWNOUT.clock.midnight;
 const midnightForecast = (v: CueView): boolean =>
   v.cardClosed && between(v.now, C.c6 - BROWNOUT.demand.forecastLeadSeconds, MIDNIGHT);
 
+/** Solace "caught nothing": under one request in its whole minute. */
+const SOLACE_CAUGHT_NOTHING = 0.5;
+/** The surge's one task is open: alone in the surge, the laundry cut offered and not taken. */
+const surgeTask = (v: CueView): boolean =>
+  between(v.now, C.c4, C.c5) && !(v.rescued ?? false) && !v.laundryCut;
+
 /** The crew are in. */
 const rescued = (v: CueView): boolean => v.rescued ?? false;
 /** The board is back after the rescue scene. */
@@ -162,7 +172,8 @@ export const CUES: readonly Cue[] = [
   {
     id: 'C1.triage.05',
     follows: ['C1.lux.01'],
-    when: (v, f) => v.now < C.c3 && after(f, 'C1.lux.01', 2, at(v)),
+    // One instruction for one target: said only while the grid is still empty (SUPERSEDED withdraws it).
+    when: (v, f) => v.now < C.c3 && v.servers === 0 && after(f, 'C1.lux.01', 2, at(v)),
   },
   {
     id: 'C1.triage.03',
@@ -197,10 +208,26 @@ export const CUES: readonly Cue[] = [
       after(f, 'C2.lux.bin', 5, at(v)),
   },
 
-  // C3: bigger or more?
+  // Paid, and Solace's minute ran out without catching a request (Rolando, 31 Oct 2026: make the
+  // failed promise unmistakable, so nobody thinks the button or the gauge is broken).
+  {
+    id: 'C2.triage.expired',
+    when: (v) =>
+      v.banner === 'pay' &&
+      (v.bannerAt ?? null) !== null &&
+      v.now >= (v.bannerAt ?? 0) + BROWNOUT.solace.durationSeconds &&
+      (v.solaceCaught ?? 0) < SOLACE_CAUGHT_NOTHING,
+  },
+  {
+    id: 'C2.lux.expired',
+    follows: ['C2.triage.expired'],
+    when: (v, f) => after(f, 'C2.triage.expired', 2, at(v)),
+  },
+
+  // C3: scale up first (Rolando, 31 Oct 2026: a second server can't work before the load balancer).
   { id: 'C3.chat.01', when: (v) => between(v.now, C.c3 - SURGE_WARNING_LEAD, C.c4) },
   { id: 'C3.chat.02', when: (v) => between(v.now, C.c3 - SURGE_WARNING_LEAD, C.c4) },
-  { id: 'C3.triage.01', when: (v) => between(v.now, C.c3, C.c4) },
+  { id: 'C3.triage.01', when: (v) => between(v.now, C.c3, C.c4) && !v.overclocked && alone(v) },
   { id: 'C3.triage.02', when: (v) => between(v.now, C.c3, C.c4) && v.servers >= 2 },
   {
     id: 'C3.lux.01',
@@ -216,6 +243,12 @@ export const CUES: readonly Cue[] = [
   // C4: the district surge, while Lux is alone.
   { id: 'C4.triage.01', when: (v) => between(v.now, C.c4 - SURGE_WARNING_LEAD, C.c4 + 5) },
   { id: 'C4.lux.01', when: (v) => between(v.now, C.c4, C.c4 + 5) },
+  // The surge's one task (Rolando, 31 Oct 2026): cut the laundry floor; the key pulses meanwhile.
+  {
+    id: 'C4.lux.shed',
+    follows: ['C4.lux.01'],
+    when: (v, f) => surgeTask(v) && after(f, 'C4.lux.01', 1, at(v)),
+  },
   // The surge's power dip takes the big box (the one with the kit) dark; a stock box going dark is not it.
   {
     id: 'C4.triage.02',
@@ -224,6 +257,32 @@ export const CUES: readonly Cue[] = [
       alone(v) &&
       (v.darkPart ?? null) !== null &&
       v.darkPart === (v.overclockedId ?? null),
+  },
+  // Panic by presentation, while the one task waits: short lines from Lux, more words from TRIAGE.
+  {
+    id: 'C4.triage.05',
+    follows: ['C4.lux.shed'],
+    when: (v, f) => surgeTask(v) && after(f, 'C4.lux.shed', 1, at(v)),
+  },
+  {
+    id: 'C4.lux.03',
+    follows: ['C4.triage.05'],
+    when: (v, f) => surgeTask(v) && after(f, 'C4.triage.05', 1, at(v)),
+  },
+  {
+    id: 'C4.triage.06',
+    follows: ['C4.lux.03'],
+    when: (v, f) => surgeTask(v) && after(f, 'C4.lux.03', 1, at(v)),
+  },
+  {
+    id: 'C4.lux.04',
+    follows: ['C4.triage.06'],
+    when: (v, f) => surgeTask(v) && after(f, 'C4.triage.06', 1, at(v)),
+  },
+  {
+    id: 'C4.triage.nudge.shed',
+    follows: ['C4.lux.04'],
+    when: (v, f) => surgeTask(v) && after(f, 'C4.lux.04', 6, at(v)),
   },
   {
     id: 'C4.chat.dark',
@@ -282,7 +341,18 @@ export const CUES: readonly Cue[] = [
   // C6: midnight, your call.
   // The midnight forecast is the call; the crew react to the boxes actually running.
   { id: 'C6.rei.01', when: (v) => midnightForecast(v) },
+  {
+    id: 'C6.lux.forecast',
+    follows: ['C6.rei.01'],
+    when: (v, f) => midnightForecast(v) && after(f, 'C6.rei.01', 2, at(v)),
+  },
   { id: 'C6.triage.01', holdFor: 8, when: (v) => midnightForecast(v) },
+  // Not more arithmetic: the forecast's failure, said again (Rolando, 31 Oct 2026).
+  {
+    id: 'C6.triage.03',
+    follows: ['C6.triage.01'],
+    when: (v, f) => midnightForecast(v) && after(f, 'C6.triage.01', 3, at(v)),
+  },
   { id: 'C6.ozzie.01', when: (v) => midnightForecast(v) && v.servers >= BROWNOUT.finalSizing.waste },
   { id: 'C6.mika.01', when: (v) => midnightForecast(v) && v.servers <= BROWNOUT.finalSizing.drops },
   { id: 'C6.tv.01', when: (v) => between(v.now, MIDNIGHT - 30, MIDNIGHT - 20) },
@@ -385,7 +455,8 @@ export const LUX_CUES: readonly Cue[] = [
     holdFor: 1,
     when: (v) =>
       v.now >= C.c3 - SURGE_WARNING_LEAD &&
-      v.now < MIDNIGHT &&
+      // Not in the surge: nothing she owns holds it, so she never asks for room she can't build.
+      v.now < C.c4 &&
       alone(v) &&
       v.capacity > 0 &&
       v.dropped === 0 &&
@@ -394,7 +465,7 @@ export const LUX_CUES: readonly Cue[] = [
   {
     id: 'C3.lux.over',
     holdFor: 2,
-    when: (v) => v.now >= C.c3 && v.now < MIDNIGHT && alone(v) && v.dropped > 0,
+    when: (v) => v.now >= C.c3 && v.now < C.c4 && alone(v) && v.dropped > 0,
   },
   { id: 'C3.lux.eyes', follows: ['C3.triage.04'], when: (v, f) => after(f, 'C3.triage.04', 1, at(v)) },
   { id: 'C3.lux.scaledup', follows: ['C3.triage.03'], when: (v, f) => after(f, 'C3.triage.03', 3, at(v)) },
@@ -425,14 +496,48 @@ export const LUX_CUES: readonly Cue[] = [
   {
     id: 'C6.lux.spare',
     follows: ['C6.triage.02'],
-    when: (v, f) => v.now < MIDNIGHT && v.dropped === 0 && after(f, 'C6.triage.02', 3, at(v)),
+    when: (v, f) => v.now < MIDNIGHT && v.dropped === 0 && after(f, 'C6.triage.02', 4, at(v)),
   },
   {
     id: 'C6.lux.countdown',
-    when: (v) => between(v.now, MIDNIGHT - 10, MIDNIGHT - 5) && (v.midnightHeld ?? null) === null,
+    // Twenty seconds out, so the band is quiet when the dip moves the traffic (Rolando, 31 Oct 2026).
+    when: (v) => between(v.now, MIDNIGHT - 20, MIDNIGHT - 15) && (v.midnightHeld ?? null) === null,
   },
   { id: 'C6.lux.midnight', follows: ['C6.lux.hold'], when: (v, f) => after(f, 'C6.lux.hold', 2, at(v)) },
   { id: 'C7.lux.count', follows: ['C7.triage.01'], when: (v, f) => after(f, 'C7.triage.01', 1, at(v)) },
+];
+
+/**
+ * Instructions that go out of date once the player does the thing (Rolando, 31 Oct 2026: help stops
+ * the moment the action succeeds). When `done` holds, the band withdraws these lines if they are
+ * still waiting or showing (comms.ts withdrawComms). The coach withdraws its own nudges the same way
+ * when its problem is solved.
+ */
+export const SUPERSEDED: readonly {
+  readonly ids: readonly LineId[];
+  readonly done: (v: CueView) => boolean;
+}[] = [
+  { ids: ['C1.triage.05'], done: (v) => v.servers > 0 },
+  { ids: ['C1.lux.placed'], done: (v) => v.servers > 0 && !(v.unwiredServer ?? false) },
+  { ids: ['C3.triage.01'], done: (v) => v.overclocked },
+  {
+    ids: ['C4.lux.shed', 'C4.triage.05', 'C4.lux.03', 'C4.triage.06', 'C4.lux.04', 'C4.triage.nudge.shed'],
+    done: (v) => v.laundryCut || (v.rescued ?? false),
+  },
+  // The crew are in: the surge's panic still waiting on the band is old news.
+  {
+    ids: [
+      'C4.lux.01',
+      'C4.lux.forecast2',
+      'C4.triage.02',
+      'C4.lux.dark',
+      'C4.triage.03',
+      'C4.lux.retry',
+      'C4.lux.okafor',
+      'C4.lux.02',
+    ],
+    done: (v) => v.rescued ?? false,
+  },
 ];
 
 /** Every cue the board's director runs: the scripted night, then Lux's asides. */
@@ -555,6 +660,8 @@ export function emptyCueView(): CueView {
     helpTip: false,
     recoveredTip: false,
     moves: 0,
+    bannerAt: null,
+    solaceCaught: 0,
   };
 }
 
@@ -676,5 +783,7 @@ export function cueViewOf(
   v.helpTip = helpTip;
   v.recoveredTip = recoveredTip;
   v.moves = host.moves ?? 0;
+  v.bannerAt = f.banner?.at ?? null;
+  v.solaceCaught = f.solaceCaught;
   return v;
 }
