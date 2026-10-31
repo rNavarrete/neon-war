@@ -274,7 +274,8 @@ describe('InventoryView', () => {
     view.create(cards);
     // Option 2 (Rolando, 30 Oct 2026): the tray's space moved down 200 (y 1000).
     expect(view.cardAt(530, 1082)?.id).toBe('server');
-    expect(view.cardAt(790, 1082)?.locked).toBe(true);
+    // The balancer is hidden until the crew gives it (Rolando, 31 Oct 2026), so nothing is there to click.
+    expect(view.cardAt(790, 1082)).toBeNull();
     expect(view.cardAt(cards[3].x, cards[3].y)?.id).toBe(LOCKED_KINDS[0]);
     expect(view.cardAt(470, 1010)).toBeNull();
 

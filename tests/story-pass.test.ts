@@ -20,6 +20,7 @@ import type { Part } from '../src/sim/board';
 import { LINES, type LineId } from '../src/strings';
 import { SCRIPTS } from '../src/story/scripts';
 import { fillerGap } from '../src/story/chatPanel';
+import { trayCards } from '../src/scenes/board/tray';
 
 const C = BROWNOUT.challenges;
 const MIDNIGHT = BROWNOUT.clock.midnight;
@@ -315,5 +316,23 @@ describe('the cold open: the chat blows up before TRIAGE says so (Rolando, 31 Oc
     expect(fillerGap(4, 0)).toBe(0.94921875);
     expect(fillerGap(5, 0)).toBe(0.9);
     expect(fillerGap(20, 0.99)).toBe(0.9);
+  });
+});
+
+describe('the load balancer card stays off the tray until the crew hands it over (Rolando, 31 Oct 2026)', () => {
+  it('is hidden, not greyed, before the rescue', () => {
+    expect(trayCards(false).find((c) => c.id === 'balancer')).toMatchObject({ locked: true, hidden: true });
+  });
+
+  it('appears unlocked once given', () => {
+    expect(trayCards(true).find((c) => c.id === 'balancer')).toMatchObject({ locked: false, hidden: false });
+  });
+
+  it('never hides the other cards or the drawer', () => {
+    expect(
+      trayCards(false)
+        .filter((c) => c.hidden)
+        .map((c) => c.id),
+    ).toEqual(['balancer']);
   });
 });

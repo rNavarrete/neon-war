@@ -24,6 +24,11 @@ export interface TrayCard extends Box {
   /** Texture key drawn on the card. */
   readonly art: string;
   readonly locked: boolean;
+  /**
+   * Not drawn and not clickable: the load balancer until the crew hands it over (Rolando, 31 Oct
+   * 2026: a greyed card nobody can use only spoils the crew's arrival).
+   */
+  readonly hidden: boolean;
   /** True for the three cards Session 0 can use; false for the catalog shown locked. */
   readonly main: boolean;
 }
@@ -67,7 +72,10 @@ export const DRAWER = {
 } as const;
 const MINI_PITCH = (DRAWER.right - DRAWER.left - MINI_SIZE.w) / (DRAWER.perRow - 1);
 
-/** The inventory row's cards with their place in game space. The balancer unlocks once the crew gives it. */
+/**
+ * The inventory row's cards with their place in game space. The balancer stays hidden until the crew
+ * gives it, then appears unlocked in the third slot.
+ */
 export function trayCards(balancerUnlocked: boolean): TrayCard[] {
   const card = (
     i: number,
@@ -84,6 +92,7 @@ export function trayCards(balancerUnlocked: boolean): TrayCard[] {
     price,
     art,
     locked,
+    hidden: id === 'balancer' && locked,
     main: true,
     x: CARD_X[i],
     y: CARD_Y,
@@ -118,6 +127,7 @@ export function trayCards(balancerUnlocked: boolean): TrayCard[] {
     price: null,
     art: `part-${kind}`,
     locked: true,
+    hidden: false,
     main: false,
     x: DRAWER.left + MINI_SIZE.w / 2 + (i % DRAWER.perRow) * MINI_PITCH,
     y: DRAWER.rows[Math.floor(i / DRAWER.perRow)],

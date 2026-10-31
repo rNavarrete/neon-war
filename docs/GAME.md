@@ -120,7 +120,9 @@ keeps every number in one constants object.
 **Parts on the board:** gateway (feeds one part only, no health check), scrap server, residents' database,
 load balancer (crew gift at the rescue). The load balancer splits traffic evenly across the servers wired
 behind it and **health-checks** them: a server that is dark, dead or still booting is skipped and gets a grey
-"skipped" tag, and its share goes to the live ones. Every other part is shown in the tray but locked.
+"skipped" tag, and its share goes to the live ones. The load balancer's tray card isn't shown at all until
+the crew hand it over (Rolando, 31 Oct 2026: a greyed card nobody can use spoiled their arrival). Every
+other part is shown in the tray's drawer but locked.
 
 | Thing                   | Value                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------------- |

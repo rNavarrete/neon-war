@@ -40,6 +40,8 @@ interface CardView {
   readonly art: Phaser.GameObjects.Image;
   readonly lock: Phaser.GameObjects.Image;
   readonly count: Phaser.GameObjects.Text | null;
+  /** The name, price chip and count badge: shown and hidden with the card. */
+  readonly extras: readonly Phaser.GameObjects.GameObject[];
   /** What the count shows now, so it is re-set only on a change. */
   shown: number;
 }
@@ -60,10 +62,11 @@ export class InventoryView {
     return this.views.map((v) => v.card);
   }
 
-  /** The frame each card wears now, by card id: the picked frame's art key, or 'part-card'. */
+  /** The frame each card wears now, by card id: the picked frame's art key, 'part-card', or 'hidden'. */
   frameOf(id: string): string {
     for (const v of this.views) {
       if (v.card.id !== id) continue;
+      if (v.card.hidden) return 'hidden';
       if (!v.frames) return 'part-card';
       let shown = 'part-card';
       v.frames.forEach((f, key) => {
@@ -126,6 +129,7 @@ export class InventoryView {
     if (frames) frames.forEach((f) => this.objects.push(f));
     this.objects.push(art, lock);
     let count: Phaser.GameObjects.Text | null = null;
+    const extras: Phaser.GameObjects.GameObject[] = [];
     if (c.main) {
       const name = add
         .text(c.x, c.y + c.h / 2 - 6, c.name ?? '', {
@@ -145,6 +149,7 @@ export class InventoryView {
           .setScale(badge.scale)
           .setDepth(DEPTH + 2.5);
         this.objects.push(b);
+        extras.push(b);
       }
       count = add
         .text(c.x + c.w / 2 - 8, c.y + c.h / 2 - 24, '0', {
@@ -158,9 +163,10 @@ export class InventoryView {
         .setOrigin(1, 1)
         .setDepth(DEPTH + 3);
       this.objects.push(name, ...chip, count);
+      extras.push(name, ...chip);
     }
     // -1 until the first setCounts, so the first count always lands.
-    const v: CardView = { card: c, frame, frames, art, lock, count, shown: -1 };
+    const v: CardView = { card: c, frame, frames, art, lock, count, extras, shown: -1 };
     this.paint(v);
     return v;
   }
@@ -249,12 +255,22 @@ export class InventoryView {
 
   /** The card under a point, if any. */
   cardAt(x: number, y: number): TrayCard | null {
-    for (const v of this.views) if (inBox(v.card as Box, x, y)) return v.card;
+    for (const v of this.views) if (!v.card.hidden && inBox(v.card as Box, x, y)) return v.card;
     return null;
   }
 
   private paint(v: CardView): void {
     const c = v.card;
+    const shown = !c.hidden;
+    v.art.setVisible(shown);
+    v.count?.setVisible(shown);
+    for (const o of v.extras) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(shown);
+    v.frame?.setVisible(shown);
+    if (!shown) {
+      v.lock.setVisible(false);
+      v.frames?.forEach((f) => f.setVisible(false));
+      return;
+    }
     v.lock.setVisible(c.locked);
     const grey = c.locked || this.dimmed.has(c.id);
     if (grey) v.art.setTint(DIM);

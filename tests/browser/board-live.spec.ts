@@ -1429,9 +1429,10 @@ test('board-12: the painted table, channel, cards and marks draw from public/art
     expect(p.x, kind).toBeLessThan(t.x + t.w);
   }
 
-  // The cards wear the picked frames: the server ready (it can be bought), the gift locked.
+  // The cards wear the picked frames: the server ready (it can be bought). The crew's gift isn't on
+  // the tray until they hand it over (Rolando, 31 Oct 2026).
   expect(b.inventory.frames.server).toBe('hud/live/card-frame-ready');
-  expect(b.inventory.frames.balancer).toBe('hud/live/card-frame-locked');
+  expect(b.inventory.frames.balancer).toBe('hidden');
 
   // Through C3 (a box boots, the table under it) to the rescue (the balancer pings the boxes).
   await liveReach(page, 'c3');
@@ -1452,6 +1453,7 @@ test('board-12: the painted table, channel, cards and marks draw from public/art
   expect([...lbTextures].sort()).toEqual(['art:board/balancer-ping-a', 'art:board/balancer-ping-b']);
   expect(marks, 'a ping mark over a checked box').toBeGreaterThan(0);
   expect(b.inventory.frames.balancer).not.toBe('hud/live/card-frame-locked');
+  expect(b.inventory.frames.balancer).not.toBe('hidden');
   await shot(page, 'm4-board-rescue');
 
   // No network fetch: every request went to the game's own server, and each board key loaded from
