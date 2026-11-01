@@ -149,30 +149,56 @@ the cut, or on trust or time as before. Lines about the task are taken back the 
 
 C4.chat.seed is a story seed: the message is cut off mid-word, the chat drops, and nobody follows it up.
 
-## C5 The rescue (23:57:30, scene then board)
+## C5 The rescue (23:57:30, in the HUD)
 
-The crew break into her goggles uninvited, and the board goes fully immersive for the only time. The scene plays
-while the sim is frozen; the lines after it are barks. Tightened (Rolando, 31 Oct 2026): Rei takes command and sets
-the test, Mika points at the demand gauge, Ozzie supplies the money and one joke, and control comes straight back.
+The crew hack into Lux's comms. There is no cut to a scene (Rolando, 1 Nov 2026: the HUD is the fun part, and
+cutting away took the player out of it): the call panel fills with static, TRIAGE notices first, and the crew's
+faces come through the interference one line at a time while the stream chat reacts. The board freezes on its
+last frame until Rei hands over the load balancer, then comes back with the crew's cable lowering it, and the
+rest of the call plays over the board while the player builds. Lines go one at a time as the band frees up; each
+chat reaction lands a beat after the line it answers.
 
-### Scene
+### The hijack
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
-| C5.triage.01 | scene | TRIAGE (panicking) | goggles glitch | "Someone's in our goggles. Someone is IN our goggles." |
-| C5.rei.01 | scene | Rei | hologram lands | "You built this?" |
-| C5.lux.01 | scene | Lux |  | "Are you here to complain?" |
-| C5.rei.02 | scene | Rei |  | "Night Shift. We brought the parts. You're doing the wiring." |
-| C5.mika.01 | scene | Mika |  | "Breathe. Watch the demand gauge. It's settling to about 120 a second." |
-| C5.mika.02 | scene | Mika | not played (31 Oct 2026: folded into C5.mika.01) | "The surge is settling. About 120 a second for the next minute." |
-| C5.rei.03 | scene | Rei | crew cable drops | "Here. A load balancer. It spreads traffic across every server behind it, and its health check skips any that's dark." |
-| C5.rei.cut | scene | Rei | only if the laundry floor was cut | "You cut the laundry loose." (beat) "...Who taught you that?" |
-| C5.lux.cut | scene | Lux | only after C5.rei.cut | "Nobody." |
-| C5.ozzie.01 | scene | Ozzie |  | "I'll front you 100. Waste it and I'm telling your grandma." |
+| C5.triage.01 | bark | TRIAGE (worried) | the crew arrive: static floods the call panel | "Wait. Something's on our channel. I didn't open that!" |
+| C5.chat.hack | chat | stream: viewer | with C5.triage.01 | did someone just hack the stream?? |
+| C5.lux.who | bark | Lux | next | "Who is this? Get off my channel." |
+| C5.chat.fuzzy | chat | block: kenji | with C5.lux.who | lux your feed just went all fuzzy |
+| C5.triage.who | bark | TRIAGE (eager) | next | "Yeah! Who ARE you?" |
+| C5.chat.chest | chat | stream: viewer | with C5.triage.who | triage said that with its whole chest |
+| C5.rei.01 | bark | Rei | next: her face comes through the static | "You built this?" |
+| C5.chat.who | chat | stream: viewer | with C5.rei.01 | WHO IS THAT |
+| C5.chat.hair | chat | stream: viewer | after C5.chat.who | ok but her hair is SO cool |
+| C5.lux.01 | bark | Lux | next | "Are you here to complain?" |
+| C5.rei.build | bark | Rei | next | "No. It's good work. But one more wave like that and it's gone." |
+| C5.chat.compliment | chat | stream: viewer | with C5.rei.build | was that a compliment or a threat |
+| C5.lux.fine | bark | Lux | next | "We're fine. We don't need your help." |
+| C5.chat.trust | chat | stream: viewer | with C5.lux.fine | lux don't trust them |
+| C5.mika.collapse | bark | Mika | next: Mika's face comes through | "Not from what we're seeing. Your block goes dark in a minute." |
+| C5.chat.red | chat | stream: viewer | with C5.mika.collapse | ok but the gauge IS all red... |
+| C5.rei.02 | bark | Rei | next | "Night Shift. We brought the parts. You're doing the wiring." |
+| C5.chat.nightshift | chat | stream: viewer | with C5.rei.02 | night shift?? never heard of them |
+| C5.rei.03 | bark | Rei | next: the board comes back and the crew's cable lowers the load balancer | "Here. A load balancer. It spreads traffic across every server." |
+| C5.chat.lb | chat | stream: viewer | with C5.rei.03 | load balancer? what's that?? |
+| C5.chat.lb2 | chat | stream: viewer | after C5.chat.lb | i think it splits the traffic between the servers?? |
+| C5.rei.health | bark | Rei | next | "And its health check skips any server that's dark." |
+| C5.rei.cut | bark | Rei | only if the laundry floor was cut | "You cut the laundry loose." (beat) "...Who taught you that?" |
+| C5.lux.cut | bark | Lux | only after C5.rei.cut | "Nobody." |
+| C5.ozzie.01 | bark | Ozzie | next: Ozzie's face comes through | "I'll front you 100. Waste it and I'm telling your grandma." |
+| C5.chat.ozzie | chat | stream: viewer | with C5.ozzie.01 | who's the guy with the money 💸 |
+| C5.mika.02 | bark | Mika | next | "The surge is settling. About 120 a second for the next minute." |
+| C5.rei.04 | bark | Rei | last line of the call | "Clock's running. Show us." |
+
+### Not played any more
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+| C5.mika.01 | scene | Mika | not played (1 Nov 2026: Mika's gauge line is C5.mika.02 again, after the hand-over) | "Breathe. Watch the demand gauge. It's settling to about 120 a second." |
 | C5.ozzie.02 | scene | Ozzie | not played (31 Oct 2026: the server-count argument is cut) | "Six servers. Buy six, sleep tonight." |
 | C5.mika.03 | scene | Mika | not played (31 Oct 2026: the server-count argument is cut) | "Six is a waste. Two will do." |
 | C5.ozzie.03 | scene | Ozzie | not played (31 Oct 2026: the server-count argument is cut) | "Two is how you end up here again." |
-| C5.rei.04 | scene | Rei | last line: control goes back to the player | "Clock's running. Show us." |
 | C5.mika.04 | scene | Mika | not played in Session 0 (Regroup is kept for a later session) | "One more thing. When it gets fast, hit this. Time slows down. You get it once." |
 
 ### Back on the board
@@ -185,6 +211,7 @@ the test, Mika points at the demand gauge, Ozzie supplies the money and one joke
 | C5.ozzie.04 | bark | Ozzie | 5 or more servers | "That's a lot of servers. I respect it." |
 | C5.mika.05 | bark | Mika | 5 or more servers | "Look at the chart. Half of that capacity is just heating your room." |
 | C5.chat.01 | chat | block: young father | errors stop | it's back!!! |
+| C5.chat.friendly | chat | stream: viewer | 2 s after C5.chat.01 | everything's back... so they're friendly?? |
 | C5.triage.nudge.splitter | bark | TRIAGE (thinking) | coach: the gateway does not feed the load balancer, ghost wire lit | "The gateway isn't feeding the load balancer. Connect them!" |
 | C5.lux.nudge.splitter | bark | Lux | coach: still not fed, 9 s later (then again every 25 s) | "Gateway into the load balancer. Connect it." |
 | C5.triage.nudge.behind.1 | bark | TRIAGE (thinking) | coach: a server outside the load balancer, ghost wire lit | "That server isn't behind the load balancer. Nothing reaches it." |
@@ -192,6 +219,42 @@ the test, Mika points at the demand gauge, Ozzie supplies the money and one joke
 | C5.lux.nudge.behind | bark | Lux | coach: still outside, 12 s later (then again every 25 s) | "Wire it behind the load balancer." |
 | C5.triage.nudge.replace.1 | bark | TRIAGE (sheepish) | coach: a dead server waiting to be swapped, the server lit | "That server cooked! Click it, then press REPLACE." |
 | C5.lux.nudge.replace | bark | Lux | coach: still dead, 9 s later (then again every 25 s) | "Swap the dead server." |
+
+### Crew banter in the quiet stretch
+
+Once the build holds the tail and nothing is dropping, the crew fill the wait with who they are (Rolando, 1 Nov
+2026: with every server up the player was only watching the timer). One exchange at a time, in this order, each
+only after the band has been quiet for 4 s, never in the 22 s before the midnight forecast or its first 18 s, and never after
+23:59:28 (the dip and the countdown own the last half minute). Valve's dynamic dialog (Elan Ruskin, GDC 2012)
+is the model: idle chatter waits for the world to be quiet and gives way to anything that matters.
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+| C5.triage.band | bark | TRIAGE (eager) | exchange 1 | "So who's Night Shift? Are you a band?" |
+| C5.ozzie.band | bark | Ozzie | exchange 1 | "We'd be a great band." |
+| C5.rei.who | bark | Rei | exchange 1 | "We keep the lights on in the blocks Solace skips." |
+| C5.chat.goodguys | chat | stream: viewer | with C5.rei.who | so they're the GOOD guys? |
+| C5.mika.watched | bark | Mika | exchange 2 | "We watch your streams. You fix what nobody pays you to." |
+| C5.lux.creepy | bark | Lux | exchange 2 | "That's... a little creepy." |
+| C5.ozzie.snacks | bark | Ozzie | exchange 2 | "Told you we should've opened with snacks." |
+| C5.chat.fans | chat | stream: viewer | with C5.lux.creepy | lux has FANS fans 😳 |
+| C5.ozzie.roles | bark | Ozzie | exchange 3 | "I do the money. Mika does the numbers. Rei does the scary voice." |
+| C5.rei.voice | bark | Rei | exchange 3 | "I don't do a voice." |
+| C5.mika.voice | bark | Mika | exchange 3 | "She does a voice." |
+| C5.chat.ozzie2 | chat | stream: viewer | with C5.mika.voice | ozzie is my favourite already |
+| C5.triage.pings | bark | TRIAGE (thinking) | exchange 4 | "Those little pings. Is the load balancer checking on them?" |
+| C5.mika.health | bark | Mika | exchange 4 | "Health checks. A server goes dark, it gets skipped. No drama." |
+| C5.lux.neat | bark | Lux | exchange 4 | "Huh. Okay. That's actually neat." |
+| C5.chat.ohh | chat | stream: viewer | with C5.mika.health | ohhh so THAT'S what it does |
+| C5.rei.wire | bark | Rei | exchange 5 | "You wire like someone I used to know." |
+| C5.lux.whoknew | bark | Lux | exchange 5 | "Who?" |
+| C5.rei.later | bark | Rei | exchange 5 | "Later. Watch your board." |
+| C5.chat.lore | chat | stream: viewer | with C5.rei.later | wait. LORE?? |
+| C5.ozzie.solace | bark | Ozzie | exchange 6 | "Solace wanted 200 credits for a banner? On New Year?" |
+| C5.mika.solace | bark | Mika | exchange 6 | "They sell the fix for a problem they won't solve." |
+| C5.chat.solace | chat | stream: viewer | with C5.mika.solace | solace L |
+
+C5.rei.wire is a story seed, like C4.chat.seed: Rei knew Akemi, and nobody says so yet.
 
 ### Rewind after the crew arrives
 
@@ -273,30 +336,50 @@ too long, so they never hold up a hint.
 | C6.lux.midnight | bark | Lux | 2 s after C6.lux.hold | "Happy New Year, block. Lights stay on." |
 | C7.lux.count | bark | Lux | 1 s after TRIAGE's "one server and a bit?" | "I built you, and you still can't count." |
 
-## C8 Debrief and Night Book (00:01:00)
+## C8 The sign-off, the scorecard and the Night Book (00:00:30)
 
-Goggles up, back in the rainy room with fireworks outside. Kept short (Rolando, 31 Oct 2026): Rei acknowledges the
-night and grades the build in a line each, calling out only the Solace money and Ozzie's tab when they cost; then
-TRIAGE's "Stream saved" and Rei's invitation while the block is still celebrating. The real terms and the interview
-answer are in the Night Book, a page per click, and CLOSE BOOK skips to the title card. Grade lines branch on the raw
-results; the thresholds behind "some requests dropped" are not set yet, so a ticket that needs exact numbers stops
-and asks.
+Kept in the HUD (Rolando, 1 Nov 2026: Rei standing in Lux's room made no sense, she was never there). At
+00:00:30 the crew call in one last time over the board: Rei acknowledges the night and grades the build in a
+line each (plus the Solace money and Ozzie's tab when they cost), then the invitation to the arcade, Lux's
+non-answer and TRIAGE's sign-off, with the stream chat losing it. Only then do the goggles come up: the
+scorecard over Lux's room with the fireworks outside is the very last thing, followed by the Night Book (a page
+per click; CLOSE BOOK skips to the title card). Grade lines branch on the raw results; the thresholds behind
+"some requests dropped" are not set yet, so a ticket that needs exact numbers stops and asks.
 
-### Rei grades the night
+### The crew sign off (in the HUD)
+
+| ID | Kind | Speaker | When | Line |
+| --- | --- | --- | --- | --- |
+| C8.rei.ack | bark | Rei | 00:00:30, the call opens | "Whole block lit through midnight. On your first night." |
+| C8.rei.sizing.good | bark | Rei | midnight held on fewer than 5 boxes | "You counted before you built. Most people don't." |
+| C8.rei.sizing.bad | bark | Rei | midnight failed, or 5 or more boxes ran | "You built first and counted later. Count first." |
+| C8.rei.banner.pay | bark | Rei | paid the banner | "And you paid Solace. For a minute of nothing." |
+| C8.rei.debt | bark | Rei | Ozzie's tab above 100 | "You owe Ozzie. He will remember." |
+| C8.ozzie.debt | bark | Ozzie | after C8.rei.debt | "I'll remember." |
+| C8.rei.invite | bark | Rei | after the grade | "We've been following you for a while, Lux." |
+| C8.rei.leagues | bark | Rei | next | "You're ready for the big leagues." |
+| C8.rei.end | bark | Rei | next | "Arcade under the rail line. Tomorrow, midnight. Don't be late." |
+| C8.chat.arcade | chat | stream: viewer | with C8.rei.end | THE ARCADE?? lux you have to go |
+| C8.chat.invite | chat | stream: viewer | after C8.chat.arcade | invite me too 🥺 |
+| C8.lux.invite | bark | Lux | next | "...I'll think about it." |
+| C8.triage.going | bark | TRIAGE (happy) | next | "She's going. She's definitely going." |
+| C8.triage.end | bark | TRIAGE (happy) | last line: the goggles come up after it | "Stream saved. 4 viewers. Best night ever." |
+| C8.chat.gg | chat | stream: viewer | with C8.triage.end | gg lux. see you tomorrow night |
+
+### Not played any more
 
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C8.rei.open | scene | Rei | not played (31 Oct 2026: the debrief opens on C8.rei.ack) | "Right. Let's see what you did." |
-| C8.rei.ack | scene | Rei | debrief opens | "Whole block lit through midnight. On your first night." |
-| C8.rei.sizing.good | scene | Rei | midnight held on fewer than 5 boxes | "You counted before you built. Most people don't." |
-| C8.rei.sizing.bad | scene | Rei | midnight failed, or 5 or more boxes ran | "You built first and counted later. Count first." |
-| C8.rei.banner.pay | scene | Rei | paid the banner | "And you paid Solace. For a minute of nothing." |
-| C8.rei.banner.skip | scene | Rei | not played (31 Oct 2026: the debrief keeps one acknowledgement; the rest is in the Night Book) | "You didn't take Solace's offer. Good." |
-| C8.rei.debt | scene | Rei | Ozzie's tab above 100 | "You owe Ozzie. He will remember." |
-| C8.ozzie.debt | scene | Ozzie | after C8.rei.debt | "I'll remember." |
-| C8.rei.waste | scene | Rei | not played (31 Oct 2026: the debrief keeps one acknowledgement; the rest is in the Night Book) | "Half those servers did nothing but cost." |
-| C8.rei.down | scene | Rei | not played (31 Oct 2026: the debrief keeps one acknowledgement; the rest is in the Night Book) | "And you turned them off after. That's rarer than it should be." |
-| C8.rei.close | scene | Rei | not played (31 Oct 2026: the debrief keeps one acknowledgement; the rest is in the Night Book) | "Now the words for it. You'll need them." |
+| C8.rei.banner.skip | scene | Rei | not played (31 Oct 2026: one acknowledgement; the rest is in the Night Book) | "You didn't take Solace's offer. Good." |
+| C8.rei.waste | scene | Rei | not played (31 Oct 2026: one acknowledgement; the rest is in the Night Book) | "Half those servers did nothing but cost." |
+| C8.rei.down | scene | Rei | not played (31 Oct 2026: one acknowledgement; the rest is in the Night Book) | "And you turned them off after. That's rarer than it should be." |
+| C8.rei.close | scene | Rei | not played (31 Oct 2026: one acknowledgement; the rest is in the Night Book) | "Now the words for it. You'll need them." |
+
+### The scorecard
+
+Goggles up, back in the rainy room with the fireworks outside: the night's raw results in one card, no
+characters on screen. A click opens the Night Book.
 
 ### The terms, named (three groups)
 
@@ -326,8 +409,6 @@ and asks.
 | --- | --- | --- | --- |
 | C8.book.open | scene | (stage direction, no text) | She opens the book. The first pages are full of old handwriting that isn't Rei's. She turns past them to a blank page. |
 | C8.book.page1 | ui | Night Book | Demand decides the design. Count who's coming, how often, and how big the peak gets. Build for the peak, with room for one part to die. |
-| C8.triage.end | scene | TRIAGE (happy) | "Stream saved. 4 viewers. Best night ever." |
-| C8.rei.end | scene | Rei | "Arcade under the rail line. Tomorrow, midnight. Don't be late." |
 | C8.title | ui | Title card | Session 0: Brownout |
 
 ## Chat filler
@@ -622,7 +703,6 @@ until the owner approves it (decision D8).
 | ID | Kind | Speaker | When | Line |
 | --- | --- | --- | --- | --- |
 | C4.chat.dark | chat | block: kenji | the surge's power dip takes the big server dark | lights just blinked and the net went with them |
-| C5.chat.lb | chat | stream: viewer | 3 s after the board returns from the rescue | what did they just plug in for her?? |
 | C6.chat.dark | chat | block: young father | 23:59:50, the dip takes a server dark | lights blinked. please. ten more seconds |
 | C7.chat.01 | chat | block: mrs okafor | 5 s after midnight held | Happy New Year Lux. Now get some sleep x |
 | fill.block.dark.01 | block | block | filler while a server is dark | kenji: everything just went out again |

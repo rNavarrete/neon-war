@@ -67,6 +67,8 @@ export const LABELS = {
     lux: 'LUX',
     cutOff: 'CUT OFF',
   },
+  /** The call panel's title while the crew jam it (their hijack, 1 Nov 2026). */
+  crewCall: { unknown: 'COMMS \u00b7 UNKNOWN SIGNAL' },
   comms: {
     /** The comms band's title, and the glyph that asks for a line's voice again. */
     title: 'COMMS',

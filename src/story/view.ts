@@ -92,6 +92,8 @@ export interface VnViewOptions {
   filler?: readonly LineId[];
   /** Show the Skip button (the scene was seen before). */
   skippable: boolean;
+  /** Stand nobody on stage: the text box and nameplate only (the scorecard, 1 Nov 2026). Default true. */
+  figures?: boolean;
   /** Stand the cast between these x only (game px), clear of the scene's own panels; the whole stage by default. */
   stage?: { readonly from: number; readonly to: number };
   onClick: () => void;
@@ -185,7 +187,7 @@ export class VnView {
     this.body.setVisible(true).setFontStyle(narration ? 'italic' : '');
 
     const portrait = name ? (face ? `portrait:${face}` : portraitFor(speaker, this.opts.where)?.key) : null;
-    if (name && portrait) {
+    if (name && portrait && this.opts.figures !== false) {
       const img = this.portraits.get(name);
       if (!img) this.portraits.set(name, this.scene.add.image(0, 0, portrait).setOrigin(0.5, 1).setDepth(10));
       else img.setTexture(portrait);

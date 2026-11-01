@@ -13,6 +13,7 @@ import { type RewindKind, rewindTarget } from '../story/rewind';
 import type { ScriptId } from '../story/scripts';
 import { storyState } from '../story/state';
 import { storyWiring } from '../story/wiring';
+import { bus } from './bus';
 import { newRun, run } from './run';
 
 /** What the story scene is asked to play, and what happens when it ends. */
@@ -30,6 +31,7 @@ const UNDER = [SCENES.board, SCENES.hud] as const;
 
 /** Start Session 0 from the top with a fresh run: the cold open, then the board at C1. */
 export function startSession(from: Phaser.Scene): void {
+  crewFreeze = false;
   newRun();
   run().hold('scene');
   for (const key of [SCENES.board, SCENES.hud, SCENES.pause, SCENES.settings, SCENES.debrief]) {
@@ -76,15 +78,6 @@ function playOver(from: Phaser.Scene, data: Omit<StoryData, 'onDone'>, after: ()
   sp.bringToTop(SCENES.story);
 }
 
-/**
- * The rescue (C5): the crew's scene over the full-immersive backdrop, then back to the board.
- * `laundryCut` defaults to what the run says (ENG-503); tests may force it.
- */
-export function playRescue(from: Phaser.Scene, opts: { laundryCut?: boolean } = {}): void {
-  const laundryCut = opts.laundryCut ?? storyWiring.laundryCut();
-  playOver(from, { scriptId: 'C5', laundryCut }, () => storyWiring.afterRescue());
-}
-
 const REWIND_SCRIPT: Record<RewindKind, ScriptId> = {
   replay: 'rewind-replay',
   'rei-surge': 'rewind-rei-surge',
@@ -107,6 +100,33 @@ export function playRewind(
   playOver(from, { scriptId: REWIND_SCRIPT[kind], rewind: { kind, from: now, target } }, () =>
     onRewind(target),
   );
+}
+
+/**
+ * The crew call in over the HUD instead of a scene (Rolando, 1 Nov 2026). For the hijack the board
+ * freezes on its last frame (the sim waits with it) while the HUD keeps running the call and the chat;
+ * the HUD brings the board back at the hand-off (resumeBoard). For the ending the HUD plays the
+ * sign-off and then the scorecard (playDebrief).
+ */
+export function startCrewCall(board: Phaser.Scene, kind: 'hijack' | 'ending'): void {
+  if (kind === 'hijack' && board.scene.isActive(SCENES.board)) {
+    crewFreeze = true;
+    board.scene.pause(SCENES.board);
+  }
+  bus.emit('crewCall', { kind });
+}
+
+/** The crew's hijack holds the board frozen (the pause menu must not bring it back early). */
+let crewFreeze = false;
+
+export function crewHoldsBoard(): boolean {
+  return crewFreeze;
+}
+
+/** Bring the board back after the crew's hand-off (a no-op when it is already running). */
+export function resumeBoard(from: Phaser.Scene): void {
+  crewFreeze = false;
+  if (from.scene.isPaused(SCENES.board)) from.scene.resume(SCENES.board);
 }
 
 /** The night's results from the run, with what only ENG-503 knows from src/story/wiring.ts. */

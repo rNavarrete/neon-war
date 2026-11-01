@@ -105,7 +105,7 @@ export interface Seen {
   surgeStartsAt: number[];
   /** The district surge warning (startsAt C4) was seen on some read. */
   surgeAtC4: boolean;
-  /** The C5 rescue scene (story.scriptId 'C5') was seen. */
+  /** The crew's hijack call (hud.crew.call 'hijack', the rescue since 1 Nov 2026) was seen. */
   rescue: boolean;
 }
 
@@ -136,10 +136,9 @@ const MOMENTS: Record<Moment, MomentSpec> = {
     done: (s, seen) => seen.surgeAtC4 && !!s.hud && s.hud.now >= C.c4,
   },
   rescue: {
-    timeout: 40_000,
-    waitsOn: "story.scriptId === 'C5' (observed), then story.finished containing 'C5' and scene 'board'",
-    done: (s, seen) =>
-      seen.rescue && !!s.story && !s.story.active && s.story.finished.includes('C5') && s.scene === 'board',
+    timeout: 60_000,
+    waitsOn: "hud.crew.call === 'hijack' (observed), then hud.crew.hijackDone and scene 'board'",
+    done: (s, seen) => seen.rescue && !!s.hud && s.hud.crew.hijackDone && s.scene === 'board',
   },
   midnight: {
     timeout: 50_000,
@@ -155,7 +154,7 @@ export interface Reached {
   hud: HudTestState;
   /** Wall-clock seconds the reach call took (not counting a board it had to open). */
   seconds: number;
-  /** Story scenes the helper clicked through on the way, in order (for example ['C5']). */
+  /** Story scenes the helper clicked through on the way, in order (for example ['rewind-replay']). */
   scenes: string[];
   /** Events seen on the way. */
   seen: Seen;
@@ -170,11 +169,12 @@ export interface ReachOptions {
  * Run the night on to `moment` and return the hook as it was there.
  *
  * - If the page has not been opened yet, opens the board at speed 20 with autopilot first.
- * - Clicks the job card away, and clicks through every story scene that comes up on the way (the
- *   C5 rescue, a rewind), using Skip when it shows, since a scene holds the run.
+ * - Clicks the job card away, and clicks through every story scene that comes up on the way (a
+ *   rewind), using Skip when it shows, since a scene holds the run. The crew's hijack plays in the
+ *   HUD by itself.
  * - 'c1' the board is running at C1 or later; 'c3' the clock is at C3 or later; 'surge' the
  *   district surge warning was seen with startsAt C4 and the clock is at C4 or later; 'rescue'
- *   the C5 scene came up and has been clicked through, back on the board; 'midnight' the in-world
+ *   the crew's hijack call came up in the HUD and has ended, the board back; 'midnight' the in-world
  *   clock reads 00:00.
  *
  * Throws, naming the hook fields it waited on and the last values read, if the moment is not
@@ -194,7 +194,7 @@ export async function reach(page: Page, moment: Moment, opts: ReachOptions = {})
     const surge = s.hud?.surge;
     if (surge && !seen.surgeStartsAt.includes(surge.startsAt)) seen.surgeStartsAt.push(surge.startsAt);
     if (surge?.startsAt === C.c4) seen.surgeAtC4 = true;
-    if (s.story?.scriptId === 'C5') seen.rescue = true;
+    if (s.hud?.crew.call === 'hijack' || s.hud?.crew.hijackDone) seen.rescue = true;
     if (spec.done(s, seen)) {
       return { moment, snap: s, hud: s.hud!, seconds: (Date.now() - started) / 1000, scenes, seen };
     }

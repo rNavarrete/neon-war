@@ -314,14 +314,14 @@ test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers',
     return log.rows.find((r) => r.at > l.at && (r.thanks || r.id === 'fill.block.rejoin.01')) ?? null;
   };
   // The jump lands a C1 board in the surge, so a box can overheat before C4 + 20 and a rewind screen
-  // hold the run (seen on CI). Click any such screen on, as play would; never the crew's C5.
+  // hold the run (seen on CI). Click any such screen on, as play would; the crew must not have come.
   const deadline = Date.now() + 30_000;
   while (leave() === null) {
     await log.read(page);
     if (leave() !== null) break;
     const s = await snap(page);
     const story = s.story;
-    if (Date.now() > deadline || story?.scriptId === 'C5')
+    if (Date.now() > deadline || s.hud?.crew.call === 'hijack' || s.hud?.crew.hijackDone)
       throw new Error(
         `waited for 'Mrs Okafor left the chat' (C4.chat.03); hud.now=${s.hud?.now ?? 'none'}, ` +
           `story=${story?.active ? story.scriptId : 'none'}; rows: ${log.ids()}`,
@@ -331,7 +331,7 @@ test('Mrs Okafor leaves in the surge and posts nothing until the chat recovers',
     await page.waitForTimeout(at ? 100 : 50);
   }
   expect(leave()!.text).toBe('Mrs Okafor left the chat');
-  // The crew break in (C5): reach clicks the scene through, then the chat recovers.
+  // The crew break in (their hijack call in the HUD), then the chat recovers.
   await log.during(page, reach(page, 'rescue'));
   await log.until(
     page,

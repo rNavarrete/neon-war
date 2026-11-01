@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { defaultDebriefResults, quitToTitle } from '../game/flow';
 import { run } from '../game/run';
 import { settings } from '../game/settings';
-import { type DebriefResults, type SeenLine, debriefLines, resultRows, seenLines } from '../story/debrief';
+import { type DebriefResults, type SeenLine, resultRows, seenLines } from '../story/debrief';
 import { LABELS } from '../story/labels';
 import { parseBold, runWords } from '../story/markup';
 import { type DebriefStep, playSfx, setLiveView, stopSfx, storyState } from '../story/state';
@@ -61,9 +61,11 @@ interface Spark {
 }
 
 /**
- * The debrief (C8): goggles up, back in Lux's room with fireworks outside. Rei grades the night
- * beside the raw results, the terms are named in three groups, the interview-version card, Night
- * Book page 1 ("Demand decides the design") and the title card. A click finishes or advances.
+ * The scorecard (C8), the very last thing (Rolando, 1 Nov 2026): goggles up, back in Lux's room with
+ * fireworks outside, and nobody standing in it. Rei's grade and the arcade invitation were already
+ * said over the HUD (src/scenes/hud/crewCalls.ts); here the night's raw results fill one card, then
+ * Night Book page 1 ("Demand decides the design"), the terms in three groups, the interview-version
+ * card and the title card. A click finishes or advances.
  */
 export class DebriefScene extends Phaser.Scene {
   ready = false;
@@ -108,24 +110,17 @@ export class DebriefScene extends Phaser.Scene {
       where: 'room',
       chat: false,
       skippable: false,
-      // The results and the interview card fill the left (x 90 to 950): Rei and Ozzie stand right of them.
-      stage: { from: 1000, to: 1900 },
+      // Nobody stands in Lux's room: the crew were only ever on her comms.
+      figures: false,
       onClick: () => this.click(),
       onSkip: () => {},
     });
     setLiveView(this.view);
     provideTestState('debriefSeen', () => this.seen);
 
-    const grades = debriefLines(this.results);
     this.beats = [
-      ...grades.map((id, i): Beat => ({
-        step: 'grades',
-        line: id,
-        enter: i === 0 ? () => this.drawResults() : undefined,
-      })),
-      // The invitation lands while the block is still celebrating, before any reading.
-      { step: 'invite', line: 'C8.triage.end' },
-      { step: 'invite', line: 'C8.rei.end' },
+      // The scorecard: the night's numbers in one card, with nothing said over them.
+      { step: 'grades', enter: () => this.drawResults() },
       // The Night Book (Rolando, 31 Oct 2026): page 1, then the words and the interview answer for
       // whoever wants them. A click turns the page; CLOSE BOOK goes straight to the title card.
       {
@@ -180,7 +175,7 @@ export class DebriefScene extends Phaser.Scene {
   }
 
   private click(): void {
-    if (!this.view.typingDone) {
+    if (this.beats[this.beat]?.line && !this.view.typingDone) {
       this.view.finishTyping();
       return;
     }
@@ -238,27 +233,63 @@ export class DebriefScene extends Phaser.Scene {
     return this.stepLayer;
   }
 
-  /** The raw result per category, beside Rei as she grades. */
+  /**
+   * The scorecard: one card centred over the room, the session's name, how midnight went, then the
+   * raw result per category. No letter grades; Rei already graded it over the HUD.
+   */
   private drawResults(): void {
     const c = this.layer(12);
-    c.add(this.add.rectangle(90, 110, 620, 560, 0x0b0820, 0.86).setOrigin(0).setStrokeStyle(2, 0x2de2e6));
+    const w = 900;
+    const h = 760;
+    const x = (W - w) / 2;
+    const y = 120;
+    c.add(this.add.rectangle(x, y, w, h, 0x0b0820, 0.9).setOrigin(0).setStrokeStyle(3, 0x2de2e6));
+    c.add(this.add.rectangle(x, y, w, 8, 0xff4fd8, 0.9).setOrigin(0));
     c.add(
-      this.add.text(130, 140, LABELS.results, {
+      this.add.text(x + 50, y + 40, LABELS.scorecard, {
         fontFamily: FONT,
-        fontSize: '40px',
+        fontSize: '26px',
+        fontStyle: 'bold',
+        color: '#ff4fd8',
+      }),
+    );
+    c.add(
+      this.add.text(x + 50, y + 80, LABELS.results, {
+        fontFamily: FONT,
+        fontSize: '56px',
         fontStyle: 'bold',
         color: '#2de2e6',
       }),
     );
+    const held = this.results.midnightHeld;
+    c.add(
+      this.add.text(
+        x + 50,
+        y + 160,
+        held ? LABELS.midnightHeld(this.results.serversAtMidnight) : LABELS.midnightDark,
+        { fontFamily: FONT, fontSize: '30px', fontStyle: 'bold', color: held ? '#b6ff5c' : '#ff6b6b' },
+      ),
+    );
     resultRows(this.results).forEach((r, i) => {
-      const y = 230 + i * 70;
-      c.add(this.add.text(130, y, r.label, { fontFamily: FONT, fontSize: '28px', color: '#cfc8e8' }));
+      const ry = y + 250 + i * 70;
+      c.add(this.add.rectangle(x + 40, ry - 14, w - 80, 1, 0x2de2e6, 0.25).setOrigin(0));
+      c.add(this.add.text(x + 50, ry, r.label, { fontFamily: FONT, fontSize: '30px', color: '#cfc8e8' }));
       c.add(
         this.add
-          .text(670, y, r.value, { fontFamily: FONT, fontSize: '30px', fontStyle: 'bold', color: '#ffd27a' })
+          .text(x + w - 50, ry, r.value, {
+            fontFamily: FONT,
+            fontSize: '32px',
+            fontStyle: 'bold',
+            color: '#ffd27a',
+          })
           .setOrigin(1, 0),
       );
     });
+    c.add(
+      this.add
+        .text(W / 2, y + h - 40, LABELS.openBook, { fontFamily: FONT, fontSize: '22px', color: '#9a95ad' })
+        .setOrigin(0.5),
+    );
   }
 
   /**

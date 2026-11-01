@@ -104,6 +104,8 @@ export interface CueHost {
   readonly decommissionsAfterMidnight: number;
   /** Placed parts the player has moved this run (default 0). */
   readonly moves?: number;
+  /** The crew's hijack call is still playing on the band (default false): the board isn't back yet. */
+  readonly crewTalking?: boolean;
 }
 
 export interface Cue {
@@ -317,7 +319,6 @@ export const CUES: readonly Cue[] = [
   // C5: back on the board after the rescue scene (holds on the HUD clock, so they count while the
   // sim clock waits for the crew build).
   { id: 'C5.triage.02', holdFor: 1, when: (v) => boardBack(v) && v.now < C.c6 },
-  { id: 'C5.chat.lb', holdFor: 3, when: (v) => boardBack(v) && v.now < C.c6 },
   {
     id: 'C5.triage.03',
     holdFor: 10,
@@ -759,8 +760,10 @@ export function cueViewOf(
     (dropped > 0 && now >= C.c6 - BROWNOUT.demand.forecastLeadSeconds && now <= MIDNIGHT + 1);
 
   v.rescued = f.rescued;
-  // The board is back once the crew are in and nothing holds it (the rescue scene has ended).
-  v.rescueClock = f.rescued ? (prevRescueClock ?? (f.paused ? null : clock)) : null;
+  // The board is back once the crew are in, their hijack call is over and nothing holds it.
+  v.rescueClock = f.rescued
+    ? (prevRescueClock ?? (f.paused || (host.crewTalking ?? false) ? null : clock))
+    : null;
   v.darkPart = darkPart;
   v.overclockedId = overclockedId;
   v.liveBehindLb = live;

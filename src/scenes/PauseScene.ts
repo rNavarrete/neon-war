@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { quitToTitle, startSession } from '../game/flow';
+import { crewHoldsBoard, quitToTitle, startSession } from '../game/flow';
 import { run } from '../game/run';
 import { SCENES } from './keys';
 import { MAGENTA, UI_FONT, addButton, addDim, addPanel, preloadButtons } from './shellUi';
@@ -44,7 +44,7 @@ export class PauseScene extends Phaser.Scene {
   /** Close the menu and let the board run again. */
   resumeGame(): void {
     run().release('pause');
-    if (this.scene.isPaused(SCENES.board)) this.scene.resume(SCENES.board);
+    if (this.scene.isPaused(SCENES.board) && !crewHoldsBoard()) this.scene.resume(SCENES.board);
     if (this.scene.isPaused(SCENES.hud)) this.scene.resume(SCENES.hud);
     this.scene.stop();
   }

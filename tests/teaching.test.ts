@@ -349,7 +349,7 @@ describe('the wording pass (learning-3), in the real terms', () => {
 
   it('uses one verb for a dark server the load balancer passes: skips, its health check, as Rei says', () => {
     expect(LINES['C5.rei.03'].text).toContain('load balancer');
-    expect(LINES['C5.rei.03'].text).toContain('health check skips');
+    expect(LINES['C5.rei.health'].text).toContain('health check skips');
     expect(LABELS.plates.splitter).toContain('health check skips a dark one');
     expect(LABELS.plates.state.skipped).toBe('the load balancer skips it (health check)');
   });

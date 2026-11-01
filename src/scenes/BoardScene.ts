@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { type GameEvents, bus, dragVerdict } from '../game/bus';
 import { Director } from '../game/director';
+import { crewHoldsBoard } from '../game/flow';
 import { run } from '../game/run';
 import { type Part, type PartKind, wireKey } from '../sim/board';
 import { provideTestState } from '../testHook';
@@ -901,6 +902,9 @@ export class BoardScene extends Phaser.Scene {
     r.tick(seconds);
     this.liftHeld(this.game.loop.rawDelta);
     this.director?.flush(this);
+    // The crew's hijack froze the board this frame: keep the last frame drawn (no balancer, no cable)
+    // until the hand-off brings it back, as the rescue scene used to.
+    if (crewHoldsBoard()) return;
     this.syncBoard(seconds);
   }
 

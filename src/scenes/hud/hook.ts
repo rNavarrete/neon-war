@@ -58,6 +58,18 @@ export interface HudTestState {
    */
   cues: { fired: LineId[]; silenced: boolean };
   /**
+   * The crew's calls over the HUD (src/scenes/hud/crewCalls.ts): the call playing now, whether the
+   * hijack is over, how many banter exchanges have played, every call line and chat reaction sent
+   * this run in order, and whether the hijack still holds the board frozen.
+   */
+  crew: {
+    call: 'hijack' | 'banter' | 'ending' | null;
+    hijackDone: boolean;
+    banter: number;
+    said: LineId[];
+    boardFrozen: boolean;
+  };
+  /**
    * The tutorial coach (src/scenes/hud/coach.ts): the problem the player is stuck on now (step and
    * key), how long it has lasted on the HUD clock, whether its highlight shows, the band's hint,
    * what it lights, and every nudge said this run in order.

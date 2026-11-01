@@ -771,7 +771,6 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
     active: boolean;
     skip: { visible: boolean; x: number; y: number };
     click: Pt | null;
-    finished: string[];
   };
   const story = () =>
     page.evaluate(() => (window.__neonTest!.state as unknown as { story?: StoryHook }).story ?? null);
@@ -789,13 +788,17 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
     }
     lanes.push({ demand: b.channel.demand, lanePps: b.channel.lanePps });
   };
-  // Run on through the surge and its power dip to the crew, clicking the rescue scene through.
-  const deadline = Date.now() + 60_000;
+  // Run on through the surge and its power dip to the crew, until their hijack call in the HUD is over.
+  const hijackDone = () =>
+    page.evaluate(
+      () => (window.__neonTest!.state as unknown as { hud?: { crew: { hijackDone: boolean } } }).hud?.crew.hijackDone,
+    );
+  const deadline = Date.now() + 90_000;
   for (;;) {
     const b = await board(page);
     look(b);
     const s = await story();
-    if (s?.finished.includes('C5') && !s.active && b.parts.some((p) => p.kind === 'balancer')) break;
+    if ((await hijackDone()) && b.parts.some((p) => p.kind === 'balancer')) break;
     if (Date.now() > deadline) throw new Error(`the rescue never came (board.now ${b.now})`);
     if (s?.active) {
       const p = s.skip.visible ? s.skip : s.click;

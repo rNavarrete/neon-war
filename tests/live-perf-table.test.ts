@@ -3,7 +3,7 @@ import { createViews } from '../src/scenes/live/registry';
 import { PlaceholderView } from '../src/scenes/live/view';
 
 // Cross-lane swap 7: the per-zone table under "### Budgets" in docs/LIVE.md states each built
-// view's declared budget, objects as well as texts (CommsView's 31 with the leader line and the caller cam's tile, 29 before layout A2, the cam's
+// view's declared budget, objects as well as texts (CommsView's 32 with the leader line, the caller cam's tile and the hijack static, 29 before layout A2, the cam's
 // 15), and its texts still sum to the global 144 (110 until layout A2's sixteen-row chat and Lux's caption, Rolando 30
 // Oct 2026).
 
@@ -46,10 +46,11 @@ describe('docs/LIVE.md budget table matches the built views', () => {
     expect(checked).toBeGreaterThan(8);
   });
 
-  it('names CommsView at 31 objects', () => {
+  it('names CommsView at 32 objects', () => {
     const comms = rows().find((x) => x.name.startsWith('`comms`'));
-    // 29 until layout A2's caller cam (Rolando, 30 Oct 2026) added its tile and face.
-    expect(comms?.objects).toBe(31);
+    // 29 until layout A2's caller cam (Rolando, 30 Oct 2026) added its tile and face; 31 until the
+    // crew's hijack (1 Nov 2026) added the static drawn over the tile.
+    expect(comms?.objects).toBe(32);
   });
 
   it('keeps the texts total at the global 144', () => {
