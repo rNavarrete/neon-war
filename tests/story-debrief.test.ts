@@ -1,6 +1,13 @@
 import { BROWNOUT } from '../src/sim/brownout';
 import { brownoutSession } from '../src/sim/tick';
-import { type DebriefResults, debriefLines, debriefResults, resultRows } from '../src/story/debrief';
+import {
+  BOOK_PAGES,
+  type DebriefResults,
+  debriefLines,
+  debriefResults,
+  nextBookPage,
+  resultRows,
+} from '../src/story/debrief';
 
 const BEST: DebriefResults = {
   droppedRequests: 0,
@@ -14,17 +21,10 @@ const BEST: DebriefResults = {
 };
 
 describe('debrief lines', () => {
-  it('opens and closes with Rei, and praises a build that held midnight without waste', () => {
-    const lines = debriefLines(BEST);
-    expect(lines[0]).toBe('C8.rei.open');
-    expect(lines.at(-1)).toBe('C8.rei.close');
-    expect(lines).toEqual([
-      'C8.rei.open',
-      'C8.rei.sizing.good',
-      'C8.rei.banner.skip',
-      'C8.rei.down',
-      'C8.rei.close',
-    ]);
+  // Rolando, 31 Oct 2026: the tail after midnight is short. Rei acknowledges the night and grades
+  // the build; the terms and the interview answer live in the Night Book.
+  it('acknowledges the night, then praises a build that held midnight without waste, and stops', () => {
+    expect(debriefLines(BEST)).toEqual(['C8.rei.ack', 'C8.rei.sizing.good']);
   });
 
   it('calls sizing bad when midnight failed or ran on boxes that only cost', () => {
@@ -34,10 +34,14 @@ describe('debrief lines', () => {
     expect(debriefLines({ ...BEST, midnightHeld: false })).not.toContain('C8.rei.sizing.good');
   });
 
-  it('calls out a paid banner, and praises ignoring or binning it', () => {
-    expect(debriefLines({ ...BEST, banner: 'pay' })).toContain('C8.rei.banner.pay');
-    expect(debriefLines({ ...BEST, banner: 'bin' })).toContain('C8.rei.banner.skip');
-    expect(debriefLines({ ...BEST, banner: null })).toContain('C8.rei.banner.skip');
+  it('calls out a paid banner, and says nothing about one ignored or binned', () => {
+    expect(debriefLines({ ...BEST, banner: 'pay' })).toEqual([
+      'C8.rei.ack',
+      'C8.rei.sizing.good',
+      'C8.rei.banner.pay',
+    ]);
+    expect(debriefLines({ ...BEST, banner: 'bin' })).toEqual(['C8.rei.ack', 'C8.rei.sizing.good']);
+    expect(debriefLines({ ...BEST, banner: null })).toEqual(['C8.rei.ack', 'C8.rei.sizing.good']);
   });
 
   it("names Ozzie's debt only when his tab is above his 100 front, with his reply after", () => {
@@ -46,10 +50,22 @@ describe('debrief lines', () => {
     expect(lines.indexOf('C8.ozzie.debt')).toBe(lines.indexOf('C8.rei.debt') + 1);
   });
 
-  it('calls waste at 5 or more boxes at midnight and notes scaling down', () => {
-    expect(debriefLines({ ...BEST, serversAtMidnight: 4 })).not.toContain('C8.rei.waste');
-    expect(debriefLines({ ...BEST, serversAtMidnight: 5 })).toContain('C8.rei.waste');
-    expect(debriefLines({ ...BEST, scaledDown: false })).not.toContain('C8.rei.down');
+  it('grades 5 or more boxes at midnight as built first, counted later, in one line', () => {
+    expect(debriefLines({ ...BEST, serversAtMidnight: 5 })).toEqual(['C8.rei.ack', 'C8.rei.sizing.bad']);
+    expect(debriefLines({ ...BEST, scaledDown: false })).toEqual(['C8.rei.ack', 'C8.rei.sizing.good']);
+  });
+
+  it('keeps the worst night to four lines: the ack, the grade, the Solace money and the tab', () => {
+    expect(
+      debriefLines({ ...BEST, banner: 'pay', ozzieTab: 230, serversAtMidnight: 6, scaledDown: false }),
+    ).toEqual(['C8.rei.ack', 'C8.rei.sizing.bad', 'C8.rei.banner.pay', 'C8.rei.debt', 'C8.ozzie.debt']);
+  });
+
+  it('turns the Night Book from page 1 to the words to the interview answer, then closes', () => {
+    expect(BOOK_PAGES).toEqual(['lesson', 'terms', 'interview']);
+    expect(nextBookPage('lesson')).toBe('terms');
+    expect(nextBookPage('terms')).toBe('interview');
+    expect(nextBookPage('interview')).toBe(null);
   });
 
   it('does not mutate the results it grades', () => {

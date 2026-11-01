@@ -50,9 +50,10 @@ export interface SceneScript {
 }
 
 /**
- * C0, the cold open: one line per click in the order of docs/SCRIPT.md. TRIAGE wakes and checks on
- * Lux first; once she says she's fine the block's four chat lines roll in and TRIAGE reads them out
- * (Rolando, 30 Oct 2026: "it's the net again" had no setup). On her last line she taps the visor on
+ * C0, the cold open: one line per click in the order of docs/SCRIPT.md. The block's four chat lines
+ * roll in under the TV, Grandma and the photo, before TRIAGE wakes; TRIAGE checks on Lux, then reads
+ * the chat out (Rolando, 30 Oct 2026: "it's the net again" had no setup; 31 Oct: the chat blows up
+ * before TRIAGE says it is). On her last line she taps the visor on
  * (a full-screen CG) and the click after it plays the jack-in: the room dissolves into the grid, then the board.
  */
 const COLD_OPEN: SceneScript = {
@@ -62,17 +63,23 @@ const COLD_OPEN: SceneScript = {
   look: 'vn',
   photo: true,
   steps: [
+    // Rolando, 31 Oct 2026: the chat blows up before anyone says so, before TRIAGE is even awake.
+    // One block message lands with each click from the TV's second line on (a chat step falls
+    // through to the line after it), the filler speeds up behind them, and only then does TRIAGE
+    // wake and read it out.
     { lineId: 'C0.tv.01' },
+    { lineId: 'C0.chat.01' },
     { lineId: 'C0.tv.02' },
+    { lineId: 'C0.chat.02' },
     { lineId: 'C0.grandma.01' },
+    { lineId: 'C0.chat.03' },
     { lineId: 'C0.lux.01', face: 'lux/vn/photo', cue: 'flicker' },
+    { lineId: 'C0.chat.04' },
     { lineId: 'C0.triage.01' },
     { lineId: 'C0.lux.03', face: 'lux/vn/composing' },
-    { lineId: 'C0.chat.01' },
-    { lineId: 'C0.chat.02' },
-    { lineId: 'C0.chat.03' },
-    { lineId: 'C0.chat.04' },
     { lineId: 'C0.triage.02' },
+    // The block needs fixing again: grief gives way to her dry, confident streamer voice (31 Oct 2026).
+    { lineId: 'C0.lux.04', face: 'lux/vn/relieved' },
     { lineId: 'C0.lux.02', face: 'lux/vn/neutral', cue: 'jackin' },
   ],
 };
@@ -84,19 +91,17 @@ const RESCUE: SceneScript = {
   where: 'board',
   look: 'vn',
   steps: [
+    // Rolando, 31 Oct 2026: the densest moment, tightened. Rei takes command and sets the test,
+    // Mika points at the demand gauge, Ozzie brings the money and one joke, then the board is hers.
     { lineId: 'C5.triage.01' },
     { lineId: 'C5.rei.01' },
     { lineId: 'C5.lux.01', face: 'lux/vn/board-shocked' },
     { lineId: 'C5.rei.02' },
-    { lineId: 'C5.mika.01' },
-    { lineId: 'C5.mika.02', face: 'mika/vn/explain' },
+    { lineId: 'C5.mika.01', face: 'mika/vn/explain' },
     { lineId: 'C5.rei.03', cue: 'cable' },
     { lineId: 'C5.rei.cut', onlyIf: 'laundryCut', face: 'rei/vn/impressed' },
     { lineId: 'C5.lux.cut', onlyIf: 'laundryCut', face: 'lux/vn/board-deadpan' },
     { lineId: 'C5.ozzie.01', face: 'ozzie/vn/sums' },
-    { lineId: 'C5.ozzie.02' },
-    { lineId: 'C5.mika.03', face: 'mika/vn/focused' },
-    { lineId: 'C5.ozzie.03', face: 'ozzie/vn/sceptical' },
     { lineId: 'C5.rei.04', face: 'rei/vn/stern' },
     // C5.mika.04 (Mika hands over Regroup) is not in Session 0: BROWNOUT.regroup.inSession.
   ],

@@ -71,7 +71,14 @@ export interface BoardTestState {
    * Every card in the inventory row, at its centre: `count` is how many the player could use now
    * (0 for a drawer mini) and `price` its cost in credits (0 for the crew's gift, null for a mini).
    */
-  tray: (Point & { id: string; label: string; locked: boolean; count: number; price: number | null })[];
+  tray: (Point & {
+    id: string;
+    label: string;
+    locked: boolean;
+    hidden: boolean;
+    count: number;
+    price: number | null;
+  })[];
   /**
    * The inventory zone (TRAY_AREA) in page CSS pixels, the three cards' counts, and (board-12) the
    * frame each main card wears: a picked frame's art key (hud/live/card-frame-idle, -ready,

@@ -41,6 +41,11 @@ export const LINES = {
     speaker: 'TRIAGE (thinking)',
     text: "Uh... your chat's blowing up. The block's net is dropping again.",
   },
+  'C0.lux.04': {
+    kind: 'scene',
+    speaker: 'Lux',
+    text: "This is what I get for rebuilding the block's power app. Lifetime tech support.",
+  },
   'C0.lux.02': { kind: 'scene', speaker: 'Lux', text: "Yeah. Let's go look." },
   'C1.card.title': { kind: 'ui', speaker: 'Job card', text: 'THE LIGHTS ARE GOING OUT!' },
   'C1.card.step1': { kind: 'ui', speaker: 'Job card', text: 'Drag a SERVER onto the grid.' },
@@ -139,8 +144,14 @@ export const LINES = {
   'C2.triage.pay': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
-    text: "The chart didn't move. Was it supposed to move?",
+    text: "Solace is on. The gauge won't move: we weren't short of room.",
   },
+  'C2.triage.expired': {
+    kind: 'bark',
+    speaker: 'TRIAGE (sheepish)',
+    text: "Solace's minute is up. It caught zero requests.",
+  },
+  'C2.lux.expired': { kind: 'bark', speaker: 'Lux', text: 'Two hundred credits for a countdown. Noted.' },
   'C2.lux.ignore': { kind: 'bark', speaker: 'Lux', text: 'Not tonight.' },
   'C2.lux.bin': { kind: 'bark', speaker: 'Lux', text: 'Solace selling us our own power back.' },
   'C2.triage.after': {
@@ -162,14 +173,18 @@ export const LINES = {
   'C3.triage.01': {
     kind: 'bark',
     speaker: 'TRIAGE (eager)',
-    text: 'New toys! Scale up to a bigger server, or scale out with two?',
+    text: 'New toy! SCALE UP swaps your server for one twice as big.',
   },
   'C3.triage.02': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
     text: "It's on! Why is it doing nothing? Is it shy?",
   },
-  'C3.lux.01': { kind: 'bark', speaker: 'Lux', text: 'The gateway only feeds one server.' },
+  'C3.lux.01': {
+    kind: 'bark',
+    speaker: 'Lux',
+    text: 'The gateway feeds one server. A second one needs a load balancer.',
+  },
   'C3.triage.03': {
     kind: 'bark',
     speaker: 'TRIAGE (eager)',
@@ -184,19 +199,23 @@ export const LINES = {
   'C3.triage.nudge.choose.1': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
-    text: 'Too much for one server! The tray has two ideas.',
+    text: 'Too much for one server! Try the SCALE UP card.',
   },
   'C3.triage.nudge.choose.2': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
-    text: "Scale up, or scale out? I'm not saying. I'm pointing.",
+    text: 'SCALE UP onto your server. Same spot, twice the room!',
   },
   'C3.triage.nudge.idle': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
     text: 'That one gets nothing. Right-click it: full refund!',
   },
-  'C3.lux.nudge.idle': { kind: 'bark', speaker: 'Lux', text: 'Sell the spare. Make the first one bigger.' },
+  'C3.lux.nudge.idle': {
+    kind: 'bark',
+    speaker: 'Lux',
+    text: 'Sell it back. SCALE UP the first one instead.',
+  },
   'C3.triage.rewind': {
     kind: 'scene',
     speaker: 'TRIAGE (sheepish)',
@@ -211,14 +230,24 @@ export const LINES = {
   'C4.triage.01': {
     kind: 'bark',
     speaker: 'TRIAGE (panicking)',
-    text: "250? We're built for 120! I did that math right, I checked!",
+    text: "250? We're built for 120! I checked! Twice! Okay, three times!",
   },
   'C4.lux.01': { kind: 'bark', speaker: 'Lux', text: 'Hold. Hold. Hold.' },
+  'C4.lux.shed': { kind: 'bark', speaker: 'Lux', text: 'Laundry floor. Cut it loose. Now.' },
   'C4.flicker.01': { kind: 'ui', speaker: 'Dip warning', text: 'POWER FLICKER' },
   'C4.triage.02': {
     kind: 'bark',
     speaker: 'TRIAGE (panicking)',
     text: 'Big server is down! Big server is DOWN!',
+  },
+  'C4.triage.05': { kind: 'bark', speaker: 'TRIAGE (worried)', text: 'Lux?' },
+  'C4.lux.03': { kind: 'bark', speaker: 'Lux', text: 'I see it.' },
+  'C4.triage.06': { kind: 'bark', speaker: 'TRIAGE (worried)', text: "There's more of it now." },
+  'C4.lux.04': { kind: 'bark', speaker: 'Lux', text: 'I see that too.' },
+  'C4.triage.nudge.shed': {
+    kind: 'bark',
+    speaker: 'TRIAGE (eager)',
+    text: "The CUT key! It's glowing! It's glowing at you!",
   },
   'C4.chat.01': { kind: 'chat', speaker: 'block: mrs okafor', text: "it's gone again" },
   'C4.chat.02': { kind: 'chat', speaker: 'block: young father', text: 'calling... calling... calling...' },
@@ -258,14 +287,18 @@ export const LINES = {
     speaker: 'TRIAGE (panicking)',
     text: "Someone's in our goggles. Someone is IN our goggles.",
   },
-  'C5.rei.01': { kind: 'scene', speaker: 'Rei', text: 'Cute setup. Move over.' },
-  'C5.lux.01': { kind: 'scene', speaker: 'Lux', text: 'Who are you? Get out of my—' },
+  'C5.rei.01': { kind: 'scene', speaker: 'Rei', text: 'You built this?' },
+  'C5.lux.01': { kind: 'scene', speaker: 'Lux', text: 'Are you here to complain?' },
   'C5.rei.02': {
     kind: 'scene',
     speaker: 'Rei',
-    text: "Night Shift. We've been watching your block. You were doing fine. Then you weren't.",
+    text: "Night Shift. We brought the parts. You're doing the wiring.",
   },
-  'C5.mika.01': { kind: 'scene', speaker: 'Mika', text: 'Breathe. Read the chart.' },
+  'C5.mika.01': {
+    kind: 'scene',
+    speaker: 'Mika',
+    text: "Breathe. Watch the demand gauge. It's settling to about 120 a second.",
+  },
   'C5.mika.02': {
     kind: 'scene',
     speaker: 'Mika',
@@ -282,11 +315,15 @@ export const LINES = {
     text: 'You cut the laundry loose." (beat) "...Who taught you that?',
   },
   'C5.lux.cut': { kind: 'scene', speaker: 'Lux', text: 'Nobody.' },
-  'C5.ozzie.01': { kind: 'scene', speaker: 'Ozzie', text: "I'll front you 100. It goes on my tab." },
+  'C5.ozzie.01': {
+    kind: 'scene',
+    speaker: 'Ozzie',
+    text: "I'll front you 100. Waste it and I'm telling your grandma.",
+  },
   'C5.ozzie.02': { kind: 'scene', speaker: 'Ozzie', text: 'Six servers. Buy six, sleep tonight.' },
   'C5.mika.03': { kind: 'scene', speaker: 'Mika', text: 'Six is a waste. Two will do.' },
   'C5.ozzie.03': { kind: 'scene', speaker: 'Ozzie', text: 'Two is how you end up here again.' },
-  'C5.rei.04': { kind: 'scene', speaker: 'Rei', text: 'Stop. She can count." (to Lux) "So count.' },
+  'C5.rei.04': { kind: 'scene', speaker: 'Rei', text: "Clock's running. Show us." },
   'C5.mika.04': {
     kind: 'scene',
     speaker: 'Mika',
@@ -303,7 +340,7 @@ export const LINES = {
     text: "120 requests a second. Each server does 60. I'm not saying.",
   },
   'C5.rei.05': { kind: 'bark', speaker: 'Rei', text: 'There it is.' },
-  'C5.ozzie.04': { kind: 'bark', speaker: 'Ozzie', text: 'See? Six. Sleep tonight.' },
+  'C5.ozzie.04': { kind: 'bark', speaker: 'Ozzie', text: "That's a lot of servers. I respect it." },
   'C5.mika.05': {
     kind: 'bark',
     speaker: 'Mika',
@@ -344,11 +381,17 @@ export const LINES = {
     text: 'MIDNIGHT: everyone calls and streams at once. About 150 a second.',
   },
   'C6.rei.01': { kind: 'bark', speaker: 'Rei', text: 'Your call. How many?' },
+  'C6.lux.forecast': {
+    kind: 'bark',
+    speaker: 'Lux',
+    text: 'Midnight wave. Build before it hits, not after.',
+  },
   'C6.triage.01': {
     kind: 'bark',
     speaker: 'TRIAGE (thinking)',
     text: "150 req/s, 60 per server. Two and a half. Can't buy half a server.",
   },
+  'C6.triage.03': { kind: 'bark', speaker: 'TRIAGE (thinking)', text: "And one's going to lose power..." },
   'C6.ozzie.01': { kind: 'bark', speaker: 'Ozzie', text: "Now you're talking." },
   'C6.mika.01': { kind: 'bark', speaker: 'Mika', text: 'Brave.' },
   'C6.tv.01': { kind: 'bark', speaker: 'TV downstairs', text: 'Thirty seconds, Halation!' },
@@ -394,7 +437,7 @@ export const LINES = {
   'C1.lux.chat': {
     kind: 'bark',
     speaker: 'Lux',
-    text: 'Chat, I literally plugged in one cable. Calm down. ...Thank you.',
+    text: 'Chat, I literally connected a box. Calm down. ...Thank you.',
   },
   'C1.lux.goodcall': {
     kind: 'bark',
@@ -441,21 +484,13 @@ export const LINES = {
     speaker: 'Lux',
     text: "Whoa. Okay. Somebody's getting a shout-out at midnight.",
   },
-  'C4.lux.forecast': {
-    kind: 'bark',
-    speaker: 'Lux',
-    text: 'Big wave coming. Build before it hits, not after.',
-  },
+  'C4.lux.forecast': { kind: 'bark', speaker: 'Lux', text: '250. Nothing on this board holds that.' },
   'C4.lux.forecast2': { kind: 'bark', speaker: 'Lux', text: 'Five seconds. Come on, come on...' },
-  'C4.lux.dark': {
-    kind: 'bark',
-    speaker: 'Lux',
-    text: 'Lost one! Everybody stay calm. That includes you, TRIAGE.',
-  },
+  'C4.lux.dark': { kind: 'bark', speaker: 'Lux', text: 'Lost one. Stay calm, TRIAGE.' },
   'C4.lux.retry': {
     kind: 'bark',
     speaker: 'Lux',
-    text: 'Right. Every refresh is one more request. Stop it, guys!',
+    text: 'Every refresh is another request. Stop. Refreshing.',
   },
   'C4.lux.okafor': { kind: 'bark', speaker: 'Lux', text: "Hang on, Mrs Okafor. Lift's next." },
   'C5.lux.recover': { kind: 'bark', speaker: 'Lux', text: "Okay. Okay. We're back. Breathe." },
@@ -463,11 +498,16 @@ export const LINES = {
   'C6.lux.countdown': {
     kind: 'bark',
     speaker: 'Lux',
-    text: "Ten seconds. Baachan, if you're watching... watch this.",
+    text: "Almost there. Baachan, if you're watching... watch this.",
   },
   'C6.lux.midnight': { kind: 'bark', speaker: 'Lux', text: 'Happy New Year, block. Lights stay on.' },
   'C7.lux.count': { kind: 'bark', speaker: 'Lux', text: "I built you, and you still can't count." },
   'C8.rei.open': { kind: 'scene', speaker: 'Rei', text: "Right. Let's see what you did." },
+  'C8.rei.ack': {
+    kind: 'scene',
+    speaker: 'Rei',
+    text: 'Whole block lit through midnight. On your first night.',
+  },
   'C8.rei.sizing.good': {
     kind: 'scene',
     speaker: 'Rei',

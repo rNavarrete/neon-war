@@ -3421,6 +3421,7 @@ export class BoardScene extends Phaser.Scene {
         id: c.id,
         label: c.label,
         locked: c.locked,
+        hidden: c.hidden,
         ...page(c.x, c.y),
         count: this.inventory.countOf(c.id),
         price: c.price,

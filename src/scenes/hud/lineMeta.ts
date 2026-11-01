@@ -107,6 +107,7 @@ export const LESSON_IDS: readonly LineId[] = [
   'C5.triage.03',
   'C5.mika.05',
   'C6.triage.01',
+  'C6.triage.03',
   'C7.ozzie.01',
   'C7.triage.01',
 ];
@@ -164,6 +165,11 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
   'C4.triage.01': 'zone:alert',
   // The cut key, pointed at inside its window.
   'C4.lux.01': 'key:two',
+  'C4.lux.shed': 'key:two',
+  'C4.triage.nudge.shed': 'key:two',
+  'C2.triage.expired': 'zone:gauge',
+  'C6.lux.forecast': 'zone:alert',
+  'C6.triage.03': 'zone:alert',
   'C4.triage.02': 'part:dark',
   'C4.triage.03': 'zone:gauge',
   'C4.triage.04': 'part:database',
@@ -215,7 +221,7 @@ export const TEACHES: Readonly<Partial<Record<LineId, readonly TermKey[]>>> = {
   'C1.triage.03': ['requirements', 'requestsPerSecond', 'estimate'],
   'C1.triage.06': ['capacity', 'headroom'],
   'C2.triage.after': ['headroom'],
-  'C3.triage.01': ['scalingUp', 'scalingOut'],
+  'C3.triage.01': ['scalingUp'],
   'C3.lux.01': ['scalingOut', 'loadBalancer'],
   'C4.triage.02': ['singlePointOfFailure'],
   'C4.triage.03': ['retryStorm'],
@@ -223,6 +229,7 @@ export const TEACHES: Readonly<Partial<Record<LineId, readonly TermKey[]>>> = {
   'C5.triage.03': ['requestsPerSecond', 'scalingOut'],
   'C5.mika.05': ['headroom'],
   'C6.triage.01': ['requestsPerSecond', 'peakVsAverage'],
+  'C6.triage.03': ['redundancy'],
   // With the database beat retired (D2), the midnight dip is where one part falls and the next follow.
   'C6.triage.02': ['cascadingFailure', 'redundancy'],
   'C7.ozzie.01': ['scalingDown'],

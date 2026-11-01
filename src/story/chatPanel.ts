@@ -8,7 +8,8 @@
 // Messages roll in live (Rolando, 30 Oct 2026: "we have to make sure that we see comments roll in,
 // in real time"): the script's chat lines queue and land one at a time, 0.8 to 2 s apart, without
 // holding the dialogue; and while the scene is up the block and the viewers keep talking, a filler
-// line every 3 to 6 s from the scene's pool (the net flickering in the cold open, gone in the rescue).
+// line from the scene's pool, 3 to 6 s apart at first and faster each time (fillerGap): the net
+// flickering in the cold open, gone in the rescue.
 
 import Phaser from 'phaser';
 import {
@@ -62,8 +63,17 @@ export function avatarFor(msg: StoryChatMessage): string {
 
 /** Seconds between the script's queued chat lines landing: min and spread. */
 export const ARRIVAL = { min: 0.8, spread: 1.2 } as const;
-/** Seconds between filler lines while the scene is up: min and spread. */
-export const FILLER = { min: 3, spread: 3 } as const;
+/**
+ * Seconds between filler lines while the scene is up: min and spread for the first gap, then each gap
+ * shrinks by `ramp` down to `floor`, so the chat visibly blows up the longer the net stays bad
+ * (Rolando, 31 Oct 2026: the chat blows up before TRIAGE says so).
+ */
+export const FILLER = { min: 3, spread: 3, ramp: 0.75, floor: 0.9 } as const;
+
+/** The gap before filler line `n` (0 first), given a random draw `r` in [0, 1). Pure. */
+export function fillerGap(n: number, r: number): number {
+  return Math.max(FILLER.floor, (FILLER.min + r * FILLER.spread) * FILLER.ramp ** n);
+}
 
 /** Every line id with this prefix, in script order. Pure. */
 const pool = (prefix: string): LineId[] =>
@@ -202,7 +212,7 @@ export class StoryChat {
         this.land(this.queue.shift()!);
         this.arriveIn = ARRIVAL.min + this.rand() * ARRIVAL.spread;
         this.live = true;
-        this.fillIn = FILLER.min + this.rand() * FILLER.spread;
+        this.fillIn = fillerGap(this.fillNext, this.rand());
       }
       return;
     }
@@ -211,7 +221,7 @@ export class StoryChat {
     if (this.fillIn <= 0) {
       this.land(fillerMessage(this.filler[this.fillNext % this.filler.length]!));
       this.fillNext++;
-      this.fillIn = FILLER.min + this.rand() * FILLER.spread;
+      this.fillIn = fillerGap(this.fillNext, this.rand());
     }
   }
 

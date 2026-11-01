@@ -162,14 +162,28 @@ export function flickeringParts(dips: readonly PowerDip[], now: number): string[
   return dips.filter((d) => dipPhase(d, now) === 'flicker').flatMap((d) => dipParts(d));
 }
 
-export type RescueCause = 'trust' | 'time';
+export type RescueCause = 'trust' | 'time' | 'cut';
 
-/** Whether the crew breaks in at `now`: trust under 30 or 45 s into the district surge, whichever first. */
-export function rescueDue(trust: number, now: number): RescueCause | null {
+/**
+ * Whether the crew arrives now: trust under 30, the surge 40 s old, or (Rolando, 31 Oct 2026: the
+ * crew should follow the player's one clear task promptly) a few seconds after the laundry floor was
+ * cut loose (`cutAt`, null while it hasn't been).
+ */
+export function rescueDue(trust: number, now: number, cutAt: number | null = null): RescueCause | null {
   if (now < C.c4 || now >= C.c6) return null;
   if (trust < BROWNOUT.rescue.trustBelow) return 'trust';
   if (now - C.c4 >= BROWNOUT.rescue.surgeSeconds) return 'time';
+  if (cutAt !== null && now >= rescueAfterCut(cutAt)) return 'cut';
   return null;
+}
+
+/**
+ * When a laundry cut at `cutAt` brings the crew: a few seconds after the cut, but never before the
+ * surge's scripted dip has had as long on screen (the big server going dark is the night's single
+ * point of failure, so the crew never arrive over it).
+ */
+export function rescueAfterCut(cutAt: number): number {
+  return Math.max(cutAt, C.c4 + BROWNOUT.surgeScript.dipAfterSeconds) + BROWNOUT.rescue.afterCutSeconds;
 }
 
 export type SizingVerdict = 'drops' | 'holds-with-fast-replacement' | 'holds' | 'waste';

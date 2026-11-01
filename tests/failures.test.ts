@@ -218,21 +218,42 @@ describe('ac1: overheating', () => {
     expect(p.failure).toEqual({ at: p.t, cause: 'server-died', by: 'triage', rewindTo: C.c3 });
   });
 
-  it('ac1: played, 7.9 s over load then the paid banner takes it under 100%: it lives, and the count restarts', () => {
+  // Rolando, 31 Oct 2026: the Solace purchase must visibly do nothing when nothing is dropping. Its
+  // capacity is overflow only: it catches what the board drops, never takes load off the server.
+  it('ac1: played, the paid banner catches the dropped calls but the server still runs at 100% and cooks', () => {
     let p = stepTo(loneStockServer(), 120.5);
     expect(p.heat.overload['server-p1']).toBeCloseTo(7.9, 9);
-    // The Solace banner serves 60 first, so the server's load drops to demand − 60 < 60.
     p = ok(answerBanner(p, 'pay'));
+    // The block sends 40 over the server's 60: Solace catches them, so nothing drops...
+    expect(routePlay(p, playDemand(p, p.t), p.t).dropped).toBe(0);
+    expect(routePlay(p, 100, p.t).served).toBe(100);
+    // ...but the server keeps its full 60 and overheats on schedule.
     p = step(p, 0.1);
-    expect(p.heat.overload['server-p1']).toBeUndefined();
-    p = stepTo(p, 130);
-    expect(p.failure).toBeNull();
-    expect(p.heat.dead).toEqual([]);
-    // The banner runs to 120.5 + 60 = 180.5, past the start of the surge: the climb never cooks it.
-    p = untilFailure(p, C.c4);
-    expect(p.failure).toBeNull();
-    expect(p.heat.dead).toEqual([]);
-    expect(p.t).toBe(165);
+    expect(p.heat.dead).toEqual(['server-p1']);
+    expect(p.failure).toEqual({ at: p.t, cause: 'server-died', by: 'triage', rewindTo: C.c3 });
+  });
+
+  it('ac1: played, a banner paid in C2 with room to spare catches zero requests in its minute', () => {
+    let p = stepTo(newPlay(), C.c1);
+    p = ok(rackServer(p, 's1'));
+    p = stepTo(p, C.c2);
+    p = ok(answerBanner(p, 'pay'));
+    const paidAt = p.t;
+    p = stepTo(p, paidAt + BROWNOUT.solace.durationSeconds + 1);
+    expect(p.solaceCaught).toBe(0);
+    // The server carried the block the whole minute: Solace never took its load.
+    expect(p.session.banner).toEqual({ choice: 'pay', at: paidAt });
+    expect(p.used).toEqual(['server-p1']);
+  });
+
+  it('ac1: played, a banner paid during drops counts the requests it caught', () => {
+    let p = stepTo(loneStockServer(), 118);
+    p = ok(answerBanner(p, 'pay'));
+    p = stepTo(p, 120);
+    // From 118 to 120 the climb (67 to 70 req/s) plus the retries the drops since 112.6 piled on
+    // sends about 20 a second over the server's 60: Solace catches all of it.
+    expect(p.solaceCaught).toBeCloseTo(40.66, 2);
+    expect(p.dropped).toBeCloseTo(stepTo(loneStockServer(), 118).dropped, 9);
   });
 
   it('ac1: played, a dead server stays offline until it is replaced', () => {

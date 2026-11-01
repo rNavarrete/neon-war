@@ -84,8 +84,8 @@
   [
     "C2.triage.pay",
     "triage",
-    "[confused] The chart didn't move. Was it supposed to move?",
-    "[戸惑って] チャート、動かないね。動くはずだったんじゃないの？"
+    "[thinking] Solace is on. The gauge won't move: we weren't short of room.",
+    "[考えながら] ソレース、オンになったよ。でもゲージは動かない。そもそも余裕があったから。"
   ],
   ["C2.lux.ignore", "lux", "Not tonight.", "今夜はパス。"],
   [
@@ -103,8 +103,8 @@
   [
     "C3.triage.01",
     "triage",
-    "[excited] New toys! Scale up to a bigger server, or scale out with two?",
-    "[興奮して] 新しいおもちゃ！スケールアップで大きいサーバーにする？それともスケールアウトで二台？"
+    "[excited] New toy! SCALE UP swaps your server for one twice as big.",
+    "[興奮して] 新しいおもちゃ！スケールアップで、サーバーを倍の大きさのに取り替えるんだよ。"
   ],
   [
     "C3.triage.02",
@@ -115,8 +115,8 @@
   [
     "C3.lux.01",
     "lux",
-    "[flat] The gateway only feeds one server.",
-    "[淡々と] ゲートウェイは一台のサーバーにしか流さないよ。"
+    "[flat] The gateway feeds one server. A second one needs a load balancer.",
+    "[淡々と] ゲートウェイがつなげるのはサーバー一台だけ。二台目にはロードバランサーがいる。"
   ],
   [
     "C3.triage.03",
@@ -140,8 +140,8 @@
   [
     "C4.triage.01",
     "triage",
-    "[panicked] 250? We're built for 120! I did that math right, I checked!",
-    "[慌てて] 250？うちは120用だよ！その計算は合ってる、確かめたもん！"
+    "[panicked, rambling] 250? We're built for 120! I checked! Twice! Okay, three times!",
+    "[慌てて、早口で] 250？うちは120用だよ！確かめたもん！二回！……いや、三回！"
   ],
   [
     "C4.lux.01",
@@ -200,17 +200,22 @@
   [
     "C5.rei.01",
     "rei",
-    "[amused] Cute setup. Move over.",
-    "[面白がって] いいセットアップじゃん。ちょっとどいて。"
+    "[cool, appraising] You built this?",
+    "[冷静に、値踏みするように] これ、あんたが組んだの？"
   ],
-  ["C5.lux.01", "lux", "[angry] Who are you? Get out of my—", "[怒って] 誰？勝手に入って——"],
+  ["C5.lux.01", "lux", "[defensive, prickly] Are you here to complain?", "[ムッとして] 文句言いに来たの？"],
   [
     "C5.rei.02",
     "rei",
-    "Night Shift. We've been watching your block. You were doing fine. Then you weren't.",
-    "ナイトシフト。あんたのブロック、ずっと見てた。うまくやってたよ。途中まではね。"
+    "[in command] Night Shift. We brought the parts. You're doing the wiring.",
+    "[指揮をとって] ナイトシフト。部品は持ってきた。配線はあんたがやる。"
   ],
-  ["C5.mika.01", "mika", "[calmly] Breathe. Read the chart.", "[落ち着いて] 深呼吸して。チャートを読んで。"],
+  [
+    "C5.mika.01",
+    "mika",
+    "[calmly] Breathe. Watch the demand gauge. It's settling to about 120 a second.",
+    "[落ち着いて] 深呼吸して。需要ゲージを見て。毎秒120くらいに落ち着いてきてる。"
+  ],
   [
     "C5.mika.02",
     "mika",
@@ -233,8 +238,8 @@
   [
     "C5.ozzie.01",
     "ozzie",
-    "[smoothly] I'll front you 100. It goes on my tab.",
-    "[さらりと] 100貸してやる。俺のツケでな。"
+    "[smoothly, joking] I'll front you 100. Waste it and I'm telling your grandma.",
+    "[さらりと、冗談めかして] 100貸してやる。無駄にしたら、ばあちゃんに言いつけるからな。"
   ],
   [
     "C5.ozzie.02",
@@ -249,12 +254,7 @@
     "[dryly] Two is how you end up here again.",
     "[皮肉っぽく] 2台なんて言ってるから、こうなるんだよ。"
   ],
-  [
-    "C5.rei.04",
-    "rei",
-    "Stop. She can count. [to Lux] So count.",
-    "ストップ。この子は数えられる。……じゃあ、数えて。"
-  ],
+  ["C5.rei.04", "rei", "[firm] Clock's running. Show us.", "[きっぱりと] 時間は進んでる。見せて。"],
   [
     "C5.mika.04",
     "mika",
@@ -274,7 +274,12 @@
     "[考えながら] 毎秒120リクエスト。サーバー一台で60。答えは言わないよ。"
   ],
   ["C5.rei.05", "rei", "[satisfied] There it is.", "[満足げに] それだよ。"],
-  ["C5.ozzie.04", "ozzie", "[smug] See? Six. Sleep tonight.", "[得意げに] ほらな？6台。今夜はぐっすりだ。"],
+  [
+    "C5.ozzie.04",
+    "ozzie",
+    "[impressed, amused] That's a lot of servers. I respect it.",
+    "[感心して、面白がって] サーバー多いな。嫌いじゃない。"
+  ],
   [
     "C5.mika.05",
     "mika",
@@ -416,8 +421,8 @@
   [
     "C1.lux.chat",
     "lux",
-    "[embarrassed, laughing] Chat, I literally plugged in one cable. Calm down. ...Thank you.",
-    "[照れ笑い] チャットのみんな、ケーブル一本挿しただけだから。落ち着いて。……ありがと。"
+    "[embarrassed, laughing] Chat, I literally connected a box. Calm down. ...Thank you.",
+    "[照れ笑い] チャットのみんな、箱を一個つないだだけだから。落ち着いて。……ありがと。"
   ],
   [
     "C1.lux.goodcall",
@@ -495,8 +500,8 @@
   [
     "C4.lux.forecast",
     "lux",
-    "[serious] Big wave coming. Build before it hits, not after.",
-    "[真剣に] 大きい波が来る。来てからじゃなくて、来る前に組んで。"
+    "[tense, clipped] 250. Nothing on this board holds that.",
+    "[張りつめて、短く] 250。この盤面じゃ何も持たない。"
   ],
   [
     "C4.lux.forecast2",
@@ -507,14 +512,14 @@
   [
     "C4.lux.dark",
     "lux",
-    "[alarmed but steady] Lost one! Everybody stay calm. That includes you, TRIAGE.",
-    "[驚きつつも落ち着いて] 一台落ちた！みんな落ち着いて。トリアージ、あなたもね。"
+    "[clipped, steady] Lost one. Stay calm, TRIAGE.",
+    "[短く、落ち着いて] 一台落ちた。落ち着いて、トリアージ。"
   ],
   [
     "C4.lux.retry",
     "lux",
-    "[exasperated] Right. Every refresh is one more request. Stop it, guys!",
-    "[呆れて] そう。更新するたびにリクエストが一つ増えるの。やめてってば！"
+    "[exasperated, clipped] Every refresh is another request. Stop. Refreshing.",
+    "[呆れて、短く] 更新するたびにリクエストが増える。更新、やめて。"
   ],
   [
     "C4.lux.okafor",
@@ -537,8 +542,8 @@
   [
     "C6.lux.countdown",
     "lux",
-    "[soft, emotional] Ten seconds. Baachan, if you're watching... watch this.",
-    "[静かに、感情を込めて] あと十秒。ばあちゃん、見てるなら……見てて。"
+    "[soft, emotional] Almost there. Baachan, if you're watching... watch this.",
+    "[静かに、感情を込めて] もうすぐ。ばあちゃん、見てるなら……見てて。"
   ],
   [
     "C6.lux.midnight",
@@ -609,14 +614,14 @@
   [
     "C3.triage.nudge.choose.1",
     "triage",
-    "[thinking] Too much for one server! The tray has two ideas.",
-    "[考えながら] サーバー一台じゃ足りない！トレイにアイデアが二つあるよ。"
+    "[thinking] Too much for one server! Try the SCALE UP card.",
+    "[考えながら] サーバー一台じゃ足りない！スケールアップのカードを使ってみて。"
   ],
   [
     "C3.triage.nudge.choose.2",
     "triage",
-    "[playful] Scale up, or scale out? I'm not saying. I'm pointing.",
-    "[いたずらっぽく] スケールアップ？スケールアウト？言わないよ。指さすだけ。"
+    "[eager] SCALE UP onto your server. Same spot, twice the room!",
+    "[張り切って] スケールアップをサーバーに重ねて。同じ場所で、容量は倍！"
   ],
   [
     "C3.triage.nudge.idle",
@@ -627,8 +632,8 @@
   [
     "C3.lux.nudge.idle",
     "lux",
-    "[to herself] Sell the spare. Make the first one bigger.",
-    "[独り言] 余ったのは売ろう。最初のを大きくする。"
+    "[to herself] Sell it back. SCALE UP the first one instead.",
+    "[独り言] それは売り戻そう。代わりに最初のをスケールアップ。"
   ],
   [
     "C5.triage.nudge.splitter",
@@ -671,5 +676,62 @@
     "lux",
     "[to herself] Swap the dead server.",
     "[独り言] 落ちたサーバーを交換しよう。"
+  ],
+  [
+    "C0.lux.04",
+    "lux",
+    "[dry, wry sigh] This is what I get for rebuilding the block's power app. Lifetime tech support.",
+    "[ため息まじりに、皮肉っぽく] ブロックの電力アプリを作り直したら、こうなるわけ。一生テクサポ係。"
+  ],
+  [
+    "C2.lux.expired",
+    "lux",
+    "[deadpan] Two hundred credits for a countdown. Noted.",
+    "[無表情で] カウントダウンに200クレジット。覚えとく。"
+  ],
+  [
+    "C2.triage.expired",
+    "triage",
+    "[sheepish] Solace's minute is up. It caught zero requests.",
+    "[気まずそうに] ソレースの1分、終わったよ。拾ったリクエスト、ゼロ。"
+  ],
+  ["C4.lux.03", "lux", "[tense, clipped] I see it.", "[張りつめて、短く] 見えてる。"],
+  ["C4.lux.04", "lux", "[tense, clipped] I see that too.", "[張りつめて、短く] それも見えてる。"],
+  [
+    "C4.lux.shed",
+    "lux",
+    "[urgent, clipped] Laundry floor. Cut it loose. Now.",
+    "[切迫して、短く] コインランドリーの階。切り離す。今。"
+  ],
+  ["C4.triage.05", "triage", "[worried] Lux?", "[心配そうに] ルクス？"],
+  [
+    "C4.triage.06",
+    "triage",
+    "[worried, rising] There's more of it now.",
+    "[心配そうに、だんだん焦って] さっきより増えてる。"
+  ],
+  [
+    "C4.triage.nudge.shed",
+    "triage",
+    "[frantic, excited] The CUT key! It's glowing! It's glowing at you!",
+    "[あたふたと] カットキー！光ってる！ルクスに向かって光ってるよ！"
+  ],
+  [
+    "C6.lux.forecast",
+    "lux",
+    "[serious] Midnight wave. Build before it hits, not after.",
+    "[真剣に] 年越しの波が来る。来てからじゃなくて、来る前に組んで。"
+  ],
+  [
+    "C6.triage.03",
+    "triage",
+    "[thinking, worried] And one's going to lose power...",
+    "[考えながら、心配そうに] それと、一台は電源が落ちるよ……"
+  ],
+  [
+    "C8.rei.ack",
+    "rei",
+    "[quiet respect] Whole block lit through midnight. On your first night.",
+    "[静かに認めて] 年越しまでブロック全部、明かりがついてた。初日でね。"
   ]
 ]

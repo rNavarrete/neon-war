@@ -39,7 +39,23 @@ describe('story scripts', () => {
         id !== 'C5.rei.rewind' &&
         id !== 'C5.mika.04',
     );
-    expect(c5.steps.map((s) => s.lineId)).toEqual(sceneIds);
+    // Rolando, 31 Oct 2026: the crew entrance tightened. Rei sets the test, Mika points at the
+    // gauge, Ozzie pays and jokes; the server-count argument is out (its lines stay unplayed).
+    const unplayed = ['C5.mika.02', 'C5.ozzie.02', 'C5.mika.03', 'C5.ozzie.03'];
+    expect(c5.steps.map((s) => s.lineId)).toEqual(sceneIds.filter((id) => !unplayed.includes(id)));
+    expect(c5.steps.map((s) => s.lineId)).toEqual([
+      'C5.triage.01',
+      'C5.rei.01',
+      'C5.lux.01',
+      'C5.rei.02',
+      'C5.mika.01',
+      'C5.rei.03',
+      'C5.rei.cut',
+      'C5.lux.cut',
+      'C5.ozzie.01',
+      'C5.rei.04',
+    ]);
+    expect(LINES['C5.rei.02'].text).toBe("Night Shift. We brought the parts. You're doing the wiring.");
     // Mika's Regroup hand-over is not in Session 0 (BROWNOUT.regroup.inSession).
     expect(c5.steps.map((s) => s.lineId)).not.toContain('C5.mika.04');
     expect(c5.backdrop).toBe('art/bg/immersive.webp');

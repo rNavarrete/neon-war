@@ -695,7 +695,8 @@ test('comms-8: the leader points at the idle box for C3.triage.02; null without 
   await reach(page, 'c3', { timeout: 30_000 });
   await expect
     .poll(async () => (await comms(page)).history, { timeout: 10_000, intervals: [50] })
-    .toContain('C3.triage.01');
+    .toContain('C3.triage.03');
+  // Best play scaled up before C3, so TRIAGE acknowledges it (C3.triage.03) instead of asking.
   // Rack a second box in a free pad: TRIAGE asks why it does nothing.
   const pad = await page.evaluate(
     () =>
@@ -741,7 +742,9 @@ test('comms-8: the leader points at the idle box for C3.triage.02; null without 
   // Zone lines: null while nobody registered the zone, at the registered point once someone has.
   const zoneNames: Record<string, string[]> = {
     'C1.triage.06': ['gauge'],
-    'C3.triage.01': ['inventory', 'inventory:server'],
+    // Best play scales up before C3, so C3.triage.01 (scale up, at the inventory) is never said:
+    // help stops once the action is done (story pass, 31 Oct 2026). C1.triage.03 points at the gauge.
+    'C1.triage.03': ['gauge'],
   };
   for (const [id, names] of Object.entries(zoneNames)) {
     const seen = all.filter((s) => s.id === id);

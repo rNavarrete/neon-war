@@ -174,18 +174,51 @@ describe('coachProblem: what counts as stuck', () => {
     expect(p).toMatchObject({ step: 'replace', key: 'replace:s1', cards: ['server'], parts: ['s1'] });
   });
 
-  it('in C3, the one box at its limit and dropping calls lights both tray options', () => {
+  // Rolando, 31 Oct 2026: C3 offered "scale up or scale out?" when a second server can't work yet.
+  // One instruction, one target: the SCALE UP card, from the start of C3.
+  it('in C3, a stock box the gateway feeds lights the SCALE UP card only, before anything drops', () => {
+    const p = coachProblem(
+      input({
+        waitingForFirstBuild: false,
+        now: C.c3,
+        parts: [gateway, database, box('s1')],
+        wires: [w('gateway', 's1'), w('s1', 'database')],
+        load: { s1: 30 },
+        dropped: 0,
+      }),
+    );
+    expect(p).toMatchObject({ step: 'choose', cards: ['overclock'], parts: ['s1'], hint: null });
+  });
+
+  it('in C3, the box already scaled up needs nothing', () => {
+    const big = { ...box('s1'), boost: 2 };
     const p = coachProblem(
       input({
         waitingForFirstBuild: false,
         now: C.c3 + 30,
-        parts: [gateway, database, box('s1')],
+        parts: [gateway, database, big],
         wires: [w('gateway', 's1'), w('s1', 'database')],
         load: { s1: 60 },
-        dropped: 10,
       }),
     );
-    expect(p).toMatchObject({ step: 'choose', cards: ['overclock', 'server'], parts: ['s1'], hint: null });
+    expect(p).toBe(null);
+  });
+
+  it('lights the SCALE UP card at once in C3 and nudges only 10 s later', () => {
+    const p = coachProblem(
+      input({
+        waitingForFirstBuild: false,
+        now: C.c3,
+        parts: [gateway, database, box('s1')],
+        wires: [w('gateway', 's1'), w('s1', 'database')],
+      }),
+    )!;
+    const lit = stepCoach(stepCoach(NEW_COACH, p, 0, false).state, p, 0.1, false);
+    expect(coachLit(lit.state)).toBe(true);
+    const at9 = stepCoach(lit.state, p, 8.8, false);
+    expect(at9.nudge).toBe(null);
+    const at10 = stepCoach(at9.state, p, 1.1, false);
+    expect(at10.nudge).toBe('C3.triage.nudge.choose.1');
   });
 
   it('nothing after midnight', () => {
@@ -299,10 +332,10 @@ describe('the nudges themselves', () => {
     expect(long).toEqual([]);
   });
 
-  it('never give a number in C3: TRIAGE points, the player picks', () => {
-    expect(LINES['C3.triage.nudge.choose.1'].text).toBe('Too much for one server! The tray has two ideas.');
+  it('never give a number in C3: TRIAGE names the one tool, SCALE UP', () => {
+    expect(LINES['C3.triage.nudge.choose.1'].text).toBe('Too much for one server! Try the SCALE UP card.');
     expect(LINES['C3.triage.nudge.choose.2'].text).toBe(
-      "Scale up, or scale out? I'm not saying. I'm pointing.",
+      'SCALE UP onto your server. Same spot, twice the room!',
     );
   });
 });

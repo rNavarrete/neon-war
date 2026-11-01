@@ -17,6 +17,7 @@ import { ChatFeedView } from './hud/ChatFeedView';
 import { chatOf } from './hud/chat';
 import {
   BOARD_CUES,
+  SUPERSEDED,
   type CueView,
   type DirectorState,
   NEW_DIRECTOR,
@@ -553,6 +554,8 @@ export class HudScene extends Phaser.Scene {
     const out = direct(this.director, v, BOARD_CUES);
     this.director = out.state;
     for (let i = 0; i < out.fired.length; i++) this.cue(out.fired[i]);
+    // Help stops the moment the action succeeds: take back instructions already done.
+    if (this.comms) for (const s of SUPERSEDED) if (s.done(v)) this.comms.withdraw(s.ids);
   }
 
   /**
@@ -581,8 +584,11 @@ export class HudScene extends Phaser.Scene {
         : coachProblem(c);
     this.lastCoachFrame = f;
     this.lastCoachCard = this.cardOpen;
+    const solved = this.coach.problem;
     const out = stepCoach(this.coach, p, dt, f.paused || this.dragging);
     this.coach = out.state;
+    // The problem was solved (or became another): its nudges still waiting are out of date.
+    if (solved && solved.key !== (out.state.problem?.key ?? null)) this.comms?.withdraw(solved.lines);
     if (out.nudge) {
       this.coachSaid.push(out.nudge);
       this.comms?.enqueue(out.nudge);

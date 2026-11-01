@@ -110,7 +110,7 @@ test('holding a placed server lifts it: it moves to a free spot with every wire 
   expect(await wiresOf()).toEqual([`${id}>database`, `gateway>${id}`].sort());
 });
 
-test('the tray shows the server, the kit and a locked load balancer, and the rest of the catalog locked', async ({
+test('the tray shows the server and the kit, no load balancer until the crew gives it, and the rest of the catalog locked', async ({
   page,
 }) => {
   await openBoard(page);
@@ -119,6 +119,9 @@ test('the tray shows the server, the kit and a locked load balancer, and the res
   expect(byId.server.locked).toBe(false);
   expect(byId.overclock.locked).toBe(false);
   expect(byId.balancer.locked).toBe(true);
+  // Rolando, 31 Oct 2026: a greyed card nobody can use spoiled the crew's arrival, so it isn't drawn.
+  expect(byId.balancer.hidden).toBe(true);
+  expect(b.inventory.frames.balancer).toBe('hidden');
   const others = b.tray.filter((t) => !['server', 'overclock', 'balancer'].includes(t.id));
   expect(others.length).toBe(20);
   expect(others.every((t) => t.locked)).toBe(true);
@@ -126,11 +129,10 @@ test('the tray shows the server, the kit and a locked load balancer, and the res
   expect(b.slots.every((s) => !s.locked)).toBe(true);
   expect(b.parts.some((p) => p.kind === 'balancer')).toBe(false);
 
-  // Trying the locked balancer says why.
+  // Its empty slot does nothing: no card to pick up, no "the crew hasn't given you" refusal.
   await page.mouse.click(byId.balancer.x, byId.balancer.y);
-  await expect
-    .poll(async () => (await board(page)).refusal)
-    .toMatch(/the crew hasn't given you a load balancer yet/i);
+  await page.waitForTimeout(300);
+  expect((await board(page)).refusal).toBe(null);
 });
 
 test('dragging a scrap server to a slot places it, spends 80 credits and shows it booting for 3 s', async ({

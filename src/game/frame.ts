@@ -95,6 +95,8 @@ export interface Frame {
   readonly rescue: { readonly at: number; readonly by: RescueCause } | null;
   readonly regroup: { readonly charges: number; readonly handedOver: boolean; readonly left: number };
   readonly banner: { readonly choice: BannerChoice; readonly at: number } | null;
+  /** Requests the paid Solace banner has caught this run: overflow only, so zero while nothing drops. */
+  readonly solaceCaught: number;
   readonly midnight: Midnight | null;
   readonly failure: Failure | null;
   readonly rewinds: readonly Rewind[];
@@ -192,6 +194,7 @@ export function readFrame(r: Run): Frame {
     rescue: play.rescue,
     regroup: play.regroup,
     banner: r.session.banner,
+    solaceCaught: play.solaceCaught,
     midnight: play.midnight,
     failure: play.failure,
     rewinds: play.rewinds,

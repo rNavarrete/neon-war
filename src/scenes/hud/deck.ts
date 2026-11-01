@@ -90,7 +90,8 @@ export function stepDeck(out: DeckState, f: DeckInput, clock: number, steady: bo
   out.regroup = regroupKey(f.regroup);
   out.cut = cutKey(f.now, f.laundryCutAvailable, f.laundryCut);
   out.ring = out.regroup === 'active' ? Math.min(1, f.regroup.left / BROWNOUT.regroup.seconds) : 0;
-  out.pulse = out.regroup === 'ready' ? pulseAt(clock, steady) : 1;
+  // A ready key pulses: Regroup, and the laundry cut, the surge's one task (Rolando, 31 Oct 2026).
+  out.pulse = out.regroup === 'ready' || out.cut === 'ready' ? pulseAt(clock, steady) : 1;
   out.bannerOpen = bannerOpen(f.now, f.banner, f.cardOpen);
   out.blocked = f.paused || f.cardOpen || out.bannerOpen;
   return out;
@@ -124,14 +125,14 @@ export function keyShown(s: DeckState, key: KeyName): boolean {
   return key === 'one' ? s.regroup !== 'hidden' : s.cut !== 'hidden';
 }
 
-/** A key's alpha as drawn: lit keys at full (Regroup's pulse), done keys half, the rest dim. */
+/** A key's alpha as drawn: lit keys at full (their pulse), done keys half, the rest dim. */
 export function keyAlpha(s: DeckState, key: KeyName): number {
   if (key === 'one') {
     if (s.regroup === 'ready') return s.pulse;
     if (s.regroup === 'active') return 1;
     return s.regroup === 'spent' ? 0.45 : 0.3;
   }
-  return s.cut === 'ready' ? 1 : s.cut === 'done' ? 0.45 : 0.3;
+  return s.cut === 'ready' ? s.pulse : s.cut === 'done' ? 0.45 : 0.3;
 }
 
 /** What a key's cap says: its digit and its word (labels.ts), split at the first space. */

@@ -138,9 +138,11 @@ describe("Lux's asides", () => {
     expect(direct(asked, view({ now: C.c4 + 11, clock: 1 }), BOARD_CUES).fired).toContain('C4.lux.retry');
   });
 
-  it('C6: ten seconds to midnight, and only while the night is still open', () => {
-    expect(play([{ now: MIDNIGHT - 8 }])).toContain('C6.lux.countdown');
+  // Rolando, 31 Oct 2026: the dip at ten seconds out needs the band quiet, so she speaks at twenty.
+  it('C6: twenty seconds to midnight, clear of the dip, and only while the night is still open', () => {
+    expect(play([{ now: MIDNIGHT - 18 }])).toContain('C6.lux.countdown');
     expect(play([{ now: MIDNIGHT - 12 }])).not.toContain('C6.lux.countdown');
+    expect(play([{ now: MIDNIGHT - 8 }])).not.toContain('C6.lux.countdown');
   });
 
   it('the scripted table alone never fires an aside', () => {

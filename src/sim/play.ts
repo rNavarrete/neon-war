@@ -19,6 +19,7 @@ import {
   type BannerChoice,
   type Session,
   bannerCapacity,
+  withBanner,
   chargeUpkeep,
   chooseBanner,
   createSession,
@@ -39,6 +40,7 @@ import {
   darkParts,
   dipWarnAt,
   laundryCutAvailable,
+  rescueAfterCut,
   rescueDue,
   resolveDip,
   secondsToOverheat,
@@ -101,6 +103,8 @@ export interface Play {
   readonly failure: Failure | null;
   /** Requests dropped this run. */
   readonly dropped: number;
+  /** Requests the paid Solace banner caught this run (overflow only: zero while nothing drops). */
+  readonly solaceCaught: number;
   /** Viewer tips so far (src/sim/tips.ts): the session's income. */
   readonly tips: TipState;
   /**
@@ -153,6 +157,7 @@ export function createPlay(init: {
     midnight: null,
     failure: null,
     dropped: 0,
+    solaceCaught: 0,
     tips: NO_TIPS,
     used: [],
     checkpoint: null,
@@ -174,11 +179,10 @@ export function playDemand(play: Play, now: number): number {
   return withRetries(blockDemand(now, play.rescue !== null, play.laundryCut !== null), play.retry);
 }
 
-/** Where `demand` goes at `now`: the paid banner first, the rest through the board. */
+/** Where `demand` goes at `now`: through the board, then the paid banner catches what it drops. */
 export function routePlay(play: Play, demand: number, now: number): Flow {
-  const extra = Math.min(demand, bannerCapacity(play.session, now));
-  const flow = route(play.session.board, BROWNOUT_RULES, demand - extra, offlineParts(play, now));
-  return { ...flow, served: flow.served + extra };
+  const flow = route(play.session.board, BROWNOUT_RULES, demand, offlineParts(play, now));
+  return withBanner(flow, bannerCapacity(play.session, now));
 }
 
 /** Live servers: on the board and not dead. */
@@ -208,6 +212,7 @@ export function nextEdge(play: Play): number {
   for (const id in play.session.offlineUntil) consider(play.session.offlineUntil[id]);
   const banner = play.session.banner;
   if (banner && banner.choice === 'pay') consider(banner.at + BROWNOUT.solace.durationSeconds);
+  if (play.laundryCut && !play.rescue) consider(rescueAfterCut(play.laundryCut.at));
   consider(t + secondsToOverheat(play.heat));
   return edge;
 }
@@ -280,7 +285,8 @@ function advance(play: Play, dt: number): Play {
   if (now < C.c1) return checkpointed({ ...play, t });
 
   const demand = playDemand(play, now);
-  const flow = routePlay(play, demand, now);
+  const raw = route(play.session.board, BROWNOUT_RULES, demand, offlineParts(play, now));
+  const flow = withBanner(raw, bannerCapacity(play.session, now));
   const share = errorShare(flow, demand);
   const heat = updateOverheat(
     play.session.board,
@@ -299,6 +305,7 @@ function advance(play: Play, dt: number): Play {
       retry: updateRetries(play.retry, share, dt),
       heat,
       dropped: play.dropped + flow.dropped * dt,
+      solaceCaught: play.solaceCaught + (raw.dropped - flow.dropped) * dt,
       used: usedAfter(play.used, flow),
     },
     t,
@@ -312,7 +319,7 @@ function advance(play: Play, dt: number): Play {
     if (heat.dead.length > play.heat.dead.length) return failed(next, 'server-died', 'triage');
     if (trustGone) return failed(next, 'trust', 'triage');
   } else if (now < C.c6) {
-    const due = next.rescue ? null : rescueDue(session.trust, t);
+    const due = next.rescue ? null : rescueDue(session.trust, t, next.laundryCut?.at ?? null);
     if (due) next = applyRescue(next, t, due);
     // Trust gone in the surge: the crew comes anyway and Rei rewinds to the start of the surge.
     if (trustGone) {

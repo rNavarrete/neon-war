@@ -73,31 +73,40 @@ test('the cold open waits for a click on every line, then hands over to the boar
   expect(s.active).toBe(true);
   expect(s.runHeld).toBe(true);
 
+  // The chat blows up before anyone in the room says so (Rolando, 31 Oct 2026): one block message
+  // lands with each click from the TV's second line, before TRIAGE is even awake.
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.tv.02');
+  expect(s.chat).toEqual(["kenji: lux the net's doing the thing again"]);
+  expect(s.onStage).toEqual([]);
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.grandma.01');
+  expect(s.chat).toHaveLength(2);
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.01');
   expect(s.nameplate).toBe('Lux');
   expect(s.portrait).toBe('portrait:lux/vn/photo');
-  expect(s.chat).toEqual([]);
+  expect(s.chat).toHaveLength(3);
+  expect(s.onStage).toEqual(['Lux']);
 
-  // TRIAGE wakes and checks on her before the phone lights up (Rolando, 30 Oct 2026: the old "it's the
-  // net again" came before the chat had said anything), so the chat stays empty for two more lines.
+  // The fourth message wakes TRIAGE, who checks on her first...
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.triage.01');
-  expect(s.chat).toEqual([]);
+  expect(s.chat).toHaveLength(4);
+  expect(s.chat[3]).toBe('kenji: lux pls');
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.03');
-  expect(s.chat).toEqual([]);
 
-  // The phone lights up with the block's four messages as TRIAGE reads them out.
+  // ...and only then reads out the chat that has been blowing up all scene.
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.triage.02');
   expect(s.chat).toHaveLength(4);
-  expect(s.chat[0]).toBe("kenji: lux the net's doing the thing again");
   await page.screenshot({ path: 'test-results/screens/cold-open.png' });
+
+  // The block needs her again (Rolando, 31 Oct 2026): the power-app line, her dry streamer voice back.
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C0.lux.04');
+  expect(s.portrait).toBe('portrait:lux/vn/relieved');
 
   s = await nextLine(page);
   expect(s.lineId).toBe('C0.lux.02');
@@ -369,7 +378,7 @@ for (const r of REWINDS) {
   });
 }
 
-test('the debrief grades the night, names the terms, ends with the interview card, then Night Book page 1 and the title card', async ({
+test('the debrief is short: Rei acknowledges and grades, the invitation, then the Night Book a page per click and the title card', async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -385,7 +394,7 @@ test('the debrief grades the night, names the terms, ends with the interview car
     serversAtMidnight: 5,
   } as const;
   await page.evaluate((r) => window.__neonStory!.playDebrief(r), results);
-  await expect.poll(async () => (await story(page)).lineId).toBe('C8.rei.open');
+  await expect.poll(async () => (await story(page)).lineId).toBe('C8.rei.ack');
 
   let s = await story(page);
   expect(s.debrief?.step).toBe('grades');
@@ -398,23 +407,39 @@ test('the debrief grades the night, names the terms, ends with the interview car
   expect(s.figures.Rei!.facesLeft).toBe(true);
   await page.screenshot({ path: 'test-results/screens/debrief.png' });
 
+  // Rolando, 31 Oct 2026: one acknowledgement and one grade, then only what costs the player later.
   const grades = [s.lineId];
-  while (s.lineId !== 'C8.rei.close') {
+  while (s.debrief?.step === 'grades') {
     s = await nextLine(page);
-    grades.push(s.lineId);
+    if (s.debrief?.step === 'grades') grades.push(s.lineId);
   }
   expect(grades).toEqual([
-    'C8.rei.open',
+    'C8.rei.ack',
     // Graded on the boxes built: midnight held, but on 5 (one only cost).
     'C8.rei.sizing.bad',
     'C8.rei.banner.pay',
     'C8.rei.debt',
     'C8.ozzie.debt',
-    'C8.rei.waste',
-    'C8.rei.down',
-    'C8.rei.close',
   ]);
 
+  // The invitation lands while the fireworks are still going, before any reading.
+  expect(s.debrief?.step).toBe('invite');
+  expect(s.lineId).toBe('C8.triage.end');
+  s = await nextLine(page);
+  expect(s.lineId).toBe('C8.rei.end');
+  expect(s.debrief?.closeBook).toBeNull();
+
+  // The Night Book: page 1, written as it opens, with CLOSE BOOK.
+  s = await nextLine(page);
+  expect(s.debrief?.step).toBe('book');
+  expect(s.lineId).toBe('C8.book.open');
+  expect(s.nameplate).toBeNull();
+  expect(s.debrief?.page).toMatch(/^Demand decides the design\./);
+  expect(s.debrief?.closeBook).not.toBeNull();
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: 'test-results/screens/night-book.png' });
+
+  // A click turns to the words, named in three groups...
   s = await nextLine(page);
   expect(s.debrief?.step).toBe('terms');
   expect(s.debrief?.terms.map((t) => t.group)).toEqual(['Sizing', 'Scaling', 'Failure']);
@@ -422,6 +447,7 @@ test('the debrief grades the night, names the terms, ends with the interview car
   expect(s.debrief?.terms[2].bold).toContain('Redundancy, N+1');
   await page.screenshot({ path: 'test-results/screens/debrief-terms.png' });
 
+  // ...and to the interview answer, with Rei's note read out.
   s = await nextLine(page);
   expect(s.debrief?.step).toBe('interview');
   expect(s.lineId).toBe('C8.rei.interview');
@@ -430,20 +456,9 @@ test('the debrief grades the night, names the terms, ends with the interview car
   await page.screenshot({ path: 'test-results/screens/interview-card.png' });
 
   s = await nextLine(page);
-  expect(s.debrief?.step).toBe('book');
-  expect(s.lineId).toBe('C8.book.open');
-  expect(s.nameplate).toBeNull();
-  s = await nextLine(page);
-  expect(s.lineId).toBe('C8.triage.end');
-  expect(s.debrief?.page).toMatch(/^Demand decides the design\./);
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: 'test-results/screens/night-book.png' });
-  s = await nextLine(page);
-  expect(s.lineId).toBe('C8.rei.end');
-
-  s = await nextLine(page);
   expect(s.debrief?.step).toBe('title');
   expect(s.debrief?.title).toBe('Session 0: Brownout');
+  expect(s.debrief?.closeBook).toBeNull();
   expect(s.fireworks.bursts).toBeGreaterThan(0);
   expect(s.fireworks.flashes).toBeGreaterThan(0);
   expect(s.sfx).toContain('fireworks');
@@ -452,6 +467,24 @@ test('the debrief grades the night, names the terms, ends with the interview car
 
   await clickStory(page);
   await expect.poll(async () => (await state(page)).scene).toBe('title');
+});
+
+test('CLOSE BOOK on page 1 skips the rest of the Night Book to the title card', async ({ page }) => {
+  test.setTimeout(60_000);
+  await toBoard(page);
+  await page.evaluate(() => window.__neonStory!.playDebrief());
+  await expect.poll(async () => (await story(page)).lineId).toBe('C8.rei.ack');
+  let s = await story(page);
+  for (let guard = 0; s.debrief?.step !== 'book' && guard < 20; guard++) s = await nextLine(page);
+  expect(s.debrief?.step).toBe('book');
+  const close = s.debrief!.closeBook!;
+  await page.mouse.click(close.x, close.y);
+  await expect.poll(async () => (await story(page)).debrief?.step).toBe('title');
+  s = await story(page);
+  expect(s.debrief?.title).toBe('Session 0: Brownout');
+  // Nothing in between was shown: no terms, no card.
+  expect(s.debrief?.terms).toEqual([]);
+  expect(s.debrief?.card).toEqual([]);
 });
 
 test('reduce flicker keeps the debrief fireworks without flashes', async ({ page }) => {
@@ -496,28 +529,37 @@ test('the cold open shows the photo as an insert, then Lux holding it on the lef
   expect(s.lineId).toBe('C0.tv.01');
   expect(s.photo).toBe(true);
   await page.screenshot({ path: 'test-results/screens/story-photo-insert.png' });
+  // The chat blows up before anyone says so (Rolando, 31 Oct 2026): the first block message comes
+  // with the TV's second line, while TRIAGE is still asleep.
+  while (s.lineId !== 'C0.tv.02') {
+    if (!s.typingDone) await clickStory(page);
+    s = await clickStory(page);
+  }
+  expect(s.chat).toEqual(["kenji: lux the net's doing the thing again"]);
+  expect(s.onStage).toEqual([]);
   while (s.lineId !== 'C0.lux.01') {
     if (!s.typingDone) await clickStory(page);
     s = await clickStory(page);
   }
   expect(s.photo).toBe(false);
   expect(s.onStage).toEqual(['Lux']);
+  expect(s.chat).toHaveLength(3);
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'test-results/screens/story-lux-staged.png' });
-  // The phone lights up: four rows in the stream chat, and TRIAGE hovers beside Lux. Since the check-in
-  // beat (Rolando, 30 Oct 2026) that is C0.triage.02, after TRIAGE asks if she's okay.
+  // TRIAGE wakes to the fourth message, checks on her, and only then reads the chat out.
   while (s.lineId !== 'C0.triage.02') {
     if (!s.typingDone) await clickStory(page);
     s = await clickStory(page);
   }
   expect(s.chat).toHaveLength(4);
   expect(s.onStage).toEqual(['Lux', 'TRIAGE']);
-  // The four messages roll in one at a time rather than all at once...
-  expect(s.chatShown.length).toBeLessThan(4);
+  // The four script messages land in order, one at a time, with filler between them once it starts.
   await expect
-    .poll(async () => (await story(page)).chatShown.length, { timeout: 10_000 })
-    .toBeGreaterThanOrEqual(4);
-  expect((await story(page)).chatShown.slice(0, 4)).toEqual(s.chat);
+    .poll(async () => (await story(page)).chatShown.filter((m) => s.chat.includes(m)).length, {
+      timeout: 10_000,
+    })
+    .toBe(4);
+  expect((await story(page)).chatShown.filter((m) => s.chat.includes(m))).toEqual(s.chat);
   await page.screenshot({ path: 'test-results/screens/story-triage-chat.png' });
   // ...and the chat keeps talking while the player reads.
   await expect.poll(async () => (await story(page)).chatShown.length, { timeout: 10_000 }).toBeGreaterThan(4);

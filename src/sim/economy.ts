@@ -118,8 +118,10 @@ export function bannerCapacity(session: Session, now: number): number {
 }
 
 /**
- * Where `demand` goes at `now`: the paid banner serves up to its extra capacity first, the rest is
- * routed through the board with booting and rebooting parts offline.
+ * Where `demand` goes at `now`: through the board first, with booting and rebooting parts offline;
+ * the paid banner then catches what the board would drop, up to its extra capacity. Solace's
+ * "guaranteed capacity" is overflow only (Rolando, 31 Oct 2026: the purchase must visibly do
+ * nothing when nothing is dropping, never leave the player's own server idle).
  */
 export function routeSession(
   session: Session,
@@ -127,9 +129,15 @@ export function routeSession(
   now: number,
   rules: BoardRules = BROWNOUT_RULES,
 ): Flow {
-  const extra = Math.min(demand, bannerCapacity(session, now));
-  const flow = route(session.board, rules, demand - extra, offlineAt(session, now));
-  return { ...flow, served: flow.served + extra };
+  const flow = route(session.board, rules, demand, offlineAt(session, now));
+  return withBanner(flow, bannerCapacity(session, now));
+}
+
+/** A flow with the paid banner's overflow caught: up to `extra` of its dropped requests served. */
+export function withBanner(flow: Flow, extra: number): Flow {
+  const caught = Math.min(flow.dropped, extra);
+  if (caught <= 0) return flow;
+  return { ...flow, served: flow.served + caught, dropped: flow.dropped - caught };
 }
 
 /** At the rescue Ozzie fronts credits, once. */
