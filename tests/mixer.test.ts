@@ -309,9 +309,10 @@ describe('missing voices', () => {
     expect(m.en).toContain('C1.lux.01');
     // 85 until Lux's 26 board lines were recorded, then 111 until the 20 coach nudges were
     // (Rolando, 30 Oct 2026), 133 with the cold open's check-in beat, then 145 once the story pass's
-    // 12 new lines were recorded (31 Oct 2026): every spoken line.
-    expect(m.ja).toHaveLength(145);
-    expect(m.en).toHaveLength(145);
+    // 12 new lines were recorded (31 Oct 2026), then 172 with the crew call's 27 (1 Nov 2026): every
+    // spoken line.
+    expect(m.ja).toHaveLength(172);
+    expect(m.en).toHaveLength(172);
   });
 
   it('keeps the last 20 requests', () => {

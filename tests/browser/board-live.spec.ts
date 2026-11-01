@@ -791,7 +791,9 @@ test('after C4 (board-5, board-6): DARK counts down, never DEAD; SKIPPED stays a
   // Run on through the surge and its power dip to the crew, until their hijack call in the HUD is over.
   const hijackDone = () =>
     page.evaluate(
-      () => (window.__neonTest!.state as unknown as { hud?: { crew: { hijackDone: boolean } } }).hud?.crew.hijackDone,
+      () =>
+        (window.__neonTest!.state as unknown as { hud?: { crew: { hijackDone: boolean } } }).hud?.crew
+          .hijackDone,
     );
   const deadline = Date.now() + 90_000;
   for (;;) {

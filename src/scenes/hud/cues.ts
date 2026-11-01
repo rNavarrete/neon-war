@@ -338,6 +338,8 @@ export const CUES: readonly Cue[] = [
   },
   { id: 'C5.mika.05', follows: ['C5.ozzie.04'], when: (v, f) => after(f, 'C5.ozzie.04', 3, at(v)) },
   { id: 'C5.chat.01', when: (v) => boardBack(v) && v.now < C.c6 && v.dropped === 0 },
+  // The stream decides the crew are friendly once the block is back (Rolando, 1 Nov 2026).
+  { id: 'C5.chat.friendly', follows: ['C5.chat.01'], when: (v, f) => after(f, 'C5.chat.01', 2, at(v)) },
 
   // C6: midnight, your call.
   // The midnight forecast is the call; the crew react to the boxes actually running.

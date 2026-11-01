@@ -248,6 +248,11 @@ declare module '../live/views/comms' {
     glow: CommsGlowState;
     /** The crew's light-up: 0 dark, 1 lit, eased over 400 ms once run().rescued. */
     crew: { light: number };
+    /**
+     * The call tile's interference (the crew's hijack, 1 Nov 2026): the signal, the static's level
+     * now (0 clean to 1 jammed, crewCalls.noiseLevel), and the call panel's title.
+     */
+    signal: { kind: Signal; noise: number; title: string };
     /** comms-8: every name registered with locate.ts now, and where it is (page px; null when off screen). */
     located: Record<string, { x: number; y: number } | null>;
   }
@@ -1251,6 +1256,11 @@ export class CommsView implements LiveView {
       iris: { ...this.irisNow(), mood: this.mood(), motion: this.reduced() ? 'reduced' : 'full' },
       glow: this.glowNow(),
       crew: { light: crewLight(this.crewSince, this.real) },
+      signal: {
+        kind: this.signal,
+        noise: Math.round(this.noise * 1000) / 1000,
+        title: this.title?.text ?? '',
+      },
       art: {
         plate: {
           use: this.plateUse?.use ?? 'code',

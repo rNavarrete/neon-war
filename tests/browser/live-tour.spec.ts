@@ -25,6 +25,7 @@ interface Tour {
     deck: { regroup: string; keys: { one: Obj; two: Obj } };
     chat: { feed: { who: string; text: string }[]; block: string[]; stream: string[] };
     audience: { watching: number } | null;
+    crew: { hijackDone: boolean };
   };
   board: {
     channel: {
@@ -129,11 +130,12 @@ test('the Live tour: every zone, the channel and the voice, at the C4 surge and 
     description: `now ${s.hud.now.toFixed(0)}, ${surge.seconds} s`,
   });
 
-  // ---- midnight, the C5 rescue clicked through on the way ----
+  // ---- midnight, the crew's hijack call played in the HUD on the way ----
   const twelve = await reach(page, 'midnight', { timeout: 60_000 });
   const m = await tour(page);
   expectEveryZone(m, 'midnight');
-  expect(twelve.scenes, 'the C5 rescue was clicked through').toContain('C5');
+  expect(twelve.seen.rescue, "the crew's hijack call was seen").toBe(true);
+  expect(m.hud.crew.hijackDone, 'midnight: hud.crew.hijackDone').toBe(true);
   expect(m.hud.clock, 'midnight: hud.clock').toMatch(/^00:0\d:\d\d$/);
   expect(m.hud.map.midnight, 'midnight: hud.map.midnight').toBe(true);
   // The crew came in at the rescue: every slot is lit, and the crew's lines were voiced.

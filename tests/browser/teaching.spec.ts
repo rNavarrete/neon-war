@@ -99,8 +99,8 @@ test('1. demand against room is readable in C1, C3, C4, C6 and C7, nothing over 
     await test.step(`now >= ${at}`, async () => {
       await until(page, `hud.now >= ${at}`, (s) => (s.hud?.now ?? 0) >= at && !s.story?.active, 40_000, saw);
       // The board runs on at speed 10: read the first frame on which the four reads agree. 40 s (it was
-      // 20) since the C5 rescue can start inside this window and its fifteen lines are clicked through
-      // first; on CI that alone took 20 s (30 Oct 2026). The check itself is unchanged.
+      // 20) since the crew's hijack call can start inside this window and holds the board for its
+      // lines; on CI that alone took 20 s (30 Oct 2026). The check itself is unchanged.
       const s = await until(page, `the readout agreeing with hud.sim after now ${at}`, readable, 40_000);
       const h = s.hud!;
       expect(h.gauge!.readout.length, 'the gauge prints its number').toBeGreaterThan(0);

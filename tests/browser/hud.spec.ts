@@ -46,34 +46,6 @@ async function waitForNow(page: Page, t: number, timeout = 240_000): Promise<Hud
   return hud(page);
 }
 
-type Story = {
-  active: boolean;
-  scriptId: string | null;
-  click: { x: number; y: number } | null;
-  skip: { visible: boolean; x: number; y: number };
-};
-
-/** The story section of the hook. */
-async function storyOf(page: Page): Promise<Story> {
-  return page.evaluate(() => window.__neonTest!.state.story as unknown as Story);
-}
-
-/** Wait for a story scene over the board (the rescue), then click through it to the end. */
-async function playThroughScene(page: Page, scriptId: string): Promise<void> {
-  const story = () => storyOf(page);
-  await expect
-    .poll(async () => (await story()).scriptId, { timeout: 60_000, intervals: [50] })
-    .toBe(scriptId);
-  for (let guard = 0; guard < 200; guard++) {
-    const s = await story();
-    if (!s.active) return;
-    const p = s.skip.visible ? s.skip : s.click;
-    if (p) await page.mouse.click(p.x, p.y);
-    await page.waitForTimeout(80);
-  }
-  throw new Error(`the ${scriptId} scene never ended`);
-}
-
 test('the session opens on the job card, and clicking it away starts C1', async ({ page }) => {
   test.setTimeout(60_000);
   await openBoard(page, 4);
@@ -238,14 +210,13 @@ test('the surge, the laundry cut, the dip flicker, the rescue, the midnight fore
     // Taken as the surge lands, so the warning (it lingers a few seconds) and the cut both show.
     await page.screenshot({ path: 'test-results/screens/hud-c4.png' });
     // Lux's line about the cut waits in the comms band's queue behind TRIAGE's surge lines. Taken a
-    // few sim seconds late (C4 + 5 or after), it is still queued when the crew break in soon after,
-    // and the rescue scene pauses the HUD with it there, so it cannot show until the scene is
-    // clicked through (tech follow-up 5). Wait for whichever comes first; the line itself is
-    // asserted in bark.history below, after the scene if it came first.
+    // few sim seconds late (C4 + 5 or after), it may still be queued when the crew break into the
+    // comms soon after; it then goes to the band between their lines. Wait for whichever comes
+    // first; the line itself is asserted in bark.history below.
     await expect
       .poll(
         async () =>
-          (await hud(page)).bark.history.includes('C4.lux.cut') || (await storyOf(page)).scriptId === 'C5',
+          (await hud(page)).bark.history.includes('C4.lux.cut') || (await hud(page)).crew.call === 'hijack',
         { timeout: 60_000, intervals: [50] },
       )
       .toBe(true);
@@ -259,14 +230,15 @@ test('the surge, the laundry cut, the dip flicker, the rescue, the midnight fore
   });
 
   await test.step('the crew arrive, and no Regroup is handed over in Session 0', async () => {
-    // Tech follow-up 4: while the rescue scene is up the HUD is paused, and the title's dot says HELD.
+    // The crew break into the comms in the HUD (1 Nov 2026): the board holds still under the call
+    // until Rei hands the load balancer over, and the HUD keeps running.
     await expect
-      .poll(async () => (await storyOf(page)).scriptId, { timeout: 60_000, intervals: [50] })
-      .toBe('C5');
-    expect((await hud(page)).title?.live).toBe('held');
-    await playThroughScene(page, 'C5');
-    await expect.poll(async () => (await hud(page)).title?.live, { timeout: 10_000 }).not.toBe('held');
-    // Lux answered the laundry cut, before the scene or right after it (see the laundry step).
+      .poll(async () => (await hud(page)).crew.call, { timeout: 60_000, intervals: [50] })
+      .toBe('hijack');
+    expect((await hud(page)).crew.boardFrozen).toBe(true);
+    await expect.poll(async () => (await hud(page)).crew.hijackDone, { timeout: 90_000 }).toBe(true);
+    expect((await hud(page)).crew.boardFrozen).toBe(false);
+    // Lux answered the laundry cut, before the call or during it (see the laundry step).
     await expect
       .poll(async () => (await hud(page)).bark.history, { timeout: 60_000 })
       .toContain('C4.lux.cut');

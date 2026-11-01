@@ -194,8 +194,8 @@
   [
     "C5.triage.01",
     "triage",
-    "[panicked] Someone's in our goggles. Someone is IN our goggles.",
-    "[パニックで] 誰かがゴーグルに入ってる。誰かが中にいるってば！"
+    "[worried, glitchy] Wait. Something's on our channel. I didn't open that!",
+    "[不安そうに] 待って。チャンネルに何か入ってきてる。わたし、開けてないよ！"
   ],
   [
     "C5.rei.01",
@@ -225,8 +225,8 @@
   [
     "C5.rei.03",
     "rei",
-    "Here. A load balancer. It spreads traffic across every server behind it, and its health check skips any that's dark.",
-    "ほら。ロードバランサー。後ろのサーバー全部にトラフィックを振り分けて、ヘルスチェックで落ちてるのは飛ばしてくれる。"
+    "[handing it over] Here. A load balancer. It spreads traffic across every server.",
+    "[手渡すように] ほら。ロードバランサー。トラフィックを全部のサーバーに振り分ける。"
   ],
   [
     "C5.rei.cut",
@@ -733,5 +733,142 @@
     "rei",
     "[quiet respect] Whole block lit through midnight. On your first night.",
     "[静かに認めて] 年越しまでブロック全部、明かりがついてた。初日でね。"
+  ],
+  [
+    "C5.lux.who",
+    "lux",
+    "[sharp, defensive] Who is this? Get off my channel.",
+    "[鋭く、警戒して] 誰？ わたしのチャンネルから出てって。"
+  ],
+  [
+    "C5.triage.who",
+    "triage",
+    "[puffed up, brave] Yeah! Who ARE you?",
+    "[強がって] そうだ！ あなた、誰なの？"
+  ],
+  [
+    "C5.rei.build",
+    "rei",
+    "[cool, measured] No. It's good work. But one more wave like that and it's gone.",
+    "[冷静に] いや。いい仕事だよ。でも、もう一回あんな波が来たら終わりだ。"
+  ],
+  [
+    "C5.lux.fine",
+    "lux",
+    "[stubborn] We're fine. We don't need your help.",
+    "[意地を張って] 大丈夫。あんたたちの助けなんていらない。"
+  ],
+  [
+    "C5.mika.collapse",
+    "mika",
+    "[calm, matter-of-fact] Not from what we're seeing. Your block goes dark in a minute.",
+    "[落ち着いて、淡々と] こっちから見る限り、そうは見えない。あと一分で、あんたのブロックは真っ暗になる。"
+  ],
+  [
+    "C5.rei.health",
+    "rei",
+    "And its health check skips any server that's dark.",
+    "それに、ヘルスチェックで落ちてるサーバーは飛ばしてくれる。"
+  ],
+  [
+    "C5.triage.band",
+    "triage",
+    "[curious, excited] So who's Night Shift? Are you a band?",
+    "[わくわくして] で、ナイトシフトって誰なの？ バンド？"
+  ],
+  ["C5.ozzie.band", "ozzie", "[amused] We'd be a great band.", "[面白がって] いいバンドになると思うぜ。"],
+  [
+    "C5.rei.who",
+    "rei",
+    "[quietly] We keep the lights on in the blocks Solace skips.",
+    "[静かに] ソレイスが見捨てたブロックの明かりを守ってる。"
+  ],
+  [
+    "C5.mika.watched",
+    "mika",
+    "[warm] We watch your streams. You fix what nobody pays you to.",
+    "[温かく] あんたの配信、見てるよ。誰もお金を払わないものを直してる。"
+  ],
+  ["C5.lux.creepy", "lux", "[deadpan] That's... a little creepy.", "[真顔で] それ……ちょっと怖いんだけど。"],
+  [
+    "C5.ozzie.snacks",
+    "ozzie",
+    "[laughing] Told you we should've opened with snacks.",
+    "[笑いながら] だからお菓子から入れって言ったろ。"
+  ],
+  [
+    "C5.ozzie.roles",
+    "ozzie",
+    "[cheerful] I do the money. Mika does the numbers. Rei does the scary voice.",
+    "[陽気に] 俺は金担当。ミカは数字担当。レイは怖い声担当。"
+  ],
+  ["C5.rei.voice", "rei", "[flat] I don't do a voice.", "[淡々と] 声なんて作ってない。"],
+  ["C5.mika.voice", "mika", "[teasing] She does a voice.", "[からかって] 作ってるよ。"],
+  [
+    "C5.triage.pings",
+    "triage",
+    "[thinking] Those little pings. Is the load balancer checking on them?",
+    "[考えながら] あの小さいピング。ロードバランサーがみんなの様子を見てるの？"
+  ],
+  [
+    "C5.mika.health",
+    "mika",
+    "Health checks. A server goes dark, it gets skipped. No drama.",
+    "ヘルスチェック。サーバーが落ちたら、飛ばされる。騒ぎにはならない。"
+  ],
+  [
+    "C5.lux.neat",
+    "lux",
+    "[impressed despite herself] Huh. Okay. That's actually neat.",
+    "[思わず感心して] へえ。そっか。それ、けっこういいじゃん。"
+  ],
+  [
+    "C5.rei.wire",
+    "rei",
+    "[softly, remembering] You wire like someone I used to know.",
+    "[静かに、思い出すように] あんたの配線、昔の知り合いに似てる。"
+  ],
+  ["C5.lux.whoknew", "lux", "[sharp] Who?", "[鋭く] 誰？"],
+  [
+    "C5.rei.later",
+    "rei",
+    "[closing the subject] Later. Watch your board.",
+    "[話を切って] あとで。ボードを見てな。"
+  ],
+  [
+    "C5.ozzie.solace",
+    "ozzie",
+    "[scoffing] Solace wanted 200 credits for a banner? On New Year?",
+    "[鼻で笑って] ソレイスがバナーひとつで200クレジット？ 大晦日に？"
+  ],
+  [
+    "C5.mika.solace",
+    "mika",
+    "[dry] They sell the fix for a problem they won't solve.",
+    "[冷めた声で] 自分たちが解決しない問題の、修理を売ってるだけ。"
+  ],
+  [
+    "C8.rei.invite",
+    "rei",
+    "[sincere] We've been following you for a while, Lux.",
+    "[真剣に] ずっと見てたよ、ルクス。"
+  ],
+  [
+    "C8.rei.leagues",
+    "rei",
+    "[a small smile] You're ready for the big leagues.",
+    "[少し笑って] もう大舞台に出ていい。"
+  ],
+  [
+    "C8.lux.invite",
+    "lux",
+    "[trying to sound cool] ...I'll think about it.",
+    "[クールなふりをして] ……考えとく。"
+  ],
+  [
+    "C8.triage.going",
+    "triage",
+    "[delighted whisper] She's going. She's definitely going.",
+    "[嬉しそうにささやいて] 行くね。ぜったい行くね。"
   ]
 ]

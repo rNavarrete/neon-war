@@ -101,7 +101,7 @@ test('reach surge at speed 20 with autopilot: surge.startsAt C4 seen and now >= 
   expect(errors).toEqual([]);
 });
 
-test('reach midnight at speed 20 with autopilot: clock 00:00 within 50 s, the rescue clicked through', async ({
+test('reach midnight at speed 20 with autopilot: clock 00:00 within 50 s, the crew call played on the way', async ({
   page,
 }, testInfo) => {
   test.setTimeout(90_000);
@@ -118,9 +118,10 @@ test('reach midnight at speed 20 with autopilot: clock 00:00 within 50 s, the re
   );
   expect(r.hud.clock).toMatch(/^00:00/);
   expect(r.seconds).toBeLessThan(50);
-  // The crew's rescue holds the run on the way; the helper clicked it through itself.
-  expect(r.scenes).toContain('C5');
-  expect(r.snap.story?.finished).toContain('C5');
+  // The crew's hijack call holds the board on the way and plays itself in the HUD; no scene.
+  expect(r.seen.rescue).toBe(true);
+  expect(r.hud.crew.hijackDone).toBe(true);
+  expect(r.scenes).toEqual([]);
   expect(r.snap.story?.active).toBe(false);
   await shot(page, 'live-reach-midnight');
   expect(errors).toEqual([]);
@@ -142,14 +143,8 @@ type Hud = {
   cues: { fired: string[]; silenced: boolean };
   bark: { history: string[] };
   chat: { block: string[]; stream: string[] };
+  crew: { hijackDone: boolean };
 };
-type StoryState = {
-  active: boolean;
-  scriptId: string | null;
-  click: { x: number; y: number } | null;
-  skip: { visible: boolean; x: number; y: number };
-};
-
 const CARD_HOMES = ['jobCard', 'banner', 'dipFallback'];
 
 async function hudState(page: Page): Promise<Hud> {
@@ -199,19 +194,11 @@ async function expectRestaged(page: Page, moment: string, read?: Hud): Promise<B
   return shown;
 }
 
-async function clickThroughScene(page: Page, scriptId: string): Promise<void> {
-  const story = () => page.evaluate(() => window.__neonTest!.state.story as unknown as StoryState);
+/** Wait for the crew's hijack call over the HUD to run to its end (it plays itself). */
+async function waitForHijack(page: Page): Promise<void> {
   await expect
-    .poll(async () => (await story()).scriptId, { timeout: 90_000, intervals: [50] })
-    .toBe(scriptId);
-  for (let guard = 0; guard < 200; guard++) {
-    const s = await story();
-    if (!s.active) return;
-    const p = s.skip.visible ? s.skip : s.click;
-    if (p) await page.mouse.click(p.x, p.y);
-    await page.waitForTimeout(80);
-  }
-  throw new Error(`the ${scriptId} scene never ended`);
+    .poll(async () => (await hudState(page)).crew.hijackDone, { timeout: 120_000, intervals: [50] })
+    .toBe(true);
 }
 
 test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', async ({ page }) => {
@@ -293,7 +280,7 @@ test('the restaged HUD: every legacy piece inside its zone at C1, C4 and C6', as
     expect(ids).not.toContain('dial');
   });
 
-  await clickThroughScene(page, 'C5');
+  await waitForHijack(page);
 
   await test.step('C6: the midnight forecast, with no sizing prompt and no dial card', async () => {
     await expect

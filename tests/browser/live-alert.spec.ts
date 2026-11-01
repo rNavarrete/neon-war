@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import type { AlertHistoryEntry } from '../../src/scenes/hud/AlertView';
 import { BROWNOUT } from '../../src/sim/brownout';
-import { dismissJobCard, hud, openBoard, reach, shot, snap } from './live/reach';
+import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 
 // The gauges lane's alert band (gauges-3), asserted on window.__neonTest.state.hud.alert: one alert at
 // a time, the number first in the headline, RAID only as the tag, and the district surge's number
@@ -184,10 +184,10 @@ test('deck keys: 1 and 2 on the keyboard act like the keys, and wait for the car
     expect((await hud(page)).deck!.cut).toBe('done');
   });
 
-  await test.step('a story scene holds the keys: 1 during the rescue does nothing', async () => {
+  await test.step("the crew's hijack call holds the keys: 1 during the rescue does nothing", async () => {
     await expect
-      .poll(async () => (await snap(page)).story?.scriptId ?? null, { timeout: 60_000, intervals: [25] })
-      .toBe('C5');
+      .poll(async () => (await hud(page)).crew.call, { timeout: 60_000, intervals: [25] })
+      .toBe('hijack');
     const before = (await hud(page)).deck!.pressed;
     await page.keyboard.press('1');
     await page.waitForTimeout(150);

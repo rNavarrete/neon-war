@@ -243,7 +243,7 @@ test('the reread log: pin, a new line under it, replay, hover, leave, and no log
 // A sampler in the page reads hud.comms every 100 ms (at speed 20 the current line moves between
 // Playwright reads): whenever TRIAGE speaks, hud.comms.triage.mood is her line's bracket, and it is
 // null for everyone else; under reduce flicker the ring is steady and the panicking iris is still.
-// The crew's slots are dark until the C5 rescue scene and lit after it.
+// The crew's slots are dark until their hijack call breaks in and lit after it.
 interface CommsSample {
   speaker: string;
   id: string;
@@ -278,8 +278,7 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
     w.__commsSamples = [];
     setInterval(() => {
       const s = window.__neonTest!.state as unknown as {
-        hud?: { comms?: CommsTestState };
-        story?: { finished: string[] };
+        hud?: { comms?: CommsTestState; crew?: { call: string | null; hijackDone: boolean } };
       };
       const k = s.hud?.comms;
       if (!k) return;
@@ -290,13 +289,13 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
         iris: { mood: k.iris.mood, dx: k.iris.dx, dy: k.iris.dy, motion: k.iris.motion },
         glow: { slot: k.glow.slot, color: k.glow.color, motion: k.glow.motion },
         crewPresent: k.slots.filter((x) => ['REI', 'MIKA', 'OZZIE'].includes(x.name)).map((x) => x.present),
-        rescueDone: s.story?.finished.includes('C5') ?? false,
+        rescueDone: s.hud?.crew?.call === 'hijack' || (s.hud?.crew?.hijackDone ?? false),
       });
     }, 100);
   });
 
   const r = await reach(page, 'rescue', { timeout: 60_000 });
-  expect(r.scenes).toContain('C5');
+  expect(r.seen.rescue).toBe(true);
   const samples = (await page.evaluate(
     () => (window as unknown as { __commsSamples: unknown[] }).__commsSamples,
   )) as CommsSample[];
@@ -319,7 +318,7 @@ test('comms-4, comms-9: TRIAGE moods, steady glow, still iris under reduce flick
     expect([s.iris.dx, s.iris.dy], s.id).toEqual([0, 0]);
     expect(s.glow, s.id).toMatchObject({ slot: 'TRIAGE', color: 'red' });
   }
-  // The crew stay dark until the rescue scene is through.
+  // The crew stay dark until their call breaks in.
   const before = samples.filter((s) => !s.rescueDone);
   expect(before.length).toBeGreaterThan(0);
   expect(before.every((s) => s.crewPresent.every((p) => !p))).toBe(true);
