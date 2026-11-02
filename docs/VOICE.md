@@ -38,6 +38,8 @@ The old takes were moved, not deleted, to `out/lines/_old-2026-11-01/`.
 
 The one-screen end (2 Nov 2026) dropped `C8.rei.interview` (the Night Book's interview page is gone), so its
 two clips were removed from `public/audio/voice/`; the takes stay in the voice pipeline folder.
+The same day `C8.triage.end` was re-recorded in both languages to say 18 viewers (the chat shows 18
+stream handles); the old takes are in `out/lines/_old-2026-11-02/`.
 
 ## The manifest
 
