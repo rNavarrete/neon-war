@@ -35,7 +35,7 @@ test('the chat opens with the phone messages, reacts to the first serve and togg
   expect(h.chat.header).toMatchObject({ title: 'LIVE CHAT', tag: 'BLOCK + STREAM' });
   expect(h.audience?.watching ?? null).toBeNull();
 
-  // The first box serves: the cue table's two chat lines post, and the audience goes to 3.
+  // The first box serves: the cue table's two chat lines post, and the audience goes to 14.
   await reach(page, 'c1');
   await expect
     .poll(
@@ -46,7 +46,7 @@ test('the chat opens with the phone messages, reacts to the first serve and togg
       { timeout: 30_000, intervals: [50] },
     )
     .toEqual(['C1.chat.01', 'C1.chat.02']);
-  await expect.poll(async () => (await chatOf(page)).audience?.watching, { timeout: 30_000 }).toBe(3);
+  await expect.poll(async () => (await chatOf(page)).audience?.watching, { timeout: 30_000 }).toBe(14);
 
   h = await chatOf(page);
   const c = h.chat;

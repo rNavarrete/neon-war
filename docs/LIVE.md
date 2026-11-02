@@ -218,9 +218,10 @@ no events of their own by module augmentation: a new event is a line in `GameEve
   starts, no reaction posts for 2 s, so the lesson is read alone; other band lines do not quiet it.
   `since` is the HUD clock the line started at, and `tag` its band tag (HINT, WARNING, CREW, LUX,
   HOUSE).
-- **`audience`.** How many are watching Lux's stream, 0 to 4, from the chat lane's `viewersOf`:
-  2 until the first serve, 3 from then, 1 after 5 s of heavy errors, 3 on recovery, 4 on a held
-  midnight, 0 when dark. The chat view emits it only when the number changes, and the first
+- **`audience`.** How many are watching Lux's stream, 0 to 18, from the chat lane's `viewersOf`:
+  9 until the first serve, 14 from then, 6 after 5 s of heavy errors, 14 on recovery, 18 (every
+  stream handle in the chat) on a held midnight, 0 when dark. Rescaled on 2 Nov 2026 from 0 to 4,
+  which read wrong next to a chat full of names; TRIAGE's sign-off says the same 18. The chat view emits it only when the number changes, and the first
   emission comes with the first change, so TitleView shows WATCHING with no number until then.
   Nothing reads the count back from the hook: `hud.audience.watching` is a mirror for tests.
 

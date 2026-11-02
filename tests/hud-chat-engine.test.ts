@@ -1,5 +1,5 @@
 import script from '../docs/SCRIPT.md?raw';
-import { chatEntry, chatOf, fillerPool, seededRandom } from '../src/scenes/hud/chat';
+import { VIEWER_HANDLES, chatEntry, chatOf, fillerPool, seededRandom } from '../src/scenes/hud/chat';
 import {
   CHAT_PACE,
   HYPE_BURST,
@@ -23,6 +23,7 @@ import {
   seedChat,
   stepChat,
   toggleFilter,
+  VIEWERS,
   viewersOf,
   visibleRows,
 } from '../src/scenes/hud/chatEngine';
@@ -65,7 +66,7 @@ interface Sim {
 /** A chat that has already seen the first serve, settled at `clock`. */
 function sim(clock = 0, seed = 1): Sim {
   const rand = seededRandom(seed);
-  const s: ChatState = { ...initialChat(clock, rand), servedOnce: true, servingMax: 1, watching: 3 };
+  const s: ChatState = { ...initialChat(clock, rand), servedOnce: true, servingMax: 1, watching: 14 };
   return { s, rows: [], rand };
 }
 
@@ -274,27 +275,38 @@ describe('scripted ids and pace', () => {
 });
 
 describe('viewersOf', () => {
-  const f = { now: 120, servedOnce: false, heavyFor: 0, calmFor: 10, held: false, dark: false };
-
-  it('2 until the first serve, 3 from it, 1 after 5 s of heavy errors, 3 on recovery, 4 held, 0 dark', () => {
-    expect(viewersOf(2, f)).toBe(2);
-    expect(viewersOf(2, { ...f, servedOnce: true })).toBe(3);
-    expect(viewersOf(3, { ...f, servedOnce: true, heavyFor: 4.9, calmFor: 0 })).toBe(3);
-    expect(viewersOf(3, { ...f, servedOnce: true, heavyFor: 5, calmFor: 0 })).toBe(1);
-    expect(viewersOf(1, { ...f, servedOnce: true, calmFor: 2.9 })).toBe(1);
-    expect(viewersOf(1, { ...f, servedOnce: true, calmFor: 3 })).toBe(3);
-    expect(viewersOf(3, { ...f, servedOnce: true, held: true })).toBe(4);
-    expect(viewersOf(3, { ...f, servedOnce: true, dark: true })).toBe(0);
-    expect(viewersOf(0, { ...f, servedOnce: true })).toBe(3);
+  // Rolando (2 Nov 2026): the chat shows a dozen-plus names, so "4 viewers" read wrong. The held
+  // midnight's audience is every handle the stream posts under, and TRIAGE's sign-off says that number.
+  it('ends a held night on every stream handle (18), and TRIAGE says 18', () => {
+    expect(VIEWER_HANDLES.length).toBe(18);
+    expect(VIEWERS).toEqual({ waiting: 9, live: 14, heavy: 6, held: 18 });
+    expect(
+      viewersOf(14, { now: 520, servedOnce: true, heavyFor: 0, calmFor: 10, held: true, dark: false }),
+    ).toBe(18);
+    expect(LINES['C8.triage.end'].text).toBe('Stream saved. 18 viewers. Best night ever.');
   });
 
-  it('never rises inside a surge window, and never exceeds 4', () => {
+  const f = { now: 120, servedOnce: false, heavyFor: 0, calmFor: 10, held: false, dark: false };
+
+  it('9 until the first serve, 14 from it, 6 after 5 s of heavy errors, 14 on recovery, 18 held, 0 dark', () => {
+    expect(viewersOf(9, f)).toBe(9);
+    expect(viewersOf(9, { ...f, servedOnce: true })).toBe(14);
+    expect(viewersOf(14, { ...f, servedOnce: true, heavyFor: 4.9, calmFor: 0 })).toBe(14);
+    expect(viewersOf(14, { ...f, servedOnce: true, heavyFor: 5, calmFor: 0 })).toBe(6);
+    expect(viewersOf(6, { ...f, servedOnce: true, calmFor: 2.9 })).toBe(6);
+    expect(viewersOf(6, { ...f, servedOnce: true, calmFor: 3 })).toBe(14);
+    expect(viewersOf(14, { ...f, servedOnce: true, held: true })).toBe(18);
+    expect(viewersOf(14, { ...f, servedOnce: true, dark: true })).toBe(0);
+    expect(viewersOf(0, { ...f, servedOnce: true })).toBe(14);
+  });
+
+  it('never rises inside a surge window, and never exceeds 18', () => {
     expect(SURGE_WINDOWS[0]).toEqual([C.c4, C.c5]);
     expect(inSurge(C.c4 + 10)).toBe(true);
     expect(inSurge(C.c5)).toBe(false);
-    expect(viewersOf(1, { ...f, now: C.c4 + 20, servedOnce: true, calmFor: 30 })).toBe(1);
-    expect(viewersOf(1, { ...f, now: C.c5, servedOnce: true, calmFor: 30 })).toBe(3);
-    for (let prev = 0; prev <= 4; prev++)
+    expect(viewersOf(6, { ...f, now: C.c4 + 20, servedOnce: true, calmFor: 30 })).toBe(6);
+    expect(viewersOf(6, { ...f, now: C.c5, servedOnce: true, calmFor: 30 })).toBe(14);
+    for (const prev of [0, 6, 9, 14, 18])
       for (const held of [false, true])
         for (const heavyFor of [0, 6])
           for (const now of [100, C.c4 + 5, C.c6 + 5, 520]) {
@@ -306,13 +318,13 @@ describe('viewersOf', () => {
               held,
               calmFor: heavyFor ? 0 : 5,
             });
-            expect(n).toBeLessThanOrEqual(4);
+            expect(n).toBeLessThanOrEqual(18);
             expect(n).toBeGreaterThanOrEqual(0);
-            if (inSurge(now) && !held) expect(n).toBeLessThanOrEqual(Math.max(prev, prev === 0 ? 3 : 0));
+            if (inSurge(now) && !held) expect(n).toBeLessThanOrEqual(Math.max(prev, prev === 0 ? 14 : 0));
           }
   });
 
-  it('through a night: 2, 3, 1 in the surge, 3 after it, 4 at a held midnight; 0 when dark', () => {
+  it('through a night: 9, 14, 6 in the surge, 14 after it, 18 at a held midnight; 0 when dark', () => {
     const rand = seededRandom(3);
     let s = initialChat(0, rand);
     const seen: number[] = [];
@@ -333,8 +345,8 @@ describe('viewersOf', () => {
     for (let t = C.c5; t < C.c7; t += 0.5) at(t, {});
     at(C.c7, { midnightHeld: true });
     at(C.c7 + 1, { midnightHeld: true });
-    expect(seen).toEqual([2, 3, 1, 3, 4]);
-    expect(Math.max(...seen)).toBeLessThanOrEqual(4);
+    expect(seen).toEqual([9, 14, 6, 14, 18]);
+    expect(Math.max(...seen)).toBeLessThanOrEqual(18);
 
     const dark = stepChat(s, { ...CALM, clock: C.c7 + 2, now: C.c7 + 2, midnightDark: true }, [], rand).state;
     expect(dark.watching).toBe(0);

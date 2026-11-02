@@ -97,8 +97,8 @@ describe('voice manifest', () => {
     // (Rolando, 30 Oct 2026) added C0.lux.03 and C0.triage.02.
     // 145 since Rolando's story pass (31 Oct 2026) added 12 spoken lines, recorded the same day.
     // 172 since the crew's call moved into the HUD (1 Nov 2026) added 27 spoken lines, recorded the
-    // same day.
-    expect(voicedLines()).toHaveLength(172);
+    // same day; 171 once the one-screen end (2 Nov 2026) dropped Rei's interview line.
+    expect(voicedLines()).toHaveLength(171);
     const KNOWN_GAPS = knownGaps();
     // 20 coach nudges until they were recorded (Rolando, 30 Oct 2026); the story pass's 12 new lines
     // until they were recorded (31 Oct 2026). None now.

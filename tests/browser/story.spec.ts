@@ -299,7 +299,7 @@ test("a real overheat in C3 plays TRIAGE's replay and rewinds credits, parts and
   expect(b.parts.filter((p) => p.kind === 'server')).toHaveLength(1);
 });
 
-test('one test plays the whole session from the title to Night Book page 1 with best play', async ({
+test('one test plays the whole session from the title to the one-screen end with best play', async ({
   page,
 }) => {
   test.setTimeout(300_000);
@@ -338,25 +338,21 @@ test('one test plays the whole session from the title to Night Book page 1 with 
   await page.screenshot({ path: 'test-results/screens/session-rescue.png' });
   await expect.poll(async () => (await crewHud(page)).hud.crew.hijackDone, { timeout: 90_000 }).toBe(true);
 
-  // Midnight holds, then the debrief at 00:01:00.
+  // Midnight holds, the crew sign off over the HUD, then the one-screen end.
   await expect
     .poll(async () => (await story(page)).debrief?.step ?? null, { timeout: 120_000 })
-    .toBe('grades');
+    .toBe('scorecard');
   const s = await story(page);
   expect(s.debrief?.results.midnightHeld).toBe(true);
   expect(s.debrief?.results.serversAtMidnight).toBe(4);
   expect(s.debrief?.results.droppedRequests).toBeGreaterThan(0);
   expect(s.debrief?.results.ozzieTab).toBe(100);
   expect(s.debrief?.results.scaledDown).toBe(true);
-  await page.screenshot({ path: 'test-results/screens/session-debrief.png' });
-
-  let line = s;
-  for (let guard = 0; line.debrief?.step !== 'book' && guard < 40; guard++) line = await nextLine(page);
-  expect(line.debrief?.step).toBe('book');
-  line = await nextLine(page);
-  expect(line.debrief?.page).toMatch(/^Demand decides the design\./);
   await page.waitForTimeout(1000);
-  await page.screenshot({ path: 'test-results/screens/session-night-book.png' });
+  await page.screenshot({ path: 'test-results/screens/session-debrief.png' });
+  // One click ends the session.
+  await page.mouse.click(s.debrief!.end.x, s.debrief!.end.y);
+  await expect.poll(async () => (await state(page)).scene).toBe('title');
 });
 
 const REWINDS = [
@@ -396,7 +392,7 @@ for (const r of REWINDS) {
   });
 }
 
-test('the debrief is the last thing: the scorecard with nobody in the room, then the Night Book a page per click and the title card', async ({
+test('the end is one screen: the results, one lesson and the words for it, then a click ends the session', async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -412,76 +408,28 @@ test('the debrief is the last thing: the scorecard with nobody in the room, then
     serversAtMidnight: 5,
   } as const;
   await page.evaluate((r) => window.__neonStory!.playDebrief(r), results);
-  await expect.poll(async () => (await story(page)).debrief?.step ?? null).toBe('grades');
+  await expect.poll(async () => (await story(page)).debrief?.step ?? null).toBe('scorecard');
 
-  // Rolando, 1 Nov 2026: Rei grades and invites over the HUD; the room shows only the scorecard,
-  // with no one standing in it and no line under it.
-  let s = await story(page);
-  expect(s.debrief?.results).toEqual(results);
+  // Rolando, 2 Nov 2026: no Night Book pages, no interview card; one screen and done. Nobody stands
+  // in the room and nothing is said over it.
+  const s = await story(page);
+  expect(s.debrief).toMatchObject({
+    step: 'scorecard',
+    results,
+    title: 'Session 0: Brownout',
+    lesson: 'Count the peak before you build. Then build for it, plus one spare.',
+    words: 'Load balancer · Health checks · Scaling out · Redundancy, N+1',
+  });
   expect(s.lineId).toBe(null);
   expect(s.onStage).toEqual([]);
   expect(Object.keys(s.figures)).toEqual([]);
-  await page.waitForTimeout(600);
-  await page.screenshot({ path: 'test-results/screens/debrief.png' });
-
-  // The Night Book: page 1, written as it opens, with CLOSE BOOK.
-  await clickStory(page);
-  await expect.poll(async () => (await story(page)).debrief?.step).toBe('book');
-  s = await story(page);
-  expect(s.lineId).toBe('C8.book.open');
-  expect(s.nameplate).toBeNull();
-  expect(s.debrief?.page).toMatch(/^Demand decides the design\./);
-  expect(s.debrief?.closeBook).not.toBeNull();
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: 'test-results/screens/night-book.png' });
-
-  // A click turns to the words, named in three groups...
-  s = await nextLine(page);
-  expect(s.debrief?.step).toBe('terms');
-  expect(s.debrief?.terms.map((t) => t.group)).toEqual(['Sizing', 'Scaling', 'Failure']);
-  expect(s.debrief?.terms[1].bold).toContain('Load balancer');
-  expect(s.debrief?.terms[2].bold).toContain('Redundancy, N+1');
-  await page.screenshot({ path: 'test-results/screens/debrief-terms.png' });
-
-  // ...and to the interview answer, with Rei's note read out.
-  s = await nextLine(page);
-  expect(s.debrief?.step).toBe('interview');
-  expect(s.lineId).toBe('C8.rei.interview');
-  expect(s.debrief?.card[0]).toBe('How would you scale a web app from a single server?');
-  expect(s.debrief?.card).toHaveLength(8);
-  await page.screenshot({ path: 'test-results/screens/interview-card.png' });
-
-  s = await nextLine(page);
-  expect(s.debrief?.step).toBe('title');
-  expect(s.debrief?.title).toBe('Session 0: Brownout');
-  expect(s.debrief?.closeBook).toBeNull();
-  expect(s.fireworks.bursts).toBeGreaterThan(0);
-  expect(s.fireworks.flashes).toBeGreaterThan(0);
   expect(s.sfx).toContain('fireworks');
   await page.waitForTimeout(1200);
-  await page.screenshot({ path: 'test-results/screens/title-card.png' });
+  await page.screenshot({ path: 'test-results/screens/debrief.png' });
 
-  await clickStory(page);
+  // One click anywhere ends the session: back to the title.
+  await page.mouse.click(s.debrief!.end.x, s.debrief!.end.y);
   await expect.poll(async () => (await state(page)).scene).toBe('title');
-});
-
-test('CLOSE BOOK on page 1 skips the rest of the Night Book to the title card', async ({ page }) => {
-  test.setTimeout(60_000);
-  await toBoard(page);
-  await page.evaluate(() => window.__neonStory!.playDebrief());
-  await expect.poll(async () => (await story(page)).debrief?.step ?? null).toBe('grades');
-  await clickStory(page);
-  await expect.poll(async () => (await story(page)).debrief?.step).toBe('book');
-  let s = await story(page);
-  expect(s.debrief?.step).toBe('book');
-  const close = s.debrief!.closeBook!;
-  await page.mouse.click(close.x, close.y);
-  await expect.poll(async () => (await story(page)).debrief?.step).toBe('title');
-  s = await story(page);
-  expect(s.debrief?.title).toBe('Session 0: Brownout');
-  // Nothing in between was shown: no terms, no card.
-  expect(s.debrief?.terms).toEqual([]);
-  expect(s.debrief?.card).toEqual([]);
 });
 
 test('reduce flicker keeps the debrief fireworks without flashes', async ({ page }) => {
