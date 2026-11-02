@@ -1,0 +1,13 @@
+{
+  "common": "Edit ONLY the band print on Lux's oversized faded white long-sleeve tee, inside the transparent mask area. Remove the old print completely and replace it with an ORIGINAL fictional band tee print described below. Keep it a faded, slightly cracked vintage screen print on the same off-white cotton, with the same folds, lighting and painted anime style as the rest of the picture, about the same size and placement as the old print (wordmark on top, square picture in the middle, album title below). Spell every word exactly as given, in clean legible letters. The see-through yellow raincoat edge on the right still overlaps the shirt the way it does now. Everything outside the mask stays exactly the same. Do not include any real band name, any swimming baby, or any dollar bill.",
+  "concepts": [
+    {"id": "deadair", "band": "DEADAIR", "title": "OFFLINE", "print": "Wordmark 'DEADAIR' in heavy condensed black distressed capitals. Picture: a rusty rooftop satellite dish half-sunk in deep blue water, light rays from above, a few bubbles. Under it 'OFFLINE' in bold black capitals."},
+    {"id": "sodium-halo", "band": "SODIUM HALO", "title": "WET CONCRETE", "print": "Wordmark 'SODIUM HALO' in cracked tall serif capitals, black. Picture: one sodium-orange streetlight glowing through heavy rain at night, its halo reflected in a puddle on dark concrete, two-tone orange and navy screen print. Under it 'WET CONCRETE' in small spaced black capitals."},
+    {"id": "lantern-kids", "band": "LANTERN KIDS", "title": "KEEP IT LIT", "print": "Wordmark 'LANTERN KIDS' in hand-cut stencil capitals, black. Picture: an old lattice power-grid pylon at night with one warm paper lantern glowing at its top against a dark teal sky, tiny lit windows of slum rooftops below, three-colour screen print. Under it 'KEEP IT LIT' in bold black capitals."},
+    {"id": "paper-moths", "band": "PAPER MOTHS", "title": "TO THE LIGHT", "print": "Wordmark 'PAPER MOTHS' in scratchy hand-lettered black capitals. Picture: a pale moth circling a single bare light bulb hanging from a tangle of black cables, warm amber glow on cream and black, woodcut style. Under it 'TO THE LIGHT' in bold black capitals."},
+    {"id": "low-battery", "band": "LOW BATTERY", "title": "STILL HERE", "print": "Wordmark 'LOW BATTERY' in chunky black grunge capitals. Picture: a big hand-drawn battery icon outline, empty except one glowing red bar on the left, over a faded halftone night skyline, red and black screen print. Under it 'STILL HERE' in bold black capitals."}
+  ],
+  "variants_per_concept": 2,
+  "size": "1024x1536",
+  "quality": "high"
+}
