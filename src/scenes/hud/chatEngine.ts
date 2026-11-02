@@ -17,9 +17,10 @@
 // 6 to 10 s of silence, from the pool of the block's state (chat.ts), block twice for every stream
 // line.
 //
-// viewersOf is the tiny honest audience (decision D5): 2 until the first serve, 3 from it, 1 after
-// 5 s of heavy errors, 3 on recovery, 4 at a held midnight, 0 when the block goes dark; it never
-// rises during a surge and never exceeds 4.
+// viewersOf is the small honest audience (decision D5, rescaled 2 Nov 2026 so the count matches the
+// eighteen handles the chat shows): 9 until the first serve, 14 from it, 6 after 5 s of heavy
+// errors, 14 on recovery, 18 (every regular) at a held midnight, 0 when the block goes dark; it never
+// rises during a surge and never exceeds 18.
 //
 // Pure: no Phaser, no Date. Time comes in as the HUD clock; randomness from an injected rand.
 // stepChat returns the identical state and NO_POSTS on a frame with no edges or events.
@@ -67,8 +68,13 @@ export const HEAVY_HOLD = 2;
 /** A spell of errors at least this long, then this much calm, before the thanks. */
 export const SPELL_MIN = 3;
 export const CALM_HOLD = 3;
-/** Heavy errors held this long before the audience falls to 1. */
+/** Heavy errors held this long before the audience falls to 6. */
 export const VIEWERS_HEAVY_HOLD = 5;
+/**
+ * The stream's audience at each step (2 Nov 2026: Rolando counted a dozen-plus names in the chat, so
+ * "4 viewers" read wrong). `held` is every handle in VIEWER_HANDLES (chat.ts).
+ */
+export const VIEWERS = { waiting: 9, live: 14, heavy: 6, held: 18 } as const;
 /** Retries share edges that earn a reaction. */
 export const RETRY_STEPS: readonly number[] = [0.2, 0.4];
 /** Rows the feed keeps as history (the view shows the newest five). */
@@ -470,7 +476,7 @@ export function initialChat(clock: number, rand: () => number, rewinds = 0): Cha
     silenced: false,
     left: [],
     filter: 'all',
-    watching: 2,
+    watching: VIEWERS.waiting,
     errSince: null,
     heavySince: null,
     calmSince: clock,
@@ -513,19 +519,19 @@ export interface ViewerFacts {
 }
 
 /**
- * How many are watching after `prev`: 2 until the first serve, 3 from it, 1 after 5 s of heavy
- * errors, 3 once calm holds 3 s, 4 at a held midnight, 0 when dark. Never above 4, and never
- * rising inside a surge window (the held midnight aside: it ends the night at 4).
+ * How many are watching after `prev`: 9 until the first serve, 14 from it, 6 after 5 s of heavy
+ * errors, 14 once calm holds 3 s, 18 at a held midnight, 0 when dark. Never above 18, and never
+ * rising inside a surge window (the held midnight aside: it ends the night at 18).
  */
 export function viewersOf(prev: number, f: ViewerFacts): number {
   if (f.dark) return 0;
-  if (f.held) return 4;
-  let n = prev === 0 ? (f.servedOnce ? 3 : 2) : prev;
-  if (f.heavyFor >= VIEWERS_HEAVY_HOLD - 1e-9) n = Math.min(n, 1);
+  if (f.held) return VIEWERS.held;
+  let n = prev === 0 ? (f.servedOnce ? VIEWERS.live : VIEWERS.waiting) : prev;
+  if (f.heavyFor >= VIEWERS_HEAVY_HOLD - 1e-9) n = Math.min(n, VIEWERS.heavy);
   const mayRise = !inSurge(f.now);
-  if (mayRise && n === 2 && f.servedOnce) n = 3;
-  if (mayRise && n === 1 && f.calmFor >= CALM_HOLD - 1e-9) n = 3;
-  return Math.max(0, Math.min(4, n));
+  if (mayRise && n === VIEWERS.waiting && f.servedOnce) n = VIEWERS.live;
+  if (mayRise && n === VIEWERS.heavy && f.calmFor >= CALM_HOLD - 1e-9) n = VIEWERS.live;
+  return Math.max(0, Math.min(VIEWERS.held, n));
 }
 
 // ---- helpers ----

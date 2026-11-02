@@ -117,7 +117,7 @@ export interface GameEvents {
    */
   cue: { id: LineId; kind: 'bark' | 'chat'; at: number };
   /**
-   * How many are watching Lux's stream now (0..4, from the chat lane's viewersOf), emitted by the
+   * How many are watching Lux's stream now (0..18, from the chat lane's viewersOf), emitted by the
    * chat view on every change. The title draws it as WATCHING; before the first one it shows no
    * number.
    */

@@ -326,18 +326,18 @@ describe('the chat in the host loop (chat-3)', () => {
     for (let c = 0.05; c < 2; c += 0.05) f.step(frameAt(), c, []);
     expect(heard).toEqual([]);
     expect(f.watching).toBeNull();
-    // The first serve: 2 -> 3.
+    // The first serve: 9 -> 14.
     for (let c = 2; c < 4; c += 0.05) f.step(frameAt(SERVING), c, []);
-    expect(heard).toEqual([3]);
-    expect(f.watching).toBe(3);
-    // Heavy errors held 5 s in the district surge: 3 -> 1.
+    expect(heard).toEqual([14]);
+    expect(f.watching).toBe(14);
+    // Heavy errors held 5 s in the district surge: 14 -> 6.
     const surge = BROWNOUT.challenges.c4 + 10;
     for (let c = 4; c < 12; c += 0.05) f.step(frameAt({ ...SERVING, now: surge, errorShare: 0.7 }), c, []);
-    expect(heard).toEqual([3, 1]);
+    expect(heard).toEqual([14, 6]);
     // Dark at midnight: 0.
     f.step(frameAt({ ...SERVING, now: surge, midnight: { held: false } }), 12.05, []);
-    expect(heard).toEqual([3, 1, 0]);
-    expect(heard.every((n) => n >= 0 && n <= 4)).toBe(true);
+    expect(heard).toEqual([14, 6, 0]);
+    expect(heard.every((n) => n >= 0 && n <= 18)).toBe(true);
     f.detach();
   });
 
@@ -368,16 +368,16 @@ describe('the chat in the host loop (chat-3)', () => {
     const f = new ChatFeed(0);
     f.attach(b);
     for (let c = 0.05; c < 3; c += 0.05) f.step(frameAt(SERVING), c, []);
-    expect(f.watching).toBe(3);
+    expect(f.watching).toBe(14);
     f.reset(50);
     expect(f.state.feed.map((r) => r.id)).toEqual(SEED_IDS);
     expect(f.posts).toBe(4);
     // The title is told the count went back to the start.
-    expect(heard).toEqual([3, 2]);
+    expect(heard).toEqual([14, 9]);
     f.detach();
   });
 
-  it('keeps hud.chat block and stream and adds the feed fields; hud.audience.watching is null, then 0..4', () => {
+  it('keeps hud.chat block and stream and adds the feed fields; hud.audience.watching is null, then 0..18', () => {
     const b = new Bus();
     const { scene } = stubScene();
     const view = new ChatFeedView();
@@ -420,7 +420,7 @@ describe('the chat in the host loop (chat-3)', () => {
     const feed = (h.chat as ChatTestState).feed;
     expect(feed.find((r) => r.id === 'C1.chat.02')).toMatchObject({ chat: 'stream', scripted: true });
     expect(feed.filter((r) => r.cause === 'hype').length).toBeGreaterThanOrEqual(HYPE_BURST.min);
-    expect(h.audience).toEqual({ watching: 3 });
+    expect(h.audience).toEqual({ watching: 14 });
     view.shutdown();
   });
 
@@ -979,14 +979,14 @@ describe('the 10 per 30 s cap with scripted rows', () => {
     ...initialChat(0, rand),
     servedOnce: true,
     servingMax: 1,
-    watching: 3,
+    watching: 14,
     recent: Array.from({ length: n }, () => at),
     lastPostAt: at,
   });
 
   it('a surge of scripted cues, reactions and filler never paces more than windowMax in 30 s, and every scripted id posts, in order', () => {
     const rand = seededRandom(7);
-    let s: ChatState = { ...initialChat(0, rand), servedOnce: true, servingMax: 1, watching: 3 };
+    let s: ChatState = { ...initialChat(0, rand), servedOnce: true, servingMax: 1, watching: 14 };
     const rows: ChatRow[] = [];
     // The surge's scripted ids, cued close together as the autopilot night does.
     const cues: [number, LineId][] = [

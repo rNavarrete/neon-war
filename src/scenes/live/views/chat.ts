@@ -79,7 +79,7 @@ export interface ChatTestState {
 }
 
 export interface AudienceTestState {
-  /** The last bus audience value: null until the first viewersOf change, then 0..4. */
+  /** The last bus audience value: null until the first viewersOf change, then 0..18. */
   watching: number | null;
 }
 
