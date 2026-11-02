@@ -188,11 +188,11 @@ test('deck keys: 1 and 2 on the keyboard act like the keys, and wait for the car
     await expect
       .poll(async () => (await hud(page)).crew.call, { timeout: 60_000, intervals: [25] })
       .toBe('hijack');
-    const before = (await hud(page)).deck!.pressed;
-    await page.keyboard.press('1');
-    await page.waitForTimeout(150);
-    expect((await presses(page)).filter((p) => p.acted && p.key === 'one')).toHaveLength(0);
-    expect((await hud(page)).deck!.pressed).toBe(before);
+    // The HUD keeps running under the call (no scene pauses it), so the press is heard but does nothing.
+    const p = await pressDigit(page, '1');
+    expect(p).toMatchObject({ key: 'one', via: 'key', acted: false });
+    expect((await presses(page)).filter((x) => x.acted && x.key === 'one')).toHaveLength(0);
+    expect((await hud(page)).crew.boardFrozen).toBe(true);
     await reach(page, 'rescue', { timeout: 60_000 });
     // Session 0 hands over no Regroup (BROWNOUT.regroup.inSession), so key 1 stays empty.
     expect((await hud(page)).deck?.regroup).toBe('hidden');

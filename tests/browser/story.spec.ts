@@ -173,8 +173,12 @@ test('the crew break into the comms over the HUD: static, "who are you", a froze
   test.setTimeout(120_000);
   await muted(page);
   await toBoard(page, 4);
+  // The HUD scene starts a moment after the board: wait for its comms band before calling in.
+  await expect.poll(async () => ((await crewHud(page)).hud?.comms?.signal ? 'up' : 'none')).toBe('up');
   await page.evaluate(() => window.__neonStory!.crewCall('hijack'));
-  await expect.poll(async () => (await crewHud(page)).hud.comms.line?.id ?? null).toBe('C5.triage.01');
+  await expect
+    .poll(async () => (await crewHud(page)).hud?.comms?.line?.id ?? null, { timeout: 15_000 })
+    .toBe('C5.triage.01');
 
   // No scene: the board stays on screen, held still, and TRIAGE notices an unknown signal on the tile.
   let h = await crewHud(page);
@@ -188,7 +192,10 @@ test('the crew break into the comms over the HUD: static, "who are you", a froze
 
   // Rei's face comes through the static.
   await expect
-    .poll(async () => (await crewHud(page)).hud.comms.line?.id ?? null, { timeout: 30_000, intervals: [50] })
+    .poll(async () => (await crewHud(page)).hud?.comms?.line?.id ?? null, {
+      timeout: 30_000,
+      intervals: [50],
+    })
     .toBe('C5.rei.01');
   expect((await crewHud(page)).hud.comms.signal.kind).toBe('resolve');
   await page.screenshot({ path: 'test-results/screens/crew-hijack-rei.png' });
