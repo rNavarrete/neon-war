@@ -187,6 +187,9 @@ test('the crew break into the comms over the HUD: static, "who are you", a froze
   expect(h.hud.crew.boardFrozen).toBe(true);
   expect(h.hud.comms.signal.kind).toBe('static');
   expect(h.hud.comms.signal.title).toBe('COMMS · UNKNOWN SIGNAL');
+  // Rolando's pick for the hijack (2 Nov 2026): the digital-glitch static.
+  const shell = (await state(page)) as unknown as { shell: { recentSfx: string[] } };
+  expect(shell.shell.recentSfx).toContain('comms-static');
   await page.waitForTimeout(400);
   await page.screenshot({ path: 'test-results/screens/crew-hijack-static.png' });
 

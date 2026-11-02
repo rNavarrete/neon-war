@@ -88,9 +88,9 @@ const line = (bus: Bus, id: LineId, since = 0): void =>
   bus.emit('line', { id, speaker: 'TRIAGE', tag: 'HINT', lesson: false, since });
 
 describe('Live sound effect keys', () => {
-  it('pins LIVE_SFX_KEYS beside the 21 SFX_KEYS', () => {
+  it('pins LIVE_SFX_KEYS beside the 22 SFX_KEYS', () => {
     expect(LIVE_SFX_KEYS).toEqual(['server-online', 'packet-drop', 'health-skip', 'headroom-red']);
-    expect(SFX_KEYS).toHaveLength(21);
+    expect(SFX_KEYS).toHaveLength(22);
     for (const k of LIVE_SFX_KEYS) expect((SFX_KEYS as readonly string[]).includes(k)).toBe(false);
   });
 

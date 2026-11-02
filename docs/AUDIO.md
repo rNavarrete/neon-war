@@ -1,7 +1,9 @@
 # Audio in public/audio
 
 Session 0's music and sound effects. They were picked on 27 Oct 2026 from the candidates on branch
-`claude/project-thread-sctaoa` (`docs/art-candidates/sound/` and `docs/art-candidates/music/`).
+`claude/project-thread-sctaoa` (`docs/art-candidates/sound/` and `docs/art-candidates/music/`). The crew's hijack
+static, `comms-static.mp3`, came later: Rolando picked option 1 ("digital glitch") of six ElevenLabs takes on
+2 Nov 2026, levelled to about −18 LUFS.
 
 - Effects come from ElevenLabs and the music from Suno, as Rolando decided on 26 Oct 2026.
 - Everything loads from `public/`, never from the network.
@@ -37,6 +39,7 @@ Chaos" (−15.6 LUFS), so the two tracks need no gain change.
 | `banner-pop.mp3`    | 1.5 s  | The Solace banner slides in                             |
 | `credits.mp3`       | 0.7 s  | Credits are spent or refunded                           |
 | `regroup-slow.mp3`  | 3.0 s  | Regroup starts                                          |
+| `comms-static.mp3`  | 2.0 s  | The crew hijack Lux's comms (static floods the call tile) |
 | `rescue-cable.mp3`  | 2.0 s  | The crew's cable drops at the rescue                    |
 | `rewind.mp3`        | 2.0 s  | A rewind (TRIAGE's replay or Rei's)                     |
 | `goggles-on.mp3`    | 2.0 s  | Lux pulls her goggles down (cold open)                  |
@@ -52,7 +55,7 @@ Chaos" (−15.6 LUFS), so the two tracks need no gain change.
 ## Live screen effects (`LIVE_SFX_KEYS`, not yet on disk)
 
 The Live screen adds four effects. They live in `LIVE_SFX_KEYS` in `src/game/mixer.ts`, beside
-`SFX_KEYS` in `src/game/audio.ts`, which stays pinned at 21 by `tests/shell-audio.test.ts`.
+`SFX_KEYS` in `src/game/audio.ts`, which stays pinned at 22 by `tests/shell-audio.test.ts`.
 `isSfxKey` accepts either list, and every emitter guards with it. The files come from the owner's
 ElevenLabs run (decision D6), never from a worker. This table is that run's list.
 

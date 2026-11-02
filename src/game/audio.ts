@@ -25,6 +25,7 @@ export const TITLE_MUSIC_FADE = 0.8;
 /** Every effect in public/audio/sfx, by its file name without .mp3. */
 export const SFX_KEYS = [
   'banner-pop',
+  'comms-static',
   'credits',
   'fireworks',
   'goggles-on',

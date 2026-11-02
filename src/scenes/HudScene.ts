@@ -675,7 +675,7 @@ export class HudScene extends Phaser.Scene {
       // The channel jams: the camera jolts once (not under reduce flicker) and the panel fills with static.
       if (!settings().reduceFlicker) this.cameras.main.shake(260, 0.004);
       this.comms?.setSignal('static');
-      bus.emit('sfx', { key: 'triage-panic' });
+      bus.emit('sfx', { key: 'comms-static' });
     } else {
       this.call = startCall('ending', endingCall(defaultDebriefResults()));
     }
