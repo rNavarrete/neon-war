@@ -96,7 +96,9 @@ describe('voice manifest', () => {
     // Two more since the idle-server nudges (30 Oct 2026); 133 since the cold open's check-in beat
     // (Rolando, 30 Oct 2026) added C0.lux.03 and C0.triage.02.
     // 145 since Rolando's story pass (31 Oct 2026) added 12 spoken lines, recorded the same day.
-    expect(voicedLines()).toHaveLength(145);
+    // 172 since the crew's call moved into the HUD (1 Nov 2026) added 27 spoken lines, recorded the
+    // same day.
+    expect(voicedLines()).toHaveLength(172);
     const KNOWN_GAPS = knownGaps();
     // 20 coach nudges until they were recorded (Rolando, 30 Oct 2026); the story pass's 12 new lines
     // until they were recorded (31 Oct 2026). None now.

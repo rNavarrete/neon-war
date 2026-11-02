@@ -1,6 +1,6 @@
 # Recorded voices
 
-Every spoken line of Session 0 (145 lines: the scene lines and the barks of `docs/SCRIPT.md`) has
+Every spoken line of Session 0 (172 lines: the scene lines and the barks of `docs/SCRIPT.md`) has
 a recorded clip in Japanese and in English. This page covers where the clips come from, how to
 re-record one and which takes are out of date. How the game plays them (channels, the duck, one
 voice at a time, lazy groups) is in `docs/AUDIO.md`.
@@ -30,6 +30,11 @@ the TV say "ten minutes" over a "five minutes" caption), from
 Rolando's story pass (31 Oct 2026) re-recorded 19 changed lines and recorded 12 new ones, in both
 languages, from `redo-lines-2026-10-31.json` in the voice pipeline folder (run on Rolando's Mac).
 The old takes were moved, not deleted, to `out/lines/_old-2026-10-31/`.
+
+The crew's call in the HUD (1 Nov 2026) re-recorded 2 changed lines (`C5.triage.01`, `C5.rei.03`)
+and recorded 27 new ones (the hijack, the quiet-stretch banter and the arcade invitation), in both
+languages, from `redo-lines-2026-11-01.json` in the voice pipeline folder (run on Rolando's Mac).
+The old takes were moved, not deleted, to `out/lines/_old-2026-11-01/`.
 
 ## The manifest
 
@@ -65,7 +70,7 @@ would be the wrong voice.
 Lines whose words changed in `src/strings.ts` since they were recorded. Words are compared without
 the performance tags, the stage directions in brackets and quotes.
 
-None since the story pass's lines were recorded (31 Oct 2026).
+None since the crew-call lines were recorded (1 Nov 2026).
 
 One line has a stage direction written into the text (`C5.rei.cut` has "(beat)"); the spoken
 words match the take.
@@ -75,7 +80,7 @@ words match the take.
 Spoken lines added since the last recording session. They show as text with no voice (the mixer
 lists them in `shell.voice.missing`) until they are recorded and added to the manifest.
 
-None since the story pass's 12 new lines were recorded (31 Oct 2026).
+None since the crew call's 27 new lines were recorded (1 Nov 2026).
 
 ## Speaker changed
 

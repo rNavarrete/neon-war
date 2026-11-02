@@ -20,6 +20,7 @@
 
 import type Phaser from 'phaser';
 import type { Bus } from '../../game/bus';
+import { crewHoldsBoard } from '../../game/flow';
 import type { Frame } from '../../game/frame';
 import { run } from '../../game/run';
 import { settings } from '../../game/settings';
@@ -342,6 +343,8 @@ export class DeckView implements LiveView {
 
   /** Call the run's action behind a key; true when it took. */
   private act(key: KeyName): boolean {
+    // The crew's hijack call holds the board still: no key acts until Rei hands over.
+    if (crewHoldsBoard()) return false;
     const r = run();
     if (key === 'one') return r.regroup().ok;
     const res = cutLaundry(r);

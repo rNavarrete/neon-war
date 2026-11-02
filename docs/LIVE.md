@@ -236,11 +236,12 @@ against `src/game/bus.ts`):
 | `overheat` | `run.ts`, a server goes over 100% load | `{id}` |
 | `serverDied` | `run.ts`, a server dies from overheating | `{id}` |
 | `powerDip` | `run.ts`, a dip's warning ends and the part goes dark | `{id}` |
-| `rescue` | OverlayScene, the crew's cable drops | `{}` |
+| `rescue` | OverlayScene and HudScene (the hijack's hand-off), the crew's cable drops | `{}` |
 | `crewArrived` | `run.ts`, the sim brings the crew in | `{by}` |
 | `failure` | `run.ts`, the board froze on a failure | `Failure` |
 | `midnight` | `run.ts`, the stroke of twelve | `Midnight` |
 | `sessionEnd` | `run.ts`, the clock reached 00:01:00 | `{}` |
+| `crewCall` | `flow.ts` (the director), the crew call in over the HUD: the hijack or the sign-off | `{kind}` |
 | `occurrence` | HudScene, once per edge between two frames | `Occurrence` |
 | `drag` | BoardScene (above) | `{kind, card, over, state?, legal?}` |
 | `line` | CommsView (above) | `{id, speaker, tag, lesson, since}` |
@@ -394,7 +395,7 @@ against the built views):
 | `map` (MapView)                                      |     3 |                 10 |
 | `cam` (LuxCamView, with Lux's caption)               |     3 |                 17 |
 | `gauge` (GaugeView with HeadroomView)                |    11 |                 14 |
-| `comms` (CommsView, with the leader line and call tile) |    13 |                 31 |
+| `comms` (CommsView, with the leader line, call tile and hijack static) |    13 |                 32 |
 | `deck` (DeckView)                                    |     7 |                 18 |
 | `chat` (ChatFeedView)                                |    50 |                 86 |
 | `feed` and `inventory` (BoardScene)                  |    28 |                  - |

@@ -3,7 +3,7 @@ import { ZONES } from '../../src/scenes/live/layout';
 import type { KeyName } from '../../src/scenes/hud/deck';
 import type { HudTestState } from '../../src/scenes/hud/hook';
 import { BROWNOUT } from '../../src/sim/brownout';
-import { dismissJobCard, hud, openBoard, reach, shot, snap } from './live/reach';
+import { dismissJobCard, hud, openBoard, reach, shot } from './live/reach';
 
 const C = BROWNOUT.challenges;
 const MIDNIGHT = BROWNOUT.clock.midnight;
@@ -279,7 +279,7 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
 
   await test.step('the district surge: RAID in the tag, the cut clicked, OVER BY and a red room bar', async () => {
     // At speed 20 the surge runs only about 6 sim s (0.3 s of wall clock) before trust falls under 30
-    // and the C5 scene takes the screen. So a recorder in the page reads the hook every frame from
+    // and the crew's hijack call freezes the board. So a recorder in the page reads the hook every frame from
     // here on (window.__liveGauges9, a test-only global the game never reads), the key is clicked on
     // the first frame the deck offers the cut, and the asserts run on the frames it kept.
     const key = (await lane(page)).deck.keys.two;
@@ -439,11 +439,11 @@ test('gauges lane at speed 20: every hook field at its challenge, four live-gaug
   });
 
   await test.step('after the rescue: no Regroup in Session 0, key 1 stays empty and the night runs at full speed', async () => {
-    // The C5 scene holds the board.
+    // The crew's hijack call holds the board still.
     await expect
-      .poll(async () => (await snap(page)).story?.scriptId ?? null, { timeout: 15_000, intervals: [25] })
-      .toBe('C5');
-    expect((await lane(page)).paused).toBe(true);
+      .poll(async () => (await hud(page)).crew.call, { timeout: 15_000, intervals: [25] })
+      .toBe('hijack');
+    expect((await hud(page)).crew.boardFrozen).toBe(true);
     await reach(page, 'rescue');
     const h = await lane(page);
     // Regroup is kept for a later session (BROWNOUT.regroup.inSession).

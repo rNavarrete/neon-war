@@ -35,7 +35,7 @@ export interface ScriptStep {
 /** How the scene is drawn: a painted visual novel, TRIAGE's stream replay, or a crew rewind. */
 export type SceneLook = 'vn' | 'vhs' | 'crew';
 
-export type ScriptId = 'C0' | 'C5' | 'rewind-replay' | 'rewind-rei-surge' | 'rewind-rei-midnight';
+export type ScriptId = 'C0' | 'rewind-replay' | 'rewind-rei-surge' | 'rewind-rei-midnight';
 
 export interface SceneScript {
   readonly id: ScriptId;
@@ -84,29 +84,6 @@ const COLD_OPEN: SceneScript = {
   ],
 };
 
-/** C5, the rescue: the crew break into her goggles over the full-immersive backdrop. */
-const RESCUE: SceneScript = {
-  id: 'C5',
-  backdrop: 'art/bg/immersive.webp',
-  where: 'board',
-  look: 'vn',
-  steps: [
-    // Rolando, 31 Oct 2026: the densest moment, tightened. Rei takes command and sets the test,
-    // Mika points at the demand gauge, Ozzie brings the money and one joke, then the board is hers.
-    { lineId: 'C5.triage.01' },
-    { lineId: 'C5.rei.01' },
-    { lineId: 'C5.lux.01', face: 'lux/vn/board-shocked' },
-    { lineId: 'C5.rei.02' },
-    { lineId: 'C5.mika.01', face: 'mika/vn/explain' },
-    { lineId: 'C5.rei.03', cue: 'cable' },
-    { lineId: 'C5.rei.cut', onlyIf: 'laundryCut', face: 'rei/vn/impressed' },
-    { lineId: 'C5.lux.cut', onlyIf: 'laundryCut', face: 'lux/vn/board-deadpan' },
-    { lineId: 'C5.ozzie.01', face: 'ozzie/vn/sums' },
-    { lineId: 'C5.rei.04', face: 'rei/vn/stern' },
-    // C5.mika.04 (Mika hands over Regroup) is not in Session 0: BROWNOUT.regroup.inSession.
-  ],
-};
-
 /** TRIAGE's stream replay, for a failure in C1 to C3. */
 const REWIND_REPLAY: SceneScript = {
   id: 'rewind-replay',
@@ -136,13 +113,12 @@ const REWIND_REI_MIDNIGHT: SceneScript = {
 
 export const SCRIPTS: Readonly<Record<ScriptId, SceneScript>> = {
   C0: COLD_OPEN,
-  C5: RESCUE,
   'rewind-replay': REWIND_REPLAY,
   'rewind-rei-surge': REWIND_REI_SURGE,
   'rewind-rei-midnight': REWIND_REI_MIDNIGHT,
 };
 
-/** The steps a scene plays given the run's flags (the laundry cut adds Rei's aside in C5). */
+/** The steps a scene plays given the run's flags (a step may wait on the laundry cut). */
 export function stepsFor(script: SceneScript, flags: { readonly laundryCut?: boolean }): ScriptStep[] {
   return script.steps.filter((s) => !s.onlyIf || flags[s.onlyIf] === true);
 }

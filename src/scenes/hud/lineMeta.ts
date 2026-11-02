@@ -176,6 +176,14 @@ export const LEADER_FOR: Readonly<Partial<Record<LineId, Exclude<Subject, null>>
   'C4.triage.cut': 'zone:gauge',
   'C5.triage.03': 'zone:gauge',
   'C5.rei.05': 'part:balancer',
+  // The crew's hijack and banter (1 Nov 2026): the hand-off and the health check at the balancer,
+  // Mika's warning and the tail at the gauge.
+  'C5.rei.03': 'part:balancer',
+  'C5.rei.health': 'part:balancer',
+  'C5.mika.collapse': 'zone:gauge',
+  'C5.mika.02': 'zone:gauge',
+  'C5.triage.pings': 'part:balancer',
+  'C5.mika.health': 'part:balancer',
   'C5.mika.05': 'zone:gauge',
   // The midnight forecast and its outage sub-line.
   'C6.rei.01': 'zone:alert',

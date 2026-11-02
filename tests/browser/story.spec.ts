@@ -150,69 +150,85 @@ test('the cold open waits for a click on every line, then hands over to the boar
   }
 });
 
-test('the rescue plays as a scene over the immersive backdrop and returns to the board', async ({ page }) => {
-  test.setTimeout(60_000);
-  await slowText(page);
+type CrewHud = {
+  scene?: string;
+  hud: {
+    crew: { call: string | null; hijackDone: boolean; said: string[]; boardFrozen: boolean };
+    comms: { line: { id: string } | null; signal: { kind: string | null; noise: number; title: string } };
+    chat: { feed: { who: string; text: string }[] };
+  };
+};
+const crewHud = async (page: Page) => (await state(page)) as unknown as CrewHud;
+
+/** Muted, fast text: the call runs on its own, no clicks. */
+async function muted(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('neon-war.settings', JSON.stringify({ volume: 0, textSpeed: 'fast' }));
+  });
+}
+
+test('the crew break into the comms over the HUD: static, "who are you", a frozen board until the load balancer', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await muted(page);
   await toBoard(page, 4);
-  await page.evaluate(() => window.__neonStory!.playRescue(true));
-  await expect.poll(async () => (await story(page)).lineId).toBe('C5.triage.01');
+  // The HUD scene starts a moment after the board: wait for its comms band before calling in.
+  await expect.poll(async () => ((await crewHud(page)).hud?.comms?.signal ? 'up' : 'none')).toBe('up');
+  await page.evaluate(() => window.__neonStory!.crewCall('hijack'));
+  await expect
+    .poll(async () => (await crewHud(page)).hud?.comms?.line?.id ?? null, { timeout: 15_000 })
+    .toBe('C5.triage.01');
 
-  let s = await story(page);
-  expect(s.active).toBe(true);
-  expect(s.scriptId).toBe('C5');
-  expect(s.backdrop).toBe('art/bg/immersive.webp');
-  expect(s.nameplate).toBe('TRIAGE');
-  expect(s.portrait).toBe('portrait:triage/panic');
-  expect(s.skip.visible).toBe(false);
-  expect(s.runHeld).toBe(true);
-
-  // A click while typing finishes the line; the next click advances.
-  expect(s.typingDone).toBe(false);
-  s = await clickStory(page);
-  expect(s.lineId).toBe('C5.triage.01');
-  expect(s.typingDone).toBe(true);
-
-  s = await nextLine(page);
-  expect(s.lineId).toBe('C5.rei.01');
-  expect(s.nameplate).toBe('Rei');
-  expect(s.onStage).toEqual(['TRIAGE', 'Rei']);
-  expect(s.dimmed).toEqual(['TRIAGE']);
-
-  s = await nextLine(page);
-  expect(s.lineId).toBe('C5.lux.01');
-  expect(s.portrait).toBe('portrait:lux/vn/board-shocked');
-  expect(s.dimmed).toEqual(['TRIAGE', 'Rei']);
-  // Rei came on first, but Lux stands on the left facing in (never mirrored: her shirt has words on
-  // it) and Rei, on the right, is mirrored to face her.
-  expect(s.figures.Lux!.left).toBeLessThan(s.figures.Rei!.left);
-  expect(s.figures.Lux!.facesLeft).toBe(false);
-  expect(s.figures.Rei!.facesLeft).toBe(true);
-  await page.screenshot({ path: 'test-results/screens/rescue-facing.png' });
-
-  const seen: string[] = [];
-  while (s.active && s.lineId !== 'C5.rei.cut') {
-    s = await nextLine(page);
-    seen.push(s.lineId!);
-  }
-  expect(seen).toContain('C5.rei.03');
-  expect(s.sfx).toContain('rescue-cable');
-  await page.screenshot({ path: 'test-results/screens/rescue.png' });
-  s = await nextLine(page);
-  expect(s.lineId).toBe('C5.lux.cut');
-
-  while (s.active) s = await nextLine(page);
-  expect(s.finished).toEqual(['C5']);
-  await expect.poll(async () => (await state(page)).scene).toBe('board');
-  expect((await story(page)).runHeld).toBe(false);
-
-  // Seen once: the replay can be skipped.
-  await page.evaluate(() => window.__neonStory!.playRescue(false));
-  await expect.poll(async () => (await story(page)).skip.visible).toBe(true);
-  s = await story(page);
-  expect(s.seen).toContain('C5');
-  await page.mouse.click(s.skip.x, s.skip.y);
-  await expect.poll(async () => (await story(page)).finished).toEqual(['C5', 'C5']);
+  // No scene: the board stays on screen, held still, and TRIAGE notices an unknown signal on the tile.
+  let h = await crewHud(page);
   expect((await story(page)).active).toBe(false);
+  expect(h.hud.crew.call).toBe('hijack');
+  expect(h.hud.crew.boardFrozen).toBe(true);
+  expect(h.hud.comms.signal.kind).toBe('static');
+  expect(h.hud.comms.signal.title).toBe('COMMS · UNKNOWN SIGNAL');
+  // Rolando's pick for the hijack (2 Nov 2026): the digital-glitch static.
+  const shell = (await state(page)) as unknown as { shell: { recentSfx: string[] } };
+  expect(shell.shell.recentSfx).toContain('comms-static');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: 'test-results/screens/crew-hijack-static.png' });
+
+  // Rei's face comes through the static.
+  await expect
+    .poll(async () => (await crewHud(page)).hud?.comms?.line?.id ?? null, {
+      timeout: 30_000,
+      intervals: [50],
+    })
+    .toBe('C5.rei.01');
+  expect((await crewHud(page)).hud.comms.signal.kind).toBe('resolve');
+  await page.screenshot({ path: 'test-results/screens/crew-hijack-rei.png' });
+
+  await expect.poll(async () => (await crewHud(page)).hud.crew.hijackDone, { timeout: 90_000 }).toBe(true);
+  h = await crewHud(page);
+  expect(h.hud.crew.boardFrozen).toBe(false);
+  expect(h.hud.crew.call).toBe(null);
+  expect(h.hud.crew.said.filter((id) => !id.includes('.chat.'))).toEqual([
+    'C5.triage.01',
+    'C5.lux.who',
+    'C5.triage.who',
+    'C5.rei.01',
+    'C5.lux.01',
+    'C5.rei.build',
+    'C5.lux.fine',
+    'C5.mika.collapse',
+    'C5.rei.02',
+    'C5.rei.03',
+    'C5.rei.health',
+    'C5.ozzie.01',
+    'C5.mika.02',
+    'C5.rei.04',
+  ]);
+  // The stream chat reacted all the way through.
+  const feed = h.hud.chat.feed.map((m) => m.text);
+  expect(feed).toContain('did someone just hack the stream??');
+  expect(feed).toContain("lux don't trust them");
+  expect(feed).toContain("load balancer? what's that??");
+  await expect.poll(async () => (await crewHud(page)).hud.comms.signal.kind, { timeout: 5_000 }).toBe(null);
 });
 
 /** Click through whatever story scene is up until it ends (Skip when it shows). */
@@ -233,20 +249,21 @@ const board = async (page: Page) => (await state(page)).board as unknown as Boar
 test('the sim triggers the rescue and the board returns with the load balancer unlocked', async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(150_000);
+  await muted(page);
   await toBoard(page, 20, '&autopilot');
   expect((await board(page)).tray.find((t) => t.id === 'balancer')?.locked).toBe(true);
-  // Nothing opens the scene but the sim: the surge drains trust under 30 and the crew break in.
+  // Nothing starts the call but the sim: the surge drains trust under 30 and the crew break in.
   await expect
-    .poll(async () => (await story(page)).scriptId, { timeout: 90_000, intervals: [50] })
-    .toBe('C5');
+    .poll(async () => (await crewHud(page)).hud.crew.call, { timeout: 90_000, intervals: [50] })
+    .toBe('hijack');
   const now = (await state(page)).hud as unknown as { now: number };
   expect(now.now).toBeGreaterThan(C.c4);
   expect(now.now).toBeLessThan(C.c4 + BROWNOUT.rescue.surgeSeconds + 0.1);
-  expect((await story(page)).backdrop).toMatch(/immersive/);
+  expect((await story(page)).active).toBe(false);
   await page.screenshot({ path: 'test-results/screens/rescue-live.png' });
-  await playThrough(page);
-  await expect.poll(async () => (await state(page)).scene).toBe('board');
+  await expect.poll(async () => (await crewHud(page)).hud.crew.hijackDone, { timeout: 90_000 }).toBe(true);
+  expect((await state(page)).scene).toBe('board');
   const b = await board(page);
   expect(b.tray.find((t) => t.id === 'balancer')?.locked).toBe(false);
   expect(b.parts.some((p) => p.kind === 'balancer')).toBe(true);
@@ -286,6 +303,7 @@ test('one test plays the whole session from the title to Night Book page 1 with 
   page,
 }) => {
   test.setTimeout(300_000);
+  await muted(page);
   await boot(page, '/?test&speed=20&autopilot');
   const shell = () =>
     page.evaluate(
@@ -313,12 +331,12 @@ test('one test plays the whole session from the title to Night Book page 1 with 
   const card = (await hud()).jobCard;
   await page.mouse.click(card.x, card.y);
 
-  // C1 to C4 on best play, then the crew break in.
+  // C1 to C4 on best play, then the crew break into the comms (no scene).
   await expect
-    .poll(async () => (await story(page)).scriptId, { timeout: 120_000, intervals: [50] })
-    .toBe('C5');
+    .poll(async () => (await crewHud(page)).hud?.crew.call ?? null, { timeout: 120_000, intervals: [50] })
+    .toBe('hijack');
   await page.screenshot({ path: 'test-results/screens/session-rescue.png' });
-  await playThrough(page);
+  await expect.poll(async () => (await crewHud(page)).hud.crew.hijackDone, { timeout: 90_000 }).toBe(true);
 
   // Midnight holds, then the debrief at 00:01:00.
   await expect
@@ -378,7 +396,7 @@ for (const r of REWINDS) {
   });
 }
 
-test('the debrief is short: Rei acknowledges and grades, the invitation, then the Night Book a page per click and the title card', async ({
+test('the debrief is the last thing: the scorecard with nobody in the room, then the Night Book a page per click and the title card', async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -394,44 +412,22 @@ test('the debrief is short: Rei acknowledges and grades, the invitation, then th
     serversAtMidnight: 5,
   } as const;
   await page.evaluate((r) => window.__neonStory!.playDebrief(r), results);
-  await expect.poll(async () => (await story(page)).lineId).toBe('C8.rei.ack');
+  await expect.poll(async () => (await story(page)).debrief?.step ?? null).toBe('grades');
 
+  // Rolando, 1 Nov 2026: Rei grades and invites over the HUD; the room shows only the scorecard,
+  // with no one standing in it and no line under it.
   let s = await story(page);
-  expect(s.debrief?.step).toBe('grades');
   expect(s.debrief?.results).toEqual(results);
-  expect(s.portrait).toBe('portrait:rei/vn/grading');
-  // Rei stands tall beside the results panel (x 90 to 710) and the interview card (to 950), not behind them.
-  expect(s.figures.Rei!.left).toBeGreaterThan(950);
-  expect(s.figures.Rei!.right).toBeLessThanOrEqual(1920);
-  // Alone right of the middle, she turns in toward the results.
-  expect(s.figures.Rei!.facesLeft).toBe(true);
+  expect(s.lineId).toBe(null);
+  expect(s.onStage).toEqual([]);
+  expect(Object.keys(s.figures)).toEqual([]);
+  await page.waitForTimeout(600);
   await page.screenshot({ path: 'test-results/screens/debrief.png' });
 
-  // Rolando, 31 Oct 2026: one acknowledgement and one grade, then only what costs the player later.
-  const grades = [s.lineId];
-  while (s.debrief?.step === 'grades') {
-    s = await nextLine(page);
-    if (s.debrief?.step === 'grades') grades.push(s.lineId);
-  }
-  expect(grades).toEqual([
-    'C8.rei.ack',
-    // Graded on the boxes built: midnight held, but on 5 (one only cost).
-    'C8.rei.sizing.bad',
-    'C8.rei.banner.pay',
-    'C8.rei.debt',
-    'C8.ozzie.debt',
-  ]);
-
-  // The invitation lands while the fireworks are still going, before any reading.
-  expect(s.debrief?.step).toBe('invite');
-  expect(s.lineId).toBe('C8.triage.end');
-  s = await nextLine(page);
-  expect(s.lineId).toBe('C8.rei.end');
-  expect(s.debrief?.closeBook).toBeNull();
-
   // The Night Book: page 1, written as it opens, with CLOSE BOOK.
-  s = await nextLine(page);
-  expect(s.debrief?.step).toBe('book');
+  await clickStory(page);
+  await expect.poll(async () => (await story(page)).debrief?.step).toBe('book');
+  s = await story(page);
   expect(s.lineId).toBe('C8.book.open');
   expect(s.nameplate).toBeNull();
   expect(s.debrief?.page).toMatch(/^Demand decides the design\./);
@@ -473,9 +469,10 @@ test('CLOSE BOOK on page 1 skips the rest of the Night Book to the title card', 
   test.setTimeout(60_000);
   await toBoard(page);
   await page.evaluate(() => window.__neonStory!.playDebrief());
-  await expect.poll(async () => (await story(page)).lineId).toBe('C8.rei.ack');
+  await expect.poll(async () => (await story(page)).debrief?.step ?? null).toBe('grades');
+  await clickStory(page);
+  await expect.poll(async () => (await story(page)).debrief?.step).toBe('book');
   let s = await story(page);
-  for (let guard = 0; s.debrief?.step !== 'book' && guard < 20; guard++) s = await nextLine(page);
   expect(s.debrief?.step).toBe('book');
   const close = s.debrief!.closeBook!;
   await page.mouse.click(close.x, close.y);

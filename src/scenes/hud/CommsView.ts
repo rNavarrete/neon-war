@@ -77,6 +77,7 @@ import {
   triageMood,
   typedOf,
 } from './comms';
+import { type BandView, type Signal, faceThrough, noiseLevel } from './crewCalls';
 import { COLORS, FONT, FONT_SANS } from './layout';
 import { type LocatedPoint, locate, registeredNames } from './locate';
 import { LABELS } from './labels';
@@ -247,6 +248,11 @@ declare module '../live/views/comms' {
     glow: CommsGlowState;
     /** The crew's light-up: 0 dark, 1 lit, eased over 400 ms once run().rescued. */
     crew: { light: number };
+    /**
+     * The call tile's interference (the crew's hijack, 1 Nov 2026): the signal, the static's level
+     * now (0 clean to 1 jammed, crewCalls.noiseLevel), and the call panel's title.
+     */
+    signal: { kind: Signal; noise: number; title: string };
     /** comms-8: every name registered with locate.ts now, and where it is (page px; null when off screen). */
     located: Record<string, { x: number; y: number } | null>;
   }
@@ -261,7 +267,7 @@ declare global {
 
 export class CommsView implements LiveView {
   readonly zone = 'comms' as const;
-  readonly budget: LiveBudget = { objects: 31, texts: 13 };
+  readonly budget: LiveBudget = { objects: 32, texts: 13 };
 
   /** The band's model; replaced, never mutated. */
   state: CommsState = NO_COMMS;
@@ -356,6 +362,14 @@ export class CommsView implements LiveView {
   private callReal = 0;
   private leaderTry = -Infinity;
   private shownLeaderAlpha = -1;
+  /** The panel's title (COMMS, or UNKNOWN SIGNAL while the crew jam it). */
+  private title: Phaser.GameObjects.Text | null = null;
+  /** The crew's interference over the call tile (crewCalls.ts Signal), its start and the drawn level. */
+  private noiseGfx: Phaser.GameObjects.Graphics | null = null;
+  private signal: Signal = null;
+  private signalAt = 0;
+  private noise = 0;
+  private noiseDrawnAt = -Infinity;
 
   preload(scene: Phaser.Scene): void {
     preloadAvatars(scene as never, [
@@ -428,6 +442,7 @@ export class CommsView implements LiveView {
     });
     // Over the call tile, on a dark chip so a face under it never hides it.
     if (L.tile) title.setBackgroundColor('#05070fcc').setPadding(4, 2, 4, 2);
+    this.title = title;
 
     const slots = add.graphics();
     const rims = add.graphics();
@@ -559,7 +574,9 @@ export class CommsView implements LiveView {
           ? add.image(t.x + t.w / 2, t.y + t.h, '__DEFAULT').setOrigin(0.5, 1)
           : null;
       this.tileImg?.setVisible(false);
-      tileParts.push(bg, ...(this.tileImg ? [this.tileImg] : []));
+      // The crew's hijack (crewCalls.ts): static drawn over the tile, redrawn while it crackles.
+      this.noiseGfx = add.graphics();
+      tileParts.push(bg, ...(this.tileImg ? [this.tileImg] : []), this.noiseGfx);
     }
     this.callA = L.tile ? 0 : 1;
 
@@ -644,6 +661,66 @@ export class CommsView implements LiveView {
   reset(): void {
     if (this.state.current) this.emit('lineEnd', this.state.current.id);
     this.state = NO_COMMS;
+    this.setSignal(null);
+  }
+
+  /** What a crew call needs to know about the band: a line showing, and how many wait. */
+  band(): BandView {
+    const c = this.state.current;
+    return { busy: c !== null && this.clock < c.until, queued: this.state.queue.length };
+  }
+
+  /**
+   * The crew's interference on the call panel (crewCalls.ts): 'static' jams it under an UNKNOWN
+   * SIGNAL title, 'resolve' lets a face come through, 'clear' fades the last of it, null is clean.
+   */
+  setSignal(s: Signal): void {
+    if (s === this.signal) return;
+    this.signal = s;
+    this.signalAt = this.real;
+    const jammed = s === 'static' || s === 'resolve';
+    this.title?.setText(jammed ? LABELS.crewCall.unknown : COMMS_TEXT.title);
+    this.title?.setColor(jammed ? COLORS.redText : COLORS.cyanText);
+    if (s === null) {
+      this.noise = 0;
+      this.noiseGfx?.clear();
+      this.tileImg?.setAlpha(1);
+    }
+  }
+
+  /** The static over the tile: random bars redrawn ~20 times a second (4 under reduce flicker). */
+  private updateNoise(): void {
+    const g = this.noiseGfx;
+    const t = this.L?.tile;
+    if (!g || !t || this.signal === null) return;
+    const level = noiseLevel(this.signal, this.real - this.signalAt);
+    this.tileImg?.setAlpha(faceThrough(level));
+    const every = this.reduced() ? 0.25 : 0.05;
+    if (level === this.noise && this.real - this.noiseDrawnAt < every) return;
+    if (this.real - this.noiseDrawnAt < every && Math.abs(level - this.noise) < 0.05) return;
+    this.noise = level;
+    this.noiseDrawnAt = this.real;
+    g.clear();
+    if (level <= 0.01) {
+      if (this.signal === 'clear') this.setSignal(null);
+      return;
+    }
+    const strength = this.reduced() ? level * 0.5 : level;
+    g.fillStyle(0x05070f, 0.45 * strength);
+    g.fillRect(t.x + 2, t.y + 2, t.w - 4, t.h - 4);
+    const bars = Math.round(26 * strength);
+    for (let i = 0; i < bars; i++) {
+      const y = t.y + 4 + Math.random() * (t.h - 10);
+      const h = 1 + Math.random() * 6;
+      const x = t.x + 4 + Math.random() * t.w * 0.3;
+      const w = (t.w - 8) * (0.4 + Math.random() * 0.6);
+      const c = Math.random();
+      g.fillStyle(
+        c < 0.6 ? 0xd8e6ff : c < 0.8 ? COLORS.cyan : 0xff4fd8,
+        (0.25 + Math.random() * 0.5) * strength,
+      );
+      g.fillRect(x, y, Math.min(w, t.x + t.w - 4 - x), h);
+    }
   }
 
   update(frame: Frame, clock: LiveClock): void {
@@ -683,6 +760,7 @@ export class CommsView implements LiveView {
     }
     if (frame.rescued !== this.shownPresent) this.setPresent(frame.rescued);
     this.updateCall();
+    this.updateNoise();
     this.updateMotion(alpha);
     this.updateLeader(frame, alpha);
     this.held = frame.paused;
@@ -1178,6 +1256,11 @@ export class CommsView implements LiveView {
       iris: { ...this.irisNow(), mood: this.mood(), motion: this.reduced() ? 'reduced' : 'full' },
       glow: this.glowNow(),
       crew: { light: crewLight(this.crewSince, this.real) },
+      signal: {
+        kind: this.signal,
+        noise: Math.round(this.noise * 1000) / 1000,
+        title: this.title?.text ?? '',
+      },
       art: {
         plate: {
           use: this.plateUse?.use ?? 'code',

@@ -15,9 +15,11 @@ import { DEFAULT_SETTINGS, SETTINGS_VERSION, parseSettings } from '../src/game/s
 import { Bus } from '../src/game/bus';
 
 describe('sound keys', () => {
-  it('lists the 21 effects of docs/AUDIO.md, each at its file under public/', () => {
-    expect(SFX_KEYS).toHaveLength(21);
-    expect(new Set(SFX_KEYS).size).toBe(21);
+  it('lists the 22 effects of docs/AUDIO.md, each at its file under public/', () => {
+    // 22 since the crew's hijack static (Rolando's pick, 2 Nov 2026).
+    expect(SFX_KEYS).toHaveLength(22);
+    expect(new Set(SFX_KEYS).size).toBe(22);
+    expect(sfxPath('comms-static')).toBe('audio/sfx/comms-static.mp3');
     expect(sfxPath('place-part')).toBe('audio/sfx/place-part.mp3');
   });
 

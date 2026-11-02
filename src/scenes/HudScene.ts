@@ -48,6 +48,18 @@ import { AlertView } from './hud/AlertView';
 import { DeckView } from './hud/DeckView';
 import { GAME_HEIGHT, GAME_WIDTH } from './BoardScene';
 import { storyEnd } from '../story/state';
+import { crewHoldsBoard, defaultDebriefResults, playDebrief, resumeBoard } from '../game/flow';
+import {
+  BANTER,
+  type CallState,
+  type CallStep,
+  HIJACK,
+  banterDue,
+  callSteps,
+  endingCall,
+  startCall,
+  stepCall,
+} from './hud/crewCalls';
 import { SCENES } from './keys';
 import { type LiveFlags, PLAY_FLAGS, flagsFrom } from './live/flags';
 import { type CountedObject, type Filtered, PerfMeter, liveTestState } from './live/hook';
@@ -136,6 +148,17 @@ export class HudScene extends Phaser.Scene {
     dropped: 0,
   };
   private bannerShown = false;
+  /** The crew's call on the band now (the hijack, a banter exchange, the sign-off), or null. */
+  private call: CallState | null = null;
+  /** The hijack call has ended this run (the crew are in and talking over the board). */
+  private hijackDone = false;
+  /** Banter exchanges played this run, in BANTER order. */
+  private banterPlayed = 0;
+  /** HUD clock nothing last dropped at, and the band was last busy at (for banterDue). */
+  private lastDropAt = 0;
+  private bandBusyAt = 0;
+  /** Every call line and reaction sent this run, in order (for the hook). */
+  private callLog: LineId[] = [];
   private decommissionsAfterMidnight = 0;
   /** Placed parts the player has moved this run. */
   private moves = 0;
@@ -155,11 +178,13 @@ export class HudScene extends Phaser.Scene {
     bannerShown: boolean;
     decommissionsAfterMidnight: number;
     moves: number;
+    crewTalking: boolean;
   } = {
     cardClosed: false,
     bannerShown: false,
     decommissionsAfterMidnight: 0,
     moves: 0,
+    crewTalking: false,
   };
 
   // Views, built in create().
@@ -260,6 +285,7 @@ export class HudScene extends Phaser.Scene {
         if (a.type === 'decommission' && run().now >= MIDNIGHT) this.decommissionsAfterMidnight++;
         if (a.type === 'move') this.moves++;
       }),
+      bus.on('crewCall', (c) => this.startCrewCall(c.kind)),
       bus.on('drag', (d) => {
         this.dragging = d.kind !== null;
         // Picking something up or letting go is the player trying: the coach holds its next nudge.
@@ -309,6 +335,7 @@ export class HudScene extends Phaser.Scene {
     this.updateBanner(r);
 
     this.runDirector(f);
+    this.runCall(f);
     this.runCoach(f, step);
     if (this.perf.frame(delta)) this.samplePerf();
   }
@@ -373,6 +400,12 @@ export class HudScene extends Phaser.Scene {
     this.comms?.reset();
     this.chatFeed?.reset(this.clock);
     this.bannerShown = false;
+    this.call = null;
+    this.hijackDone = false;
+    this.banterPlayed = 0;
+    this.lastDropAt = this.clock;
+    this.bandBusyAt = this.clock;
+    this.callLog = [];
     this.decommissionsAfterMidnight = 0;
     this.moves = 0;
     // A fresh run: nothing carries over from the last run's view (dropped in C6, the rescue clock).
@@ -550,6 +583,7 @@ export class HudScene extends Phaser.Scene {
     host.bannerShown = this.bannerShown;
     host.decommissionsAfterMidnight = this.decommissionsAfterMidnight;
     host.moves = this.moves;
+    host.crewTalking = this.call?.kind === 'hijack';
     const v = cueViewOf(this.view, f, this.occurrences, this.clock, host, this.view);
     const out = direct(this.director, v, BOARD_CUES);
     this.director = out.state;
@@ -585,7 +619,8 @@ export class HudScene extends Phaser.Scene {
     this.lastCoachFrame = f;
     this.lastCoachCard = this.cardOpen;
     const solved = this.coach.problem;
-    const out = stepCoach(this.coach, p, dt, f.paused || this.dragging);
+    const hijack = this.call?.kind === 'hijack';
+    const out = stepCoach(this.coach, p, dt, f.paused || this.dragging || hijack);
     this.coach = out.state;
     // The problem was solved (or became another): its nudges still waiting are out of date.
     if (solved && solved.key !== (out.state.problem?.key ?? null)) this.comms?.withdraw(solved.lines);
@@ -628,6 +663,81 @@ export class HudScene extends Phaser.Scene {
     this.firedCues.push(id);
     bus.emit('cue', { id, kind: chat ? 'chat' : 'bark', at: this.clock });
     if (!chat && LINES[id].kind === 'bark') this.comms?.enqueue(id);
+  }
+
+  // ---- the crew's calls (crewCalls.ts) ----
+
+  /** The crew call in: the hijack at the rescue, or the sign-off after midnight. */
+  private startCrewCall(kind: 'hijack' | 'ending'): void {
+    const r = run();
+    if (kind === 'hijack') {
+      this.call = startCall('hijack', callSteps(HIJACK, { laundryCut: r.play.laundryCut !== null }));
+      // The channel jams: the camera jolts once (not under reduce flicker) and the panel fills with static.
+      if (!settings().reduceFlicker) this.cameras.main.shake(260, 0.004);
+      this.comms?.setSignal('static');
+      bus.emit('sfx', { key: 'comms-static' });
+    } else {
+      this.call = startCall('ending', endingCall(defaultDebriefResults()));
+    }
+  }
+
+  /**
+   * One frame of the crew's call: the next line goes to the band when it is free, reactions land in
+   * the chat a beat after their line, and a call that ends hands on (the hijack brings the board
+   * back if it is still frozen; the sign-off opens the scorecard). With no call up, the banter
+   * scheduler starts the next exchange when the night is quiet.
+   */
+  private runCall(f: Frame): void {
+    const band = this.comms?.band() ?? { busy: false, queued: 0 };
+    if (band.busy || band.queued > 0) this.bandBusyAt = this.clock;
+    if (f.dropped > 0) this.lastDropAt = this.clock;
+    if (!this.call) {
+      const due =
+        this.banterPlayed < BANTER.length &&
+        banterDue({
+          now: f.now,
+          crewIn: f.rescued && this.hijackDone,
+          running: !f.paused && !f.waitingForCrewBuild,
+          calmFor: this.clock - this.lastDropAt,
+          bandFreeFor: this.clock - this.bandBusyAt,
+          coaching: this.coach.problem !== null,
+        });
+      if (!due) return;
+      this.call = startCall('banter', BANTER[this.banterPlayed++]);
+    }
+    const out = stepCall(this.call, band, this.clock);
+    this.call = out.state;
+    for (let i = 0; i < out.chat.length; i++) {
+      this.callLog.push(out.chat[i]);
+      this.cue(out.chat[i]);
+    }
+    if (out.play) this.playCallStep(out.play);
+    if (!out.done) return;
+    const kind = this.call.kind;
+    this.call = null;
+    if (kind === 'hijack') {
+      this.hijackDone = true;
+      resumeBoard(this);
+      this.comms?.setSignal('clear');
+    } else if (kind === 'ending') {
+      playDebrief(this);
+    }
+  }
+
+  /** A call line goes to the band, with what its cue does. */
+  private playCallStep(step: CallStep): void {
+    this.callLog.push(step.id);
+    this.firedCues.push(step.id);
+    bus.emit('cue', { id: step.id, kind: 'bark', at: this.clock });
+    this.comms?.enqueue(step.id);
+    if (step.cue === 'static') this.comms?.setSignal('static');
+    else if (step.cue === 'resolve') this.comms?.setSignal('resolve');
+    else if (step.cue === 'handoff') {
+      // The load balancer comes down: the board comes back, the crew's cable lowers it.
+      resumeBoard(this);
+      this.comms?.setSignal('clear');
+      bus.emit('rescue', {});
+    }
   }
 
   // ---- helpers ----
@@ -711,6 +821,13 @@ export class HudScene extends Phaser.Scene {
       },
       bark: this.comms?.barkSnapshot() ?? { current: null, text: null, history: [] },
       cues: { fired: [...this.firedCues], silenced: chatSilenced(this.director) },
+      crew: {
+        call: this.call?.kind ?? null,
+        hijackDone: this.hijackDone,
+        banter: this.banterPlayed,
+        said: [...this.callLog],
+        boardFrozen: crewHoldsBoard(),
+      },
       coach: {
         step: this.coach.problem?.step ?? null,
         key: this.coach.problem?.key ?? null,

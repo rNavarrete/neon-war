@@ -1,12 +1,13 @@
-// Turns what the sim did during a frame into the story beats that interrupt the board: the rescue
-// scene when the crew arrives, a rewind screen when the board fails, the debrief at 00:01:00.
+// Turns what the sim did during a frame into the story beats that interrupt the board: the crew's
+// hijack call in the HUD when they arrive, a rewind screen when the board fails, the crew's sign-off
+// call when the session ends (the HUD plays the scorecard after it).
 // The board scene calls flush() right after it ticks the run, so at most one beat starts per frame.
 
 import type Phaser from 'phaser';
 import type { Failure } from '../sim/play';
 import type { RewindKind } from '../story/rewind';
 import { bus } from './bus';
-import { playDebrief, playRescue, playRewind } from './flow';
+import { playRewind, startCrewCall } from './flow';
 import { run } from './run';
 
 /** Which rewind screen a failure gets: TRIAGE's replay before the crew, Rei's after. */
@@ -41,9 +42,9 @@ export class Director {
         run().rewind();
       });
     } else if (crew) {
-      playRescue(board);
+      startCrewCall(board, 'hijack');
     } else if (end) {
-      playDebrief(board);
+      startCrewCall(board, 'ending');
     }
   }
 

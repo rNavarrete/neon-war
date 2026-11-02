@@ -1,5 +1,5 @@
 import script from '../docs/SCRIPT.md?raw';
-import { SCRIPTS, chatText, isChat, scriptFaces, stepsFor, typedChars } from '../src/story/scripts';
+import { SCRIPTS, chatText, isChat, scriptFaces, typedChars } from '../src/story/scripts';
 import { portraitFor } from '../src/game/portraits';
 import { LINES } from '../src/strings';
 
@@ -30,45 +30,8 @@ describe('story scripts', () => {
     expect(c0.backdrop).toBe('art/bg/bedroom-dark.webp');
   });
 
-  it('plays the rescue scene lines in script order over the immersive backdrop', () => {
-    const c5 = SCRIPTS.C5;
-    const sceneIds = Object.keys(LINES).filter(
-      (id) =>
-        id.startsWith('C5.') &&
-        LINES[id as keyof typeof LINES].kind === 'scene' &&
-        id !== 'C5.rei.rewind' &&
-        id !== 'C5.mika.04',
-    );
-    // Rolando, 31 Oct 2026: the crew entrance tightened. Rei sets the test, Mika points at the
-    // gauge, Ozzie pays and jokes; the server-count argument is out (its lines stay unplayed).
-    const unplayed = ['C5.mika.02', 'C5.ozzie.02', 'C5.mika.03', 'C5.ozzie.03'];
-    expect(c5.steps.map((s) => s.lineId)).toEqual(sceneIds.filter((id) => !unplayed.includes(id)));
-    expect(c5.steps.map((s) => s.lineId)).toEqual([
-      'C5.triage.01',
-      'C5.rei.01',
-      'C5.lux.01',
-      'C5.rei.02',
-      'C5.mika.01',
-      'C5.rei.03',
-      'C5.rei.cut',
-      'C5.lux.cut',
-      'C5.ozzie.01',
-      'C5.rei.04',
-    ]);
-    expect(LINES['C5.rei.02'].text).toBe("Night Shift. We brought the parts. You're doing the wiring.");
-    // Mika's Regroup hand-over is not in Session 0 (BROWNOUT.regroup.inSession).
-    expect(c5.steps.map((s) => s.lineId)).not.toContain('C5.mika.04');
-    expect(c5.backdrop).toBe('art/bg/immersive.webp');
-    expect(c5.steps.every((s) => !Object.keys(s).includes('at'))).toBe(true);
-  });
-
-  it("adds Rei's laundry aside only when the laundry floor was cut", () => {
-    const without = stepsFor(SCRIPTS.C5, {}).map((s) => s.lineId);
-    const withCut = stepsFor(SCRIPTS.C5, { laundryCut: true }).map((s) => s.lineId);
-    expect(without).not.toContain('C5.rei.cut');
-    expect(without).not.toContain('C5.lux.cut');
-    expect(withCut.indexOf('C5.lux.cut')).toBe(withCut.indexOf('C5.rei.cut') + 1);
-    expect(withCut.length).toBe(without.length + 2);
+  it('has no rescue scene any more: the crew break into the HUD instead (1 Nov 2026)', () => {
+    expect(Object.keys(SCRIPTS)).toEqual(['C0', 'rewind-replay', 'rewind-rei-surge', 'rewind-rei-midnight']);
   });
 
   it('uses the rewind lines for each rewind screen', () => {
@@ -110,7 +73,6 @@ describe('story scripts', () => {
     expect(luxFaces.length).toBeGreaterThan(3);
     for (const f of luxFaces) expect(f).toMatch(/^lux\/vn\//);
     expect(portraitFor('Lux', 'board')?.file).toBe('art/chars/lux/vn/board-determined.webp');
-    expect(SCRIPTS.C5.steps.find((st) => st.lineId === 'C5.lux.01')?.face).toBe('lux/vn/board-shocked');
   });
 
   it('stands the crew up too: Rei, Mika and Ozzie speak from their tall sprites, in the room and on the board', () => {
@@ -120,7 +82,7 @@ describe('story scripts', () => {
     const crewFaces = Object.values(SCRIPTS).flatMap((sc) =>
       sc.steps.filter((st) => st.face && !st.face.startsWith('lux/')).map((st) => st.face),
     );
-    expect(crewFaces.length).toBeGreaterThan(5);
-    for (const f of crewFaces) expect(f).toMatch(/^(rei|mika|ozzie)\/vn\//);
+    // Only Rei's two rewinds stand a crew member up now: the rescue plays in the HUD (1 Nov 2026).
+    expect(crewFaces).toEqual(['rei/vn/stern', 'rei/vn/stern']);
   });
 });

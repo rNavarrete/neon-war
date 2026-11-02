@@ -58,6 +58,12 @@ export interface GameEvents {
   midnight: Midnight;
   /** The clock reached 00:01:00: the debrief plays. */
   sessionEnd: Record<string, never>;
+  /**
+   * The crew call in over the HUD (src/scenes/hud/crewCalls.ts): 'hijack' when they break into the
+   * comms at the rescue (the board is frozen until the hand-off), 'ending' after midnight, before the
+   * scorecard.
+   */
+  crewCall: { kind: 'hijack' | 'ending' };
   /** An edge between two frames of the sim (src/game/occurrences.ts), emitted by the HUD once each. */
   occurrence: Occurrence;
 

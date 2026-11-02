@@ -3,7 +3,7 @@ import {
   type StoryData,
   defaultDebriefResults,
   playDebrief,
-  playRescue,
+  startCrewCall,
   playRewind,
   startSession,
 } from '../game/flow';
@@ -141,7 +141,6 @@ export class StoryScene extends Phaser.Scene {
       look: s.look,
     });
     if (s.where === 'room') playSfx('rain-loop', true);
-    if (s.id === 'C5') this.cameras.main.shake(400, settings().reduceFlicker ? 0.002 : 0.006);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (s.where === 'room') stopSfx('rain-loop');
@@ -456,7 +455,8 @@ declare global {
     /** Test-only triggers for the story flow (installed only with `?test`). */
     __neonStory?: {
       startSession(): void;
-      playRescue(laundryCut?: boolean): void;
+      /** The crew call in over the HUD: the hijack (freezes the board) or the sign-off. */
+      crewCall(kind: 'hijack' | 'ending'): void;
       playRewind(kind: RewindKind): void;
       playDebrief(results?: Partial<DebriefResults>): void;
       /** Set the run's clock (seconds since 23:54:25), to stage a failure at a given time. */
@@ -471,7 +471,7 @@ function installStoryTrigger(story: StoryScene): void {
     story.game.scene.getScenes(true).find((s) => s.scene.key !== SCENES.story) ?? story;
   window.__neonStory = {
     startSession: () => startSession(from()),
-    playRescue: (laundryCut) => playRescue(from(), { laundryCut }),
+    crewCall: (kind) => startCrewCall(story.game.scene.getScene(SCENES.board) ?? from(), kind),
     playRewind: (kind) => playRewind(from(), kind),
     playDebrief: (results) => playDebrief(from(), { ...defaultDebriefResults(), ...results }),
     setNow: (now) => {

@@ -88,9 +88,9 @@ const line = (bus: Bus, id: LineId, since = 0): void =>
   bus.emit('line', { id, speaker: 'TRIAGE', tag: 'HINT', lesson: false, since });
 
 describe('Live sound effect keys', () => {
-  it('pins LIVE_SFX_KEYS beside the 21 SFX_KEYS', () => {
+  it('pins LIVE_SFX_KEYS beside the 22 SFX_KEYS', () => {
     expect(LIVE_SFX_KEYS).toEqual(['server-online', 'packet-drop', 'health-skip', 'headroom-red']);
-    expect(SFX_KEYS).toHaveLength(21);
+    expect(SFX_KEYS).toHaveLength(22);
     for (const k of LIVE_SFX_KEYS) expect((SFX_KEYS as readonly string[]).includes(k)).toBe(false);
   });
 
@@ -309,9 +309,10 @@ describe('missing voices', () => {
     expect(m.en).toContain('C1.lux.01');
     // 85 until Lux's 26 board lines were recorded, then 111 until the 20 coach nudges were
     // (Rolando, 30 Oct 2026), 133 with the cold open's check-in beat, then 145 once the story pass's
-    // 12 new lines were recorded (31 Oct 2026): every spoken line.
-    expect(m.ja).toHaveLength(145);
-    expect(m.en).toHaveLength(145);
+    // 12 new lines were recorded (31 Oct 2026), then 172 with the crew call's 27 (1 Nov 2026): every
+    // spoken line.
+    expect(m.ja).toHaveLength(172);
+    expect(m.en).toHaveLength(172);
   });
 
   it('keeps the last 20 requests', () => {
