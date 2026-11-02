@@ -73,7 +73,7 @@ gives the number, the crew argue numbers in C5, and C6 is the player alone.
 | C5  | 23:58:00 (3:35)    | Board (HUD call) | **Rescue.** The crew hack Lux's comms over the HUD (Rolando, 1 Nov 2026): static on the call tile and the board frozen. TRIAGE notices ("Something's on our channel"), Lux and TRIAGE ask who they are, Rei asks if she built this ("one more wave like that and it's gone"), Lux says they're fine, Mika says the block goes dark in a minute, Rei drops a load balancer (the board comes back and the static clears) and names its health check, Ozzie fronts 100 with one joke, and Rei hands control back ("Clock's running. Show us."). The chat reacts throughout. The big server cooked; the crew put a stock 60 back in its place. 3 servers behind the balancer hold the tail. Once the build covers the tail, the crew banter in the quiet stretch: who Night Shift are, the health check, Solace (docs/SCRIPT.md). | load balancer, horizontal scaling, health check |
 | C6  | 23:59:00 (4:35)    | Board  | **Midnight, your call.** Forecast 150 req/s, one server loses power about 10 s before midnight for 20 s (no racks: Rolando, 30 Oct 2026). Lux: "Build before it hits, not after." (moved here from the surge: now she has the tools). TRIAGE does the sum (two and a half), then points back at the failure, not more arithmetic: "And one's going to lose power..." No sizing question: the player builds the count, and the debrief grades the servers actually running at midnight. 150 ÷ 60 = 2.5, so 3 hold the peak and **4** ride out the dip. The band stays quiet around the dip so the traffic moving to the survivors registers. | capacity planning, peak vs average, redundancy, N+1 |
 | C7  | 00:00:00 (5:35)    | Board  | **Scale down** (optional, 30 s): fireworks; demand falls to 40 within 20 s while upkeep keeps ticking. Decommission down to 2. | scale down, elasticity, cost   |
-| C8  | 00:00:30 (6:05)    | HUD call, then scene | **Sign-off and debrief** (Rolando, 1 Nov 2026). Over the HUD, Rei acknowledges the night and grades the build (plus the Solace money and Ozzie's tab, if any), then the invitation ("We've been following you for a while... ready for the big leagues... the arcade, tomorrow night"), Lux's "I'll think about it" and TRIAGE's "Stream saved". Then the **scorecard**, the last screen of the night: the raw results over the room, nobody standing in it. Then the **Night Book**: page 1, "Demand decides the design"; a click turns to the terms in three groups (sizing, scaling, failure) and then to the interview version, with Rei's "somebody in a nice shirt" note; CLOSE BOOK skips straight to the title card. | everything above            |
+| C8  | 00:00:30 (6:05)    | HUD call, then scene | **Sign-off and debrief** (Rolando, 1 Nov 2026). Over the HUD, Rei acknowledges the night and grades the build (plus the Solace money and Ozzie's tab, if any), then the invitation ("We've been following you for a while... ready for the big leagues... the arcade, tomorrow night"), Lux's "I'll think about it" and TRIAGE's "Stream saved". Then **one end screen**, the last thing (Rolando, 2 Nov 2026: the Night Book's pages were too much text and too much clicking): the session's name, how midnight went and the raw results, the one lesson ("Count the peak before you build. Then build for it, plus one spare.") and the words for what she built (load balancer, health checks, scaling out, redundancy N+1), over the room with nobody in it. One click ends the session. | everything above            |
 
 **Losing is gentle.** There is no game-over screen.
 
@@ -172,7 +172,8 @@ Not set yet: the debrief's grade thresholds. A ticket that needs them stops and 
 
 ## The interview version
 
-The Night Book's last page (read at the player's own pace, 31 Oct 2026) is a card that turns the night into an interview answer to
+Session 0 follows the shape of the interview answer below. Since the one-screen end (2 Nov 2026) the game no
+longer shows it as a card; it is the design brief the night is built on. The answer to
 "How would you scale a web app from a single server?": pin down who uses it and what must stay up; estimate
 requests per second (users times call rate) and size for the peak, not the average; one server is fine well
 under its capacity; scale up first (quick, but it has a ceiling, needs downtime and is still one point of
@@ -191,8 +192,7 @@ Desktop only, 16:9, built at 1920x1080 and scaled to fit.
 | Pause            | Esc or button                     | Resume, Restart session, Settings, Quit to title                               |
 | Settings         | From title or pause               | Volume, text speed, reduce flicker, fullscreen                                 |
 | Rewind           | A failure (see Losing is gentle)   | TRIAGE's stream replay before the rescue, Rei's rewind after it, then back into the board                                |
-| Debrief          | After the crew's sign-off         | The scorecard: how midnight went and the raw results, centred over the room (Rei's grade and invitation play over the HUD before it) |
-| Night Book       | End of debrief                    | Page 1 (the lesson, handwritten), then the terms in three groups and the interview-version card a click at a time; CLOSE BOOK goes to the title card ("Session 0: Brownout") |
+| Debrief          | After the crew's sign-off         | One end screen: how midnight went, the raw results, the one lesson and the words for it, over the room (Rei's grade and invitation play over the HUD before it); a click ends the session |
 
 **Board HUD:** the job card at the start; midnight countdown and in-world clock; demand-versus-capacity chart
 (the main readout); trust
@@ -227,5 +227,4 @@ Sound: one board music loop (Suno, "Cell Shaped Chaos") and a small set of effec
 
 ## Brownout is done when
 
-A stranger opens the game link, plays the full 6 minutes without help, and reaches the debrief and the first
-Night Book page. Each ticket's acceptance criteria live in its contract, not in this file.
+A stranger opens the game link, plays the full 6 minutes without help, and reaches the end screen. Each ticket's acceptance criteria live in its contract, not in this file.

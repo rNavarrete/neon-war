@@ -7,12 +7,13 @@ export const LABELS = {
   replay: 'REPLAY',
   rec: 'REC',
   rewinding: 'REWINDING',
-  results: 'TONIGHT',
-  /** The scorecard's header and its midnight line (1 Nov 2026). */
-  scorecard: 'SESSION 0 \u00b7 BROWNOUT',
+  /** The scorecard's midnight line (1 Nov 2026). */
   midnightHeld: (servers: number) => `MIDNIGHT HELD on ${servers} server${servers === 1 ? '' : 's'}`,
   midnightDark: 'BLOCK DARK AT MIDNIGHT',
-  openBook: 'click to open the Night Book',
+  /** The one-screen end (2 Nov 2026): its kicker, the lesson's label and the way out. */
+  complete: 'SESSION COMPLETE',
+  lesson: "TONIGHT'S LESSON",
+  endSession: 'click to end the session',
   dropped: 'Dropped requests',
   wasted: 'Wasted credits',
   trust: 'Trust left',
@@ -25,8 +26,6 @@ export const LABELS = {
   bannerNone: 'No answer',
   yes: 'Yes',
   no: 'No',
-  card: 'THE INTERVIEW VERSION',
-  closeBook: 'CLOSE BOOK',
   turnPage: 'click to turn the page',
   clickOn: 'click to continue',
 };

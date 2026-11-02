@@ -336,14 +336,15 @@ too long, so they never hold up a hint.
 | C6.lux.midnight | bark | Lux | 2 s after C6.lux.hold | "Happy New Year, block. Lights stay on." |
 | C7.lux.count | bark | Lux | 1 s after TRIAGE's "one server and a bit?" | "I built you, and you still can't count." |
 
-## C8 The sign-off, the scorecard and the Night Book (00:00:30)
+## C8 The sign-off and the one-screen end (00:00:30)
 
 Kept in the HUD (Rolando, 1 Nov 2026: Rei standing in Lux's room made no sense, she was never there). At
 00:00:30 the crew call in one last time over the board: Rei acknowledges the night and grades the build in a
 line each (plus the Solace money and Ozzie's tab when they cost), then the invitation to the arcade, Lux's
 non-answer and TRIAGE's sign-off, with the stream chat losing it. Only then do the goggles come up: the
-scorecard over Lux's room with the fireworks outside is the very last thing, followed by the Night Book (a page
-per click; CLOSE BOOK skips to the title card). Grade lines branch on the raw results; the thresholds behind
+end screen over Lux's room with the fireworks outside is the very last thing: one card, one click, and the
+session ends (Rolando, 2 Nov 2026: the Night Book's pages of terms and the interview answer were too much text
+and too much clicking). Grade lines branch on the raw results; the thresholds behind
 "some requests dropped" are not set yet, so a ticket that needs exact numbers stops and asks.
 
 ### The crew sign off (in the HUD)
@@ -363,7 +364,7 @@ per click; CLOSE BOOK skips to the title card). Grade lines branch on the raw re
 | C8.chat.invite | chat | stream: viewer | after C8.chat.arcade | invite me too 🥺 |
 | C8.lux.invite | bark | Lux | next | "...I'll think about it." |
 | C8.triage.going | bark | TRIAGE (happy) | next | "She's going. She's definitely going." |
-| C8.triage.end | bark | TRIAGE (happy) | last line: the goggles come up after it | "Stream saved. 4 viewers. Best night ever." |
+| C8.triage.end | bark | TRIAGE (happy) | last line: the goggles come up after it | "Stream saved. 18 viewers. Best night ever." |
 | C8.chat.gg | chat | stream: viewer | with C8.triage.end | gg lux. see you tomorrow night |
 
 ### Not played any more
@@ -376,12 +377,22 @@ per click; CLOSE BOOK skips to the title card). Grade lines branch on the raw re
 | C8.rei.down | scene | Rei | not played (31 Oct 2026: one acknowledgement; the rest is in the Night Book) | "And you turned them off after. That's rarer than it should be." |
 | C8.rei.close | scene | Rei | not played (31 Oct 2026: one acknowledgement; the rest is in the Night Book) | "Now the words for it. You'll need them." |
 
-### The scorecard
+### The end screen
 
-Goggles up, back in the rainy room with the fireworks outside: the night's raw results in one card, no
-characters on screen. A click opens the Night Book.
+Goggles up, back in the rainy room with the fireworks outside and no characters on screen. One card holds the
+session's name, how midnight went, the night's raw results, the one lesson and the words for what the player
+built. A click anywhere ends the session and goes back to the title.
+
+| ID | Kind | Speaker | Line |
+| --- | --- | --- | --- |
+| C8.title | ui | Title card | Session 0: Brownout |
+| C8.lesson | ui | Lesson | Count the peak before you build. Then build for it, plus one spare. |
+| C8.lesson.words | ui | Lesson | Load balancer · Health checks · Scaling out · Redundancy, N+1 |
 
 ### The terms, named (three groups)
+
+Not shown on their own any more (2 Nov 2026). They stay as the source of the term names the HUD's lesson tags
+use (src/story/debrief.ts TERM_NAMES).
 
 | ID | Kind | Group | Line |
 | --- | --- | --- | --- |
@@ -389,27 +400,11 @@ characters on screen. A click opens the Night Book.
 | C8.terms.scaling | ui | Scaling | **Scaling up** (the bigger server: quick, but it has a ceiling and goes dark while it swaps). **Scaling out** (more servers). **Load balancer** with **health checks** (splits traffic, skips dark servers). **Scaling down** (turning them off after). |
 | C8.terms.failure | ui | Failure | **Single point of failure** (one big server). **Cascading failure** (one part falls, the next follows). **Retry storm** (everyone hitting refresh). **Load shedding** (cutting the laundry loose). **Redundancy, N+1** (the peak plus one spare). |
 
-### The interview version
-
-| ID | Kind | Speaker | Line |
-| --- | --- | --- | --- |
-| C8.rei.interview | scene | Rei (Night Book, the interview page, read when the player turns to it) | "Someday somebody in a nice shirt will ask you how to scale a web app from one server. Here's your answer." |
-| C8.card.title | ui | Card | How would you scale a web app from a single server? |
-| C8.card.1 | ui | Card | 1. Pin down who uses it and what must stay up. |
-| C8.card.2 | ui | Card | 2. Estimate requests per second: users times how often they call. Size for the peak, not the average. |
-| C8.card.3 | ui | Card | 3. One server is fine while it runs well under capacity. |
-| C8.card.4 | ui | Card | 4. Scale up first: quick, but it has a ceiling, needs downtime, and is still one point of failure. |
-| C8.card.5 | ui | Card | 5. Then scale out behind a load balancer with health checks. |
-| C8.card.6 | ui | Card | 6. Size the pool for the peak plus one spare. |
-| C8.card.7 | ui | Card | 7. Scale back down when the peak passes. |
-
-### Night Book page 1 and the close
+### Not shown any more
 
 | ID | Kind | Speaker | Line |
 | --- | --- | --- | --- |
 | C8.book.open | scene | (stage direction, no text) | She opens the book. The first pages are full of old handwriting that isn't Rei's. She turns past them to a blank page. |
-| C8.book.page1 | ui | Night Book | Demand decides the design. Count who's coming, how often, and how big the peak gets. Build for the peak, with room for one part to die. |
-| C8.title | ui | Title card | Session 0: Brownout |
 
 ## Chat filler
 

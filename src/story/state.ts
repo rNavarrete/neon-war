@@ -11,7 +11,8 @@ import type { RewindKind } from './rewind';
 import { seenScenes } from './seen';
 import { isVoiced } from '../game/voice';
 
-export type DebriefStep = 'grades' | 'invite' | 'book' | 'terms' | 'interview' | 'title';
+/** The debrief is one screen now (Rolando, 2 Nov 2026). */
+export type DebriefStep = 'scorecard';
 
 /** A point on the page in CSS pixels, for tests to click. */
 export interface PagePoint {
@@ -61,13 +62,12 @@ export interface StoryTestState {
   debrief: {
     step: DebriefStep;
     results: DebriefResults;
-    /** Each term group with its bold runs, as drawn. */
-    terms: { group: string; bold: string[] }[];
-    card: string[];
-    page: string | null;
-    title: string | null;
-    /** The Night Book's CLOSE BOOK button while the book is open (it skips to the title card), else null. */
-    closeBook: PagePoint | null;
+    /** The card's heading, its one-line lesson and the words for what the player built, as drawn. */
+    title: string;
+    lesson: string;
+    words: string;
+    /** The "click to end the session" hint (a click anywhere ends it). */
+    end: PagePoint;
   } | null;
   fireworks: { bursts: number; flashes: number };
   /** Lux's room only: the window glass and the box round the rain drawn this frame (null otherwise). */

@@ -389,16 +389,10 @@
     "じゃあ、それに名前をつけよう。これから必要になる。"
   ],
   [
-    "C8.rei.interview",
-    "rei",
-    "Someday somebody in a nice shirt will ask you how to scale a web app from one server. Here's your answer.",
-    "いつか、いいシャツ着た誰かに聞かれるよ。サーバー一台のウェブアプリをどうスケールさせるかって。これがその答え。"
-  ],
-  [
     "C8.triage.end",
     "triage",
-    "[happily] Stream saved. 4 viewers. Best night ever.",
-    "[嬉しそうに] 配信保存したよ。視聴者4人。最高の夜！"
+    "[happily] Stream saved. 18 viewers. Best night ever.",
+    "[嬉しそうに] 配信保存したよ。視聴者18人。最高の夜！"
   ],
   [
     "C8.rei.end",

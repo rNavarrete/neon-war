@@ -656,53 +656,25 @@ export const LINES = {
     speaker: 'Failure',
     text: '**Single point of failure** (one big server). **Cascading failure** (one part falls, the next follows). **Retry storm** (everyone hitting refresh). **Load shedding** (cutting the laundry loose). **Redundancy, N+1** (the peak plus one spare).',
   },
-  'C8.rei.interview': {
-    kind: 'scene',
-    speaker: 'Rei',
-    text: "Someday somebody in a nice shirt will ask you how to scale a web app from one server. Here's your answer.",
-  },
-  'C8.card.title': {
-    kind: 'ui',
-    speaker: 'Card',
-    text: 'How would you scale a web app from a single server?',
-  },
-  'C8.card.1': { kind: 'ui', speaker: 'Card', text: '1. Pin down who uses it and what must stay up.' },
-  'C8.card.2': {
-    kind: 'ui',
-    speaker: 'Card',
-    text: '2. Estimate requests per second: users times how often they call. Size for the peak, not the average.',
-  },
-  'C8.card.3': {
-    kind: 'ui',
-    speaker: 'Card',
-    text: '3. One server is fine while it runs well under capacity.',
-  },
-  'C8.card.4': {
-    kind: 'ui',
-    speaker: 'Card',
-    text: '4. Scale up first: quick, but it has a ceiling, needs downtime, and is still one point of failure.',
-  },
-  'C8.card.5': {
-    kind: 'ui',
-    speaker: 'Card',
-    text: '5. Then scale out behind a load balancer with health checks.',
-  },
-  'C8.card.6': { kind: 'ui', speaker: 'Card', text: '6. Size the pool for the peak plus one spare.' },
-  'C8.card.7': { kind: 'ui', speaker: 'Card', text: '7. Scale back down when the peak passes.' },
   'C8.book.open': {
     kind: 'scene',
     speaker: '(stage direction, no text)',
     text: "She opens the book. The first pages are full of old handwriting that isn't Rei's. She turns past them to a blank page.",
   },
-  'C8.book.page1': {
+  'C8.lesson': {
     kind: 'ui',
-    speaker: 'Night Book',
-    text: "Demand decides the design. Count who's coming, how often, and how big the peak gets. Build for the peak, with room for one part to die.",
+    speaker: 'Lesson',
+    text: 'Count the peak before you build. Then build for it, plus one spare.',
+  },
+  'C8.lesson.words': {
+    kind: 'ui',
+    speaker: 'Lesson',
+    text: 'Load balancer · Health checks · Scaling out · Redundancy, N+1',
   },
   'C8.triage.end': {
     kind: 'bark',
     speaker: 'TRIAGE (happy)',
-    text: 'Stream saved. 4 viewers. Best night ever.',
+    text: 'Stream saved. 18 viewers. Best night ever.',
   },
   'C8.rei.end': {
     kind: 'bark',

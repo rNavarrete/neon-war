@@ -2,52 +2,23 @@ import Phaser from 'phaser';
 import { defaultDebriefResults, quitToTitle } from '../game/flow';
 import { run } from '../game/run';
 import { settings } from '../game/settings';
-import { type DebriefResults, type SeenLine, resultRows, seenLines } from '../story/debrief';
+import { type DebriefResults, resultRows } from '../story/debrief';
 import { LABELS } from '../story/labels';
-import { parseBold, runWords } from '../story/markup';
-import { type DebriefStep, playSfx, setLiveView, stopSfx, storyState } from '../story/state';
+import { playSfx, setLiveView, stopSfx, storyState } from '../story/state';
 import { FrameClock, H, VnView, W, cover, fileKey, preloadView, toPage } from '../story/view';
-import { storyWiring } from '../story/wiring';
-import { LINES, type LineId, line } from '../strings';
-import { provideTestState } from '../testHook';
-import type { TermGroup } from './hud/lineMeta';
+import { line } from '../strings';
 import { SCENES } from './keys';
 
 const BG = 'art/bg/bedroom-midnight.webp';
-const BOOK = 'art/story/night-book-page.webp';
-
-const TERMS: readonly LineId[] = ['C8.terms.sizing', 'C8.terms.scaling', 'C8.terms.failure'];
-/** The taught-trace group each TERMS column names. */
-const TERM_GROUPS: readonly TermGroup[] = ['sizing', 'scaling', 'failure'];
-/** The terms columns: top and height (they reach down to the text box's free space on this beat). */
-const TERMS_TOP = 120;
-const TERMS_H = 900;
-
-declare module '../testHook' {
-  interface TestSections {
-    /** The grey "you saw it at" lines the debrief printed under its terms (learning-4, D10). */
-    debriefSeen: SeenLine[];
-  }
-}
-const CARD: readonly LineId[] = [
-  'C8.card.1',
-  'C8.card.2',
-  'C8.card.3',
-  'C8.card.4',
-  'C8.card.5',
-  'C8.card.6',
-  'C8.card.7',
-];
 
 const FONT = '"Trebuchet MS", "Segoe UI", Arial, sans-serif';
-const HAND = '"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive';
 
-/** One beat of the debrief: an optional line in the text box and what appears with it. */
-interface Beat {
-  step: DebriefStep;
-  line?: LineId;
-  enter?: () => void;
-}
+/** A click on the scorecard ends the session, but not one landing this soon after it opens (the
+ * tail of a click in the HUD). */
+const END_GUARD_SECONDS = 0.8;
+/** The card's top and the end-the-session hint near its foot (game px). */
+const CARD_Y = 180;
+const END_Y = 800;
 
 const SPARKS = 96;
 const SPARKS_PER_BURST = 24;
@@ -61,28 +32,25 @@ interface Spark {
 }
 
 /**
- * The scorecard (C8), the very last thing (Rolando, 1 Nov 2026): goggles up, back in Lux's room with
- * fireworks outside, and nobody standing in it. Rei's grade and the arcade invitation were already
- * said over the HUD (src/scenes/hud/crewCalls.ts); here the night's raw results fill one card, then
- * Night Book page 1 ("Demand decides the design"), the terms in three groups, the interview-version
- * card and the title card. A click finishes or advances.
+ * The end of Session 0 (C8): one screen, then the title (Rolando, 2 Nov 2026: the Night Book's pages of
+ * terms and the interview answer were too much text and too much clicking). Goggles up, back in Lux's
+ * room with fireworks outside and nobody in it; Rei's grade and the arcade invitation were already said
+ * over the HUD (src/scenes/hud/crewCalls.ts). The card holds the night's raw results, the one lesson
+ * and the words the night taught; one click ends the session. Results screens in games celebrate, show
+ * how the player did at a glance and get out of the way; this one does that in a single beat.
  */
 export class DebriefScene extends Phaser.Scene {
   ready = false;
   private results: DebriefResults = defaultDebriefResults();
-  private beats: Beat[] = [];
-  private beat = -1;
   private view!: VnView;
-  private stepLayer: Phaser.GameObjects.Container | null = null;
   private fx!: Phaser.GameObjects.Container;
   private flash!: Phaser.GameObjects.Rectangle;
   private sparks: Spark[] = [];
   private nextBurst = 0;
   private frames = new FrameClock();
-  /** The grey lines drawn under the terms, for the test hook. */
-  private seen: SeenLine[] = [];
-  /** The Night Book's CLOSE BOOK button while the book is open. */
-  private closeButton: Phaser.GameObjects.Text | null = null;
+  /** Seconds the scorecard has been up. */
+  private shownFor = 0;
+  private ending = false;
 
   constructor() {
     super(SCENES.debrief);
@@ -91,12 +59,12 @@ export class DebriefScene extends Phaser.Scene {
   init(data: { results?: DebriefResults }): void {
     this.results = data.results ?? defaultDebriefResults();
     this.ready = false;
-    this.seen = [];
-    this.closeButton = null;
+    this.shownFor = 0;
+    this.ending = false;
   }
 
   preload(): void {
-    preloadView(this, [BG, BOOK]);
+    preloadView(this, [BG]);
   }
 
   create(): void {
@@ -116,27 +84,6 @@ export class DebriefScene extends Phaser.Scene {
       onSkip: () => {},
     });
     setLiveView(this.view);
-    provideTestState('debriefSeen', () => this.seen);
-
-    this.beats = [
-      // The scorecard: the night's numbers in one card, with nothing said over them.
-      { step: 'grades', enter: () => this.drawResults() },
-      // The Night Book (Rolando, 31 Oct 2026): page 1, then the words and the interview answer for
-      // whoever wants them. A click turns the page; CLOSE BOOK goes straight to the title card.
-      {
-        step: 'book',
-        line: 'C8.book.open',
-        enter: () => {
-          this.drawBook();
-          this.writePage();
-          this.showCloseBook();
-        },
-      },
-      { step: 'terms', enter: () => this.drawTerms() },
-      { step: 'interview', line: 'C8.rei.interview', enter: () => this.drawCard() },
-      { step: 'title', enter: () => this.drawTitle() },
-    ];
-    this.beat = -1;
 
     Object.assign(storyState, {
       active: true,
@@ -146,13 +93,12 @@ export class DebriefScene extends Phaser.Scene {
       look: 'vn',
       fireworks: { bursts: 0, flashes: 0 },
       debrief: {
-        step: 'grades',
+        step: 'scorecard',
         results: this.results,
-        terms: [],
-        card: [],
-        page: null,
-        title: null,
-        closeBook: null,
+        title: line('C8.title'),
+        lesson: line('C8.lesson'),
+        words: line('C8.lesson.words'),
+        end: toPage(this, W / 2, END_Y),
       },
     });
     playSfx('rain-loop', true);
@@ -164,323 +110,118 @@ export class DebriefScene extends Phaser.Scene {
       setLiveView(null);
     });
 
-    this.advance();
+    this.view.hideBox();
+    this.drawScorecard();
     this.ready = true;
   }
 
   update(time: number): void {
     const dt = this.frames.step(time);
+    this.shownFor += dt;
     this.view.update(dt);
     this.updateFireworks(dt);
   }
 
+  /** One click ends the session and goes back to the title. */
   private click(): void {
-    if (this.beats[this.beat]?.line && !this.view.typingDone) {
-      this.view.finishTyping();
-      return;
-    }
-    if (this.beat >= this.beats.length - 1) {
-      quitToTitle(this);
-      return;
-    }
-    this.advance();
-  }
-
-  private advance(): void {
-    const b = this.beats[++this.beat];
-    const prev = this.beat > 0 ? this.beats[this.beat - 1] : null;
-    if (prev && prev.step !== b.step && prev.step !== 'book') {
-      this.stepLayer?.destroy();
-      this.stepLayer = null;
-    }
-    if (storyState.debrief) storyState.debrief.step = b.step;
-    b.enter?.();
-    if (b.line) this.view.say(b.line);
-    else this.view.hideBox();
-  }
-
-  /** The CLOSE BOOK button over the open Night Book: it skips the rest of the book to the title card. */
-  private showCloseBook(): void {
-    const x = 1690;
-    const y = 70;
-    const b = this.add
-      .text(x, y, LABELS.closeBook, {
-        fontFamily: FONT,
-        fontSize: '30px',
-        fontStyle: 'bold',
-        color: '#2de2e6',
-        backgroundColor: '#0b0820',
-        padding: { x: 22, y: 12 },
-      })
-      .setOrigin(0.5)
-      .setDepth(60)
-      .setInteractive({ useHandCursor: true });
-    b.on('pointerdown', () => this.closeBook());
-    this.closeButton = b;
-    if (storyState.debrief) storyState.debrief.closeBook = toPage(this, x, y);
-  }
-
-  /** Close the Night Book: on to the title card, whatever page it is on. */
-  private closeBook(): void {
-    if (!this.closeButton) return;
-    storyState.clicks++;
-    this.beat = this.beats.length - 2;
-    this.advance();
-  }
-
-  private layer(depth: number): Phaser.GameObjects.Container {
-    this.stepLayer = this.add.container(0, 0).setDepth(depth);
-    return this.stepLayer;
+    if (this.ending || this.shownFor < END_GUARD_SECONDS) return;
+    this.ending = true;
+    quitToTitle(this);
   }
 
   /**
-   * The scorecard: one card centred over the room, the session's name, how midnight went, then the
-   * raw result per category. No letter grades; Rei already graded it over the HUD.
+   * The one screen: the session's name, how midnight went, the raw result per category, then the
+   * lesson in one line and the words for what the player built. No letter grades; Rei already graded
+   * it over the HUD.
    */
-  private drawResults(): void {
-    const c = this.layer(12);
-    const w = 900;
-    const h = 760;
+  private drawScorecard(): void {
+    const c = this.add.container(0, 0).setDepth(12);
+    const w = 1000;
     const x = (W - w) / 2;
-    const y = 120;
+    const y = CARD_Y;
+    const h = END_Y + 44 - y;
     c.add(this.add.rectangle(x, y, w, h, 0x0b0820, 0.9).setOrigin(0).setStrokeStyle(3, 0x2de2e6));
     c.add(this.add.rectangle(x, y, w, 8, 0xff4fd8, 0.9).setOrigin(0));
     c.add(
-      this.add.text(x + 50, y + 40, LABELS.scorecard, {
+      this.add.text(x + 50, y + 34, LABELS.complete, {
         fontFamily: FONT,
-        fontSize: '26px',
+        fontSize: '24px',
         fontStyle: 'bold',
         color: '#ff4fd8',
       }),
     );
     c.add(
-      this.add.text(x + 50, y + 80, LABELS.results, {
-        fontFamily: FONT,
-        fontSize: '56px',
-        fontStyle: 'bold',
-        color: '#2de2e6',
-      }),
+      this.add
+        .text(x + 50, y + 66, line('C8.title'), {
+          fontFamily: FONT,
+          fontSize: '54px',
+          fontStyle: 'bold',
+          color: '#2de2e6',
+        })
+        .setShadow(0, 0, '#ff4fd8', 18, true, true),
     );
     const held = this.results.midnightHeld;
     c.add(
       this.add.text(
         x + 50,
-        y + 160,
+        y + 146,
         held ? LABELS.midnightHeld(this.results.serversAtMidnight) : LABELS.midnightDark,
         { fontFamily: FONT, fontSize: '30px', fontStyle: 'bold', color: held ? '#b6ff5c' : '#ff6b6b' },
       ),
     );
-    resultRows(this.results).forEach((r, i) => {
-      const ry = y + 250 + i * 70;
-      c.add(this.add.rectangle(x + 40, ry - 14, w - 80, 1, 0x2de2e6, 0.25).setOrigin(0));
-      c.add(this.add.text(x + 50, ry, r.label, { fontFamily: FONT, fontSize: '30px', color: '#cfc8e8' }));
+    // The results in two columns of three, so the card stays one glance tall.
+    const rows = resultRows(this.results);
+    const colW = (w - 100 - 40) / 2;
+    rows.forEach((r, i) => {
+      const col = i < 3 ? 0 : 1;
+      const rx = x + 50 + col * (colW + 40);
+      const ry = y + 216 + (i % 3) * 52;
+      c.add(this.add.rectangle(rx, ry - 10, colW, 1, 0x2de2e6, 0.25).setOrigin(0));
+      c.add(this.add.text(rx, ry, r.label, { fontFamily: FONT, fontSize: '24px', color: '#cfc8e8' }));
       c.add(
         this.add
-          .text(x + w - 50, ry, r.value, {
+          .text(rx + colW, ry, r.value, {
             fontFamily: FONT,
-            fontSize: '32px',
+            fontSize: '26px',
             fontStyle: 'bold',
             color: '#ffd27a',
           })
           .setOrigin(1, 0),
       );
     });
+    // The lesson: one line, and the words for what she built.
+    const ly = y + 390;
+    c.add(this.add.rectangle(x + 40, ly - 16, w - 80, 1, 0xff4fd8, 0.5).setOrigin(0));
     c.add(
-      this.add
-        .text(W / 2, y + h - 40, LABELS.openBook, { fontFamily: FONT, fontSize: '22px', color: '#9a95ad' })
-        .setOrigin(0.5),
-    );
-  }
-
-  /**
-   * The terms, named in three groups, with each term in bold; under the group, one grey line per
-   * term the taught trace has an entry for: "you saw it at hh:mm:ss: <line>" (D10).
-   */
-  private drawTerms(): void {
-    const c = this.layer(25);
-    const colW = 560;
-    const terms: { group: string; bold: string[] }[] = [];
-    const seen = seenLines(storyWiring.taught());
-    this.seen = seen;
-    TERMS.forEach((id, i) => {
-      const x = 80 + i * (colW + 40);
-      c.add(
-        this.add
-          .rectangle(x, TERMS_TOP, colW, TERMS_H, 0x0b0820, 0.9)
-          .setOrigin(0)
-          .setStrokeStyle(2, 0xff4fd8),
-      );
-      const group = LINES[id].speaker;
-      c.add(
-        this.add.text(x + 30, 150, group, {
-          fontFamily: FONT,
-          fontSize: '42px',
-          fontStyle: 'bold',
-          color: '#ff4fd8',
-        }),
-      );
-      const runs = parseBold(line(id));
-      const bottom = this.layoutRuns(c, runs, x + 30, 230, colW - 60);
-      this.drawSeen(
-        c,
-        seen.filter((s) => s.group === TERM_GROUPS[i]),
-        x + 30,
-        bottom + 36,
-        colW - 60,
-      );
-      terms.push({ group, bold: runs.filter((r) => r.bold).map((r) => r.text) });
-    });
-    if (storyState.debrief) storyState.debrief.terms = terms;
-  }
-
-  /** The grey "you saw it at" lines of one column, each under its term's name, from `top` down. */
-  private drawSeen(
-    c: Phaser.GameObjects.Container,
-    lines: readonly SeenLine[],
-    left: number,
-    top: number,
-    width: number,
-  ): void {
-    let y = top;
-    for (const s of lines) {
-      const name = this.add.text(left, y, s.name, {
+      this.add.text(x + 50, ly, LABELS.lesson, {
         fontFamily: FONT,
-        fontSize: '18px',
+        fontSize: '22px',
         fontStyle: 'bold',
-        color: '#c9a95c',
-      });
-      c.add(name);
-      y += name.height + 2;
-      const t = this.add.text(left, y, s.text, {
-        fontFamily: FONT,
-        fontSize: '18px',
-        color: '#9a95ad',
-        wordWrap: { width },
-      });
-      c.add(t);
-      y += t.height + 10;
-    }
-  }
-
-  /** Lay bold and plain runs out word by word, wrapping at `width`; returns the bottom of the last row. */
-  private layoutRuns(
-    c: Phaser.GameObjects.Container,
-    runs: ReturnType<typeof parseBold>,
-    left: number,
-    top: number,
-    width: number,
-  ): number {
-    const lineH = 40;
-    const space = 8;
-    let x = left;
-    let y = top;
-    for (const w of runWords(runs)) {
-      const word = w.text.trim();
-      const gap = w.text.length > w.text.trimEnd().length ? space : 0;
-      if (!word) {
-        if (x > left) x += space;
-        continue;
-      }
-      const t = this.add.text(x, y, word, {
-        fontFamily: FONT,
-        fontSize: '28px',
-        fontStyle: w.bold ? 'bold' : '',
-        color: w.bold ? '#ffd27a' : '#e8e4f5',
-      });
-      if (x > left && x + t.width > left + width) {
-        x = left;
-        y += lineH;
-        t.setPosition(x, y);
-      }
-      x += t.width + gap;
-      c.add(t);
-    }
-    return y + lineH;
-  }
-
-  /** The interview-version card. */
-  private drawCard(): void {
-    const c = this.layer(12);
-    c.add(this.add.rectangle(90, 70, 860, 720, 0xf3ecd8, 0.97).setOrigin(0).setStrokeStyle(4, 0x2de2e6));
-    c.add(
-      this.add.text(130, 100, LABELS.card, {
-        fontFamily: FONT,
-        fontSize: '24px',
-        fontStyle: 'bold',
-        color: '#7a3cff',
+        color: '#ff4fd8',
       }),
     );
-    const title = this.add.text(130, 140, line('C8.card.title'), {
+    const lesson = this.add.text(x + 50, ly + 36, line('C8.lesson'), {
       fontFamily: FONT,
       fontSize: '34px',
       fontStyle: 'bold',
-      color: '#1b1430',
-      wordWrap: { width: 780 },
+      color: '#ffffff',
+      wordWrap: { width: w - 100 },
+      lineSpacing: 4,
     });
-    c.add(title);
-    let y = 150 + title.height + 20;
-    for (const id of CARD) {
-      const t = this.add.text(130, y, line(id), {
+    c.add(lesson);
+    c.add(
+      this.add.text(x + 50, lesson.y + lesson.height + 22, line('C8.lesson.words'), {
         fontFamily: FONT,
-        fontSize: '26px',
-        color: '#241c3c',
-        wordWrap: { width: 780 },
-        lineSpacing: 4,
-      });
-      c.add(t);
-      y += t.height + 14;
-    }
-    if (storyState.debrief) storyState.debrief.card = [line('C8.card.title'), ...CARD.map(line)];
-  }
-
-  /** Night Book page 1: the book opens over the room. */
-  private drawBook(): void {
-    const c = this.layer(12);
-    const book = this.add.image(W / 2, H / 2, fileKey(BOOK)).setAlpha(0);
-    c.add(book);
-    this.tweens.add({ targets: book, alpha: 1, duration: 700 });
-  }
-
-  /** The lesson, handwritten on the blank right-hand page. */
-  private writePage(): void {
-    const c = this.stepLayer ?? this.layer(12);
-    const text = this.add
-      .text(1050, 170, line('C8.book.page1'), {
-        fontFamily: HAND,
-        fontSize: '38px',
-        color: '#2a2440',
-        wordWrap: { width: 520 },
-        lineSpacing: 14,
-      })
-      .setAngle(-1.5)
-      .setAlpha(0);
-    c.add(text);
-    this.tweens.add({ targets: text, alpha: 1, duration: 900 });
-    if (storyState.debrief) storyState.debrief.page = line('C8.book.page1');
-  }
-
-  /** The title card, with the fireworks over it. */
-  private drawTitle(): void {
-    this.closeButton?.destroy();
-    this.closeButton = null;
-    if (storyState.debrief) storyState.debrief.closeBook = null;
-    const c = this.layer(50);
-    c.add(this.add.rectangle(0, 0, W, H, 0x05070f, 0.94).setOrigin(0));
-    const title = this.add
-      .text(W / 2, H / 2, line('C8.title'), {
-        fontFamily: FONT,
-        fontSize: '96px',
-        fontStyle: 'bold',
-        color: '#2de2e6',
-      })
-      .setOrigin(0.5)
-      .setShadow(0, 0, '#ff4fd8', 24, true, true)
-      .setAlpha(0);
-    c.add(title);
-    this.tweens.add({ targets: title, alpha: 1, duration: 1200 });
-    this.fx.setDepth(55);
-    playSfx('fireworks');
-    if (storyState.debrief) storyState.debrief.title = line('C8.title');
+        fontSize: '24px',
+        color: '#ffd27a',
+        wordWrap: { width: w - 100 },
+      }),
+    );
+    c.add(
+      this.add
+        .text(W / 2, END_Y, LABELS.endSession, { fontFamily: FONT, fontSize: '22px', color: '#9a95ad' })
+        .setOrigin(0.5),
+    );
   }
 
   // --- Fireworks outside the window: pooled sparks; flashes only without reduce flicker -----------
